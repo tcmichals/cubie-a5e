@@ -1,0 +1,14 @@
+#!/bin/sh
+case "$1" in
+  start)
+    printf "Starting AIC8800 Wireless Networking: "
+    modprobe aic8800_fdrv 2>/dev/null
+    wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
+    udhcpc -b -i wlan0 -R
+    echo "OK"
+    ;;
+  stop)
+    killall udhcpc wpa_supplicant
+    echo "OK"
+    ;;
+esac

@@ -1,0 +1,3 @@
+config BR2_PACKAGE_AIC8800_DRIVER
+	bool "aic8800-driver"
+	depends on BR2_LINUX_KERNEL
