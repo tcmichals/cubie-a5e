@@ -1,3 +1,21 @@
 config BR2_PACKAGE_TIMVX_DELEGATE
 	bool "timvx-delegate"
 	depends on BR2_PACKAGE_TENSORFLOW_LITE
+	help
+	  Installs TIM-VX delegate runtime artifacts for Cubie A5E NPU validation.
+
+if BR2_PACKAGE_TIMVX_DELEGATE
+
+config BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR
+	string "Path to TIM-VX prebuilt runtime bundle"
+	default ""
+	help
+	  Absolute path to a directory that contains TIM-VX runtime artifacts.
+	  Expected layout (common):
+	    <bundle>/lib/*.so*
+	    <bundle>/bin/*    (optional)
+	
+	  During image build, libraries are copied into /usr/lib and binaries into
+	  /usr/bin.
+
+endif

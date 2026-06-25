@@ -39,6 +39,12 @@ BR2_LINUX_KERNEL_DTB_OVERLAYS="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/overlays/cubie-a5e
 # Native Linux Kernel Compiled Tools (GPIO User-space Utilities)
 BR2_PACKAGE_LINUX_TOOLS_GPIO=y
 
+# Peripheral bus/user-space validation tools
+BR2_PACKAGE_LIBGPIOD=y
+BR2_PACKAGE_LIBGPIOD_TOOLS=y
+BR2_PACKAGE_I2C_TOOLS=y
+BR2_PACKAGE_SPI_TOOLS=y
+
 # Wireless Networking, Firmware, and Diagnostic Tools
 BR2_PACKAGE_LINUX_FIRMWARE=y
 BR2_PACKAGE_IW=y
@@ -47,6 +53,7 @@ BR2_PACKAGE_WPA_SUPPLICANT=y
 
 # Multimedia Pipeline Framework Utilities
 BR2_PACKAGE_LIBV4L=y
+BR2_PACKAGE_V4L_UTILS=y
 
 # Python 3 Core and Extension Runtime Libraries
 BR2_PACKAGE_PYTHON3=y

@@ -1,0 +1,57 @@
+#!/bin/sh
+set -eu
+
+echo "[npu-smoke-test] Cubie A5E TIM-VX delegate smoke test"
+
+echo "[1/4] Kernel/device checks"
+if [ -e /dev/galcore ]; then
+    echo "  OK: /dev/galcore present"
+else
+    echo "  WARN: /dev/galcore missing (galcore/NPU kernel device not detected)"
+fi
+
+echo "[2/4] Delegate/runtime library checks"
+FOUND_LIB=0
+for pattern in \
+    "/usr/lib/libvx_delegate.so*" \
+    "/usr/lib/libtim-vx.so*" \
+    "/usr/lib/libovxlib.so*" \
+    "/usr/lib/libOpenVX.so*"
+do
+    set +e
+    ls $pattern >/dev/null 2>&1
+    rc=$?
+    set -e
+    if [ $rc -eq 0 ]; then
+        echo "  OK: found $pattern"
+        FOUND_LIB=1
+    fi
+done
+
+if [ "$FOUND_LIB" -eq 0 ]; then
+    echo "  FAIL: no known TIM-VX/OpenVX delegate libs found under /usr/lib"
+    echo "        Provide BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR with lib/*.so artifacts"
+    exit 2
+fi
+
+echo "[3/4] TensorFlow Lite runtime presence"
+if command -v benchmark_model >/dev/null 2>&1; then
+    echo "  OK: benchmark_model found at $(command -v benchmark_model)"
+else
+    echo "  WARN: benchmark_model not found (this may be fine depending on package set)"
+fi
+
+echo "[4/4] Python import checks"
+if command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import importlib.util
+mods = ["tensorflow", "tflite_runtime"]
+for m in mods:
+    print(f"  {'OK' if importlib.util.find_spec(m) else 'WARN'}: python module {m}")
+PY
+else
+    echo "  WARN: python3 not found"
+fi
+
+echo "[npu-smoke-test] complete"
+exit 0
