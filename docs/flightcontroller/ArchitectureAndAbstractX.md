@@ -356,6 +356,30 @@ To configure, tune, and monitor the Linux-based iNAV flight controller from a PC
 * **Flight Loop Telemetry:** The Linux iNAV process opens `/dev/spidev0.0` and `/dev/spidev1.0` to exchange high-speed raw state and motor command structures with the FPGA co-processor.
 * **Ground Control Link:** The virtual interface (`tun0`) encapsulates Multiwii Serial Protocol (MSP) packets into UDP/IP, transmitting them over Wi-Fi to let the iNAV Configurator connect, flash profiles, calibrate sensors, and plot live telemetry graphs.
 
+---
+
+## 7. Comparative Analysis: Cubie A5E vs. Legacy Linux Flight Controllers
+
+To contextualize this architecture, it is helpful to compare it against historical Linux Foundation / Dronecode-supported flight controllers (such as the **BeagleBone Blue** and **Raspberry Pi + Navio2** running ArduPilot/PX4).
+
+| Architectural Feature | Legacy Linux Autopilots (e.g., BeagleBone Blue, Pi+Navio2) | Cubie A5E + FPGA (This Project) |
+| :--- | :--- | :--- |
+| **Primary I/O Generation** | CPU-driven (Linux PWM drivers or PRUs) | **Dedicated FPGA Hardware Engine** (deterministic logic) |
+| **Motor Protocol Jitter** | Vulnerable to CPU scheduling/governor hiccups | **Jitter-Free DSHOT/PWM** generated directly in FPGA fabric |
+| **CPU Core Isolation** | Limited (quad-core or single-core limits background tasks) | **Octa-core A55 (Core 7 Isolated)**, leaving 7 cores for OS/NPU |
+| **Telemetry Bandwidth** | Single shared SPI/I2C bus | **Dual-SPI Link (Link A + Link B)** using AbstractX |
+| **AI / NPU Acceleration** | None or CPU-bound (very low frame rates) | **TIM-VX Accelerated NPU** (100+ FPS vision landing assist) |
+
+### Why This Design is Superior:
+
+1. **Jitter-Free DSHOT (FPGA Offloading):** 
+   In systems like the Raspberry Pi + Navio2, the Linux CPU handles both the high-level OS and the microsecond-accurate generation of PWM/DSHOT signals. If the kernel experiences even a brief latency spike (e.g., from network interrupts or file system writes on the SD card), it can cause motor control jitter. Our architecture isolates all critical hardware timing (DSHOT generation and PWM input capture) into the FPGA hardware gates.
+2. **True Octa-Core CPU Isolation:** 
+   With a quad-core processor, isolating a core leaves only 3 cores to handle the operating system, video streaming, Wi-Fi driver overhead, and AI workloads. The Cubie A5E's 8-core design allows us to pin the iNAV flight loop to Core 7, while leaving 7 fully capable Cortex-A55 cores for heavy background operations.
+3. **Advanced Machine Learning Coprocessing:** 
+   Standard Linux flight controllers lack hardware neural acceleration. Our platform integrates the TIM-VX delegate directly with the onboard NPU, enabling real-time neural network inference (such as landing pad recognition) to run concurrently with flight operations without robbing cycles from the flight controller loop.
+
+
 
 
 
