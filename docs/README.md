@@ -22,6 +22,9 @@ These documents cover the base operating system build, hardware interfaces, and 
   * Explains the NPU graphics driver/runtime stack (`galcore` + TIM-VX/OpenVX + TFLite delegate).
   * Documents integrating the prebuilt TIM-VX runtime binary bundle.
   * Explains running the on-target `/usr/bin/npu-smoke-test` validation script.
+* **[Camera Verification & Testing](buildroot/CameraTesting.md)**
+  * Documents V4L2 device node scanning and frame capture tests.
+  * Details diagnostic commands (`v4l2-ctl`) and direct frame extraction scripts.
 
 ---
 
