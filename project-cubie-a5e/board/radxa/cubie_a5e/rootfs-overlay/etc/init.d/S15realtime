@@ -30,6 +30,15 @@ case "$1" in
                 fi
             done
         fi
+
+        # 3. Elevate SPI and I2C (TWI) Interrupt Thread Priorities to 85
+        # This guarantees that SPI and I2C driver transfers preempt the iNAV flight loop (priority 80)
+        # to deliver sensor/control data with zero scheduling lag.
+        echo "Elevating SPI/I2C kernel IRQ thread priorities to 85..."
+        for pid in $(pgrep -f "irq/.*(spi|twi|sunxi)"); do
+            chrt -f -p 85 "$pid" 2>/dev/null && echo "Elevated IRQ PID $pid" || true
+        done
+
         
         echo "Real-Time Optimization initialization completed."
         ;;
