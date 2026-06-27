@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# Real-Time Core and Interrupt Affinity Initialization Script
+#
+
+case "$1" in
+    start)
+        echo "Initializing Real-Time Optimizations..."
+        
+        # 1. Force Isolated CPU Core 7 to Performance Governor
+        if [ -d /sys/devices/system/cpu/cpu7/cpufreq ]; then
+            echo "Locking CPU Core 7 to performance governor..."
+            echo performance > /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor
+        else
+            echo "Warning: CPU Core 7 frequency governor node not found."
+        fi
+
+        # 2. Redirect Interrupts (smp_affinity) away from Core 7 to Cores 0-6
+        # Mask 0x7f (binary: 01111111) excludes CPU Core 7 (the 8th core, index 7)
+        if [ -d /proc/irq ]; then
+            echo "Steering interrupts away from CPU Core 7 to Cores 0-6..."
+            
+            # Set default affinity for future interrupts
+            echo 7f > /proc/irq/default_smp_affinity 2>/dev/null || true
+            
+            # Re-steer all currently active interrupts
+            for irq_dir in /proc/irq/*; do
+                if [ -d "$irq_dir" ] && [ -f "$irq_dir/smp_affinity" ]; then
+                    echo 7f > "$irq_dir/smp_affinity" 2>/dev/null || true
+                fi
+            done
+        fi
+        
+        echo "Real-Time Optimization initialization completed."
+        ;;
+    stop)
+        # Revert back to default balance if needed (typically not used during flight shutdown)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
+
+exit 0

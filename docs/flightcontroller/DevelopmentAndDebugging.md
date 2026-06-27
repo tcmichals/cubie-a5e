@@ -160,6 +160,9 @@ APPEND root=/dev/mmcblk0p2 rootwait isolcpus=7 nohz_full=7 rcu_nocbs=7
 * **`nohz_full=7`:** Stops scheduling-clock ticks on CPU 7 when only one real-time thread is running.
 * **`rcu_nocbs=7`:** Relocates Read-Copy Update (RCU) callback threads away from CPU 7.
 
+> [!NOTE]
+> This boot command is automated in this repository via the U-Boot boot command script [`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](file:///home/tcmichals/projects/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd).
+
 ### B. Pinning the CPU Governor to Max Performance
 
 To avoid latency spikes caused by the CPU scaling governor entering low-frequency power-saving states, configure Core 7 to stay at maximum frequency:
@@ -169,9 +172,28 @@ To avoid latency spikes caused by the CPU scaling governor entering low-frequenc
 echo performance > /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor
 ```
 
+### C. Hardware Interrupt Steering (IRQ Affinity)
+
+Even if CPU 7 is isolated from standard user-space tasks, hardware interrupts (such as SPI transactions, Wi-Fi network packets, NPU execution states, and timers) can default to triggering on Core 7, causing microsecond-level latency spikes in the iNAV loop.
+
+To prevent this, steer all hardware interrupts away from Core 7 to Cores 0-6 by setting the SMP affinity mask to `7f` (binary `01111111`):
+
+```bash
+# Route all future interrupts to CPU Cores 0-6
+echo 7f > /proc/irq/default_smp_affinity
+
+# Route all active interrupts away from CPU Core 7
+for irq in /proc/irq/*; do
+    [ -d "$irq" ] && echo 7f > "$irq/smp_affinity" 2>/dev/null || true
+done
+```
+
+> [!TIP]
+> Both the Performance Governor lock and the Interrupt Steering are automated at startup in this repository via the system init script [`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime`](file:///home/tcmichals/projects/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime).
+
 ---
 
-### C. C++ Application RT Optimization Template
+### D. C++ Application RT Optimization Template
 
 Below is the standard C++ template used to initialize a real-time thread for the main iNAV loop. It locks memory (preventing disk swapping), allocates stack pages beforehand (preventing on-demand page faults), sets the `SCHED_FIFO` real-time scheduler policy, and pins the thread affinity to CPU 7.
 
