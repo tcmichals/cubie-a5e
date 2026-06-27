@@ -102,10 +102,10 @@ BR2_PACKAGE_SUNXI_GALCORE=y
 BR2_PACKAGE_TIMVX_DELEGATE=y
 
 BR2_TARGET_ROOTFS_EXT2_GEN=4
-#host tooling additions
+# host tooling additions
 BR2_PACKAGE_HOST_UBOOT_TOOLS=y
 
-
-
-
+# Remote Access and System Management Shells (Lightweight SSH)
+BR2_PACKAGE_DROPBEAR=y
+BR2_PACKAGE_DROPBEAR_CLIENT=y
 
