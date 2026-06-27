@@ -1,0 +1,106 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *                    RADXA CUBIE A5E — FLIGHT STACK OVERLAY
+ * ============================================================================
+ * This overlay configures the 40-pin GPIO header multiplexing for:
+ *  - Dual SPI links: SPI0 (Link A / IMU) and SPI1 (Link B / FPGA)
+ *  - Third independent SPI bus: SPI2 (General Purpose SPI expansion)
+ *  - Dual I2C buses: I2C1 (General I2C) and I2C3 (Flight Sensors)
+ *  - Dual UART ports: UART0 (Serial Console Terminal) and UART2 (GPS Receiver)
+ *
+ * Physical 40-Pin Header Layout Mapping:
+ * 
+ *                  3.3V Power [ 1] [ 2] 5V Power (Input/Output)
+ *            I2C1-SDA (TWI1)  [ 3] [ 4] 5V Power (Input/Output)
+ *            I2C1-SCL (TWI1)  [ 5] [ 6] GND
+ *            SPI2-CLK         [ 7] [ 8] UART0-TX (Debug Console Terminal)
+ *                         GND [ 9] [10] UART0-RX (Debug Console Terminal)
+ *            UART2-TX (GPS)   [11] [12] SPI1-CS0 (FPGA Dual-SPI Link B)
+ *            UART2-RX (GPS)   [13] [14] GND
+ *            SPI2-CS0         [15] [16] SPI2-MOSI
+ *                  3.3V Power [17] [18] SPI2-MISO
+ *            SPI0-MOSI (IMU)  [19] [20] GND
+ *            SPI0-MISO (IMU)  [21] [22] GPIO
+ *            SPI0-CLK  (IMU)  [23] [24] SPI0-CS0 (IMU Dual-SPI Link A)
+ *                         GND [25] [26] GPIO
+ *            I2C3-SDA (TWI3)  [27] [28] I2C3-SCL (TWI3) (Sensors/Compass)
+ *                        GPIO [29] [30] GND
+ *                        GPIO [31] [32] GPIO/PWM
+ *                        GPIO [33] [34] GND
+ *            SPI1-MISO (FPGA) [35] [36] GPIO
+ *                        GPIO [37] [38] SPI1-MOSI (FPGA)
+ *                         GND [39] [40] SPI1-CLK  (FPGA)
+ * ============================================================================
+ */
+
+/* UART0: Debug Console Terminal (Enabled on physical pins 8 and 10) */
+&uart0 {
+    status = "okay";
+    pinctrl-names = "default";
+};
+
+/* UART2: GPS Receiver Interface (Enabled on physical pins 11 and 13) */
+&uart2 {
+    status = "okay";
+    pinctrl-names = "default";
+};
+
+/* I2C1: General Expansion Bus (Enabled on physical pins 3 and 5) */
+&i2c1 {
+    status = "okay";
+    pinctrl-names = "default";
+};
+
+/* I2C3: Barometer, Compass, and Flight Sensors (Enabled on physical pins 27 and 28) */
+&i2c3 {
+    status = "okay";
+    pinctrl-names = "default";
+};
+
+/* SPI0: Dual SPI Link A / IMU Connection (Enabled on physical pins 19, 21, 23, 24) */
+&spi0 {
+    status = "okay";
+    pinctrl-names = "default";
+    num-cs = <1>;
+    
+    /* User-space SPIDEV node (/dev/spidev0.0) */
+    spidev0@0 {
+        compatible = "rohm,dh2228fv";
+        reg = <0>;
+        spi-max-frequency = <10000000>;
+        status = "okay";
+    };
+};
+
+/* SPI1: Dual SPI Link B / FPGA Connection (Enabled on physical pins 35, 38, 40, 12) */
+&spi1 {
+    status = "okay";
+    pinctrl-names = "default";
+    num-cs = <1>;
+    
+    /* User-space SPIDEV node (/dev/spidev1.0) */
+    spidev1@0 {
+        compatible = "rohm,dh2228fv";
+        reg = <0>;
+        spi-max-frequency = <25000000>;
+        status = "okay";
+    };
+};
+
+/* SPI2: General-Purpose SPI Expansion (Enabled on physical pins 7, 15, 16, 18) */
+&spi2 {
+    status = "okay";
+    pinctrl-names = "default";
+    num-cs = <1>;
+    
+    /* User-space SPIDEV node (/dev/spidev2.0) */
+    spidev2@0 {
+        compatible = "rohm,dh2228fv";
+        reg = <0>;
+        spi-max-frequency = <10000000>;
+        status = "okay";
+    };
+};

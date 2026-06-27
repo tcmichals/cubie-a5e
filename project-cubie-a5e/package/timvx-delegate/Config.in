@@ -8,7 +8,7 @@ if BR2_PACKAGE_TIMVX_DELEGATE
 
 config BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR
 	string "Path to TIM-VX prebuilt runtime bundle"
-	default ""
+	default "$(BR2_EXTERNAL_CUBIE_A5E_PATH)/../timvx-bundle"
 	help
 	  Absolute path to a directory that contains TIM-VX runtime artifacts.
 	  Expected layout (common):

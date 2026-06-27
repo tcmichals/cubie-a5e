@@ -200,41 +200,57 @@ If not already cloned:
 
 ## 6) Configure and build
 
-From repo top level:
+From the repository top level:
 
-1. `mkdir -p bld`
-2. `make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig`
-3. `make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e`
+1. Create an output directory:
+   ```bash
+   mkdir -p bld
+   ```
+2. Configure Buildroot for Cubie A5E:
+   ```bash
+   PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+   ```
+3. Build the full image:
+   ```bash
+   PATH=$PWD/bld/bin:$PATH make -C bld
+   ```
 
 ## 7) Rebuild
 
-- `make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e`
+To rebuild components after editing code or changing options, simply run:
+```bash
+PATH=$PWD/bld/bin:$PATH make -C bld
+```
 
-To reset config/build output:
-
-- remove `bld/`
-- run configure + build again
+To reset the entire configuration and build output:
+* Remove the `bld/` directory.
+* Run the configuration and build steps again.
 
 ## 8) SD card image output
 
-Generated image:
+The final bootable SD card image will be created at:
+* `bld/images/sdcard.img`
 
-- `bld/images/sdcard.img`
+To write it to an SD card (replace `/dev/sdX` with your card's device node):
+```bash
+sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress
+sync
+```
 
-Write to SD card (replace `/dev/sdX` with your device):
+## 9) TIM-VX NPU Prebuilt Integration
 
-- `sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress`
-- `sync`
+By default, the build looks for precompiled NPU driver libraries at the workspace root directory in `timvx-bundle/`. 
 
-## 9) Optional: build with TIM-VX runtime bundle
+If you store the bundle elsewhere on your host machine, you can override the path during compilation:
+```bash
+PATH=$PWD/bld/bin:$PATH make -C bld \
+    BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR=/home/tcmichals/timvx-release
+```
 
-If you have prebuilt TIM-VX runtime artifacts:
-
-- `make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR=/absolute/path/to/timvx-bundle`
-
-Then validate on target:
-
-- `/usr/bin/npu-smoke-test`
+Once loaded onto the target, you can validate the NPU stack using the onboard smoke test:
+```bash
+/usr/bin/npu-smoke-test
+```
 
 ## 10) Board references
 
