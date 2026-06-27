@@ -69,6 +69,7 @@ bld/                                   build output (generated, not in repo)
 - `BR2_PACKAGE_LIBV4L=y` + v4l-utils — camera pipeline
 - `BR2_PACKAGE_WPA_SUPPLICANT=y` + aic8800 packages — Wi-Fi (AIC8800 chip)
 - `BR2_PACKAGE_EUDEV=y` — dynamic /dev, module-driven device management
+- `BR2_PACKAGE_DROPBEAR=y` — Dropbear lightweight SSH server
 - `CONFIG_PREEMPT_RT=y` in linux.config — realtime kernel baseline
 
 ## Device tree / overlay approach
@@ -124,9 +125,19 @@ sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progre
 - `docs/buildroot/DeviceTreeHowTo.md` — DTB and overlays compilation
 - `docs/buildroot/WirelessHowTo.md` — Wi-Fi bring-up
 - `docs/buildroot/HowToNPU.md` — NPU drivers, packaging, and setup script
-- `docs/flightcontroller/ArchitectureAndAbstractX.md` — A5E/FPGA architecture split
-- `docs/flightcontroller/LandingAssistML.md` — Vision landing-assist loops and safety checks
 - `docs/flightcontroller/DevelopmentAndDebugging.md` — C++ remote debugging with VS Code / gdbserver
+- `docs/buildroot/CameraTesting.md` — Camera bring-up and V4L2 diagnostics
+
+## Real-Time Linux (PREEMPT_RT) & Core Isolation Guidelines
+
+- **Isolate Core 7:** Always configure U-Boot boot arguments with `isolcpus=7 nohz_full=7 rcu_nocbs=7` to reserve CPU Core 7 exclusively for the iNAV flight loop.
+- **CPU Governor:** Ensure CPU Core 7 governor is locked to `performance` to prevent latency spikes from clock rate throttling.
+- **Lock Address Space:** Always call `mlockall(MCL_CURRENT | MCL_FUTURE)` during initialization to lock all virtual memory pages into RAM and prevent swap/page faults.
+- **Pre-fault Stack:** Pre-allocate stack space (e.g. 1MB) and touch all memory pages during initialization to map physical RAM before the loop starts.
+- **Real-Time Priority:** Set thread scheduling policy to `SCHED_FIFO` with a priority of `80` (preempts general userspace).
+- **Core Pinning:** Explicitly pin the real-time loop thread specifically to CPU Core 7 (`pthread_setaffinity_np`).
+- **No Heap Allocations:** Strictly avoid dynamic memory allocations (`malloc`, `free`, `new`, `delete`, or dynamic vector growth) inside the fast real-time loop.
+- **Task Isolation (NPU & Media):** Run all heavy background processing (TFLite NPU inference, V4L2 camera capture, video codecs, Wi-Fi telemetry) on CPU Cores 0-6 using standard scheduling (`SCHED_OTHER`). CPU Core 7 must remain reserved *exclusively* for the time-critical iNAV autopilot loop to ensure NPU operations cannot hog resources or impact flight control reliability.
 
 ## Coding conventions
 
