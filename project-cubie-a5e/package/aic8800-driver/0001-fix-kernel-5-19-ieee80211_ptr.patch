@@ -1,28 +1,21 @@
 diff -urN a/drivers/aic8800/aic8800_fdrv/rwnx_msg_rx.c b/drivers/aic8800/aic8800_fdrv/rwnx_msg_rx.c
 --- a/drivers/aic8800/aic8800_fdrv/rwnx_msg_rx.c	2026-07-02 12:00:00.000000000 -0500
 +++ b/drivers/aic8800/aic8800_fdrv/rwnx_msg_rx.c	2026-07-02 12:00:00.000000000 -0500
-@@ -931,7 +931,11 @@
+@@ -931,7 +931,7 @@
  		return 0;
  	}
  	dev = rwnx_vif->ndev;
-+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
-+	wdev = netdev_to_wdev(dev);
-+#else
-     wdev = dev->ieee80211_ptr;
-+#endif
+-    wdev = dev->ieee80211_ptr;
++    wdev = &rwnx_vif->wdev;
  
      /* Retrieve IE addresses and lengths */
      req_ie = (const u8 *)ind->assoc_ie_buf;
-@@ -1294,7 +1298,11 @@
+@@ -1294,7 +1298,7 @@
      struct net_device *dev = rwnx_vif->ndev;
      struct cfg80211_external_auth_params params;
  	int ret = 0;
 -	struct wireless_dev *wdev = dev->ieee80211_ptr;
-+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
-+	struct wireless_dev *wdev = netdev_to_wdev(dev);
-+#else
-+	struct wireless_dev *wdev = dev->ieee80211_ptr;
-+#endif
++	struct wireless_dev *wdev = &rwnx_vif->wdev;
  	int retry_counter = 10;
  
      RWNX_DBG(RWNX_FN_ENTRY_STR);
