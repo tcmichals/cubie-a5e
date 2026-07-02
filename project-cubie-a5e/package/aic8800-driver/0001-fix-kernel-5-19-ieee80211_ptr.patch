@@ -19,3 +19,47 @@ diff -urN a/drivers/aic8800/aic8800_fdrv/rwnx_msg_rx.c b/drivers/aic8800/aic8800
  	int retry_counter = 10;
  
      RWNX_DBG(RWNX_FN_ENTRY_STR);
+diff -urN a/drivers/aic8800/aic8800_fdrv/rwnx_main.c b/drivers/aic8800/aic8800_fdrv/rwnx_main.c
+--- a/drivers/aic8800/aic8800_fdrv/rwnx_main.c	2026-07-02 12:00:00.000000000 -0500
++++ b/drivers/aic8800/aic8800_fdrv/rwnx_main.c	2026-07-02 12:00:00.000000000 -0500
+@@ -1915,7 +1915,9 @@
+ 
+     vif = netdev_priv(ndev);
+     vif->key_has_add = 0;
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
+     ndev->ieee80211_ptr = &vif->wdev;
++#endif
+     vif->wdev.wiphy = rwnx_hw->wiphy;
+     vif->rwnx_hw = rwnx_hw;
+     vif->ndev = ndev;
+@@ -2018,7 +2020,7 @@
+ 
+     if (params) {
+         vif->use_4addr = params->use_4addr;
+-        ndev->ieee80211_ptr->use_4addr = params->use_4addr;
++        vif->wdev.use_4addr = params->use_4addr;
+     } else
+         vif->use_4addr = false;
+ 
+@@ -2622,7 +2624,9 @@
+     rwnx_vif->ndev = NULL;
+ 
+     /* Clear the priv in adapter */
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
+     dev->ieee80211_ptr = NULL;
++#endif
+ 
+     return 0;
+ }
+diff -urN a/drivers/aic8800/aic8800_fdrv/aic_priv_cmd.c b/drivers/aic8800/aic8800_fdrv/aic_priv_cmd.c
+--- a/drivers/aic8800/aic8800_fdrv/aic_priv_cmd.c	2026-07-02 12:00:00.000000000 -0500
++++ b/drivers/aic8800/aic8800_fdrv/aic_priv_cmd.c	2026-07-02 12:00:00.000000000 -0500
+@@ -1734,7 +1734,7 @@
+ 	int bytes_written = 0;
+ 	char *argv[CMD_MAXARGS + 1];
+ 	int argc;
+-	struct rwnx_vif *vif = container_of(net->ieee80211_ptr, struct rwnx_vif, wdev);
++	struct rwnx_vif *vif = netdev_priv(net);
+ 	struct rwnx_hw *p_rwnx_hw = vif->rwnx_hw;
+ 	
+ 	RWNX_DBG(RWNX_FN_ENTRY_STR);
