@@ -10,7 +10,7 @@ load mmc 0:1 ${ramdisk_addr_r} cubie-a5e-flight-stack.dtbo
 
 # Instruct U-Boot to overlay the blocks dynamically in memory
 fdt addr ${fdt_addr_r}
-fdt resize 8192
+fdt resize 65536
 fdt apply ${ramdisk_addr_r}
 
 # Load the main uncompressed Linux 7.1 kernel binary and execute initialization

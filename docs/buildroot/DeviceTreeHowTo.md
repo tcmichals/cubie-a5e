@@ -30,7 +30,7 @@ This is how this project enables SPI buses, I2C buses, and custom nodes without 
 
 The overlay source file is:
 
-- `project-cubie-a5e/overlays/cubie-a5e-flight-stack.dts`
+- `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso`
 
 Open it in any text editor. It is plain text.
 
@@ -48,9 +48,9 @@ Each block targets a named node from the base device tree using `&nodename` synt
 
 After editing:
 
-1. Run a Buildroot rebuild — the `.dts` is recompiled to `.dtbo` automatically
-2. Flash the new `sdcard.img` to SD card
-3. Boot and check `/proc/device-tree` or `dmesg` to verify your changes took effect
+1. Run a Buildroot rebuild — the `.dtso` is recompiled to `.dtbo` automatically.
+2. Flash the new `sdcard.img` to the SD card.
+3. Boot and check `/proc/device-tree` or `dmesg` to verify your changes took effect.
 
 Do **not** edit files under `buildroot/` — those are upstream source and will be overwritten on update.
 
@@ -75,10 +75,11 @@ This is the safer maintenance model: fewer merge conflicts and easier upstream k
   - `BR2_LINUX_KERNEL_INTREE_DTS_NAME="allwinner/sun55i-a527-cubie-a5e"`
 
 - Overlay source:
-  - `project-cubie-a5e/overlays/cubie-a5e-flight-stack.dts`
+  - `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso`
 
 - Overlay build hook:
-  - `BR2_LINUX_KERNEL_DTB_OVERLAYS="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/overlays/cubie-a5e-flight-stack.dts"`
+  - `BR2_LINUX_KERNEL_CUSTOM_DTS_DIR="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/dts-overlay"`
+  - `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y`
 
 - Boot script source:
   - `project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`
@@ -189,36 +190,36 @@ Generated image:
 
 Recommended workflow:
 
-1. Create a new overlay DTS file in external tree, e.g.:
-   - `project-cubie-a5e/overlays/my-feature.dts`
+1. Create a new overlay DTS file in the external tree, e.g.:
+   - `project-cubie-a5e/dts-overlay/allwinner/my-feature.dtso`
 
-2. Add the overlay path in defconfig (`BR2_LINUX_KERNEL_DTB_OVERLAYS`), space-separated if multiple overlays are supported in your Buildroot/kernel version.
+2. Buildroot will automatically compile any `.dtso` file in that directory.
 
-3. Ensure the resulting `.dtbo` gets packaged into boot partition.
-   - If needed, add file entry in `genimage.cfg` under `boot.vfat.files`.
+3. Ensure the resulting `.dtbo` gets packaged into the boot partition.
+   - Add the file entry in `genimage.cfg` under `boot.vfat.files`.
 
 4. Update boot logic in `boot.cmd` to load and apply the new `.dtbo`.
    - For multiple overlays, load/apply each in deterministic order.
 
-5. Rebuild image and flash:
-   - re-run Buildroot build
-   - write updated `sdcard.img`
+5. Rebuild the image and flash.
 
-## How to modify existing overlay safely
+## How to modify the existing overlay safely
 
 - Edit only:
-  - `project-cubie-a5e/overlays/cubie-a5e-flight-stack.dts`
-- Avoid modifying base intree DTS unless absolutely required.
+  - `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso`
+- Avoid modifying the base intree DTS unless absolutely required.
 - Keep each hardware domain isolated in overlay blocks (`&i2cX`, `&spiX`, etc.).
 - Keep overlay changes minimal and commented.
 
 ## Current overlay intent in this repo
 
-`cubie-a5e-flight-stack.dts` currently demonstrates enabling/declaring:
+`cubie-a5e-flight-stack.dtso` currently demonstrates enabling/declaring:
 
-- `i2c3`
-- `spi0` (example IMU node)
-- `spi1` (example FPGA node)
+- `i2c1` and `i2c3`
+- `spi0` (Link A / IMU)
+- `spi1` (Link B / FPGA)
+- `spi2` (General SPI Expansion)
+- `uart2` (GPS Receiver)
 
 This matches the architecture goal: SPI-based FPGA offload + sensor bus enablement without changing base board DT source.
 
@@ -245,9 +246,9 @@ After boot:
 
 | What you want to change | File to edit |
 |---|---|
-| Enable/disable a peripheral (SPI, I2C, etc.) | `project-cubie-a5e/overlays/cubie-a5e-flight-stack.dts` |
-| Add a new device node (IMU, sensor, FPGA) | `project-cubie-a5e/overlays/cubie-a5e-flight-stack.dts` |
-| Add a whole new overlay file | Add `.dts` to `overlays/`, update `defconfig` + `genimage.cfg` + `boot.cmd` |
+| Enable/disable a peripheral (SPI, I2C, etc.) | `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso` |
+| Add a new device node (IMU, sensor, FPGA) | `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso` |
+| Add a whole new overlay file | Add `.dtso` to `dts-overlay/allwinner/`, update `genimage.cfg` + `boot.cmd` |
 | Change kernel boot arguments | `project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd` |
 | Change what goes into the boot FAT partition | `project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg` |
 | Change U-Boot build options | `project-cubie-a5e/board/radxa/cubie_a5e/u-boot-fragment.config` |

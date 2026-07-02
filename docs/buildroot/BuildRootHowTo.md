@@ -263,3 +263,38 @@ Once loaded onto the target, you can validate the NPU stack using the onboard sm
 - FPGA side handles hard real-time/control-timing domains (DSHOT/PWM/IMU timing path).
 - A5E Linux side handles mission logic, networking, and ML inference orchestration.
 - Buildroot external tree keeps this integration reproducible and board-specific.
+
+---
+
+## 12) U-Boot Environment Configuration (`uboot.env`)
+
+U-Boot allows configuring runtime parameters using a persistent environment file named `uboot.env` located on the boot partition of the SD card.
+
+### Default Environment File
+In this project, a default U-Boot environment is compiled and placed in the FAT partition:
+* **Source**: `project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt`
+* **Binary Output**: `uboot.env` (packaged into the boot partition by `genimage.cfg`).
+
+### How to use and customize:
+1. **Modify the Source**: Edit the text file `project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt` to add, remove, or modify environment variables (e.g., custom boot arguments, delay times, or boot commands).
+2. **Rebuild**: Rebuilding the project will automatically compile `uboot-env.txt` into `uboot.env` using `mkenvimage` and package it into the final `sdcard.img`.
+3. **Target modifications**: You can view and edit these variables directly on the target's U-Boot command prompt using the `printenv`, `setenv`, and `saveenv` commands.
+
+---
+
+## 13) Customizing the Linux Kernel Configuration
+
+This project configures the Linux kernel using the standard ARM64 architecture default configuration (`defconfig`) as a base, and overlays custom configuration options on top of it using a **config fragment** file.
+
+* **Base Configuration**: Standard ARM64 architecture defaults (enabling the serial console, MMC, ext4, USB, networks, etc.).
+* **Config Fragment Source**: `project-cubie-a5e/board/radxa/cubie_a5e/linux.config`. This file overlays specific flight-controller requirements (e.g. `CONFIG_PREEMPT_RT=y` for real-time scheduling, high-resolution timers, and a `1000Hz` tick rate).
+
+### How to modify the kernel config:
+1. **Edit the Fragment**: Open the text file `project-cubie-a5e/board/radxa/cubie_a5e/linux.config` and append or modify the options you need (e.g., `CONFIG_SOME_DRIVER=y` or `# CONFIG_OTHER_DRIVER is not set`).
+2. **Clean and Rebuild**: To force Buildroot to clean and rebuild the kernel with your updated fragment:
+   ```bash
+   make -C bld linux-dirclean
+   PATH=$PWD/bld/bin:$PATH make -C bld
+   ```
+
+
