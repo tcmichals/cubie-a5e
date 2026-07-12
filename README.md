@@ -4,6 +4,15 @@ This repository contains the files to build a custom Linux distribution for the 
 
 ---
 
+## Current Project Status
+
+As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
+
+* **✅ Base OS & Bootloader (Tested/Functional):** U-Boot successfully loads the custom device tree overlays. The Linux kernel (`PREEMPT_RT`) boots correctly, successfully isolates CPU Core 7, mounts the rootfs, and brings up the AIC8800 Wi-Fi driver and `wpa_supplicant`.
+* **⚠️ RISC-V Co-processor (Code Ready, Not Hardware Tested):** The bare-metal C++ firmware (`riscv-firmware`) and the ARM Linux real-time IPC bridge (`rbb-server`) are fully compiled, utilizing hardware Mailbox doorbells and lock-free shared memory. However, the end-to-end telemetry loop has not yet been physically verified on the board.
+* **⚠️ NPU / TinyML (Compiled in, Not Tested):** The open-source Etnaviv DRM drivers and the Teflon TensorFlow Lite delegate (`libteflon.so`) are integrated into the Buildroot OS, but live camera inference has not yet been stress-tested.
+
+---
 ## Architectural Split
 
 1. **Buildroot OS (Creating the Distribution):**
