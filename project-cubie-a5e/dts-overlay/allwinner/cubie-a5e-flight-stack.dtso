@@ -39,13 +39,16 @@
 /* UART0: Debug Console Terminal (Enabled on physical pins 8 and 10) */
 &uart0 {
     status = "okay";
-    pinctrl-names = "default";
 };
 
-/* UART2: GPS Receiver Interface (Enabled on physical pins 11 and 13) */
+/* UART2: GPS Receiver Interface (Temporarily disabled to prevent ttyS0 hijacking) */
 &uart2 {
-    status = "okay";
-    pinctrl-names = "default";
+    status = "disabled";
+};
+
+&{/aliases} {
+    serial0 = "/soc/serial@2500000";
+    serial2 = "/soc/serial@2500800";
 };
 
 /* I2C1: General Expansion Bus (Enabled on physical pins 3 and 5) */
@@ -102,5 +105,19 @@
         reg = <0>;
         spi-max-frequency = <10000000>;
         status = "okay";
+    };
+};
+
+/ {
+    soc {
+        msgbox: mailbox@3003000 {
+            compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun6i-a31-msgbox";
+            reg = <0x03003000 0x1000>;
+            interrupts = <0 147 4>;
+            clocks = <&ccu 59>;
+            resets = <&ccu 11>;
+            #mbox-cells = <1>;
+            status = "okay";
+        };
     };
 };

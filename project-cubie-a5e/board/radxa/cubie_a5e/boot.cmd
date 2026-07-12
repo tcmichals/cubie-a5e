@@ -1,5 +1,5 @@
 # Set up kernel command execution strings
-setenv bootargs console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7
+setenv bootargs console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7
 
 
 # Load the base device tree into memory slots

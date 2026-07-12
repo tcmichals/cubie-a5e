@@ -10,7 +10,7 @@ AIC8800_FIRMWARE_LICENSE = proprietary
 
 define AIC8800_FIRMWARE_INSTALL_TARGET_CMDS
 	mkdir -p $(TARGET_DIR)/lib/firmware
-	cp -r $(@D)/aic8800 $(TARGET_DIR)/lib/firmware/
+	cp -r $(@D)/src/SDIO/driver_fw/fw/* $(TARGET_DIR)/lib/firmware/
 endef
 
 $(eval $(generic-package))

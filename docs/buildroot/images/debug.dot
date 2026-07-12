@@ -1,0 +1,23 @@
+digraph debug {
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#f0f0f0", color="#aaaaaa"];
+    edge [fontname="Helvetica", fontsize=10, color="#666666"];
+
+    subgraph cluster_host {
+        label = "Ubuntu x86 Host PC";
+        fontname="Helvetica-Bold";
+        color="#702082";
+        bgcolor="#f9f2fa";
+        gdb [label="riscv-none-elf-gdb\n\n(Reads firmware.elf\nsource code symbols)", fillcolor="#e6ccff", color="#702082"];
+    }
+
+    subgraph cluster_board {
+        label = "Radxa Cubie A5E Board";
+        fontname="Helvetica-Bold";
+        color="#d9534f";
+        bgcolor="#fff0f0";
+        openocd [label="OpenOCD Server :3333\n\n(Reads/writes registers\nvia MMIO over memory)", fillcolor="#ffcccc", color="#d9534f"];
+    }
+
+    gdb -> openocd [dir=both, label="TCP 3333"];
+}

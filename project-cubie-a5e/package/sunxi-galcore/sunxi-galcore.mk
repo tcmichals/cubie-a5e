@@ -12,7 +12,8 @@ SUNXI_GALCORE_LICENSE_FILES = COPYING
 
 SUNXI_GALCORE_MODULE_MAKE_OPTS = \
 	AQROOT=$(@D)/kernel-module-imx-gpu-viv-src \
-	KERNEL_DIR=$(LINUX_DIR)
+	KERNEL_DIR=$(LINUX_DIR) \
+	SOC_PLATFORM=default-default
 
 SUNXI_GALCORE_MODULE_SUBDIRS = kernel-module-imx-gpu-viv-src
 

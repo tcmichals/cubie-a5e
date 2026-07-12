@@ -3,4 +3,5 @@ menu "Radxa Cubie A5E Flight Controller Custom Packages"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/aic8800-firmware/Config.in"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/sunxi-galcore/Config.in"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/timvx-delegate/Config.in"
+    source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/riscv-firmware/Config.in"
 endmenu

@@ -1,0 +1,34 @@
+Fix Kbuild compilation flags on modern kernels.
+
+In modern Linux kernel build systems (such as Linux 5.x/6.x/7.x), the traditional
+EXTRA_CFLAGS variable is ignored. Instead, ccflags-y and subdir-ccflags-y are
+expected. This patch maps all EXTRA_CFLAGS definitions to ccflags-y and
+subdir-ccflags-y so they are correctly passed to the compiler.
+
+Additionally, this patch strips the -Werror flags so that warnings (like missing
+prototypes) do not block compilation on newer kernels.
+
+Signed-off-by: Antigravity AI Coding Assistant
+
+diff -urN a/kernel-module-imx-gpu-viv-src/Kbuild b/kernel-module-imx-gpu-viv-src/Kbuild
+--- a/kernel-module-imx-gpu-viv-src/Kbuild	2026-07-11 12:00:00.000000000 -0500
++++ b/kernel-module-imx-gpu-viv-src/Kbuild	2026-07-11 12:00:00.000000000 -0500
+@@ -87,8 +87,8 @@
+ -include $(AQROOT)/$(SOC_PLATFORM_LOCATION)/gc_hal_kernel_platform_$(soc_board).config
+ 
+ ifeq ($(CONFIG_KASAN),)
+-EXTRA_CFLAGS += -Werror -Wno-implicit-fallthrough
+-ccflags-$(CONFIG_WERROR) += -Werror
++EXTRA_CFLAGS += -Wno-implicit-fallthrough
++ccflags-$(CONFIG_WERROR) +=
+ endif
+ 
+ OBJS := $(OS_KERNEL_DIR)/gc_hal_kernel_device.o \
+@@ -335,4 +335,7 @@
+ 
+ $(MODULE_NAME)-objs  = $(OBJS)
+ 
++ccflags-y += $(EXTRA_CFLAGS)
++subdir-ccflags-y += $(EXTRA_CFLAGS)
++
+ endif

@@ -1,0 +1,19 @@
+{
+  "project_name": "t527-mainline-flightstack",
+  "architecture_bounds": {
+    "host_domain": "ARM Cortex-A55 (Mainline Linux framework, standard POSIX, V4L2 M2M)",
+    "realtime_domain": "XuanTie E906/E907 RISC-V Core (Bare-metal / Melis RTOS via local ITCM/DTCM)"
+  },
+  "engineering_mandate": {
+    "workflow": "Strictly mainline Linux syntax. Leverage Bootlin/Paul Kocialkowski upstream baselines.",
+    "memory_allocator": "Videobuf2 contiguous standard dma-buf (vb2_dma_contig)",
+    "register_reference": "Use Radxa linux-aw2501 tree purely as an open-book TRM for register footprints.",
+    "riscv_strategy": "Reverse engineer and pull initialization sequences directly from Allwinner's official sunxi-melis SDK.",
+    "npu_strategy": "Completely reject closed vendor Acuity stacks and proprietary /dev/galcore drivers. Enforce mainline Etnaviv and Mesa Teflon delegate."
+  },
+  "logging_audit_policy": {
+    "require_trace_logs": true,
+    "trace_log_format": "Markdown (.md) tracking TRM/Bootlin/Melis/Mesa vs Mainline translation logic",
+    "required_artifacts": [".patch files formatted cleanly for buildroot out-of-tree trees / upstream RFC"]
+  }
+}

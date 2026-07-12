@@ -1,7 +1,7 @@
 # Default U-Boot environment for Radxa Cubie A5E Flight Controller
 bootdelay=1
 baudrate=115200
-bootargs=console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7
+bootargs=console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7
 bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000
 
 # Standard Allwinner 64-bit memory layout addresses (DRAM base 0x40000000)

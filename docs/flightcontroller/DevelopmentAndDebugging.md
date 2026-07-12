@@ -193,77 +193,82 @@ done
 
 ---
 
-### D. C++ Application RT Optimization Template
+### D. C++20 Real-Time ISR Optimization Template (The Doorbell Pattern)
 
-Below is the standard C++ template used to initialize a real-time thread for the main iNAV loop. It locks memory (preventing disk swapping), allocates stack pages beforehand (preventing on-demand page faults), sets the `SCHED_FIFO` real-time scheduler policy, and pins the thread affinity to CPU 7.
+Below is the standard C++20 template used to initialize a real-time thread for the flight loop or IPC bridge (`rbb-server`). Instead of spinning in a `usleep` loop, it blocks on a hardware interrupt doorbell via `/dev/uio0`. It locks memory (preventing disk swapping), sets the `SCHED_FIFO` real-time scheduler policy, and pins the thread affinity to the isolated CPU 7.
 
 ```cpp
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <iostream>
+#include <thread>
+#include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <pthread.h>
-#include <sched.h>
-#include <unistd.h>
+#include <system_error>
 
-#define RT_PRIORITY 80
-#define STACK_SIZE (1024 * 1024) // Allocate 1MB stack space
+#define RT_PRIORITY 90
+#define ISOLATED_CPU 7
 
-// Pre-fault the stack to ensure all stack pages are mapped to physical RAM
-// before entering the high-speed flight loop.
-void pre_fault_stack(void) {
-    unsigned char dummy[STACK_SIZE];
-    memset(dummy, 0, STACK_SIZE);
-}
-
-void configure_realtime_runtime(void) {
-    // 1. Lock all current and future mapped memory pages to prevent swapping
-    if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
-        perror("mlockall failed");
-        exit(EXIT_FAILURE);
+// Elevate a std::jthread to a POSIX real-time thread (SCHED_FIFO)
+// and pin it to an isolated CPU core for hard realtime performance.
+void set_realtime_priority(std::jthread& thread) {
+    pthread_t native_thread = thread.native_handle();
+    
+    // 1. Set SCHED_FIFO Priority
+    sched_param sch_params;
+    sch_params.sched_priority = RT_PRIORITY;
+    if (pthread_setschedparam(native_thread, SCHED_FIFO, &sch_params) != 0) {
+        std::cerr << "Warning: Failed to set SCHED_FIFO. Run as root.\n";
     }
-    
-    // 2. Pre-fault the stack pages
-    pre_fault_stack();
-    
-    // 3. Configure scheduling policy to SCHED_FIFO (first-in, first-out real-time)
-    struct sched_param param;
-    param.sched_priority = RT_PRIORITY;
-    if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
-        perror("sched_setscheduler SCHED_FIFO failed");
-        exit(EXIT_FAILURE);
-    }
-    
-    // 4. Bind the execution context exclusively to isolated CPU Core 7
+
+    // 2. Set CPU Affinity (Pin to isolated core)
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(7, &cpuset);
-    
-    pthread_t current_thread = pthread_self();
-    if (pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset) != 0) {
-        perror("pthread_setaffinity_np failed");
-        exit(EXIT_FAILURE);
+    CPU_SET(ISOLATED_CPU, &cpuset);
+    if (pthread_setaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset) != 0) {
+        std::cerr << "Warning: Failed to pin thread to CPU " << ISOLATED_CPU << "\n";
     }
 }
 
-int main(int argc, char *argv[]) {
-    // Initialize real-time scheduler, memory, and core affinity
-    configure_realtime_runtime();
-    
-    printf("iNAV Real-Time Loop Initialized on CPU Core 7.\n");
-    
-    // Real-Time Loop
-    while (1) {
-        // 1. Read IMU sensors over SPI (/dev/spidev0.0)
-        // 2. Compute PID update (iNAV core control loop)
-        // 3. Write Motor/ESC command structures to FPGA (/dev/spidev1.0)
+void isr_worker(std::stop_token stoken) {
+    // Open the UIO device for the Mailbox doorbell interrupt
+    int uio_fd = open("/dev/uio0", O_RDONLY);
+    if (uio_fd < 0) return;
+
+    uint32_t irq_count = 0;
+    while (!stoken.stop_requested()) {
+        // Block completely until the RISC-V or FPGA fires the hardware doorbell!
+        // 0% CPU usage while waiting.
+        ssize_t bytes = read(uio_fd, &irq_count, sizeof(irq_count));
         
-        // CRITICAL RULE: Avoid any dynamic memory allocation (malloc, new, free, std::vector resizing)
-        // inside this loop to prevent non-deterministic heap lock overhead.
-        
-        usleep(1000); // 1 kHz flight control loop
+        if (bytes == sizeof(irq_count)) {
+            // Doorbell rang! Safely execute the hard real-time loop payload here.
+            // e.g., Read from lock-free shared memory /dev/mem or SPI.
+            
+            // Re-enable the UIO interrupt for the next doorbell
+            uint32_t enable = 1;
+            write(uio_fd, &enable, sizeof(enable));
+        }
+    }
+    close(uio_fd);
+}
+
+int main() {
+    // 1. Lock all current and future mapped memory pages to prevent swapping
+    if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
+        std::cerr << "Warning: mlockall failed. Page faults may cause jitter.\n";
     }
     
+    // 2. Create the background worker using C++20 jthread
+    std::jthread worker(isr_worker);
+    
+    // 3. Elevate it to a real-time POSIX thread on Core 7
+    set_realtime_priority(worker);
+    
+    // Main thread is free to handle non-realtime tasks like Wi-Fi/Telemetry
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+    }
     return 0;
 }
 ```

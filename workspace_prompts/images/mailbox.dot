@@ -1,0 +1,39 @@
+digraph mailbox {
+    rankdir=TD;
+    node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#ffffff", color="#555555"];
+    edge [fontname="Helvetica", fontsize=10, color="#555555"];
+
+    subgraph cluster_arm {
+        label = "ARM HOST (Linux)";
+        fontname="Helvetica-Bold";
+        color="#0052cc";
+        bgcolor="#f4f8ff";
+        a1 [label="Writes payload to SRAM\nOffset 0x0007_C000"];
+        a2 [label="Waits for acknowledgement\non MSG_DATA[1]"];
+        a3 [label="IRQ triggers on host,\nreads response packet"];
+        
+        a1 -> a2 [style=invis];
+        a2 -> a3 [style=invis];
+    }
+
+    subgraph cluster_riscv {
+        label = "RISC-V CO-PROCESSOR";
+        fontname="Helvetica-Bold";
+        color="#008000";
+        bgcolor="#f0fff0";
+        r1 [label="Waits in low-power loop\nor handles SPI sensors"];
+        r2 [label="Wakes, reads register,\nexecutes cmd in SRAM"];
+        r3 [label="Clears local status,\nresumes attitude loop"];
+
+        r1 -> r2 [style=invis];
+        r2 -> r3 [style=invis];
+    }
+
+    a1 -> r2 [label="Mailbox IRQ\n(Doorbell: Writes pointer to MSG_DATA[0])", color="#cc0000", fontcolor="#cc0000"];
+    r2 -> a3 [label="Mailbox IRQ\n(Echo: Writes status to MSG_DATA[1])", color="#0000cc", fontcolor="#0000cc"];
+    
+    /* Enforce ranking */
+    { rank=same; a1; r1; }
+    { rank=same; a2; r2; }
+    { rank=same; a3; r3; }
+}

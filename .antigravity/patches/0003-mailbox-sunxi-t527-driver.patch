@@ -1,0 +1,313 @@
+From 8a87b5a19ef58b9f1a074092b7cdde4c1a5e3cbf Mon Sep 17 00:00:00 2001
+From: Antigravity Team <support@antigravity.ai>
+Date: Sat, 11 Jul 2026 16:08:00 -0500
+Subject: [PATCH] Add Allwinner T527 Mailbox Driver
+
+Add a mainline-compliant mailbox driver for the Allwinner T527 SoC,
+providing hardware doorbell functionality for inter-processor communication.
+---
+ drivers/mailbox/Kconfig             |   7 +
+ drivers/mailbox/Makefile            |   1 +
+ drivers/mailbox/sunxi-mailbox-t527.c | 225 ++++++++++++++++++++++++++++
+ 3 files changed, 233 insertions(+)
+ create mode 100644 drivers/mailbox/sunxi-mailbox-t527.c
+
+diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
+index d38ca601..72e5c83b 100644
+--- a/drivers/mailbox/Kconfig
++++ b/drivers/mailbox/Kconfig
+@@ -332,6 +332,13 @@ config SUN6I_MSGBOX
+ 	  various Allwinner SoCs. This mailbox is used for communication
+ 	  between the application CPUs and the power management coprocessor.
+ 
++config SUNXI_MAILBOX_T527
++	tristate "Allwinner T527 Mailbox Driver"
++	depends on ARCH_SUNXI || COMPILE_TEST
++	default ARCH_SUNXI
++	help
++	  Mainline-compliant mailbox driver for Allwinner T527 SoC.
++
+ config SPRD_MBOX
+ 	tristate "Spreadtrum Mailbox"
+ 	depends on ARCH_SPRD || COMPILE_TEST
+diff --git a/drivers/mailbox/Makefile b/drivers/mailbox/Makefile
+index a08d7211..e306bc89 100644
+--- a/drivers/mailbox/Makefile
++++ b/drivers/mailbox/Makefile
+@@ -70,6 +70,7 @@ obj-$(CONFIG_MTK_VCP_MBOX)	+= mtk-vcp-mailbox.o
+ obj-$(CONFIG_ZYNQMP_IPI_MBOX)	+= zynqmp-ipi-mailbox.o
+ 
+ obj-$(CONFIG_SUN6I_MSGBOX)	+= sun6i-msgbox.o
++obj-$(CONFIG_SUNXI_MAILBOX_T527)	+= sunxi-mailbox-t527.o
+ 
+ obj-$(CONFIG_SPRD_MBOX)		+= sprd-mailbox.o
+ 
+diff --git a/drivers/mailbox/sunxi-mailbox-t527.c b/drivers/mailbox/sunxi-mailbox-t527.c
+new file mode 100644
+index 00000000..7c5e3d7a
+--- /dev/null
++++ b/drivers/mailbox/sunxi-mailbox-t527.c
+@@ -0,0 +1,225 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (c) 2026 Antigravity Team
++ * Mainline-compliant mailbox driver for Allwinner T527 SoC.
++ */
++
++#include <linux/bitops.h>
++#include <linux/clk.h>
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/mailbox_controller.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_irq.h>
++#include <linux/platform_device.h>
++#include <linux/reset.h>
++#include <linux/spinlock.h>
++
++#define NUM_CHANS		8
++
++#define CTRL_REG(n)		(0x0000 + 0x4 * ((n) / 4))
++#define CTRL_RX(n)		BIT(0 + 8 * ((n) % 4))
++#define CTRL_TX(n)		BIT(4 + 8 * ((n) % 4))
++
++#define REMOTE_IRQ_EN_REG	0x0040
++#define REMOTE_IRQ_STAT_REG	0x0050
++#define LOCAL_IRQ_EN_REG	0x0060
++#define LOCAL_IRQ_STAT_REG	0x0070
++
++#define RX_IRQ(n)		BIT(0 + 2 * (n))
++#define RX_IRQ_MASK		0x5555
++#define TX_IRQ(n)		BIT(1 + 2 * (n))
++
++#define FIFO_STAT_REG(n)	(0x0100 + 0x4 * (n))
++#define MSG_STAT_REG(n)		(0x0140 + 0x4 * (n))
++#define MSG_STAT_MASK		GENMASK(2, 0)
++#define MSG_DATA_REG(n)		(0x0180 + 0x4 * (n))
++
++struct sunxi_mbox {
++	struct mbox_controller controller;
++	struct clk *clk;
++	spinlock_t lock;
++	void __iomem *regs;
++};
++
++static inline int chan_num(struct mbox_chan *chan)
++{
++	return chan - chan->mbox->chans;
++}
++
++static inline struct sunxi_mbox *to_sunxi_mbox(struct mbox_chan *chan)
++{
++	return chan->con_priv;
++}
++
++static irqreturn_t sunxi_mbox_irq(int irq, void *dev_id)
++{
++	struct sunxi_mbox *mbox = dev_id;
++	u32 status;
++	int n;
++
++	status = readl(mbox->regs + LOCAL_IRQ_EN_REG) &
++		 readl(mbox->regs + LOCAL_IRQ_STAT_REG);
++
++	if (!(status & RX_IRQ_MASK))
++		return IRQ_NONE;
++
++	for (n = 0; n < NUM_CHANS; ++n) {
++		struct mbox_chan *chan = &mbox->controller.chans[n];
++
++		if (!(status & RX_IRQ(n)))
++			continue;
++
++		while (readl(mbox->regs + MSG_STAT_REG(n)) & MSG_STAT_MASK) {
++			u32 msg = readl(mbox->regs + MSG_DATA_REG(n));
++			mbox_chan_received_data(chan, &msg);
++		}
++
++		writel(RX_IRQ(n), mbox->regs + LOCAL_IRQ_STAT_REG);
++	}
++
++	return IRQ_HANDLED;
++}
++
++static int sunxi_mbox_send_data(struct mbox_chan *chan, void *data)
++{
++	struct sunxi_mbox *mbox = to_sunxi_mbox(chan);
++	int n = chan_num(chan);
++	u32 msg = *(u32 *)data;
++
++	if (WARN_ON_ONCE(!(readl(mbox->regs + CTRL_REG(n)) & CTRL_TX(n))))
++		return 0;
++
++	writel(msg, mbox->regs + MSG_DATA_REG(n));
++	return 0;
++}
++
++static int sunxi_mbox_startup(struct mbox_chan *chan)
++{
++	struct sunxi_mbox *mbox = to_sunxi_mbox(chan);
++	int n = chan_num(chan);
++
++	if (readl(mbox->regs + CTRL_REG(n)) & CTRL_RX(n)) {
++		while (readl(mbox->regs + MSG_STAT_REG(n)) & MSG_STAT_MASK)
++			readl(mbox->regs + MSG_DATA_REG(n));
++		writel(RX_IRQ(n), mbox->regs + LOCAL_IRQ_STAT_REG);
++
++		spin_lock(&mbox->lock);
++		writel(readl(mbox->regs + LOCAL_IRQ_EN_REG) | RX_IRQ(n),
++		       mbox->regs + LOCAL_IRQ_EN_REG);
++		spin_unlock(&mbox->lock);
++	}
++
++	return 0;
++}
++
++static void sunxi_mbox_shutdown(struct mbox_chan *chan)
++{
++	struct sunxi_mbox *mbox = to_sunxi_mbox(chan);
++	int n = chan_num(chan);
++
++	if (readl(mbox->regs + CTRL_REG(n)) & CTRL_RX(n)) {
++		spin_lock(&mbox->lock);
++		writel(readl(mbox->regs + LOCAL_IRQ_EN_REG) & ~RX_IRQ(n),
++		       mbox->regs + LOCAL_IRQ_EN_REG);
++		spin_unlock(&mbox->lock);
++
++		do {
++			while (readl(mbox->regs + MSG_STAT_REG(n)) & MSG_STAT_MASK)
++				readl(mbox->regs + MSG_DATA_REG(n));
++			writel(RX_IRQ(n), mbox->regs + LOCAL_IRQ_STAT_REG);
++		} while (readl(mbox->regs + LOCAL_IRQ_STAT_REG) & RX_IRQ(n));
++	}
++}
++
++static bool sunxi_mbox_last_tx_done(struct mbox_chan *chan)
++{
++	struct sunxi_mbox *mbox = to_sunxi_mbox(chan);
++	int n = chan_num(chan);
++
++	return !(readl(mbox->regs + REMOTE_IRQ_STAT_REG) & RX_IRQ(n));
++}
++
++static bool sunxi_mbox_peek_data(struct mbox_chan *chan)
++{
++	struct sunxi_mbox *mbox = to_sunxi_mbox(chan);
++	int n = chan_num(chan);
++
++	return readl(mbox->regs + MSG_STAT_REG(n)) & MSG_STAT_MASK;
++}
++
++static const struct mbox_chan_ops sunxi_mbox_chan_ops = {
++	.send_data    = sunxi_mbox_send_data,
++	.startup      = sunxi_mbox_startup,
++	.shutdown     = sunxi_mbox_shutdown,
++	.last_tx_done = sunxi_mbox_last_tx_done,
++	.peek_data    = sunxi_mbox_peek_data,
++};
++
++static int sunxi_mbox_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct mbox_chan *chans;
++	struct reset_control *reset;
++	struct sunxi_mbox *mbox;
++	int i, ret;
++
++	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
++	if (!mbox)
++		return -ENOMEM;
++
++	chans = devm_kcalloc(dev, NUM_CHANS, sizeof(*chans), GFP_KERNEL);
++	if (!chans)
++		return -ENOMEM;
++
++	for (i = 0; i < NUM_CHANS; ++i)
++		chans[i].con_priv = mbox;
++
++	mbox->clk = devm_clk_get(dev, NULL);
++	if (IS_ERR(mbox->clk))
++		return PTR_ERR(mbox->clk);
++
++	ret = clk_prepare_enable(mbox->clk);
++	if (ret)
++		return ret;
++
++	reset = devm_reset_control_get_exclusive(dev, NULL);
++	if (IS_ERR(reset)) {
++		ret = PTR_ERR(reset);
++		goto err_disable_clk;
++	}
++
++	ret = reset_control_deassert(reset);
++	if (ret)
++		goto err_disable_clk;
++
++	mbox->regs = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(mbox->regs)) {
++		ret = PTR_ERR(mbox->regs);
++		goto err_disable_clk;
++	}
++
++	writel(0, mbox->regs + LOCAL_IRQ_EN_REG);
++
++	ret = devm_request_irq(dev, platform_get_irq(pdev, 0),
++			       sunxi_mbox_irq, 0, dev_name(dev), mbox);
++	if (ret)
++		goto err_disable_clk;
++
++	mbox->controller.dev           = dev;
++	mbox->controller.ops           = &sunxi_mbox_chan_ops;
++	mbox->controller.chans         = chans;
++	mbox->controller.num_chans     = NUM_CHANS;
++	mbox->controller.txdone_irq    = false;
++	mbox->controller.txdone_poll   = true;
++	mbox->controller.txpoll_period = 5;
++
++	spin_lock_init(&mbox->lock);
++	platform_set_drvdata(pdev, mbox);
++
++	ret = mbox_controller_register(&mbox->controller);
++	if (ret)
++		goto err_disable_clk;
++
++	return 0;
++
++err_disable_clk:
++	clk_disable_unprepare(mbox->clk);
++	return ret;
++}
++
++static void sunxi_mbox_remove(struct platform_device *pdev)
++{
++	struct sunxi_mbox *mbox = platform_get_drvdata(pdev);
++
++	mbox_controller_unregister(&mbox->controller);
++	clk_disable_unprepare(mbox->clk);
++}
++
++static const struct of_device_id sunxi_mbox_of_match[] = {
++	{ .compatible = "allwinner,sun55i-a523-msgbox", },
++	{},
++};
++MODULE_DEVICE_TABLE(of, sunxi_mbox_of_match);
++
++static struct platform_driver sunxi_mbox_driver = {
++	.driver = {
++		.name = "sunxi-mailbox-t527",
++		.of_match_table = sunxi_mbox_of_match,
++	},
++	.probe = sunxi_mbox_probe,
++	.remove = sunxi_mbox_remove,
++};
++module_platform_driver(sunxi_mbox_driver);
++
++MODULE_AUTHOR("Antigravity Team");
++MODULE_DESCRIPTION("Allwinner T527 Mailbox Driver");
++MODULE_LICENSE("GPL v2");
+-- 
+2.34.1

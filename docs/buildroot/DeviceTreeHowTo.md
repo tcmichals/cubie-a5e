@@ -211,6 +211,9 @@ Recommended workflow:
 - Keep each hardware domain isolated in overlay blocks (`&i2cX`, `&spiX`, etc.).
 - Keep overlay changes minimal and commented.
 
+> [!NOTE]
+> Internal SoC hardware engines (like the NPU or the VEU encoder) are internal IP blocks on the system bus and do not route to physical pin headers. Therefore, they are defined directly in the base SoC device tree (`sun55i-a523.dtsi`) in the kernel source and enabled by default, requiring no modifications to the board-specific overlay (`.dtso`).
+
 ## Current overlay intent in this repo
 
 `cubie-a5e-flight-stack.dtso` currently demonstrates enabling/declaring:
@@ -241,6 +244,25 @@ After boot:
 - If a peripheral device node is missing after boot, check `/proc/device-tree` to see if the node was merged in.
 - Overlay ordering matters when multiple overlays touch the same nodes or properties — apply in dependency order.
 - If you see `fdt: FDT_ERR_NOSPACE`, increase the `fdt resize` value in `boot.cmd` (e.g. `fdt resize 16384`).
+
+### Real-World Case Study: The `ttyS0` Serial Hijack
+A classic overlay bug we ran into: The board booted, U-Boot's `earlycon` printed perfectly over UART0 (the debug pins), but exactly when the kernel transitioned to the real console (`printk: legacy bootconsole [uart0] disabled`), all output stopped and the login prompt never appeared.
+
+**What happened:**
+1. Our overlay enabled `&uart2` (for a GPS module) but we forgot to explicitly alias it to a specific `ttyS` number.
+2. The Linux 8250 serial driver probed UART2 first. Since UART2 lacked an alias, the driver dynamically assigned it the lowest available name: `ttyS0`.
+3. U-Boot passed `console=ttyS0` to the kernel.
+4. The kernel blindly handed the console to `ttyS0` (which it now believed was UART2).
+5. The kernel booted perfectly and spawned the login shell—but sent it all out of the UART2 pins instead of the UART0 pins connected to our computer!
+
+**The Fix:**
+Always explicitly map your serial ports in the root `/aliases` block of your overlay using absolute string paths (not phandles!), so the driver doesn't play musical chairs:
+```dts
+&{/aliases} {
+    serial0 = "/soc/serial@2500000"; /* Force UART0 to ttyS0 */
+    serial2 = "/soc/serial@2500800"; /* Force UART2 to ttyS2 */
+};
+```
 
 ## Quick reference — which file to edit for what
 

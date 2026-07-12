@@ -112,6 +112,20 @@ Why we use them:
 - verify format/framerate negotiation early
 - isolate camera-driver issues from ML/inference code
 
+### VEU / Video Processing Engine (Encoder)
+
+Purpose: utilize the off-the-shelf hardware video encoder (VEU) in mainline Linux to compress telemetry/video streams without burdening the CPU or NPU.
+
+Related pieces:
+- Mainline `cedrus` or VEU stateless encoder driver (kernel side)
+- `v4l2-request` API (userspace side)
+- FFmpeg/GStreamer with v4l2m2m (memory-to-memory) support
+
+Why we use it:
+- Hardware-accelerated h264/h265 encoding offloads the CPU.
+- Integrates seamlessly with the standard Mainline Linux V4L2 Memory-to-Memory (M2M) stateless architecture.
+- For deep dives into the VEU driver mappings, see `workspace_prompts/prompt2_mainline_veu_encoder.md`.
+
 ### NPU / TinyML
 
 Purpose: enable accelerated inference path for flight-assist ML workloads.
@@ -119,12 +133,10 @@ Purpose: enable accelerated inference path for flight-assist ML workloads.
 Related pieces:
 
 - `tensorflow-lite`
-- `timvx-delegate` (now wired for runtime bundle install + smoke test)
-- `sunxi-galcore` (currently stub; kernel-side NPU driver packaging still to be completed)
+- `mesa3d` (compiled with the Gallium `etnaviv` driver and `-Dteflon=true` for userspace delegate)
+- `CONFIG_DRM_ETNAVIV` (mainline Linux DRM kernel driver)
 
-Current validation entry point:
-
-- `/usr/bin/npu-smoke-test`
+For details, see [HowToNPU.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/HowToNPU.md).
 
 ### Boot and trusted firmware (`BL31`, often said as "AT31")
 
@@ -237,20 +249,11 @@ sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progre
 sync
 ```
 
-## 9) TIM-VX NPU Prebuilt Integration
+## 9) Open-Source NPU Acceleration Integration
 
-By default, the build looks for precompiled NPU driver libraries at the workspace root directory in `timvx-bundle/`. 
+We use the open-source **Etnaviv** kernel DRM driver combined with **Mesa Teflon** userspace delegate (`libteflon.so`) for hardware-accelerated TinyML. 
 
-If you store the bundle elsewhere on your host machine, you can override the path during compilation:
-```bash
-PATH=$PWD/bld/bin:$PATH make -C bld \
-    BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR=/home/tcmichals/timvx-release
-```
-
-Once loaded onto the target, you can validate the NPU stack using the onboard smoke test:
-```bash
-/usr/bin/npu-smoke-test
-```
+No proprietary binary blobs or out-of-tree bundle folders are required. See [HowToNPU.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/HowToNPU.md) for full configuration and validation details.
 
 ## 10) Board references
 

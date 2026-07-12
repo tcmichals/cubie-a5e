@@ -1,0 +1,23 @@
+digraph arch {
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#f0f0f0", color="#aaaaaa"];
+    edge [fontname="Helvetica", fontsize=10, color="#666666"];
+
+    subgraph cluster_arm {
+        label = "ARM HOST DOMAIN";
+        fontname="Helvetica-Bold";
+        color="#0052cc";
+        bgcolor="#f4f8ff";
+        linux [label="Linux Kernel / Apps\n\n(Writes to shared SRAM C\nand controls reset/clocks)", fillcolor="#cce0ff", color="#0052cc"];
+    }
+
+    subgraph cluster_riscv {
+        label = "RISC-V CO-PROCESSOR DOMAIN";
+        fontname="Helvetica-Bold";
+        color="#008000";
+        bgcolor="#f0fff0";
+        fw [label="Bare-Metal Firmware\n\n(Ingests FPGA SPI sensors,\nwrites data to shared RB)", fillcolor="#ccffcc", color="#008000"];
+    }
+
+    linux -> fw [dir=both, label="Shared SRAM C"];
+}

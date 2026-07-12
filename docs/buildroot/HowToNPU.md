@@ -1,12 +1,12 @@
 # NPU & TinyML Acceleration Guide
 
-This guide explains how the Neural Processing Unit (NPU) and TinyML hardware-accelerated inference stack is configured and validated on the Radxa Cubie A5E flight controller.
+This guide explains how the Neural Processing Unit (NPU) and TinyML hardware-accelerated inference stack is configured and validated using the open-source **Etnaviv** and **Mesa Teflon** stack on the Radxa Cubie A5E flight controller.
 
 ---
 
 ## 1. NPU Software Stack
 
-To run TensorFlow Lite models using NPU hardware acceleration instead of CPU-bound inference, the following components are integrated:
+To run TensorFlow Lite models using NPU hardware acceleration instead of CPU-bound inference, the following open-source components are integrated:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -14,83 +14,48 @@ To run TensorFlow Lite models using NPU hardware acceleration instead of CPU-bou
 ├─────────────────────────────────────────────────────────┤
 │            TensorFlow Lite Inference Engine             │
 ├─────────────────────────────────────────────────────────┤
-│        TensorFlow Lite TIM-VX NPU Delegate             │
+│         Mesa Teflon NPU Delegate (libteflon.so)         │
 ├─────────────────────────────────────────────────────────┤
-│    TIM-VX / OpenVX Userspace HAL (NPU Driver Libraries) │
+│          Mesa 3D Gallium GPU Driver (etnaviv)           │
 ├─────────────────────────────────────────────────────────┤
-│   galcore Kernel Module (/dev/galcore NPU device node)  │
+│         etnaviv Kernel DRM Driver (/dev/dri/*)          │
 └─────────────────────────────────────────────────────────┘
 ```
 
 In this Buildroot tree:
-* `BR2_PACKAGE_TENSORFLOW_LITE=y` is enabled.
-* `BR2_PACKAGE_TIMVX_DELEGATE=y` installs Userspace HAL libraries and `/usr/bin/npu-smoke-test`.
-* `BR2_PACKAGE_SUNXI_GALCORE=y` provides the kernel driver stub (currently in development).
+* `CONFIG_DRM_ETNAVIV=y` is enabled in `linux.config` to build the open-source kernel driver.
+* `BR2_PACKAGE_MESA3D=y` and `BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_ETNAVIV=y` are enabled to compile the Mesa Etnaviv driver.
+* `BR2_PACKAGE_MESA3D_TEFLON=y` is enabled to build the Teflon TensorFlow Lite delegate library (`libteflon.so`).
+* `BR2_PACKAGE_TENSORFLOW_LITE=y` is enabled to build the TensorFlow Lite engine.
 
 ---
 
-## 2. TIM-VX Prebuilt Runtime Bundle
+## 2. On-Target Validation
 
-Because NPU userspace libraries are proprietary and closed-source, they cannot be built from source by Buildroot. You must supply these compiled libraries to package them into the image.
-
-To automate this setup, a helper script is provided at `project-cubie-a5e/scripts/setup-npu-bundle.sh`.
-
-### A. Populating the Bundle Automatically
-
-The script can automatically extract the necessary NPU libraries from a running board or an official Radxa OS `.img` file.
-
-**Option 1: Pull from a running Radxa Cubie board via SSH**
-Ensure your board is powered on, connected to the same network, and run:
+### A. Kernel Driver Verification
+Once booted, verify that the `etnaviv` DRM driver successfully probed the hardware:
 ```bash
-./project-cubie-a5e/scripts/setup-npu-bundle.sh ssh [board_ip] [username]
+dmesg | grep -i etnaviv
 ```
-*(If no IP/username is provided, the script defaults to `rock@192.168.1.100`)*
-
-**Option 2: Extract from a local Radxa Debian/Ubuntu image**
-If you have downloaded the official Radxa OS `.img` file to your build machine, run:
+Verify that the DRM render node exists (usually `/dev/dri/renderD128`):
 ```bash
-./project-cubie-a5e/scripts/setup-npu-bundle.sh image /path/to/radxa-image.img
-```
-*(This mounts the image read-only using a loop device and extracts the required `.so` files into the bundle).*
-
-### B. Workspace Layout
-
-The script creates the workspace-level `timvx-bundle/` directory at the project root:
-```text
-/home/tcmichals/projects/cubie-a5e/
-├── bld/
-├── project-cubie-a5e/
-└── timvx-bundle/          <-- Populated by the script
-    ├── lib/
-    │   └── libtim-vx.so   (and other .so files)
-    └── bin/
-        └── vpm_run        (optional test tool)
-```
-If this directory exists, Buildroot will find and copy the files automatically into `/usr/lib/` and `/usr/bin/` during compilation. No extra command-line arguments are required!
-
-### C. Custom Location Override
-
-If you prefer to manually store the precompiled bundle in a different directory on your system, override the path during build:
-```bash
-PATH=$PWD/bld/bin:$PATH make -C bld \
-    BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR=/home/tcmichals/my-timvx-folder
+ls -l /dev/dri/renderD128
 ```
 
----
+### B. TensorFlow Lite Delegate Inference
+To load a quantized TensorFlow Lite model (`.tflite`) using the Teflon NPU delegate, load the delegate in your Python or C++ application:
 
-## 3. On-Target Validation (NPU Smoke Test)
+**Python Example:**
+```python
+import tflite_runtime.interpreter as tflite
 
-The image includes `/usr/bin/npu-smoke-test` to verify the NPU stack's health on the physical board. 
+# Load the Teflon delegate from Mesa
+teflon_delegate = tflite.load_delegate("/usr/lib/libteflon.so")
 
-Run on the target shell:
-```bash
-/usr/bin/npu-smoke-test
+# Initialize interpreter with the NPU delegate
+interpreter = tflite.Interpreter(
+    model_path="landing_quantized.tflite",
+    experimental_delegates=[teflon_delegate]
+)
+interpreter.allocate_tensors()
 ```
-
-This script validates:
-* Visibility of the kernel driver node (`/dev/galcore`).
-* Presence of the required TIM-VX userspace `.so` files in `/usr/lib/`.
-* Presence of TensorFlow Lite delegate bindings.
-
-If any required driver or delegate library is missing, the smoke test will exit with a non-zero code and describe the failure.
-

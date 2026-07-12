@@ -1,0 +1,18 @@
+config BR2_PACKAGE_RBB_SERVER
+	bool "rbb-server"
+	depends on BR2_aarch64
+	help
+	  Remote Bitbang TCP server for XuanTie E907 RISC-V co-processor
+	  debugging via ARM MMIO bridge.
+
+	  Maps the RISC-V debug module registers directly via /dev/mem and
+	  implements the OpenOCD remote_bitbang protocol over TCP port 3335.
+
+	  No external JTAG probe required — the ARM Cortex-A55 accesses the
+	  E907 debug module via the shared MCU AHB bus.
+
+	  Run probe_riscv_debug.sh first to discover the debug module address,
+	  then: rbb_server <address> &
+	       openocd -f /etc/openocd/openocd_t527_local.cfg
+
+	  See docs/buildroot/prompt5_riscv_debug_trace.md for full details.

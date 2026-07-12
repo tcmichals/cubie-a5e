@@ -40,10 +40,8 @@ project-cubie-a5e/                     external tree (BR2_EXTERNAL) — edit her
   package/
     aic8800-driver/                    Wi-Fi driver hook
     aic8800-firmware/                  Wi-Fi firmware hook
-    sunxi-galcore/                     NPU kernel driver hook (stub — not complete)
-    timvx-delegate/                    TIM-VX delegate wiring + npu-smoke-test
-  scripts/
-    setup-npu-bundle.sh                Helper script to automatically pull NPU libs
+    sunxi-galcore/                     NPU kernel driver hook (deprecated)
+    timvx-delegate/                    TIM-VX delegate wiring (deprecated)
 docs/                                  organized how-to guides
   buildroot/                           Creating the distribution (OS / bring-up)
   flightcontroller/                    Using the distribution (Guidance / control)
@@ -60,8 +58,9 @@ bld/                                   build output (generated, not in repo)
 ## Key enabled packages (defconfig)
 
 - `BR2_PACKAGE_TENSORFLOW_LITE=y` — TFLite inference runtime
-- `BR2_PACKAGE_TIMVX_DELEGATE=y` — TIM-VX NPU delegate wiring
-- `BR2_PACKAGE_SUNXI_GALCORE=y` — NPU kernel driver (stub)
+- `BR2_PACKAGE_MESA3D=y` — Mesa 3D Graphics Library
+- `BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_ETNAVIV=y` — open-source Etnaviv Gallium driver
+- `BR2_PACKAGE_MESA3D_TEFLON=y` — Teflon TensorFlow Lite delegate library (libteflon.so)
 - `BR2_PACKAGE_PYTHON3=y` + numpy, pyserial — bring-up scripts and ML glue
 - `BR2_PACKAGE_LIBGPIOD=y` + tools — GPIO bring-up
 - `BR2_PACKAGE_I2C_TOOLS=y` — I2C bus probing
@@ -82,25 +81,22 @@ U-Boot `fdt apply` — NOT kernel configfs overlays.
 - Kernel never knows overlays existed — no `CONFIG_OF_OVERLAY` needed
 - Requires in U-Boot: `CONFIG_OF_LIBFDT_OVERLAY=y`, `CONFIG_CMD_FDT=y`
 
-## NPU stack
+## NPU stack (FOSS Mainline)
 
 ```
-/dev/galcore  (kernel, sunxi-galcore driver — stub in this tree)
-     ↓
-libovxlib / libtim-vx  (userspace runtime, from prebuilt bundle)
-     ↓
-TFLite + TIM-VX delegate
-     ↓
+/dev/dri/renderD128  (kernel, etnaviv DRM driver)
+      ↓
+libteflon.so  (userspace Gallium compute tracker, compiled by Mesa 3D)
+      ↓
+TFLite interpreter
+      ↓
 Python / application code
 ```
 
-Smoke test on target: `/usr/bin/npu-smoke-test`
-Prebuilt bundle path: `BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR` (defaults to `timvx-bundle/` in workspace root)
+Validation on target: `dmesg | grep -i etnaviv` and loading `/usr/lib/libteflon.so` as a TFLite delegate.
 
 ## Known stubs / active TODOs
 
-- `sunxi-galcore` — kernel NPU driver packaging not yet complete
-- TIM-VX runtime bundle — must be supplied externally or fetched via helper script
 - AbstractX integration — SPI driver/protocol bring-up pending FPGA hardware
 
 ## Build commands (from repo top level)
@@ -118,15 +114,21 @@ PATH=$PWD/bld/bin:$PATH make -C bld
 sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
-## Documentation Map
-
 - `docs/README.md` — index of all guides
 - `docs/buildroot/BuildRootHowTo.md` — package management & build commands
 - `docs/buildroot/DeviceTreeHowTo.md` — DTB and overlays compilation
 - `docs/buildroot/WirelessHowTo.md` — Wi-Fi bring-up
-- `docs/buildroot/HowToNPU.md` — NPU drivers, packaging, and setup script
+- `docs/buildroot/HowToNPU.md` — open-source NPU configuration and validation
+- `docs/buildroot/HowToRISCV.md` — open-source RISC-V co-processor configuration and compilation
 - `docs/flightcontroller/DevelopmentAndDebugging.md` — C++ remote debugging with VS Code / gdbserver
 - `docs/buildroot/CameraTesting.md` — Camera bring-up and V4L2 diagnostics
+- `docs/buildroot/FOSS_NPU_Migration_Article.md` — Case study on transitioning the NPU stack to FOSS
+- `docs/buildroot/Mainline_Flightstack_Bringup_Article.md` — Master technical article on the flightstack bring-up
+
+## Workspace Prompts & Research Traces
+- `workspace_prompts/prompt3_riscv_tcm_map.md` — RISC-V Memory Maps and PLIC tracing
+- `workspace_prompts/prompt4_mailbox_sync_trace.md` — Mailbox IPC Handshake Traces
+- `workspace_prompts/prompt5_riscv_debug_trace.md` — MMIO Debug Bridge Architecture
 
 ## Real-Time Linux (PREEMPT_RT) & Core Isolation Guidelines
 

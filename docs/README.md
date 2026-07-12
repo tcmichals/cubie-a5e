@@ -10,7 +10,7 @@ These documents cover the base operating system build, hardware interfaces, and 
 
 * **[Buildroot System How-To](buildroot/BuildRootHowTo.md)**
   * Details out-of-tree package development (`Config.in` and `.mk` files).
-  * Explains tool groups (eudev, SPI/I2C/GPIO tools, camera/video, Python, NPU).
+  * Explains tool groups (eudev, SPI/I2C/GPIO tools, camera/video, Python, NPU, GDB).
   * Outlines the build/rebuild/image-generation flow.
 * **[Device Tree & Overlay Guide](buildroot/DeviceTreeHowTo.md)**
   * Details how overlays are loaded using U-Boot (`fdt apply`) and why it is chosen over other architectures.
@@ -18,13 +18,19 @@ These documents cover the base operating system build, hardware interfaces, and 
 * **[Wireless Configuration How-To](buildroot/WirelessHowTo.md)**
   * Documents Wi-Fi bring-up flow (`aic8800` driver + firmware + `wpa_supplicant`).
   * Describes network startup scripts (`/etc/init.d/S40network-wifi`) and wireless diagnostics.
-* **[NPU Packaging & Driver Setup](buildroot/HowToNPU.md)**
-  * Explains the NPU graphics driver/runtime stack (`galcore` + TIM-VX/OpenVX + TFLite delegate).
-  * Documents integrating the prebuilt TIM-VX runtime binary bundle.
-  * Explains running the on-target `/usr/bin/npu-smoke-test` validation script.
+* **[Open-Source NPU Configuration](buildroot/HowToNPU.md)**
+  * Explains the open-source NPU compute stack (mainline kernel `etnaviv` DRM driver + Mesa Teflon delegate).
+  * Documents verification commands (`dmesg`, `/dev/dri/*`) and TFLite delegate scripting examples.
+* **[RISC-V Co-processor Programming & Bring-up](buildroot/HowToRISCV.md)**
+  * Details the XuanTie co-processor architecture, memory interface mappings (ITCM, DTCM, SRAM C).
+  * Documents firmware compilation using `riscv-none-elf` cross-compiler and host-side boot-up commands.
 * **[Camera Verification & Testing](buildroot/CameraTesting.md)**
-  * Documents V4L2 device node scanning and frame capture tests.
+  * Documents mainline **Media Controller** topology (`media-ctl`) and memory-mapped `mmap` streaming.
   * Details diagnostic commands (`v4l2-ctl`) and direct frame extraction scripts.
+* **[NPU FOSS Migration Case Study](buildroot/FOSS_NPU_Migration_Article.md)**
+  * Case study documenting the transition of the NPU stack from out-of-tree vendor blocks to upstream FOSS drivers.
+* **[Master Flightstack Bring-up Article](buildroot/Mainline_Flightstack_Bringup_Article.md)**
+  * Unified technical article detailing the tri-domain system architecture and bring-up of all 6 blueprints.
 
 ---
 
@@ -40,7 +46,7 @@ These documents cover flight stack architecture, FPGA integration, and intellige
   * Provides the reference Python TinyML inference loop.
 * **[C/C++ Development and Debugging Guide](flightcontroller/DevelopmentAndDebugging.md)**
   * Documents cross-compiling application code using the Buildroot toolchain.
-  * Explains remote debugging using VS Code task scripts (automating scp and spawning remote `gdbserver`).
+  * Explains remote debugging using VS Code task scripts (automating scp and spawning remote `gdbserver` or native GDB).
 
 ---
 
@@ -61,5 +67,5 @@ These documents cover flight stack architecture, FPGA integration, and intellige
 ### External Packages
 * `project-cubie-a5e/package/aic8800-driver/` — AIC8800 Wi-Fi/BT kernel driver.
 * `project-cubie-a5e/package/aic8800-firmware/` — AIC8800 firmware binaries.
-* `project-cubie-a5e/package/sunxi-galcore/` — NPU driver kernel package.
-* `project-cubie-a5e/package/timvx-delegate/` — TIM-VX delegate integration (copies host runtime bundle and NPU smoke test tool).
+* `project-cubie-a5e/package/sunxi-galcore/` — NPU driver kernel package (deprecated).
+* `project-cubie-a5e/package/timvx-delegate/` — TIM-VX delegate integration (deprecated).

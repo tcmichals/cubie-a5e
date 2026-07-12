@@ -1,0 +1,6 @@
+config BR2_PACKAGE_RISCV_FIRMWARE
+	bool "riscv-firmware"
+	help
+	  XuanTie RISC-V co-processor bare-metal ingestion firmware.
+	  Compiles the firmware from the local source directory and
+	  installs the binary payload into target `/lib/firmware/`.

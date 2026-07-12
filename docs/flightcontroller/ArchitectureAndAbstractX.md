@@ -4,33 +4,45 @@ This document outlines the flight stack system design for the Radxa Cubie A5E fl
 
 ---
 
-## 1. Split-Responsibility Architecture
+## 1. Split-Responsibility Architecture (3-Tier)
 
-To achieve both high-level intelligence (computer vision, TinyML NPU workloads, route planning) and microsecond-level hard real-time flight control, the system divides responsibilities between two main processing blocks:
+To achieve both high-level intelligence (computer vision, TinyML NPU workloads, route planning) and microsecond-level hard real-time flight control, the system divides responsibilities between three main processing blocks:
 
 ```mermaid
 graph TD
-    subgraph Cubie A5E (Linux Side)
+    subgraph ARM Linux (High-Level OS)
         A[Flight Logic & Mission State] --> B[TinyML/NPU Obstacle Avoidance]
         B --> C[Navigation & SLAM]
+        C -->|UIO Mailbox Doorbell| D
+    end
+    subgraph RISC-V (Real-Time Bridge)
+        D[E907 Bare-Metal Co-processor]
+        D <-->|Lock-Free SPSC Ringbuffer| C
     end
     subgraph FPGA (Low-Level Hardware)
-        D[DSHOT Motor Outputs]
-        E[IMU Sensor Fast Domain]
-        F[PWM Input/Output]
+        E[DSHOT Motor Outputs]
+        F[IMU Sensor Fast Domain]
+        G[PWM Input/Output]
     end
-    C <== Dual SPI bus (AbstractX) ==> E
+    D <== Dual SPI bus (AbstractX) ==> F
 ```
 
-### A. Cubie A5E (Linux OS Domain)
-* **High-Level Flight Logic:** Navigation, mission state machine, and waypoint planning.
-* **Intelligent Assist:** Machine learning models running on the onboard NPU (using the TensorFlow Lite TIM-VX delegate) for real-time video processing, obstacle avoidance, and adaptive flight control.
-* **Networking & Telemetry:** Wi-Fi (AIC8800), LTE interfaces, and high-bandwidth data logging.
+### A. Cubie A5E ARM Core (Linux OS Domain)
+* **High-Level Flight Logic:** Navigation, mission state machine, and waypoint planning (e.g. iNav).
+* **Hard Realtime Pinning:** The flight control thread runs in POSIX `SCHED_FIFO`, uses `mlockall` to prevent page faults, and is pinned to an isolated core (`isolcpus=7`) to guarantee 0 OS jitter.
+* **Intelligent Assist:** Machine learning models running on the onboard NPU (using the TensorFlow Lite TIM-VX delegate).
+
+### B. XuanTie E907 RISC-V Core (Real-Time Bridge)
+* **Zero-Cost C++ Firmware:** Runs completely bare-metal without OS overhead. Employs zero-cost C++ `volatile struct` hardware abstractions for strict type safety.
+* **Lock-Free IPC:** Communicates with the ARM Linux core via a lock-free Single-Producer/Single-Consumer (SPSC) ring buffer residing in shared memory (`/dev/mem`).
+* **Hardware Doorbell:** Uses the Mailbox peripheral to instantly fire a hardware interrupt to the ARM core when packets are ready, eliminating CPU polling.
+
+### C. FPGA (Deterministic Hardware Domain)
 
 ### B. FPGA (Deterministic Hardware Domain)
-* **Hard Real-Time I/O:** Generation of time-critical signals (e.g., DSHOT ESC outputs, PWM output for servos, PWM input for RC receivers).
-* **IMU Interfacing:** Rapidly reading the inertial sensors and providing a low-latency, deterministic sensor feedback stream.
-* **Safety Co-processor:** Running safety watchdogs and failsafe logic if the Linux OS crashes or lags.
+* **Hard Real-Time I/O:** Generation of time-critical signals (e.g., DSHOT ESC outputs, PWM output for servos).
+* **IMU Interfacing:** Rapidly reading inertial sensors and pushing data directly to the RISC-V over SPI.
+* **Safety Co-processor:** Running safety watchdogs and failsafe logic if the RISC-V or ARM OS crashes.
 
 ---
 
@@ -302,16 +314,23 @@ In this model, the FPGA acts as a hard real-time I/O serializer. The Linux-based
        |   +----------------------------+        +-----------+ |
        |   | iNAV Flight Core (RT Port) | <----> |   Wi-Fi   | |
        |   +----------------------------+        +-----------+ |
-       |          | (Attitude / Motor Cmds)            |       |
+       |          | (Hard Realtime SCHED_FIFO)         |       |
        |          v                                    | (MSP) |
        |   +----------------------------+              |       |
-       |   |   AbstractX SPI Driver     |              |       |
+       |   | rbb-server (UIO/Mem Bridge)|              |       |
        |   +----------------------------+              |       |
-       +------------------|----------------------------|-------+
-                          |                            |
-            Dual-SPI Link | (Sensor / DSHOT)           | Wi-Fi Connection
-                          |                            | (GCS Link)
-                          v                            v
+       +----------|----------^-------------------------|-------+
+                  | Doorbell | SPSC Ringbuffer
+                  v Interrupt|
+       +-------------------------------------------------------+
+       |             XuanTie E907 RISC-V Co-processor          |
+       |   +-----------------------------------------------+   |
+       |   |       Bare-Metal Zero-Cost C++ Firmware       |   |
+       |   +-----------------------------------------------+   |
+       +------------------|------------------------------------+
+                          |
+            Dual-SPI Link | (Sensor / DSHOT)
+                          v
        +----------------------------------------+ +-----------------+
        |           FPGA (I/O Expander)          | | Ground Control  |
        |                                        | |   Station       |
