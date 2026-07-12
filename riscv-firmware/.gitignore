@@ -1,0 +1,10 @@
+# Compiled object files
+*.o
+*.a
+*.so
+
+# Executables and debug files
+*.elf
+*.bin
+*.map
+*.hex
