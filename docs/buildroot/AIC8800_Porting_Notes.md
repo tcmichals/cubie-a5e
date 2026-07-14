@@ -256,4 +256,6 @@ We have conducted a secondary review of the driver against modern Linux mainline
 - We have successfully decoupled the MAC layer's data structures (`aicwf_tx_priv`, `aicwf_rx_priv`) and execution paths (`rwnx_tx_push`) from physical bus structs (`sdiodev`/`usbdev`).
 - The generic `struct aicwf_bus` now properly manages the abstraction layer.
 - `chipid` lookups have been flattened.
-- **Pending Task:** A full `make linux-dirclean && make linux` is currently compiling in the background to verify these abstractions. Once it finishes, we should verify the driver behaves correctly on the Cubieboard.
+- **Validation Complete:** We have successfully compiled the driver with SDIO-only configuration (`CONFIG_SDIO_SUPPORT=y`, `CONFIG_USB_SUPPORT=n`). 
+- **Final Fixes Applied:** During the final compilation check, we identified and eliminated lingering physical bus coupling in `aicwf_sdio.c`. We replaced direct references to `tx_priv->sdiodev` with the abstracted `tx_priv->bus_if->bus_priv.sdio` and corrected the `aicwf_rx_init()` signature to correctly consume the generalized `sdiodev` argument.
+- **Next Steps:** Verify the driver behaves correctly on the Cubieboard and prepares the `shenmintao` pull request.
