@@ -1,0 +1,14 @@
+--- a/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c
++++ b/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c
+@@ -1159,10 +1159,8 @@ int aicwf_sdio_func_init(struct aic_sdio_dev *sdiodev)
+         sdio_err("enable func fail %d.\n", ret);
+     }
+ 
+-    host->ios.clock = 60000000;
+-    host->ops->set_ios(host, &host->ios);
+     sdio_release_host(sdiodev->func);
+-    sdio_dbg("Set SDIO Clock %d MHz\n",host->ios.clock/1000000);
++    sdio_dbg("Keeping SDIO Clock %d MHz\n",host->ios.clock/1000000);
+ 
+     ret = aicwf_sdio_writeb(sdiodev, SDIOWIFI_REGISTER_BLOCK, block_bit0);
+     if (ret < 0) {

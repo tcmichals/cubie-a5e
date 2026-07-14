@@ -19,6 +19,10 @@
 * Identify any compilation failures caused by API drift in the kernel (e.g., changes to netdevice, cfg80211, or macro definitions).
 * Update or create patches (like the existing `0001-fix-kernel-5-19-ieee80211_ptr.patch`) to bridge compatibilities.
 
+### Phase 1.5: SDIO Logic Merge (Radxa to GitHub)
+* **CRITICAL CONTEXT:** The newer GitHub driver (`shenmintao/aic8800d80`) had a broken SDIO implementation because it wrongly assumed the combo chip would report an `SDIO_CLASS_WLAN` class. The Linux MMC core completely ignored the card.
+* **ACTION/RESOLUTION:** We extracted the explicit Vendor/Device ID tables (e.g., `SDIO_VENDOR_ID_AIC8800D80 0xc8a1`) from the Radxa driver and injected them into the GitHub driver's `aicwf_sdmmc_ids` array via `0002-fix-sdio-device-ids.patch`. This forces the Linux MMC core to bind the driver to the card regardless of what class the cheap combo chip firmware reports.
+
 ### Phase 2: Firmware Integration
 * Validate that `aic8800-firmware` matches the expected hardware version of the chip on the Radxa Cubie A5E.
 * Enforce copying the firmware binaries cleanly to `/lib/firmware/aic8800/` during rootfs assembly.

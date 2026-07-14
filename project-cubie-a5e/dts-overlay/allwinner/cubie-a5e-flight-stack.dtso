@@ -51,6 +51,29 @@
     serial2 = "/soc/serial@2500800";
 };
 
+&{/} {
+    cubie-flight-stack-version = "1.1";
+
+    reg_3v3_wifi: 3v3-wifi {
+        compatible = "regulator-fixed";
+        regulator-name = "3v3-wifi";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        gpio = <&r_pio 0 7 0>;
+        enable-active-high;
+    };
+
+    wifi_pwrseq: wifi-pwrseq {
+        compatible = "mmc-pwrseq-simple";
+        reset-gpios = <&r_pio 1 1 1>;
+        post-power-on-delay-ms = <1000>;
+    };
+};
+
+&reg_bldo1 {
+    regulator-always-on;
+};
+
 /* I2C1: General Expansion Bus (Enabled on physical pins 3 and 5) */
 &i2c1 {
     status = "okay";
@@ -104,6 +127,27 @@
         compatible = "rohm,dh2228fv";
         reg = <0>;
         spi-max-frequency = <10000000>;
+        status = "okay";
+    };
+};
+
+&mmc1 {
+    /* Enumerate the onboard AIC8800 SDIO WLAN device on MMC host 1 */
+    bus-width = <4>;
+    max-frequency = <40000000>;
+    mmc-pwrseq = <&wifi_pwrseq>;
+    non-removable;
+    pinctrl-names = "default";
+    pinctrl-0 = <&mmc1_pins>;
+    vmmc-supply = <&reg_3v3_wifi>;
+    vqmmc-supply = <&reg_bldo1>;
+    status = "okay";
+
+    wifi: wifi@1 {
+        reg = <1>;
+        interrupt-parent = <&r_pio>;
+        interrupts = <1 0 8>;
+        interrupt-names = "host-wake";
         status = "okay";
     };
 };

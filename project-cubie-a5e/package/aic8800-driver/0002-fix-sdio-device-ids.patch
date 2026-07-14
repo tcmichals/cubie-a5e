@@ -1,0 +1,47 @@
+diff -urN aic8800-driver-master.orig/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c aic8800-driver-master/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c
+--- aic8800-driver-master.orig/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c
++++ aic8800-driver-master/drivers/aic8800/aic8800_fdrv/aicwf_sdio.c
+@@ -245,6 +245,16 @@
+ 
+ static const struct sdio_device_id aicwf_sdmmc_ids[] = {
+     {SDIO_DEVICE_CLASS(SDIO_CLASS_WLAN)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8801, SDIO_DEVICE_ID_AIC8801)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800DC, SDIO_DEVICE_ID_AIC8800DC)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80, SDIO_DEVICE_ID_AIC8800D80)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D80N)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D80LN)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D80WN)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D40N)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D40LN)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80N, SDIO_DEVICE_ID_AIC8800D40WN)},
++    {SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80X2, SDIO_DEVICE_ID_AIC8800D80X2)},
+     { },
+ };
+ 
+diff -urN aic8800-driver-master.orig/drivers/aic8800/aic8800_fdrv/aicwf_sdio.h aic8800-driver-master/drivers/aic8800/aic8800_fdrv/aicwf_sdio.h
+--- aic8800-driver-master.orig/drivers/aic8800/aic8800_fdrv/aicwf_sdio.h
++++ aic8800-driver-master/drivers/aic8800/aic8800_fdrv/aicwf_sdio.h
+@@ -17,8 +17,21 @@
+ #define AICWF_SDIO_NAME                 "aicwf_sdio"
+ #define SDIOWIFI_FUNC_BLOCKSIZE         512
+ 
+-#define SDIO_VENDOR_ID_AIC              0x8800
+-#define SDIO_DEVICE_ID_AIC              0x0001
++#define SDIO_VENDOR_ID_AIC8801                0x5449
++#define SDIO_VENDOR_ID_AIC8800DC              0xc8a1
++#define SDIO_VENDOR_ID_AIC8800D80             0xc8a1
++#define SDIO_VENDOR_ID_AIC8800D80N            0xc8a1
++#define SDIO_VENDOR_ID_AIC8800D80X2           0xc8a1
++#define SDIO_DEVICE_ID_AIC8801                          0x0145
++#define SDIO_DEVICE_ID_AIC8800DC                        0xc08d
++#define SDIO_DEVICE_ID_AIC8800D80           0x0082
++#define SDIO_DEVICE_ID_AIC8800D80N          0x9081
++#define SDIO_DEVICE_ID_AIC8800D80LN         0x9082
++#define SDIO_DEVICE_ID_AIC8800D80WN         0x9083
++#define SDIO_DEVICE_ID_AIC8800D40N          0x9084
++#define SDIO_DEVICE_ID_AIC8800D40LN         0x9085
++#define SDIO_DEVICE_ID_AIC8800D40WN         0x9086
++#define SDIO_DEVICE_ID_AIC8800D80X2         0x2082
+ #define SDIOWIFI_BYTEMODE_LEN_REG       0x02
+ #define SDIOWIFI_INTR_CONFIG_REG	    0x04
+ #define SDIOWIFI_SLEEP_REG	            0x05

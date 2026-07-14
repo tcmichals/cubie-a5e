@@ -1,0 +1,29 @@
+--- a/drivers/aic8800/aic8800_fdrv/aicwf_txrxif.c
++++ b/drivers/aic8800/aic8800_fdrv/aicwf_txrxif.c
+@@ -1022,7 +1022,7 @@
+     atomic_set(&rx_priv->rx_cnt, 0);
+ 
+ #ifdef CONFIG_USB_MSG_IN_EP
+-	if(rx_priv->usbdev->msg_in_pipe){
++	if(rx_priv->usbdev && rx_priv->usbdev->msg_in_pipe){
+     	aicwf_frame_queue_init(&rx_priv->msg_rxq, 1, MAX_RXQLEN);
+     	spin_lock_init(&rx_priv->msg_rxqlock);
+     	atomic_set(&rx_priv->msg_rx_cnt, 0);
+@@ -1088,7 +1088,7 @@
+         rx_priv->usbdev->bus_if->busrx_thread = NULL;
+     }
+ #ifdef CONFIG_USB_MSG_IN_EP
+-	if(rx_priv->usbdev->msg_in_pipe){
++	if(rx_priv->usbdev && rx_priv->usbdev->msg_in_pipe){
+ 		if (rx_priv->usbdev->bus_if->msg_busrx_thread) {
+ 			complete_all(&rx_priv->usbdev->bus_if->msg_busrx_trgg);
+ 			kthread_stop(rx_priv->usbdev->bus_if->msg_busrx_thread);
+@@ -1108,7 +1108,7 @@
+ #endif
+ 
+ #ifdef CONFIG_USB_MSG_IN_EP
+-	if(rx_priv->usbdev->msg_in_pipe){
++	if(rx_priv->usbdev && rx_priv->usbdev->msg_in_pipe){
+ 		aicwf_frame_queue_flush(&rx_priv->msg_rxq);
+ 	}
+ #endif

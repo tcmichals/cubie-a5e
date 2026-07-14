@@ -1,0 +1,22 @@
+--- a/drivers/aic8800/aic8800_fdrv/rwnx_main.c
++++ b/drivers/aic8800/aic8800_fdrv/rwnx_main.c	2026-07-13 07:35:48.377373321 -0500
+@@ -9555,13 +9555,16 @@
+ 	if ((wait_for_completion_timeout(&hostif_register_done, msecs_to_jiffies(REGISTRATION_TIMEOUT)) == 0)) {
+ 		AICWFDBG(LOGERROR, "register_driver timeout or error\n");
+         aicwf_sdio_exit();
++#ifdef AICWF_USB_SUPPORT
++        aicwf_usb_exit();
++#endif
++#ifdef AICWF_PCIE_SUPPORT
++        aicwf_pcie_exit();
++#endif
+ 	return -ENODEV;
+ }
+ 
+ #endif /* AICWF_SDIO_SUPPORT */
+-#ifdef AICWF_USB_SUPPORT
+-       //aicwf_usb_exit();
+-#endif /*AICWF_USB_SUPPORT */
+ 
+ 
+ #ifdef AICWF_PCIE_SUPPORT

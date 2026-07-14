@@ -1,0 +1,5 @@
+config BR2_PACKAGE_AIC8800_RADXA
+	bool "aic8800-radxa"
+	depends on BR2_LINUX_KERNEL
+	help
+	  Radxa's official AIC8800 WiFi/BT driver.

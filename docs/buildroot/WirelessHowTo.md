@@ -2,7 +2,20 @@
 
 This guide covers Wi-Fi bring-up for the Cubie A5E image in this repo.
 
-## 1) Included components
+## 1) Hardware Wiring and Device Tree Configuration
+
+The onboard AIC8800 Wi-Fi chip operates over the SDIO interface. It is crucial that the Device Tree is correctly configured to power up and reset the chip so the MMC subsystem can probe it.
+
+The chip is wired as follows:
+- **SDIO Interface**: Connected to `mmc1`. It requires `bus-width = <4>` and must be marked as `non-removable`.
+- **Power (VCC)**: A dedicated `3v3-wifi` regulator must be enabled by driving `PIO 0 7` high. This regulator is assigned to `vmmc-supply`.
+- **I/O Power (VCC-IO)**: Driven by the internal `reg_bldo1` (`vcc-pg-iowifi`), assigned to `vqmmc-supply`.
+- **Reset Sequence**: Controlled by a `mmc-pwrseq-simple` node. The chip is pulled out of reset by driving `PIO 1 1` low.
+- **Interrupts**: The host wake-up interrupt is wired to `PIO 1 0` (active low).
+
+A proper overlay configures `&mmc1` with these regulators and power sequences to ensure the kernel detects the SDIO card at boot.
+
+## 2) Included components
 
 From `cubie_a5e_defconfig`:
 
@@ -22,7 +35,7 @@ The script does:
 - `wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf`
 - `udhcpc -b -i wlan0 -R`
 
-## 2) Configure Wi-Fi credentials
+## 3) Configure Wi-Fi credentials
 
 ### Step A: Bring the interface up and scan for networks
 Before connecting, verify the radio is up and scan for your Access Point:
@@ -63,14 +76,14 @@ chmod 600 /etc/wpa_supplicant.conf
 ```
 
 
-## 3) Start and stop Wi-Fi service
+## 4) Start and stop Wi-Fi service
 
 On target:
 
 - start: `/etc/init.d/S40network-wifi start`
 - stop: `/etc/init.d/S40network-wifi stop`
 
-## 4) Quick diagnostics
+## 5) Quick diagnostics
 
 Useful checks:
 
@@ -79,12 +92,12 @@ Useful checks:
 - `ip addr show wlan0`
 - `logread | grep -i -E "aic|wlan|wpa|dhcp"`
 
-## 5) Common issues
+## 6) Common issues
 
 - Missing `wlan0`: driver/firmware not loaded or module name mismatch
 - No DHCP lease: AP credentials wrong, weak signal, or AP restrictions
 - Auth failures: wrong `psk`, wrong country code/reg domain
 
-## 6) Flight-use recommendation
+## 7) Flight-use recommendation
 
 For flight-controller roles, keep Wi-Fi optional for commissioning/telemetry and avoid making core control safety depend on link availability.
