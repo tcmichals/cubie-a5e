@@ -14,6 +14,8 @@ We have aggressively refactored this repository to adhere to **Mainline Linux St
 4. **WEXT Eradicated:** Legacy Wireless Extensions (`iw_handler`) have been completely purged from the codebase. The driver is now purely modern `cfg80211` / `nl80211`.
 5. **Preserved WMM QoS:** While aggressively porting to native APIs, we consciously preserved the 8-priority `frame_queue` implementation (which wraps `sk_buff_head` natively) to ensure Quality of Service (QoS) remains fully functional.
 6. **KUnit Tested:** Integrated native KUnit testing for complex slab allocators and queue management logic, ensuring long-term memory safety.
+7. **Dual-Bus Fat Module (SDIO + USB):** Unlike messy vendor trees that require you to pick *either* SDIO *or* USB at compile-time (which usually breaks if you select both), our driver seamlessly compiles as a single fat module. By invoking both `aicwf_sdio_register()` and `aicwf_usb_register()`, the Linux kernel handles the heavy lifting, dynamically probing whichever hardware actually wakes up (via Device Tree or USB Core) without any `#ifdef` cross-contamination. 
+8. **Upstream Bugfixes:** We discovered and patched long-standing typos in the upstream vendor codebase (such as `RWNX_NDEV_FLOW_CTRL_START` vs `RESTART`) that silently broke USB compilation for years.
 
 ## 1. SDIO Hardware Bring-up History
 
