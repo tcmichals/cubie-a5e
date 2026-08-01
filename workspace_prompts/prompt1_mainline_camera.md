@@ -20,6 +20,12 @@
 ### Phase 2: Media Controller Orchestration
 * Scaffold a structural setup shell script executing standard `media-ctl` and `v4l2-ctl` statements to map routing links from the physical CSI receiver into the active mainline ISP engine.
 
-## 5. Trace Logging & Documentation Plan
-* **MANDATORY LOG:** Generate `prompt1_camera_mainline_setup.md`. This must map out every hardware pin, register, and media endpoint link configured during development to provide an educational reference trail.
+## 5. Quadcopter Visual Target Tracking & Video Storage Architecture
+* **Target Tracking Sensor Selection:** Sony IMX708 (or IMX335 5MP / OV9281 Global Shutter). High resolution (1080p60/2K) provides high pixel density for target tracking algorithms (YOLOv8-nano / OpenCV KCF), while Hardware HDR prevents white-out glares when flying into direct sunlight or heavy shadows.
+* **Dual-Branch Zero-Copy Pipeline:**
+  * **Branch A (Target Tracking):** Downscaled frame (e.g. 416x416) passed to Allwinner NPU / ARM CPU for real-time bounding box detection and flight control.
+  * **Branch B (Onboard Storage):** Full-resolution 1080p60 NV12 stream passed directly via V4L2 `dma-buf` memory sharing to the Allwinner Hardware Encoder (`cedrus` / `v4l2h264enc`) to write high-bitrate MP4 files to SD storage (`/mnt/sdcard/recordings/`) with **0% CPU memcpy overhead**.
+
+## 6. Trace Logging & Documentation Plan
+* **MANDATORY LOG:** Maintain `docs/buildroot/CameraTesting.md` with V4L2 Media Controller link setups, `mmap` streaming examples, and GStreamer hardware encoding pipelines.
 * **ARTIFACT:** Output `.antigravity/patches/0001-dts-allwinner-t527-camera-pipeline.patch`.

@@ -129,3 +129,27 @@ There were two distinct issues happening simultaneously:
 After reflashing the newly assembled `sdcard.img`, the AIC8800 driver loaded perfectly and `wpa_supplicant` successfully established the Wi-Fi link for telemetry!
 
 ---
+
+## Case Study 4: Migrating to Upstream Shenmintao AIC8800 Driver & Build System Cleanup
+**Date:** July 14, 2026
+**Component:** AIC8800 Wi-Fi Driver Build Configuration
+
+### 🚨 The Goal & Symptoms
+The previous vendor-provided Radxa AIC8800 driver was messy, requiring extensive patching and hardcoded `sed` script replacements in Buildroot just to force SDIO support (e.g., rewriting `CONFIG_SDIO_SUPPORT=y` in the driver's Makefile during the `POST_PATCH_HOOK`). 
+We wanted a clean, modern Linux driver configuration capable of targeting either the SDIO or USB bus seamlessly from Buildroot's `menuconfig` without hacking the source code on the fly. The ultimate goal was to produce a lean, upstreamable patch for the `shenmintao` repository.
+
+### 🛠️ The Fixes & Upstream Patch
+We transitioned the Buildroot package to pull from the cleaner `shenmintao` tree and fundamentally fixed how the configuration is passed.
+
+1. **Buildroot `Config.in` & `.mk` Updates:**
+   - We removed the mutually exclusive hardcoding and added independent booleans `BR2_PACKAGE_AIC8800_DRIVER_SDIO` and `BR2_PACKAGE_AIC8800_DRIVER_USB`.
+   - Updated the `.mk` file to dynamically append `CONFIG_SDIO_SUPPORT=y/n` and `CONFIG_USB_SUPPORT=y/n` to the `make` command-line options based on Kconfig selections, rather than relying on `sed` hooks.
+   - Removed legacy `sed` hacks (like deleting `aic_priv_cmd.o`, which didn't even exist in the upstream tree).
+
+2. **The Upstream Patch (`0005-clean-build-config.patch`):**
+   - We authored a clean patch against the driver's `drivers/aic8800/aic8800_fdrv/Makefile`.
+   - We replaced the hardcoded `CONFIG_SDIO_SUPPORT =y` and `CONFIG_USB_SUPPORT =y` assignments with `?=` (conditional assignment).
+   - This modern Linux driver practice allows the external environment (like Buildroot or standard Kernel Kbuild) to define the bus configuration, keeping the Makefile clean and flexible.
+   - This patch is now queued for a Pull Request to the upstream `shenmintao` repository.
+
+---

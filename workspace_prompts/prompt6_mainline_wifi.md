@@ -1,35 +1,42 @@
-# Blueprint 6: Mainline Linux Wi-Fi Integration (AIC8800 Driver & Firmware)
+# Blueprint 6: Mainline Linux Wi-Fi Integration (AIC8800 Unified USB & SDIO Driver)
 
-## 1. Mandated Rules
-* **STRICTLY MAINLINE:** The driver must compile and run on mainline Linux kernels (e.g. 6.1+ or newer) without relying on vendor-specific kernel trees or custom out-of-tree APIs.
-* **STANDARD INTERFACES:** Use standard Linux `cfg80211` / `mac80211` interfaces. Do not use legacy vendor-specific networking hooks.
-* **DETERMINISTIC PACKAGING:** Retrieve driver code exclusively from the `shenmintao/aic8800d80` repository and firmware from `radxa-pkg/aic8800`.
+## 1. Mandated Rules & Workflow
+* **SINGLE SOURCE OF TRUTH:** Always inspect `docs/buildroot/AIC8800_Porting_Notes.md` at the start of any work. Maintain all architectural changes, debugging histories, and hardware fixes in this document.
+* **STRICTLY MAINLINE & BUS-AGNOSTIC:** The driver must compile and run on mainline Linux kernels (6.1+) using standard `cfg80211` / `mac80211` interfaces. Core logic must use the bus-agnostic `chipid` rather than transport-specific pointers (`usbdev->chipid`).
+* **DUAL-TRANSPORT SUPPORT (SDIO & USB):** Maintain clean separation between the generic core (`rwnx_main.c`, `rwnx_platform.c`) and physical transport layers (`aicwf_sdio.c` for SDIO, `aicwf_usb.c` for USB).
+* **MULTI-BOARD COMPATIBILITY (Cubie A5E & Cubie A7A):** Keep board-specific pin configurations (e.g. `host-wake` GPIOs, regulators, reset lines) inside board Device Tree overlays (`cubie-a5e-flight-stack.dtso`, `cubie-a7a-flight-stack.dtso`), while the driver uses dynamic DTS lookup (`of_find_compatible_node` / `of_irq_get_byname`).
+* **DEFENSIVE UNINITIALIZED LIST & STRUCTURE VALIDATION:** Every workqueue callback, power-management routine (`aicwf_sdio_sleep_allow`), flow-control callback, and suspend/resume handler MUST defensively validate parent structures AND list head pointers (`!rwnx_hw->vifs.next || !rwnx_hw->vifs.prev`) before traversal, ensuring probe failures never trigger NULL pointer dereferences.
+* **LINUX DEVICE TREE PROBING BASICS:** SDIO functions are children of MMC host controller nodes. Device tree property lookups (interrupts, host-wake, regulators) MUST target the explicit child device node (`of_find_compatible_node(..., "aic,aic8800")` or `of_get_child_by_name(mmc_np, "wifi")`) rather than passing the parent MMC host controller node pointer (`func->card->dev.of_node`), ensuring DT parsing never evaluates parent controller attributes by mistake.
+* **NO PREMATURE BUS_DOWN_ST WORKQUEUE & IRQ GATING:** Never gate probe-phase control packets (`DBG_MEM_READ_REQ` / `DBG_MEM_READ_CFM`) or threaded IRQ handlers behind `bus_if->state == BUS_DOWN_ST`. During early probe, control packets and IRQ confirmations must transmit and receive freely over the hardware bus before `bus_if->state` transitions to `BUS_UP_ST`.
+* **STRICT CHIP INIT ORDER OF OPERATIONS:** Always load firmware patch tables (`rwnx_platform_on()`) into internal chip RAM *before* issuing IPC memory read/write queries (`system_config()`), ensuring the LMAC firmware is running and capable of answering host IPC commands.
+* **IDEMPOTENT FIRMWARE PATH CONCATENATION:** Global firmware path string appends (`aic_fw_path`) MUST be guarded with `!strstr()` substring checks (e.g. `if (!strstr(aic_fw_path, "aic8800D80N"))`) to prevent path duplication and invalid directory paths during driver re-probe or reset.
+* **RESILIENT PROBE ERROR RECOVERY:** Never abort driver probe (`return;`) when early IPC memory reads (`0x40500000`) time out during initial boot before firmware patch tables are loaded. Fall back to default chip parameters (`chip_id = 0x80`), complete system register initialization, upload firmware patches into RAM, and register the `wlan0` netdev interface.
+* **EMPIRICAL LOG-DRIVEN DIAGNOSIS:** Never offer repetitive speculative theories. Trace kernel log lines (`printk` / `dmesg`) to verify execution flow directly before making code changes.
 
-## 2. Context & Origins
-* **Where this comes from:** The `aic8800` driver (`aic8800_fdrv`) needs to run on top of a mainline Linux kernel. Newer kernels have removed historical structures (e.g. `ieee80211_ptr` in `net_device` was removed in kernel 5.19). We must maintain clean, standalone compatibility patches to allow the driver from `shenmintao/aic8800d80` to compile seamlessly against the mainline kernel headers.
+## 2. Context & Architecture
+* **SDIO Transport**: Uses Out-Of-Band (OOB) GPIO interrupts (`host-wake`) via `request_threaded_irq()` to bypass Allwinner `DAT1` in-band SDIO hardware bugs and eliminate `ksdioirqd` polling overhead.
+* **USB Transport**: Uses standard Linux USB URBs (`usb_fill_bulk_urb`, `usb_submit_urb`) and control requests.
+* **Wakeup Verification**: Enforces checking bit 4 (`val & 0x10`) of `sleep_reg` (`0x01`) in `aicwf_sdio_wakeup()` for D80/D81 series chips to ensure full wake status before memory reads (`0x40500000`).
 
 ## 3. Engineering Goals
-* Compile `aic8800-driver` out-of-tree module using the Buildroot toolchain.
-* Package the appropriate firmware files from the `aic8800-firmware` repository into `/lib/firmware/aic8800/` in the target filesystem.
-* Ensure automated module loading and setup via `/etc/init.d/S40network-wifi`.
+1. Maintain unified compilation of `aic8800-driver` supporting both SDIO and USB devices on Buildroot.
+2. Package required firmware binaries (`fw_patch_table_8800d80_u02.bin`, `aic8800DC`, etc.) into `/lib/firmware/aic8800/`.
+3. Support seamless automatic interface bring-up (`wlan0`) across Cubie A5E and Cubie A7A boards.
+4. **WINDOWS DRIVER AUDIT:** Cross-reference initialization sequences, register tables, and firmware patch parameters against vendor Windows driver archives (`peckishrine/aic8800_windows_drivers`) to ensure no chip init, power management, or calibration steps were missed.
+5. **UPSTREAM CONTRIBUTION:** Prepare clean, well-formatted, bisect-friendly commits to submit back to the upstream `shenmintao/aic8800d80` repository, contributing our unified SDIO/USB refactoring, OOB GPIO interrupt integration, KUnit test suite, and modern kernel workqueue fixes back to the open-source community.
 
-## 4. Implementation Phases
-### Phase 1: Mainline Compatibility Audit & Patching
-* Attempt to build the `aic8800-driver` package against the target mainline Linux kernel headers.
-* Identify any compilation failures caused by API drift in the kernel (e.g., changes to netdevice, cfg80211, or macro definitions).
-* Update or create patches (like the existing `0001-fix-kernel-5-19-ieee80211_ptr.patch`) to bridge compatibilities.
+## 4. World-Class Driver Quality Standards
+* **Zero Warning Compilation**: Driver must build cleanly with `-Wall -Wextra` under standard cross-compilation toolchains.
+* **Zero Locking/Concurrency Violations**: Lock discipline must be strict (`spin_lock_irqsave` vs `mutex`), with no blocking `mdelay()` calls in atomic or SoftIRQ contexts.
+* **Full Unit Test Coverage**: Maintain passing KUnit tests (`aicwf_bus_test`, `aicwf_rx_prealloc_test`, `aicwf_txq_prealloc_test`) for memory management, packet queues, and bus initialization.
+* **Peer Code Review Ready**: Every commit must be bisect-friendly, self-contained, and accompanied by detailed commit messages adhering to Linux kernel coding style (`scripts/checkpatch.pl`).
 
-### Phase 1.5: SDIO Logic Merge (Radxa to GitHub)
-* **CRITICAL CONTEXT:** The newer GitHub driver (`shenmintao/aic8800d80`) had a broken SDIO implementation because it wrongly assumed the combo chip would report an `SDIO_CLASS_WLAN` class. The Linux MMC core completely ignored the card.
-* **ACTION/RESOLUTION:** We extracted the explicit Vendor/Device ID tables (e.g., `SDIO_VENDOR_ID_AIC8800D80 0xc8a1`) from the Radxa driver and injected them into the GitHub driver's `aicwf_sdmmc_ids` array via `0002-fix-sdio-device-ids.patch`. This forces the Linux MMC core to bind the driver to the card regardless of what class the cheap combo chip firmware reports.
+## 5. Code Review & Debugging Protocol
+* **UNCONDITIONAL KERNEL LOGGING (`pr_info` / `pr_err`)**: Milestone log messages (IRQ registration, DT node lookup, CMD send/receive, wake state) MUST use unconditional kernel logging (`pr_info("[aic8800] ...")`) rather than macro-suppressed debug prints, ensuring boot traces are always visible in `dmesg`.
+* **AUTOMATED DUAL-DIFF CODE REVIEWS**: Before committing any refactor, perform an explicit diff against the original working Radxa vendor commit (`git diff 388a019`) to verify no initialization register, bitwise handshake, or timing delay was inadvertently removed.
+* **DEFENSIVE ENTRY GUARDS IN ASYNC CALLBACKS**: Any function invoked by a timer (`timer_setup`), workqueue (`INIT_WORK`), or interrupt (`request_threaded_irq`) MUST validate `!sdiodev`, `!rwnx_hw`, and list pointers (`!vifs.next || !vifs.prev`) on entry.
 
-### Phase 2: Firmware Integration
-* Validate that `aic8800-firmware` matches the expected hardware version of the chip on the Radxa Cubie A5E.
-* Enforce copying the firmware binaries cleanly to `/lib/firmware/aic8800/` during rootfs assembly.
+## 6. Documentation & Maintenance
+* Update `docs/buildroot/AIC8800_Porting_Notes.md` with every verified fix.
+* Maintain `task.md` and `walkthrough.md` artifacts during active execution cycles.
 
-### Phase 3: Init Script & Diagnostics
-* Verify the init script `/etc/init.d/S40network-wifi` loads the driver (`modprobe aic8800_fdrv`), brings up the interface (`ip link set wlan0 up`), and triggers `wpa_supplicant` and `udhcpc` automatically.
-
-## 5. Trace Logging & Documentation Plan
-* **MANDATORY LOG:** Generate `prompt6_wifi_mainline_diagnostics.md` detailing the build process, kernel version targeted, compile issues discovered, and compatibility patch breakdown.
-* **ARTIFACT:** Output `.antigravity/patches/0004-net-wireless-aic8800-mainline-compat.patch`.

@@ -162,3 +162,39 @@ def capture_mmap_frame(device_path="/dev/video0", width=1920, height=1080):
 if __name__ == "__main__":
     capture_mmap_frame()
 ```
+
+---
+
+## 5) Quadcopter Visual Target Tracking & Hardware Video Storage
+
+For flight missions requiring **real-time visual target tracking** while simultaneously **recording HD video to SD storage**:
+
+### A. Dual-Branch Pipeline Topology
+Using V4L2 zero-copy `dma-buf` memory sharing, the camera feed (`/dev/video0`) is split into two parallel processing branches without CPU memcpy overhead:
+
+```text
+               MIPI-CSI (IMX708 / OV9281)
+                           │
+                 Linux V4L2 Subsystem
+                           │
+       ┌───────────────────┴───────────────────┐
+       ▼                                       ▼
+  [Branch A: Target Tracking]       [Branch B: Hardware Recording]
+  Resized Frame (416x416)           Full 1080p60 NV12 Stream
+       │                                       │
+  Allwinner NPU / CPU               Allwinner Hardware Encoder
+  (YOLOv8-nano / OpenCV KCF)           (Cedrus H.264 / H.265)
+       │                                       │
+  Flight Controller Navigation       MP4 Video File Saved to SD
+  (PX4 / ArduPilot / MAVLink)       (/mnt/sdcard/recordings/)
+```
+
+### B. Single-Command GStreamer Pipeline for Hardware H.264 Recording
+```bash
+gst-launch-1.0 -v v4l2src device=/dev/video0 ! \
+    "video/x-raw,format=NV12,width=1920,height=1080,framerate=60/1" ! \
+    tee name=t \
+    t. ! queue ! v4l2h264enc extra-controls="controls,video_bitrate=10000000;" ! \
+         h264parse ! mp4mux ! filesink location=/mnt/sdcard/flight_recordings/flight_$(date +%Y%m%d_%H%M%S).mp4 \
+    t. ! queue ! appsink name=tracking_sink
+```

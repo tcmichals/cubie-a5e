@@ -49,24 +49,22 @@
 &{/aliases} {
     serial0 = "/soc/serial@2500000";
     serial2 = "/soc/serial@2500800";
+    mmc0 = "/soc/mmc@4020000";
+    mmc1 = "/soc/mmc@4021000";
 };
 
 &{/} {
-    cubie-flight-stack-version = "1.1";
+    cubie-flight-stack-version = "1.2";
 
-    reg_3v3_wifi: 3v3-wifi {
+    reg_wifi_en: wifi-en {
         compatible = "regulator-fixed";
-        regulator-name = "3v3-wifi";
+        regulator-name = "wifi-en";
         regulator-min-microvolt = <3300000>;
         regulator-max-microvolt = <3300000>;
-        gpio = <&r_pio 0 7 0>;
+        /* PM1 (Bank 1, Pin 1, Active High). Drives WL_REG_ON high to enable Wi-Fi */
+        gpio = <&r_pio 1 1 0>;
         enable-active-high;
-    };
-
-    wifi_pwrseq: wifi-pwrseq {
-        compatible = "mmc-pwrseq-simple";
-        reset-gpios = <&r_pio 1 1 1>;
-        post-power-on-delay-ms = <1000>;
+        startup-delay-us = <1000000>; /* 1000ms delay to let the chip boot */
     };
 };
 
@@ -134,20 +132,23 @@
 &mmc1 {
     /* Enumerate the onboard AIC8800 SDIO WLAN device on MMC host 1 */
     bus-width = <4>;
-    max-frequency = <40000000>;
-    mmc-pwrseq = <&wifi_pwrseq>;
+    max-frequency = <25000000>;
     non-removable;
+    keep-power-in-suspend;
     pinctrl-names = "default";
     pinctrl-0 = <&mmc1_pins>;
-    vmmc-supply = <&reg_3v3_wifi>;
+    vmmc-supply = <&reg_wifi_en>;
     vqmmc-supply = <&reg_bldo1>;
     status = "okay";
 
     wifi: wifi@1 {
         reg = <1>;
-        interrupt-parent = <&r_pio>;
-        interrupts = <1 0 8>;
+        compatible = "aic,aic8800";
+        interrupt-parent = <&pio>;
+        interrupts = <1 0 8>; /* PB0 / PIO 1 0, Active Low (IRQ_TYPE_LEVEL_LOW = 8) */
         interrupt-names = "host-wake";
+        host-wake-gpios = <&pio 1 0 8>;
+        wlan_host_wake = <&pio 1 0 8>;
         status = "okay";
     };
 };
