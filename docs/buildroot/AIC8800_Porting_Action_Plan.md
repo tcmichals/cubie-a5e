@@ -119,6 +119,8 @@ Run these commands on the board to confirm success:
 | 2026-08-01 | `BUILD_146_COMPLETE_CHIPID_AUDIT` | Hardware test confirmed: SDIO IRQ, RX processing, IPC read, and NVRAM loading are 100% SUCCESSFUL! `cmd 123` timed out. | Audit revealed two critical bugs: SDIO wakeup register check and OOB interrupt rerouting. |
 | 2026-08-01 | `BUILD_147_SDIO_WAKEUP_REG_FIX` | `aicwf_sdio_wakeup()` was reading `sleep_reg` (0x04) instead of `wakeup_reg` (0x01) and checking `val & 0x10`. | Fixed in BUILD_147 by reading `wakeup_reg` (0x01) and checking `(val & 0x1) == 0` (matching Radxa line 1359). |
 | 2026-08-01 | `BUILD_148_NO_OOB_REG_WRITE_FIX` | **Root Cause for `cmd 123` Timeout**: `system_config_8800d80` was writing `0x00000006` to `0x40504084`. This rerouted LMAC interrupts to the external OOB GPIO line instead of SDIO DAT1 bus! In Radxa, `CONFIG_OOB=n` so `0x40504084` is never written. | Fixed in BUILD_148 by removing the `0x40504084` write to keep interrupts on SDIO DAT1. |
+| 2026-08-02 | `BUILD_158_ENFORCE_STRICT_PROBE_EXIT` | **Strict Probe Failure Alignment**: Probe correctly aborts on `err_lmac_reqs` if `cmd 123` (`MM_SET_STACK_START_REQ`) fails, preventing half-initialized driver state. | Bumped build to BUILD_158 and verified strict error return paths in `rwnx_main.c`. |
+
 
 
 
