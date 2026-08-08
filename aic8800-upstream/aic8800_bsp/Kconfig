@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menu "AIC8800 BSP options"
+
+config AIC8800_BSP_M2D_OTA_AUTO
+	bool "M2D OTA auto support"
+	default n
+	help
+	  Enable automatic M2D (Module-to-Device) over-the-air firmware
+	  update support. When enabled, the driver will automatically
+	  handle firmware download and update from the host to the device
+	  over the SDIO interface.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_M2D_OTA_LZMA
+	bool "M2D OTA LZMA support"
+	depends on AIC8800_BSP_M2D_OTA_AUTO
+	default n
+	help
+	  Enable LZMA compression support for M2D over-the-air firmware
+	  updates. This reduces the size of firmware images transferred
+	  over the SDIO bus at the cost of additional CPU time for
+	  decompression.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_LINK_DET_5G
+	bool "5G link detect"
+	default y
+	help
+	  Enable 5 GHz band link detection support. When enabled, the
+	  driver performs additional link quality monitoring on the 5 GHz
+	  band to detect and recover from link degradation.
+
+	  If unsure, say Y.
+
+config AIC8800_BSP_AMSDU_RX
+	bool "AMSDU receive"
+	default n
+	help
+	  Enable A-MSDU (Aggregate MAC Service Data Unit) receive support
+	  at the BSP layer. This allows the SDIO transport layer to handle
+	  aggregated frames, improving receive throughput for large data
+	  transfers.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_IRQ_FALL
+	bool "Falling edge IRQ"
+	depends on AIC8800_GPIO_WAKEUP
+	default n
+	help
+	  Use falling edge trigger for SDIO interrupts instead of the
+	  default rising edge. Some platform designs require falling edge
+	  IRQ configuration due to hardware signal inversion.
+
+	  Only enable this if your hardware design requires it.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_CUSTOM_PWF
+	bool "Custom power waveform"
+	depends on AIC8800_BSP_PLATFORM_EXTERNAL && BROKEN
+	default n
+	help
+	  Enable custom power waveform configuration for the AIC8800
+	  chipset. This allows fine-tuning of power delivery parameters
+	  for specific hardware designs that require non-standard power
+	  profiles.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_TEDIOUS_PRT
+	bool "Verbose print log"
+	default n
+	help
+	  Enable verbose debug logging in the BSP layer. When enabled,
+	  detailed SDIO bus transactions, firmware loading progress, and
+	  chip operation traces are printed to the kernel log.
+
+	  This is intended for development and debugging only.
+
+	  If unsure, say N.
+
+config AIC8800_BSP_PLATFORM_EXTERNAL
+	bool "External platform"
+	default n
+	help
+	  Enable support for external (non-integrated) platform
+	  configurations. This option enables code paths required when
+	  the AIC8800 chipset is used on a development board or external
+	  adapter rather than an integrated system-on-module design.
+
+	  If unsure, say N.
+
+endmenu

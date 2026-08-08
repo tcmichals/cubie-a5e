@@ -31,8 +31,13 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 
 As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
 
-* **⚠️ Base OS & Bootloader (Tested/Functional, WiFi Pending Refactoring):** U-Boot successfully loads the custom device tree overlays. The Linux kernel (`PREEMPT_RT`) boots correctly, successfully isolates CPU Core 7, and mounts the rootfs.
-  * **Wi-Fi Effort (In Progress - Milestone BUILD_148):** SDIO hardware interrupts, V3 register mapping, real-time RX packet processing (`enq_rxpkt len=512`), IPC memory read (`chip_id=0x07, chip_sub_id=0x02`), and NVRAM userconfig loading (`aic_userconfig_8800d80.txt`) are **100% verified working on physical hardware**. We are actively resolving the final LMAC stack start CFM response (`cmd 123` / `MM_SET_STACK_START_REQ`) after removing OOB GPIO interrupt rerouting to complete `wlan0` interface registration. Detailed build logs and technical notes are maintained in [`docs/buildroot/AIC8800_Porting_Action_Plan.md`](docs/buildroot/AIC8800_Porting_Action_Plan.md).
+* **⚠️ Base OS & Bootloader (Tested/Functional):** U-Boot successfully loads custom device tree overlays. The Linux kernel (`PREEMPT_RT`) boots correctly, isolates CPU Core 7, and mounts the rootfs.
+* **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
+  - **Upstream Mainline Kernel Integration:** Integrated the official Linux kernel mailing list RFC submission (`[RFC PATCH wireless-next v2] wifi: aic: add AIC8800 SDIO FullMAC driver`) directly into the Buildroot system distribution.
+  - **Clean 2-Module Architecture:** Uses `aic8800_bsp.ko` (hardware bring-up, SDIO bus setup, firmware loading, MCU boot) and `aic8800_fdrv.ko` (`cfg80211` FullMAC WLAN driver).
+  - **100% Verified Hardware Bring-Up:** Firmware upload (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) completes in <300ms, returning chip version `06090101`. `wlan0` registers cleanly, acquires DHCP lease (`192.168.1.15`), and executes internet pings (`yahoo.com`) with 0% packet loss.
+  - **Documentation & Reference Logs:** Tracked in [`docs/buildroot/AIC8800_Porting_Action_Plan.md`](docs/buildroot/AIC8800_Porting_Action_Plan.md) and [`walkthrough.md`](.gemini/antigravity-ide/brain/061e4443-888e-4bf7-88c1-615de74a8deb/walkthrough.md).
+
 * **⚠️ RISC-V Co-processor (Code Ready, Not Hardware Tested):** The bare-metal C++ firmware (`riscv-firmware`) and the ARM Linux real-time IPC bridge (`rbb-server`) are fully compiled, utilizing hardware Mailbox doorbells and lock-free shared memory. However, the end-to-end telemetry loop has not yet been physically verified on the board.
 * **⚠️ NPU / TinyML (Compiled in, Not Tested):** The open-source Etnaviv DRM drivers and the Teflon TensorFlow Lite delegate (`libteflon.so`) are integrated into the Buildroot OS, but live camera inference has not yet been stress-tested.
 

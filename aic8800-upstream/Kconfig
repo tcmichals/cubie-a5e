@@ -1,0 +1,135 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config WLAN_VENDOR_AIC
+	bool "AIC devices"
+	default y
+	help
+	  Say Y to expose drivers for wireless devices based on AIC
+	  chipsets. The individual bus and WLAN drivers remain separately
+	  selectable below this vendor menu. Saying N hides those driver
+	  questions without changing any unrelated wireless drivers.
+
+if WLAN_VENDOR_AIC
+
+menuconfig AIC8800_BSP_SUPPORT
+	tristate "AIC8800 SDIO bus support"
+	depends on MMC
+	help
+	  Enable the AIC8800 bus support package. It provides the SDIO
+	  transport, chip operations and firmware download infrastructure
+	  shared by the AIC8800 FullMAC WLAN driver.
+	  Firmware files are loaded from the aic8800/ subdirectory of the
+	  kernel firmware search path, normally /lib/firmware/aic8800/.
+
+	  If unsure, say N.
+
+if AIC8800_BSP_SUPPORT
+
+# The current driver only implements an SDIO transport. Keep this internal
+# symbol for the existing Makefile and C preprocessor conditionals.
+config AIC8800_SDIO_SUPPORT
+	def_bool y
+
+menu "AIC8800 common firmware and transport options"
+
+config AIC8800_SDIO_PWRCTRL
+	bool "SDIO power control"
+	default y
+	help
+	  Allow the driver to control the SDIO interface power state while
+	  bringing the AIC device up and down. The BSP coordinates this
+	  state with firmware download and the WLAN function. This is the
+	  normal setting for supported AIC8800 SDIO modules.
+
+	  If unsure, say Y.
+
+config AIC8800_GPIO_WAKEUP
+	bool "GPIO wakeup support"
+	default y
+	help
+	  Enable a dedicated GPIO signal for device-to-host wakeup. The
+	  signal lets the device wake the host without polling the SDIO
+	  bus. Board wiring and firmware must both provide the wake signal.
+	  Disable this when the board has no dedicated wake GPIO.
+
+	  If unsure, say Y.
+
+config AIC8800_OOB
+	bool "Out-of-band interrupt support"
+	depends on AIC8800_GPIO_WAKEUP
+	help
+	  Use a dedicated GPIO interrupt instead of the in-band SDIO
+	  interrupt. The GPIO must be described by the platform and wired
+	  to the AIC device interrupt output. This mode is only suitable
+	  for boards whose firmware and hardware use out-of-band signaling.
+
+config AIC8800_PREALLOC_TXQ
+	bool "Preallocate TX queues"
+	default y
+	help
+	  Preallocate transmit queue buffers during driver initialization.
+	  This avoids data-path allocations after the interface starts and
+	  can reduce latency under memory pressure. It also reserves the
+	  queue memory for the lifetime of the driver.
+
+	  If unsure, say Y.
+
+config AIC8800_DPD
+	bool "DPD calibration support"
+	default y
+	help
+	  Enable Digital Pre-Distortion calibration support for radio
+	  transmit-path linearization. The driver loads or generates DPD
+	  data expected by supported firmware. Keep this enabled for boards
+	  whose supplied firmware requires DPD calibration data.
+
+	  If unsure, say Y.
+
+config AIC8800_FORCE_DPD_CALIB
+	bool "Force DPD calibration"
+	depends on AIC8800_DPD
+	default y
+	help
+	  Force DPD calibration instead of using existing calibration data.
+	  This makes initialization regenerate the result even when stored
+	  calibration data is available. It increases startup work but can
+	  be useful while validating a new board or radio configuration.
+
+config AIC8800_RESV_MEM_SUPPORT
+	bool "Reserved memory support"
+	default y
+	help
+	  Enable the driver's reserved-memory allocation path for transport
+	  buffers. Platforms may use this to avoid allocating large buffers
+	  during device initialization. The reserved area must be supplied
+	  by the platform integration when this option is selected.
+
+	  If unsure, say Y.
+
+config AIC8800_SDIO_BT
+	bool "Bluetooth over SDIO support"
+	depends on BROKEN
+	help
+	  Enable the downstream Bluetooth transport sharing the Wi-Fi SDIO
+	  interface. The retained implementation uses interfaces that are
+	  not available to a current mainline kernel. It remains disabled
+	  until it is converted to the upstream Bluetooth HCI interfaces.
+
+config AIC8800_VRF_DCDC_MODE
+	bool "VRF DCDC mode"
+	default y
+	help
+	  Configure the chipset's VRF rail to use its internal DC-DC mode.
+	  This affects radio power delivery and must agree with the module
+	  and board power design. The standard supported configuration uses
+	  the internal converter. Check the board design before changing it.
+
+	  If unsure, say Y.
+
+endmenu
+
+source "drivers/net/wireless/aic/aic8800_bsp/Kconfig"
+source "drivers/net/wireless/aic/aic8800_fdrv/Kconfig"
+
+endif # AIC8800_BSP_SUPPORT
+endif # WLAN_VENDOR_AIC

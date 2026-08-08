@@ -1,18 +1,7 @@
 config BR2_PACKAGE_AIC8800_DRIVER
-	bool "aic8800-driver"
+	bool "aic8800-driver (upstream mainline)"
 	depends on BR2_LINUX_KERNEL
-
-if BR2_PACKAGE_AIC8800_DRIVER
-
-config BR2_PACKAGE_AIC8800_DRIVER_SDIO
-	bool "SDIO support"
-	default y
 	help
-	  Enable SDIO bus support for AIC8800.
-
-config BR2_PACKAGE_AIC8800_DRIVER_USB
-	bool "USB support"
-	help
-	  Enable USB bus support for AIC8800.
-
-endif
+	  AIC8800 SDIO FullMAC Wi-Fi driver from upstream wireless-next.
+	  Builds two modules: aic8800_bsp.ko (BSP/firmware) and
+	  aic8800_fdrv.ko (cfg80211 WLAN).

@@ -1,0 +1,539 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menuconfig AIC8800_WLAN_SUPPORT
+	tristate "AIC8800 FullMAC WLAN support"
+	depends on AIC8800_BSP_SUPPORT
+	depends on CFG80211
+	help
+	  Enable the AIC8800 FullMAC Wi-Fi driver.
+	  This layer registers the cfg80211 wireless device and handles
+	  station, AP, P2P, and management frame operation for AIC8800
+	  chipsets.
+
+	  If unsure, say N.
+
+if AIC8800_WLAN_SUPPORT
+
+config RWNX_FULLMAC
+	def_bool y
+
+menu "Firmware interface compatibility"
+
+config RWNX_TL4
+	bool "RWNX TL4 support"
+	depends on BROKEN
+	default n
+	help
+	  Enable support for the TL4 transport layout used by some older
+	  firmware builds. This option changes host and firmware message
+	  handling paths and should match the firmware image in use.
+
+	  If unsure, say N.
+
+config RWNX_OLD_IPC
+	bool "RWNX old IPC format"
+	depends on BROKEN
+	default n
+	help
+	  Enable compatibility with the older firmware IPC format.
+	  Select this only when the target firmware expects the legacy IPC
+	  message layout and cannot communicate with the default format.
+
+	  If unsure, say N.
+
+endmenu
+
+menu "Platform integration and legacy compatibility"
+
+config AIC8800_WPA3_FOR_OLD_KERNEL
+	bool "WPA3 compatibility for old kernels"
+	depends on BROKEN
+	help
+	  Enable downstream WPA3 compatibility code intended for kernels
+	  that predate the required cfg80211 interfaces. Current mainline
+	  already supplies the interfaces used by the normal driver path.
+	  The retained legacy implementation is therefore kept disabled.
+
+config AIC8800_VHT_FOR_OLD_KERNEL
+	bool "VHT compatibility for old kernels"
+	depends on BROKEN
+	help
+	  Enable the legacy VHT capability implementation. Keep this
+	  disabled on current mainline kernels. The normal cfg80211 path
+	  advertises VHT capabilities through the current kernel API. This
+	  option remains only for downstream source compatibility.
+
+config AIC8800_HE_FOR_OLD_KERNEL
+	bool "HE compatibility for old kernels"
+	depends on BROKEN
+	help
+	  Enable the legacy 802.11ax HE capability implementation. Keep
+	  this disabled on current mainline kernels. The default driver path
+	  uses the current cfg80211 HE capability representation. This code
+	  is retained only for old downstream kernel integrations.
+
+config AIC8800_WIFI_SUSPEND_FOR_LINUX
+	bool "Legacy procfs Wi-Fi suspend control"
+	depends on BROKEN
+	help
+	  Expose the downstream procfs control used by legacy user space
+	  to request Wi-Fi suspend. Normal systems should use cfg80211
+	  power management and system suspend instead. The legacy procfs
+	  ABI remains disabled because it is not an upstream interface.
+
+config AIC8800_GKI
+	bool "Android GKI compatibility"
+	depends on BROKEN
+	help
+	  Enable compatibility wrappers needed by Android Generic Kernel
+	  Image based platforms. These wrappers target downstream Android
+	  kernel interfaces rather than a current mainline kernel. The code
+	  is retained for reference but cannot be selected upstream.
+
+config AIC8800_GENL
+	bool "Generic netlink control interface"
+	default n
+	help
+	  Build the private AIC8800 generic-netlink command interface used
+	  for manufacturing and driver debugging. Commands require
+	  CAP_NET_ADMIN and this interface is not a stable userspace ABI.
+	  Normal systems should use cfg80211 and nl80211 instead.
+
+	  If unsure, say N.
+
+config AIC8800_USE_WIRELESS_EXT
+	bool "Legacy Wireless Extensions support"
+	depends on CFG80211_WEXT && BROKEN
+	help
+	  Build the AIC-specific Wireless Extensions compatibility layer.
+	  New user space should use nl80211 instead. The retained code uses
+	  downstream compatibility interfaces and is not enabled on current
+	  mainline kernels. This option remains for source history only.
+
+endmenu
+
+menu "Wireless and data path features"
+
+config RWNX_SPLIT_TX_BUF
+	bool "Split TX buffer for A-MSDU"
+	depends on BROKEN
+	default n
+	help
+	  Enable split TX buffer handling for A-MSDU capable firmware.
+	  This option should be enabled only when the firmware advertises
+	  matching aggregation support and expects split host buffers.
+
+	  If unsure, say N.
+
+config RWNX_AMSDUS_TX
+	bool "Enable A-MSDU TX"
+	default n
+	depends on RWNX_SPLIT_TX_BUF
+	help
+	  Enable transmit-side A-MSDU aggregation support in the FullMAC
+	  driver. This depends on split TX buffer support and matching
+	  firmware capabilities for aggregated frame transmission.
+
+	  If unsure, say N.
+
+config RWNX_BFMER
+	bool "VHT beamformer support"
+	default n
+	help
+	  Enable VHT beamformer support for chip and firmware builds that
+	  implement explicit transmit beamforming. This adds beamforming
+	  station bookkeeping and firmware command handling.
+
+	  If unsure, say N.
+
+config RWNX_MUMIMO_TX
+	bool "MU-MIMO TX support"
+	default n
+	depends on !RWNX_OLD_IPC
+	help
+	  Enable MU-MIMO transmit support for firmware builds that expose
+	  multi-user transmit scheduling. This option adds MU group state
+	  tracking and related firmware message handling.
+
+	  If unsure, say N.
+
+config AIC8800_RX_REORDER
+	bool "RX reorder support"
+	default y
+	help
+	  Enable receive reorder handling for aggregated 802.11 traffic.
+	  The driver keeps per-station reorder state so packets are passed
+	  to the network stack in sequence when block-ack is active.
+
+	  If unsure, say Y.
+
+config AIC8800_ARP_OFFLOAD
+	bool "ARP offload support"
+	default y
+	help
+	  Enable ARP offload support in the Wi-Fi firmware path.
+	  When supported by firmware, ARP handling may continue while the
+	  host is in a low-power state.
+
+	  If unsure, say Y.
+
+config AIC8800_RADAR_OR_IR_DETECT
+	bool "Radar/IR detect support"
+	default n
+	help
+	  Enable radar or interference detection event handling.
+	  This is used by DFS-capable firmware to report channel events
+	  that may require channel changes or regulatory action.
+
+	  If unsure, say N.
+
+config AIC8800_USE_5G
+	bool "Enable 5 GHz band"
+	default y
+	help
+	  Enable 5 GHz band support in the driver capability setup.
+	  Disable this only for hardware or regulatory configurations that
+	  must restrict operation to the 2.4 GHz band.
+
+	  If unsure, say Y.
+
+config AIC8800_CREATE_TRACE_POINTS
+	bool "Create trace points"
+	depends on EVENT_TRACING
+	default n
+	help
+	  Enable tracepoint definitions for selected AIC8800 driver paths.
+	  This is useful for driver development and timing analysis but is
+	  not required for normal runtime operation.
+
+	  If unsure, say N.
+
+config AIC8800_TXRX_THREAD_PRIO
+	bool "TX/RX thread priority"
+	default y
+	help
+	  Enable priority tuning for the driver transmit and receive
+	  worker threads. This can reduce latency under load on platforms
+	  where the SDIO transport shares CPU time with other work.
+	  The selected priority is applied when the transport threads start.
+	  Leave this enabled for the standard SDIO configuration.
+
+	  If unsure, say Y.
+
+config AIC8800_COEX
+	bool "Wi-Fi/Bluetooth coexistence"
+	default y
+	help
+	  Enable coexistence support for combo Wi-Fi and Bluetooth chips.
+	  The driver exchanges coexistence information with firmware so
+	  shared-radio operation can be coordinated. This requires
+	  coexistence support in the selected firmware image.
+	  Disable it only for Wi-Fi-only modules.
+
+	  If unsure, say Y.
+
+config AIC8800_RX_NETIF_RECV_SKB
+	bool "Use netif_receive_skb for RX"
+	default y
+	help
+	  Pass received packets to the networking stack with
+	  netif_receive_skb(). This is the normal receive path for this
+	  driver and should match the platform networking integration.
+
+	  If unsure, say Y.
+
+config AIC8800_SET_VENDOR_EXTENSION_IE
+	bool "Vendor extension IE support"
+	depends on BROKEN
+	default n
+	help
+	  Enable support for setting vendor extension information elements
+	  in management frames. This is intended for product-specific
+	  interoperability requirements and test configurations.
+
+	  If unsure, say N.
+
+config AIC8800_SUPPORT_REALTIME_CHANGE_MAC
+	bool "Runtime MAC address change"
+	default y
+	help
+	  Allow the driver to update the interface MAC address at runtime.
+	  This is used by platforms that need to apply a board-specific or
+	  user-provided MAC address after probe.
+
+	  If unsure, say Y.
+
+config AIC8800_USE_P2P0
+	bool "Use P2P0 interface"
+	default n
+	help
+	  Enable use of a dedicated P2P0 interface for Wi-Fi Direct.
+	  This should match the firmware and user space expectation for
+	  P2P device interface creation.
+
+	  If unsure, say N.
+
+config AIC8800_TX_NETIF_FLOWCTRL
+	bool "TX netdev flow control"
+	default n
+	help
+	  Enable netdev queue flow control from the transmit path.
+	  The driver may stop and wake netdev queues based on firmware and
+	  SDIO buffer pressure to avoid excessive packet buildup.
+
+	  If unsure, say N.
+
+config AIC8800_ONE_TXQ
+	bool "Single TX queue"
+	default n
+	help
+	  Use a single transmit queue model for platforms that cannot use
+	  the normal per-access-category queue layout. This may simplify
+	  integration at the cost of scheduling flexibility.
+
+	  If unsure, say N.
+
+config AIC8800_PREALLOC_RX_SKB
+	bool "Preallocate RX SKBs"
+	help
+	  Preallocate receive socket buffers during initialization. This
+	  may improve allocation latency at the cost of reserved memory.
+	  The buffers remain available to the SDIO receive path while the
+	  driver is active. Enable this only when that memory tradeoff fits.
+
+config AIC8800_FDRV_NO_REG_SDIO
+	bool "Avoid direct SDIO register access"
+	help
+	  Disable the FullMAC driver's direct SDIO register access path.
+	  Firmware-mediated access is used instead for affected operations.
+	  This is intended for platforms that restrict direct bus access.
+	  Enable it only when the platform integration requires that mode.
+
+config AIC8800_BR_SUPPORT
+	bool "Bridge support"
+	depends on BROKEN
+	default n
+	help
+	  Enable bridge helper code used by some downstream networking
+	  setups. This can adjust packet handling when the wireless
+	  interface is attached to a Linux bridge.
+
+	  If unsure, say N.
+
+config AIC8800_SCHED_SCAN
+	bool "Scheduled scan support"
+	default n
+	help
+	  Enable scheduled scan handling in the driver. When supported by
+	  firmware, cfg80211 can request periodic scans without waking
+	  user space for every scan cycle.
+
+	  If unsure, say N.
+
+config AIC8800_USE_CUSTOMER_MAC
+	bool "Use customer MAC address"
+	default n
+	help
+	  Enable product-specific MAC address selection logic.
+	  This option is intended for platforms that store the Wi-Fi MAC
+	  address outside the normal firmware or NVMEM path.
+
+	  If unsure, say N.
+
+endmenu
+
+menu "Performance, regulatory and power management"
+
+config AIC8800_FILTER_TCP_ACK
+	bool "Filter TCP ACK packets"
+	default y
+	help
+	  Enable TCP ACK filtering in the SDIO data path.
+	  This can reduce transmit traffic and improve throughput on some
+	  platforms by suppressing redundant pure ACK packets.
+
+	  If unsure, say Y.
+
+config AIC8800_TEMP_COMP
+	bool "Temperature compensation"
+	default y
+	help
+	  Enable temperature compensation support for RF calibration.
+	  The driver can request temperature data from firmware or chip
+	  logic and apply compensation where supported.
+
+	  If unsure, say Y.
+
+config AIC8800_AUTO_CUSTREG
+	bool "Automatic customer regulatory setup"
+	default y
+	help
+	  Enable automatic customer regulatory configuration handling.
+	  The driver may apply board or product regulatory parameters
+	  during initialization when firmware support is present.
+
+	  If unsure, say Y.
+
+config AIC8800_TEMP_CONTROL
+	bool "Temperature control"
+	default y
+	help
+	  Enable temperature control handling for supported chips.
+	  This allows the driver to exchange thermal control commands with
+	  firmware and react to temperature-related state changes.
+
+	  If unsure, say Y.
+
+config AIC8800_WOWLAN_PM
+	bool "WoWLAN power management"
+	default y
+	help
+	  Enable Wake-on-WLAN power management support.
+	  When firmware supports it, selected wireless events can wake the
+	  host from suspend while the device remains in a low-power mode.
+
+	  If unsure, say Y.
+
+config AIC8800_POWER_LIMIT
+	bool "Power limit support"
+	default y
+	help
+	  Enable power limit handling for supported board configurations.
+	  The driver can pass configured transmit power restrictions to
+	  firmware when product data requires it.
+
+	  If unsure, say Y.
+
+config AIC8800_REGION_PW
+	bool "Regional power support"
+	default y
+	help
+	  Enable regional transmit power handling.
+	  This option allows board or firmware data to select power tables
+	  that correspond to the configured regulatory region.
+
+	  If unsure, say Y.
+
+config AIC8800_MCC
+	bool "Multi-channel concurrency support"
+	default y
+	help
+	  Enable multi-channel concurrency support for station and P2P
+	  operation on different channels. This should match firmware
+	  capability and concurrent mode requirements.
+	  The firmware remains responsible for channel time scheduling.
+	  Disable this when using firmware without MCC support.
+
+	  If unsure, say Y.
+
+config AICWF_LATENCY_MODE
+	bool "Low latency mode"
+	default n
+	help
+	  Enable low latency tuning in the AIC8800 data path.
+	  This may reduce packet latency at the cost of higher CPU usage
+	  or lower batching efficiency on some systems.
+
+	  If unsure, say N.
+
+config AIC8800_AUTO_POWERSAVE
+	bool "Automatic power save"
+	default y
+	help
+	  Enable automatic power save handling in the SDIO and firmware
+	  path. The driver may enter low-power states when traffic is idle
+	  and wake the device when new work arrives.
+
+	  If unsure, say Y.
+
+config AIC8800_NO_WAKE_COUNT
+	bool "Disable wake count tracking"
+	depends on !AIC8800_AUTO_POWERSAVE
+	default n
+	help
+	  Disable the driver's wake count tracking logic.
+	  This is mutually exclusive with the automatic power save flow and
+	  is intended only for platforms with different wake accounting.
+	  Normal mainline systems should keep wake count tracking enabled.
+	  This option exists for firmware-specific power management flows.
+
+	  If unsure, say N.
+
+endmenu
+
+menu "Radar, monitoring and diagnostics"
+
+config RWNX_RADAR
+	bool "Radar event handling"
+	default y
+	help
+	  Enable radar event processing from firmware.
+	  This is used with DFS-capable firmware so the driver can report
+	  radar detection and channel availability events to cfg80211.
+
+	  If unsure, say Y.
+
+config RWNX_BCMC
+	bool "Broadcast/multicast station support"
+	default y
+	help
+	  Enable broadcast and multicast station bookkeeping in AP mode.
+	  The driver uses this state for buffered multicast traffic and
+	  firmware station table management.
+
+	  If unsure, say Y.
+
+config RWNX_MON_DATA
+	bool "Monitor data interface support"
+	default y
+	help
+	  Enable monitor plus data interface support.
+	  This allows monitor-mode receive paths to coexist with normal
+	  data interfaces when firmware and hardware support it.
+
+	  If unsure, say Y.
+
+config RWNX_SW_PROFILING
+	bool "Software profiling"
+	default n
+	help
+	  Enable driver software profiling hooks.
+	  This option is intended for development builds that need timing
+	  or performance instrumentation in the FullMAC driver.
+
+	  If unsure, say N.
+
+config RWNX_DBG
+	bool "Debug log support"
+	default y
+	help
+	  Enable debug logging support in the FullMAC driver.
+	  The resulting log output can help diagnose firmware and driver
+	  interactions during bring-up and validation.
+
+	  If unsure, say Y.
+
+config RWNX_DEBUGFS
+	bool "DebugFS support"
+	depends on DEBUG_FS && BROKEN
+	default n
+	help
+	  Enable debugfs entries for the AIC8800 FullMAC driver.
+	  These files expose runtime state for debugging and are not
+	  required for normal end-user operation. The retained implementation
+	  still needs conversion to current debugfs and cfg80211 interfaces.
+
+	  If unsure, say N.
+
+config RWNX_P2P_DEBUGFS
+	bool "P2P debugfs support"
+	depends on RWNX_DEBUGFS
+	help
+	  Enable debugfs controls for P2P notice-of-absence and OppPS
+	  settings. These entries are intended for driver development and
+	  expose firmware scheduling state. They are not needed for normal
+	  P2P operation and depend on the main driver debugfs support.
+
+endmenu
+
+endif # AIC8800_WLAN_SUPPORT

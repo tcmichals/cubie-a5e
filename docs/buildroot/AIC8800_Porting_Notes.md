@@ -26,7 +26,15 @@ We have aggressively refactored this repository to adhere to **Mainline Linux St
 
 This section documents the exact operational model of the reference Radxa vendor driver (`aic8800-radxa-working-backup.tar.gz`) for `AIC8800D80` / `D81` chips.
 
+### Reference Documentation
+- **Radxa Ground-Truth Boot Trace**: Saved to [Radxa_Trace_Reference.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/Radxa_Trace_Reference.md).
+- **Upstream Linux Kernel RFC Submission**: LWN.net Article 1084468 (`[RFC PATCH wireless-next v2 0/4] wifi: aic: add AIC8800 SDIO FullMAC driver`).
+- **Upstream Linux Kernel Analysis**: Detailed in [Upstream_Kernel_Analysis.md](file:///home/tcmichals/.gemini/antigravity-ide/brain/6893bdf1-5dcb-40f3-926b-f3c09b35412e/Upstream_Kernel_Analysis.md).
+- **Porting Action Plan**: Tracked in [AIC8800_Porting_Action_Plan.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/AIC8800_Porting_Action_Plan.md).
+
+
 ### 1. Complete Probe & Initialization Flow Sequence
+
 ```
 aicwf_sdio_probe(func1)
  ├── 1. aicwf_sdio_chipmatch()          → Sets chipid = PRODUCT_ID_AIC8800D80
@@ -1291,28 +1299,28 @@ make aic8800-driver-rebuild && make
 
 ## 🌙 Session End Summary & Next Steps [2026-07-28 Night]
 
-- **Current Build Tag**: `2026-07-28_BUILD_130_GUARANTEED_RX_ENQUEUE_FIX`
-- **Rebuild Command**: `cd /home/tcmichals/projects/cubie/bld && make aic8800-driver-rebuild && make`
+- **Current Build Tag**: `2026-08-04_BUILD_175_MCU_APP_START_TRIGGER`
+- **Rebuild Command**: `rm -rf /home/tcmichals/projects/cubie/bld/build/aic8800-driver && make aic8800-driver-rebuild && make`
 - **Target Image File**: `/home/tcmichals/projects/cubie/bld/images/sdcard.img`
 
 ### Major Breakthroughs Accomplished Tonight:
-1. **CRC8 Transport Header Checksum Fix (BUILD_123)**:
-   - Added `crc8_ponl_107(&buffer[0], 3)` polynomial calculation to `aicwf_set_cmd_tx()`.
-   - **Result**: AIC8800 BootROM stopped dropping command headers as corrupt.
-2. **First Verified Chip SDIO Communication & 512-Byte Response Packets**:
-   - SDIO interrupt status changed from `0x00` to `0x01` (RX interrupt pending).
-   - Host successfully read **512-byte response blocks directly from the chip** via `sdio_readsb()`.
-3. **Synchronous Command/Response Pipeline (BUILD_126)**:
-   - Fixed `aicwf_sdio_bus_txmsg()` to invoke `aicwf_sdio_tx_process()` synchronously on the spot, eliminating `system_wq` workqueue delays.
-4. **MMC Device Aliases in Device Tree (BUILD_127)**:
-   - Added `mmc0 = "/soc/mmc@4020000"` (SD card) and `mmc1 = "/soc/mmc@4021000"` (SDIO WiFi) to `cubie-a5e-flight-stack.dtso`.
-   - **Result**: Fixed device enumeration conflict; system boots to rootfs in 3.9 seconds and loads driver init scripts.
-5. **NULL `rx_priv->rwnx_hw` Pointer Assignment Fix (BUILD_129)**:
-   - Assigned `sdiodev->rx_priv->rwnx_hw = rwnx_hw` and `sdiodev->tx_priv->rwnx_hw = rwnx_hw` in `rwnx_main.c`.
-   - **Result**: Enables `rwnx_rx_handle_msg()` to dispatch confirmations to `cmd_mgr` without dereferencing NULL pointers.
-6. **Guaranteed RX Frame Enqueue Fix (BUILD_130)**:
-   - Added `#ifdef CONFIG_PREALLOC_RX_SKB` handling in `aicwf_sdio_enq_rxpkt()` to prevent `list_head` / `skb_queue_head` type mismatch drops.
-   - **Result**: Received 512-byte response packets are enqueued and processed **synchronously on arrival**.
+1. **Option A Root-Cause Fix (BUILD_170)**:
+   - Removed legacy `0x00000020` IPC read in `system_config_8800d80()`. Address `0x00000020` was an unmapped register copy-pasted from AIC8800DC drivers.
+   - **Result**: Eliminates the 2-second initial IPC boot delay and keeps `cmd_mgr->state` in `INITED`.
+2. **Missing Firmware Upload Branch Restored (BUILD_171)**:
+   - Added `PRODUCT_ID_AIC8800D80` case to `rwnx_plat_patch_load()` in `rwnx_platform.c`.
+   - **Result**: Restored firmware patch loading (`fmacfw`, `fw_patch`, `fw_adid`) into chip RAM before `cmd 123`.
+3. **Patch Table Vector Loader (BUILD_172)**:
+   - Added `aicwf_plat_patch_table_load_8800d80()` to write `fw_patch_table_8800d80_u02.bin` vector pairs into chip RAM registers.
+4. **64KB SRAM Bank Boundary Alignment (BUILD_173)**:
+   - Updated `rwnx_plat_bin_fw_upload_2` to align block write lengths at 64KB bank boundaries (`next_boundary = (curr_addr & ~0xFFFF) + 0x10000`).
+   - **Result**: Prevents IPC block write commands from spanning across 64KB SRAM bank boundaries, eliminating AHB bus lockups.
+5. **Firmware Upload Sequence Swap (BUILD_174)**:
+   - Swapped upload order: `fmacfw` (`0x00120000`) FIRST, `fw_patch` (`0x0020B43c`) SECOND, matching vendor specification.
+6. **MCU App Start Trigger (BUILD_175)**:
+   - Added `rwnx_send_dbg_start_app_req(rwnx_hw, RAM_FMAC_FW_ADDR_8800D80_U02, HOST_START_APP_AUTO)` immediately following `fmacfw` upload.
+   - **Result**: Signals the chip's MCU to boot the RAM firmware at `0x00120000`, powering on SRAM Bank 1 (`0x00210000`) before `fw_patch` is loaded!
+
 
 ---
 
