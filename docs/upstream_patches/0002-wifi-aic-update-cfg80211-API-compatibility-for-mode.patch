@@ -1,0 +1,83 @@
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sat, 8 Aug 2026 12:04:30 -0500
+Subject: [PATCH RFC v2 2/2] wifi: aic: update cfg80211 API compatibility for modern kernels
+
+Fixes modern kernel API compilation differences in `aic8800_fdrv`:
+
+1. `netif_rx_ni` was removed in Linux 5.18+. Provide compatibility macro
+   in `rwnx_compat.h` mapping to `netif_rx`.
+2. `cfg80211_probe_status` parameter count was updated in Linux 6.0+.
+   Wrap `cfg80211_probe_status` invocation with `LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)`.
+3. `remain_on_channel` callback signature in `struct cfg80211_ops` dropped
+   `rx_addr` in Linux 6.5+. Wrap signature definition for Linux 6.5+.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+Tested-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h |  5 +++++
+ drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c   | 20 ++++++++++++++++++++
+ 2 files changed, 25 insertions(+)
+
+diff --git a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h
+index b2c3d4e..f5e6d7c 100644
+--- a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h
++++ b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h
+@@ -21,6 +21,11 @@
+ #ifndef _RWNX_COMPAT_H_
+ #define _RWNX_COMPAT_H_
+
++#include <linux/version.h>
+
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
++#ifndef netif_rx_ni
++#define netif_rx_ni netif_rx
++#endif
++#endif
+
+ /* CFG80211 */
+
+diff --git a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c
+index c3d4e5f..a6b7c8d 100644
+--- a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c
++++ b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c
+@@ -2824,12 +2824,22 @@ static void apm_probe_sta_work_process(struct work_struct *work)
+ 	if (found)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
++		cfg80211_probe_status(rwnx_vif->ndev, mac,
++				      (u64)rwnx_vif->sta_probe.probe_id,
++				      true, 0, false, GFP_ATOMIC);
++	else
++		cfg80211_probe_status(rwnx_vif->ndev, mac,
++				      (u64)rwnx_vif->sta_probe.probe_id,
++				      false, 0, false, GFP_ATOMIC);
++#else
+ 		cfg80211_probe_status(rwnx_vif->ndev, mac,
+ 				      (u64)rwnx_vif->sta_probe.probe_id, -1,
+ 				      true, 0, false, GFP_ATOMIC);
+ 	else
+ 		cfg80211_probe_status(rwnx_vif->ndev, mac,
+ 				      (u64)rwnx_vif->sta_probe.probe_id, -1,
+ 				      false, 0, false, GFP_ATOMIC);
++#endif
+ 	rwnx_vif->sta_probe.probe_id++;
+ }
+
+@@ -3463,6 +3473,16 @@ static int rwnx_cfg80211_remain_on_channel_(struct wiphy *wiphy,
+ 	return error;
+ }
+
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)
++static int rwnx_cfg80211_remain_on_channel(struct wiphy *wiphy,
++					   struct wireless_dev *wdev,
++					   struct ieee80211_channel *chan,
++					   unsigned int duration, u64 *cookie)
++{
++	return rwnx_cfg80211_remain_on_channel_(wiphy, wdev, chan,
++						duration, cookie, false);
++}
++#else
+ static int rwnx_cfg80211_remain_on_channel(struct wiphy *wiphy,
+ 					   struct wireless_dev *wdev,
+ 					   struct ieee80211_channel *chan,
+-- 
+2.43.0

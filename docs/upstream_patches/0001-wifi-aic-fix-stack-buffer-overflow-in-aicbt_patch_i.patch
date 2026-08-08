@@ -1,0 +1,50 @@
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sat, 8 Aug 2026 12:04:00 -0500
+Subject: [PATCH RFC v2 1/2] wifi: aic: fix stack buffer overflow in aicbt_patch_info_unpack
+
+During hardware validation of the AIC8800D80 SDIO chipset on real
+silicon (Radxa Cubie A5E with Allwinner T527 SoC running Linux 7.1),
+unpacking the BT patch table (fw_patch_table_8800d80_u02.bin) caused a
+kernel stack protector panic:
+
+  Kernel panic - not syncing: stack-protector: Kernel stack is corrupted
+  in: aicbt_patch_trap_data_load+0xe4/0x110 [aic8800_bsp]
+
+`aicbt_patch_info_unpack()` calculated copy length as:
+  patch_info->info_len * sizeof(uint32_t) * 2
+
+When reading `fw_patch_table_8800d80_u02.bin`, `info_len` resulted in a
+memcpy size exceeding the remaining bounds of the stack-allocated struct
+`struct aicbt_patch_info_t patch_info`, overflowing by 4+ bytes.
+
+Fix this by adding explicit bounds checking to `memcpy` in
+`aicbt_patch_info_unpack()`, capping `copy_len` to `sizeof(struct
+aicbt_patch_info_t) - sizeof(patch_info->info_len)`.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+Tested-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/net/wireless/aic/aic8800_bsp/aic_bsp_driver.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/wireless/aic/aic8800_bsp/aic_bsp_driver.c b/drivers/net/wireless/aic/aic8800_bsp/aic_bsp_driver.c
+index a1b2c3d..e4f5a6b 100644
+--- a/drivers/net/wireless/aic/aic8800_bsp/aic_bsp_driver.c
++++ b/drivers/net/wireless/aic/aic8800_bsp/aic_bsp_driver.c
+@@ -1148,9 +1148,13 @@ int aicbt_patch_info_unpack(struct aicbt_patch_info_t *patch_info,
+ 		if (patch_info->info_len == 0)
+ 			return 0;
+ 
++		size_t copy_len = patch_info->info_len * sizeof(uint32_t) * 2;
++		size_t max_len = sizeof(struct aicbt_patch_info_t) - sizeof(patch_info->info_len);
++		if (copy_len > max_len)
++			copy_len = max_len;
+ 		memcpy(patch_info_array + sizeof(patch_info->info_len),
+ 		       head_t->data,
+-		       patch_info->info_len * sizeof(uint32_t) * 2);
++		       copy_len);
+ 		AICWFDBG(LOGDEBUG, "%s adid_addrinf:%x addr_adid:%x \r\n", __func__,
+ 			 ((struct aicbt_patch_info_t *)patch_info_array)->adid_addrinf,
+ 			 ((struct aicbt_patch_info_t *)patch_info_array)->addr_adid);
+-- 
+2.43.0
