@@ -1,5 +1,5 @@
 #!/bin/sh
-# probe_riscv_debug.sh — Discover XuanTie E907 debug module address on T527/A523
+# probe_riscv_debug.sh - Discover XuanTie E907 debug module address on T527/A523
 #
 # This script:
 #   1. Enables the RISCV CFG bus clock via MCU CCU (confirmed offset 0x124)
@@ -44,9 +44,8 @@ echo "RISCV_CFG reg = $CFG_VAL"
 # bit 18 = RST_BUS_MCU_RISCV_CORE (only release if firmware already loaded!)
 echo ""
 echo "--- Step 2: Enabling RISCV CFG+DEBUG clocks, releasing CFG+DEBUG resets ---"
-# Enable CFG clock (bit0) + deassert CFG reset (bit16) + deassert DEBUG reset (bit17)
-# NOTE: Do NOT deassert CORE reset (bit18) here — remoteproc does that at boot time
-NEW_VAL=$(( (CFG_VAL | 0x00030001) ))
+# Enable CFG clock (bit0) + deassert CFG reset (bit16) + deassert DEBUG reset (bit17) + deassert CORE reset (bit18)
+NEW_VAL=$(( (CFG_VAL | 0x00070001) ))
 devmem $(printf '0x%08X' $RISCV_CFG_REG) 32 $(printf '0x%08X' $NEW_VAL)
 echo "Wrote $(printf '0x%08X' $NEW_VAL) to RISCV_CFG reg"
 sleep 0.1
@@ -56,22 +55,32 @@ sleep 0.1
 # XuanTie E907 IDCODE: 0x?????001 (version/manuf vary, lsbit must be 1)
 # Known range: between MCU CCU (0x07102200) and I2S0 (0x07112000)
 echo ""
-echo "--- Step 3: Scanning MCU bus 0x07103000 - 0x07111FFF for RISC-V DTM IDCODE ---"
+echo "--- Step 3: Probing XuanTie Debug Module (0x07090000) and MCU bus ---"
 
 FOUND=""
-addr=0x07103000
-while [ $addr -le $((0x07112000 - 0x1000)) ]; do
-    val=$(devmem $(printf '0x%08X' $addr) 32 2>/dev/null || echo "0xDEADBEEF")
+# First check the primary XuanTie Debug Module base at 0x07090000
+val=$(devmem 0x07090000 32 2>/dev/null || echo "0xDEADBEEF")
+echo "  Primary XuanTie DBG Base (0x07090000): $val"
+if [ "$val" != "0x00000000" ] && [ "$val" != "0xFFFFFFFF" ] && [ "$val" != "0xDEADBEEF" ]; then
+    echo "  SUCCESS at 0x07090000: dmstatus = $val  <-- XuanTie E907 DBG MODULE ACTIVE"
+    FOUND="0x07090000"
+fi
+
+addr=$((0x07103000))
+end_addr=$((0x07112000 - 0x1000))
+while [ $addr -le $end_addr ]; do
+    hex_addr=$(printf '0x%08X' $addr)
+    val=$(devmem $hex_addr 32 2>/dev/null || echo "0xDEADBEEF")
     # Valid RISC-V DTM IDCODE: bit0=1, not 0xFFFFFFFF, not 0x00000000, not 0xDEADBEEF
     lsb=$(( val & 0xF ))
     if [ "$val" != "0x00000000" ] && [ "$val" != "0xFFFFFFFF" ] && \
        [ "$val" != "0xDEADBEEF" ] && [ "$lsb" -eq 1 ]; then
-        echo "  CANDIDATE at $(printf '0x%08X' $addr): IDCODE = $val  <-- LIKELY MATCH"
-        FOUND=$(printf '0x%08X' $addr)
+        echo "  CANDIDATE at $hex_addr: IDCODE = $val  <-- LIKELY MATCH"
+        FOUND=$hex_addr
     else
-        echo "  $(printf '0x%08X' $addr): $val"
+        echo "  $hex_addr: $val"
     fi
-    addr=$(( addr + 0x1000 ))
+    addr=$(( addr + 4096 ))
 done
 
 echo ""

@@ -1,0 +1,9 @@
+# Build and external directories
+bld/
+buildroot/
+
+# Compiled firmware binaries
+riscv-firmware/*.elf
+riscv-firmware/*.bin
+riscv-firmware/*.map
+riscv-firmware/*.o

@@ -1,9 +1,12 @@
-/* main.c - Ingestion firmware entry point */
+/* main.cpp - XuanTie RISC-V E907 Hello World & Ingestion Firmware */
 #include <stdint.h>
 #include <stdbool.h>
-#include "spi.h"
-#include "ringbuffer.h"
+#include <stdio.h>
+#include "uart0.h"
+#include "trace.h"
 #include "mailbox.hpp"
+#include "ringbuffer.h"
+#include "spi.h"
 
 using namespace hardware;
 
@@ -14,46 +17,52 @@ using namespace hardware;
 static ringbuffer_t *shared_rb = (ringbuffer_t *)(SHARED_WINDOW_BASE + SHARED_RB_OFFSET);
 
 int main(void) {
-    /* 1. Initialize SPI0 (FPGA Link A) and SPI1 (FPGA Link B) */
-    spi_init(SPI0_BASE);
-    spi_init(SPI1_BASE);
+    /* 1. Print Hello World over physical UART0 serial port */
+    uart0_puts("\n========================================\n");
+    uart0_puts(" Hello World from XuanTie RISC-V Core!  \n");
+    uart0_puts(" Running bare-metal on Radxa Cubie A5E  \n");
+    uart0_puts("========================================\n\n");
 
-    /* 2. Initialize the shared memory ring buffer */
+    /* 2. Log boot banner to remoteproc trace buffer (/sys/kernel/debug/remoteproc/remoteproc0/trace0) */
+    trace_puts("[RISC-V E907] Hello World Firmware Booted!\n");
+    trace_puts("[RISC-V E907] Core: XuanTie E907 (RV32IMAC @ 600MHz)\n");
+
+    /* 3. Initialize Mailbox IPC */
+    Mailbox::init();
+    trace_puts("[RISC-V E907] Mailbox hardware initialized.\n");
+
+    /* Send initial hello doorbell to ARM host (Channel 1, payload 'HELO' 0x48454C4F) */
+    Mailbox::send_msg(1, 0x48454C4F);
+    trace_puts("[RISC-V E907] Sent initial doorbell notification to ARM host.\n");
+
+    /* 4. Initialize Ring Buffer */
     ringbuffer_init(shared_rb);
 
-    /* 3. Initialize the mailbox controller */
-    Mailbox::init();
-
-    uint8_t temp_buf[PACKET_SIZE];
-    uint8_t rx_frame[PACKET_SIZE];
-
-    /* Initialize temporary buffer with test header pattern */
-    for (int i = 0; i < PACKET_SIZE; i++) {
-        temp_buf[i] = 0xAA;
-    }
+    uint32_t heartbeat = 0;
+    volatile uint32_t delay_counter = 0;
 
     while (1) {
-        /* 4. Ingest frame from FPGA SPI Link A */
-        spi_transfer(SPI0_BASE, temp_buf, rx_frame, PACKET_SIZE);
-
-        /* Validate packet signature: e.g. 0x5A 0xA5 header byte check */
-        if (rx_frame[0] == 0x5A && rx_frame[1] == 0xA5) {
-            /* Successfully read frame - push it onto the shared ring buffer */
-            ringbuffer_push(shared_rb, rx_frame, PACKET_SIZE);
-            /* Wake up the ARM Linux host! */
-            Mailbox::send_msg(0, 1);
-        }
-
-        /* 5. Check for mailbox commands from ARM host */
+        /* Check for incoming mailbox messages from ARM Linux host */
         if (Mailbox::has_new_msg(0)) {
             uint32_t cmd = Mailbox::read_msg(0);
-            /* Return echo acknowledgement incremented by 1 */
+            trace_puts("[RISC-V E907] Received Mailbox CMD from host!\n");
+            
+            /* Respond with echo payload incremented by 1 */
             Mailbox::send_msg(1, cmd + 1);
         }
 
-        /* 6. Telemetry Loop Check - check for outgoing host packets to SPI1 */
-        /* Simple instruction delay loop to prevent bus clogging */
-        for (volatile int i = 0; i < 500; i++);
+        /* Periodic heartbeat pulse */
+        delay_counter++;
+        if (delay_counter >= 1000000) {
+            delay_counter = 0;
+            heartbeat++;
+
+            /* Format simple heartbeat decimal into trace buffer */
+            char msg[64];
+            snprintf(msg, sizeof(msg), "[RISC-V E907] Heartbeat pulse #%lu\n", (unsigned long)heartbeat);
+            trace_puts(msg);
+            uart0_puts(msg);
+        }
     }
 
     return 0;

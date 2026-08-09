@@ -68,22 +68,27 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ## Part 2 — Attach GDB Remotely from Your x86 Dev Host
 
-This uses the **target-side GDB server** (compiled with `--enable-targets=all`)
-combined with a **software MMIO OpenOCD bridge** that reads co-processor
-registers through `/dev/mem`.
+This uses the **target-side `rbb_server` bridge** combined with a **software MMIO OpenOCD bridge** that reads co-processor registers through `/dev/mem` at physical address `0x07090000`.
 
-### Step 4: Start the OpenOCD software transport on the target
-
+### Step 4: Verify hardware Debug Module accessibility
+On the target (ARM Linux shell):
 ```bash
-# On target (ARM Linux)
-openocd -f /etc/openocd/openocd_t527_local.cfg &
-# OpenOCD listens on TCP port 3333
+# Run the automated RISC-V debug probe
+probe_riscv_debug.sh
+
+# Or verify the Debug Module base address directly via devmem:
+devmem 0x07090000 32
+# Expected response: 0x00004010 (dmstatus active)
 ```
 
-The config file `openocd_t527_local.cfg` maps the debug registers at
-physical address `0x07090000` (XuanTie debug module base). See
-[Blueprint 5](../workspace_prompts/prompt5_riscv_debug_bridge.md) for the
-full config.
+### Step 5: Start rbb_server and OpenOCD on target
+```bash
+# Start the Remote Bitbang MMIO bridge daemon
+rbb_server 0x07090000 &
+
+# Start OpenOCD (listens on TCP port 3333 for GDB)
+openocd -f /etc/openocd/openocd_t527_local.cfg &
+```
 
 ### Step 5: Start GDB server on the target
 

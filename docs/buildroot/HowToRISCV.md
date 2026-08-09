@@ -76,7 +76,7 @@ make -C riscv-firmware
 make -C riscv-firmware size
 ```
 
-This compiles `startup.S` and C files using your local `/home/tcmichals/.tools/gcc-riscv-none-eabi` toolchain, generating:
+This compiles `startup.S` and C files using your local xPack GNU RISC-V Embedded GCC toolchain (`/home/tcmichals/.tools/xpack-riscv-none-elf-gcc-13.2.0-2`), generating:
 * **`firmware.elf`**: Execution file containing debug symbols.
 * **`firmware.bin`**: Raw binary payload to be loaded onto the hardware.
 * **`firmware.map`**: Linking map showing exact symbol layout.

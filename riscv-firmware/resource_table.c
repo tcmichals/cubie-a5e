@@ -138,7 +138,12 @@ static char *trace_buf     = (char *)TRACE_BUF_DA;
 static int   trace_pos     = 0;
 
 void trace_puts(const char *s) {
-    while (*s && trace_pos < (int)(TRACE_BUF_LEN - 1))
+    while (*s) {
+        if (trace_pos >= (int)(TRACE_BUF_LEN - 1)) {
+            trace_pos = 0;
+        }
         trace_buf[trace_pos++] = *s++;
+    }
     trace_buf[trace_pos] = '\0';
 }
+

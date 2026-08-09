@@ -1,6 +1,6 @@
 # Makefile for XuanTie RISC-V E906/E907 co-processor firmware
 
-TOOLCHAIN_PREFIX = /home/tcmichals/.tools/gcc-riscv-none-eabi/bin/riscv-none-elf-
+TOOLCHAIN_PREFIX ?= /home/tcmichals/.tools/xpack-riscv-none-elf-gcc-13.2.0-2/bin/riscv-none-elf-
 
 CC      = $(TOOLCHAIN_PREFIX)gcc
 CXX     = $(TOOLCHAIN_PREFIX)g++
@@ -39,7 +39,7 @@ CXXFLAGS = $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-th
 # -nostartfiles: We provide our own startup.S, but we DO link nano libc
 LDFLAGS  = -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections $(LTO_FLAGS) --specs=nano.specs -nostartfiles
 
-SRCS = startup.S main.cpp spi.c ringbuffer.c resource_table.c
+SRCS = startup.S main.cpp melis_hello_world.c spi.c ringbuffer.c resource_table.c
 OBJS = $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
 OBJS := $(OBJS:.cpp=.o)
