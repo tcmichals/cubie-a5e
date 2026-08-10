@@ -45,11 +45,8 @@ SECTIONS
         . = ALIGN(4);
     } > SRAM
 
-    /* Load address of initialized data is in SRAM, but execution address is DTCM */
-    _sram_data_start = LOADADDR(.data);
-
     /* 4. Initialized data segment is executed in DTCM but stored in SRAM C */
-    .data : AT(_sram_data_start)
+    .data :
     {
         . = ALIGN(4);
         _data_start = .;
@@ -60,7 +57,9 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _data_end = .;
-    } > DTCM
+    } > DTCM AT> SRAM
+
+    _sram_data_start = LOADADDR(.data);
 
     /* 5. Zero-initialized BSS segment in DTCM */
     .bss :
