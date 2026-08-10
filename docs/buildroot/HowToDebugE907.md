@@ -83,7 +83,7 @@ devmem 0x07090000 32
 
 ### Step 5: Start rbb_server and OpenOCD on target
 ```bash
-# Start the Remote Bitbang MMIO bridge daemon
+# Start the On-Chip Direct MMIO Debug Bridge daemon
 rbb_server 0x07090000 &
 
 # Start OpenOCD (listens on TCP port 3333 for GDB)
