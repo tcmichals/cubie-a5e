@@ -8,7 +8,7 @@
 #
 ################################################################################
 
-AIC8800_DRIVER_SITE = /home/tcmichals/projects/cubie/cubie-a5e/aic8800-upstream
+AIC8800_DRIVER_SITE = $(BR2_EXTERNAL_CUBIE_A5E_PATH)/../aic8800-upstream
 AIC8800_DRIVER_SITE_METHOD = local
 AIC8800_DRIVER_LICENSE = GPL-2.0
 
