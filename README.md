@@ -38,7 +38,10 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **100% Verified Hardware Bring-Up:** Firmware upload (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) completes in <300ms, returning chip version `06090101`. `wlan0` registers cleanly, acquires DHCP lease (`192.168.1.15`), and executes internet pings (`yahoo.com`) with 0% packet loss.
   - **Documentation & Reference Logs:** Tracked in [`docs/buildroot/AIC8800_Porting_Action_Plan.md`](docs/buildroot/AIC8800_Porting_Action_Plan.md) and [`walkthrough.md`](.gemini/antigravity-ide/brain/061e4443-888e-4bf7-88c1-615de74a8deb/walkthrough.md).
 
-* **⚠️ RISC-V Co-processor (Code Ready, Not Hardware Tested):** The bare-metal C++ firmware (`riscv-firmware`) and the ARM Linux real-time IPC bridge (`rbb-server`) are fully compiled, utilizing hardware Mailbox doorbells and lock-free shared memory. However, the end-to-end telemetry loop has not yet been physically verified on the board.
+* **✅ RISC-V Co-Processor & On-Chip Direct MMIO Debugging (100% OPERATIONAL & VERIFIED):**
+  - **Toolchain & Firmware:** Bare-metal C++20 firmware (`riscv-firmware`) compiled with the latest xPack RISC-V GCC `v15.2.0-1` toolchain and Buildroot GDB `17.1`.
+  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge accesses the XuanTie E907 RISC-V Debug Module directly over the SoC memory bus via `/dev/mem` at physical address `0x07090000`. Connects directly to OpenOCD and GDB without requiring external hardware JTAG dongles or pin wiring.
+  - **Documentation & References:** Detailed in [`docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md`](docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md) and [`docs/buildroot/HowToDebugE907.md`](docs/buildroot/HowToDebugE907.md).
 * **⚠️ NPU / TinyML (Compiled in, Not Tested):** The open-source Etnaviv DRM drivers and the Teflon TensorFlow Lite delegate (`libteflon.so`) are integrated into the Buildroot OS, but live camera inference has not yet been stress-tested.
 
 ---
