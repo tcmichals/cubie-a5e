@@ -1,6 +1,8 @@
 # Makefile for XuanTie RISC-V E906/E907 co-processor firmware
 
-TOOLCHAIN_PREFIX ?= /home/tcmichals/.tools/xpack-riscv-none-elf-gcc-13.2.0-2/bin/riscv-none-elf-
+XPACK_DIR ?= $(HOME)/.tools/xpack-riscv-none-elf-gcc-13.2.0-2
+TOOLCHAIN_PREFIX ?= $(XPACK_DIR)/bin/riscv-none-elf-
+TOOLCHAIN_CC := $(TOOLCHAIN_PREFIX)gcc
 
 CC      = $(TOOLCHAIN_PREFIX)gcc
 CXX     = $(TOOLCHAIN_PREFIX)g++
@@ -44,9 +46,20 @@ OBJS = $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
 OBJS := $(OBJS:.cpp=.o)
 
-.PHONY: all clean size
+.PHONY: all clean size check_toolchain
 
-all: firmware.bin firmware.elf
+check_toolchain:
+	@if [ ! -x "$(TOOLCHAIN_CC)" ]; then \
+		echo "=== RISC-V toolchain not found at $(TOOLCHAIN_CC) ==="; \
+		echo "=== Downloading xPack RISC-V Toolchain v13.2.0-2 ==="; \
+		mkdir -p $(HOME)/.tools; \
+		curl -L -o /tmp/xpack-riscv.tar.gz https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v13.2.0-2/xpack-riscv-none-elf-gcc-13.2.0-2-linux-x64.tar.gz; \
+		tar -xzf /tmp/xpack-riscv.tar.gz -C $(HOME)/.tools/; \
+		rm -f /tmp/xpack-riscv.tar.gz; \
+		echo "=== xPack RISC-V Toolchain successfully installed to $(XPACK_DIR) ==="; \
+	fi
+
+all: check_toolchain firmware.bin firmware.elf
 
 firmware.elf: $(OBJS) firmware.ld
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
