@@ -1,6 +1,5 @@
 # Build and external directories
 bld/
-buildroot/
 
 # Compiled firmware binaries
 riscv-firmware/*.elf
