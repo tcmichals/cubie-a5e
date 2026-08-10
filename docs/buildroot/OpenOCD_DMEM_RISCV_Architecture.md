@@ -71,9 +71,10 @@ Once mapped, reading and writing to pointer offsets executes raw ARM64 bus instr
 
 ### OpenOCD `--enable-dmem` Driver (ARM CoreSight)
 OpenOCD contains a built-in driver enabled via `./configure --enable-dmem`:
-- **Target**: Created by TI/Linaro for TI K3 / AM62x / BeagleBoard platforms.
+- **Target**: Created by TI/Linaro for TI K3 / AM62x / BeagleBoard platforms (e.g. `ti_am625_swd_native.cfg`).
 - **Protocol**: Maps **ARM CoreSight DAPBUS** registers via `/dev/mem` (base address `0x2B000000`).
 - **Commands**: `dmem device /dev/mem`, `dmem base_address 0x2B000000`.
+- **Reference Config**: `openocd -f board/ti_am625_swd_native.cfg` (used on BeaglePlay / PocketBeagle 2 for Cortex-M4F/R5F native debugging).
 
 ### `rbb_server` (RISC-V 0.13 Debug Module Bridge)
 Created for this repository to bridge OpenOCD and the XuanTie E907 RISC-V core:
