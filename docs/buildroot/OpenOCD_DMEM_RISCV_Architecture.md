@@ -182,6 +182,10 @@ Unlike high-security ARM SoCs (such as Qualcomm, NXP i.MX8, or TI High-Security 
 2. **OpenOCD Board Configuration Benchmark**:
    - `board/ti_am625_swd_native.cfg` — Standard TI/BeagleBoard native OpenOCD configuration script using `adapter driver dmem` and `/dev/mem`.
 
-3. **RISC-V External Debug Support Specification**:
+3. **BeagleBoard Forum Discussion — Minimal Cortex-R5 Example on BBAI-64**:
+   - **Link**: [https://forum.beagleboard.org/t/minimal-cortex-r5-example-on-bbai-64/32443](https://forum.beagleboard.org/t/minimal-cortex-r5-example-on-bbai-64/32443)
+   - **Summary**: Community discussion on troubleshooting co-processor power state (`target->coreid 0 powered down!`), demonstrating why `remoteproc` must power on/un-gate co-processor clocks before attaching OpenOCD over `dmem`.
+
+4. **RISC-V External Debug Support Specification**:
    - **Version**: v0.13 / v1.0 (RISC-V International)
    - **Details**: Standardizes Debug Module (DM) register interfaces (`dmcontrol`, `dmstatus`, `abstractcs`, `command`, `data0`).
