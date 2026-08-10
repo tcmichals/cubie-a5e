@@ -170,3 +170,18 @@ Unlike high-security ARM SoCs (such as Qualcomm, NXP i.MX8, or TI High-Security 
    - Linux `remoteproc` copies the `.vectors` section and entry point (`startup.S` / `_enter`) into ITCM at `0x00000000`.
    - Releasing bit 18 (`RST_BUS_MCU_RISCV_CORE`) immediately begins execution from ITCM `0x00000000`.
 
+---
+
+## 8. References, Presentations & Prior Art
+
+1. **"Debugging Heterogeneous SoC Using OpenOCD"**
+   - **Author**: Nishanth Menon (Texas Instruments Inc.)
+   - **Conference / Video**: Embedded Linux Conference / YouTube Presentation
+   - **Summary**: Key technical talk demonstrating how TI soft-wires OpenOCD directly to the SoC's CoreSight debug registers via `/dev/mem` (`--enable-dmem`) from the Linux environment, eliminating physical USB-JTAG cables for Cortex-M4F / Cortex-R5F cores.
+
+2. **OpenOCD Board Configuration Benchmark**:
+   - `board/ti_am625_swd_native.cfg` — Standard TI/BeagleBoard native OpenOCD configuration script using `adapter driver dmem` and `/dev/mem`.
+
+3. **RISC-V External Debug Support Specification**:
+   - **Version**: v0.13 / v1.0 (RISC-V International)
+   - **Details**: Standardizes Debug Module (DM) register interfaces (`dmcontrol`, `dmstatus`, `abstractcs`, `command`, `data0`).
