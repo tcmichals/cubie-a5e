@@ -150,3 +150,23 @@ adapter driver riscv_mmio
 riscv_mmio base 0x07090000
 target create e907.cpu riscv -dap dmem
 ```
+
+---
+
+## 7. Reset Vector & Security Architecture (No TrustZone / SMC APIs Needed)
+
+Unlike high-security ARM SoCs (such as Qualcomm, NXP i.MX8, or TI High-Security variants) that require Secure Monitor Calls (`smc #0`) into ARM TrustZone / TF-A to control co-processor resets or set boot vectors:
+
+1. **Unrestricted Physical MMIO**:
+   On the Allwinner T527 / A523, the MCU CCU clock gate and hardware reset controls sit at physical memory address **`0x07102124`** in non-secure physical I/O space.
+   - Bit 0 = `CLK_BUS_MCU_RISCV_CFG` (Clock gate enable)
+   - Bit 16 = `RST_BUS_MCU_RISCV_CFG` (CFG bus reset deassert)
+   - Bit 17 = `RST_BUS_MCU_RISCV_DEBUG` (Debug module reset deassert)
+   - Bit 18 = `RST_BUS_MCU_RISCV_CORE` (Core execution reset deassert)
+   The Linux kernel or `devmem` can write `0x00070001` directly to `0x07102124` without requiring any TrustZone SMC security APIs or kernel panics.
+
+2. **Hardwired ITCM Reset Vector (`0x00000000`)**:
+   The XuanTie E907 RISC-V core's reset vector is hardwired to boot from the start of ITCM (**`0x00000000`**).
+   - Linux `remoteproc` copies the `.vectors` section and entry point (`startup.S` / `_enter`) into ITCM at `0x00000000`.
+   - Releasing bit 18 (`RST_BUS_MCU_RISCV_CORE`) immediately begins execution from ITCM `0x00000000`.
+
