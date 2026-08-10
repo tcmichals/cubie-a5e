@@ -121,16 +121,28 @@ rbb_server 0x07090000 &
 openocd -f /etc/openocd/openocd_t527_local.cfg &
 ```
 
-### Step 4: Interactive GDB Debugging
-```bash
+### Step 4: Interactive GDB Debugging Workflows
+
+#### Method A: Spin Stub Workflow (Iterative Development)
+Load a simple spin stub via `remoteproc` to keep clocks enabled, then flash & debug your real firmware directly over GDB:
+```gdb
+# Launch GDB
 gdb /lib/firmware/riscv-firmware.elf
+
+(gdb) set architecture riscv:rv32
+(gdb) target remote localhost:3333
+(gdb) load new_firmware_build.elf    # Flash new ELF directly over MMIO into ITCM/DTCM
+(gdb) break main
+(gdb) continue
 ```
+
+#### Method B: Direct RemoteProc Boot (Production Deployment)
+Load the final firmware directly via Linux `remoteproc` and attach GDB to inspect running state:
 ```gdb
 (gdb) set architecture riscv:rv32
 (gdb) target remote localhost:3333
 (gdb) break main
 (gdb) info registers
-(gdb) continue
 ```
 
 ---
