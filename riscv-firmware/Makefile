@@ -24,11 +24,11 @@ XPACK_VER ?= 15.2.0-1
 XPACK_DIR ?= $(HOME)/.tools/xpack-riscv-none-elf-gcc-$(XPACK_VER)
 TOOLCHAIN_CC := $(TOOLCHAIN_PREFIX)gcc
 
-CC      ?= $(TOOLCHAIN_PREFIX)gcc
-CXX     ?= $(TOOLCHAIN_PREFIX)g++
-OBJCOPY ?= $(TOOLCHAIN_PREFIX)objcopy
-OBJDUMP ?= $(TOOLCHAIN_PREFIX)objdump
-SIZE    ?= $(TOOLCHAIN_PREFIX)size
+CC      = $(TOOLCHAIN_PREFIX)gcc
+CXX     = $(TOOLCHAIN_PREFIX)g++
+OBJCOPY = $(TOOLCHAIN_PREFIX)objcopy
+OBJDUMP = $(TOOLCHAIN_PREFIX)objdump
+SIZE    = $(TOOLCHAIN_PREFIX)size
 
 ARCH_FLAGS = -march=rv32imac_zicsr -mabi=ilp32 -mcmodel=medany
 
@@ -66,7 +66,13 @@ OBJS = $(SRCS:.c=.o)
 OBJS := $(OBJS:.S=.o)
 OBJS := $(OBJS:.cpp=.o)
 
+.DEFAULT_GOAL := all
 .PHONY: all clean size check_toolchain
+
+all: firmware.bin firmware.elf
+
+# Ensure check_toolchain completes before any object is compiled in parallel builds
+$(OBJS): | check_toolchain
 
 check_toolchain:
 	@if ! command -v "$(TOOLCHAIN_CC)" >/dev/null 2>&1 && [ ! -x "$(TOOLCHAIN_CC)" ]; then \
@@ -88,11 +94,6 @@ check_toolchain:
 		fi; \
 		echo "=== xPack RISC-V Toolchain v$(XPACK_VER) successfully installed to $(XPACK_DIR) ==="; \
 	fi
-
-all: firmware.bin firmware.elf
-
-# Ensure check_toolchain completes before any object is compiled in parallel builds
-$(OBJS): | check_toolchain
 
 firmware.elf: $(OBJS) firmware.ld
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
