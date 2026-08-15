@@ -211,17 +211,22 @@ If not already cloned:
 - `git clone https://github.com/buildroot/buildroot.git`
 
 ## 6) Configure and build
-
+ 
 From the repository top level:
 
 1. Create an output directory:
    ```bash
    mkdir -p bld
    ```
-2. Configure Buildroot for Cubie A5E:
-   ```bash
-   PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
-   ```
+2. Configure Buildroot for your target board:
+   * **For Radxa Cubie A5E (Allwinner A527/T527, SDIO Wi-Fi):**
+     ```bash
+     PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+     ```
+   * **For Radxa Cubie A7A (Allwinner A733, USB Wi-Fi):**
+     ```bash
+     PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
+     ```
 3. Build the full image:
    ```bash
    PATH=$PWD/bld/bin:$PATH make -C bld
@@ -257,9 +262,14 @@ No proprietary binary blobs or out-of-tree bundle folders are required. See [How
 
 ## 10) Board references
 
+### Radxa Cubie A5E
 - Product: https://radxa.com/products/cubie/a5e
 - Docs: https://docs.radxa.com/en/cubie/a5e
 - Hardware/interface section: https://docs.radxa.com/en/cubie/a5e#5-interface-description
+
+### Radxa Cubie A7A
+- Product: https://radxa.com/products/cubie/a7a
+- Docs: https://docs.radxa.com/en/cubie/a7a
 
 ## 11) Design intent summary
 

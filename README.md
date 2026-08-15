@@ -120,20 +120,24 @@ These configurations keep AI agents aligned on the OS/Application boundaries, cu
 
 For complete build instructions and prerequisites, see [Buildroot System How-To](docs/buildroot/BuildRootHowTo.md).
 
+### 1. Clone Buildroot (if not already cloned)
 ```bash
-# 1. Clone Buildroot (if not already cloned)
 git clone https://github.com/buildroot/buildroot.git
+```
 
-# 2. Configure the build for your target board:
+### 2. Configure and Build for Your Target Board
+
+#### Option A: Radxa Cubie A5E (Allwinner A527 / T527 — SDIO Wi-Fi 6)
+```bash
 mkdir -p bld
-
-# For Radxa Cubie A5E (Allwinner A527/T527, SDIO Wi-Fi):
 PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+PATH=$PWD/bld/bin:$PATH make -C bld
+```
 
-# OR for Radxa Cubie A7A (Allwinner A733, USB Wi-Fi):
-# PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
-
-# 3. Build the SD card image
+#### Option B: Radxa Cubie A7A (Allwinner A733 — USB Wi-Fi 6)
+```bash
+mkdir -p bld
+PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
 PATH=$PWD/bld/bin:$PATH make -C bld
 ```
 
