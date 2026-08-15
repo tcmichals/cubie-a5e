@@ -1,6 +1,6 @@
-# Cubie A5E Flight Controller
+# Cubie A5E & Cubie A7A Flight Controller
 
-This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E** and run the flight controller application stack.
+This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E** (Allwinner A527/T527) and **Radxa Cubie A7A** (Allwinner A733) single-board computers and run the flight controller application stack.
 
 ---
 
@@ -19,6 +19,15 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 
 ---
 
+## Supported Boards
+
+| Board Model | Processor (SoC) | CPU Architecture | Wi-Fi 6 Transport | Buildroot Defconfig |
+| :--- | :--- | :--- | :--- | :--- |
+| **Radxa Cubie A5E** | Allwinner A527 / T527 | 8× Arm Cortex-A55 @ 1.8GHz | AIC8800 (SDIO) | `cubie_a5e_defconfig` |
+| **Radxa Cubie A7A** | Allwinner A733 | 2× Cortex-A76 + 6× Cortex-A55 | AIC8800 (USB) | `cubie_a7a_defconfig` |
+
+---
+
 ## Project Mantra & Core Philosophies
 
 1. **Mainline First:** We reject ancient, bloated vendor BSP kernels. We target the absolute latest mainline Linux kernel releases and push for pure FOSS (Free and Open-Source Software) drivers (e.g., Etnaviv for the NPU, V4L2 for camera pipelines). 
@@ -33,8 +42,8 @@ As of the current bring-up phase, here is the functional status of the flight st
 
 * **⚠️ Base OS & Bootloader (Tested/Functional):** U-Boot successfully loads custom device tree overlays. The Linux kernel (`PREEMPT_RT`) boots correctly, isolates CPU Core 7, and mounts the rootfs.
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
-  - **Upstream Mainline Kernel Integration:** Integrated the official Linux kernel mailing list RFC submission (`[RFC PATCH wireless-next v2] wifi: aic: add AIC8800 SDIO FullMAC driver`) directly into the Buildroot system distribution.
-  - **Clean 2-Module Architecture:** Uses `aic8800_bsp.ko` (hardware bring-up, SDIO bus setup, firmware loading, MCU boot) and `aic8800_fdrv.ko` (`cfg80211` FullMAC WLAN driver).
+  - **Upstream Mainline Kernel Integration:** Integrated the official Linux kernel mailing list RFC submission (`[RFC PATCH wireless-next v2] wifi: aic: add AIC8800 FullMAC driver`) directly into the Buildroot system distribution.
+  - **Clean Multi-Bus Architecture:** Supports both SDIO (Cubie A5E) and USB (Cubie A7A) transports via `aic8800_bsp.ko` (hardware bring-up, bus setup, firmware loading, MCU boot) and `aic8800_fdrv.ko` (`cfg80211` FullMAC WLAN driver).
   - **100% Verified Hardware Bring-Up:** Firmware upload (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) completes in <300ms, returning chip version `06090101`. `wlan0` registers cleanly, acquires DHCP lease (`192.168.1.15`), and executes internet pings (`yahoo.com`) with 0% packet loss.
   - **Documentation & Reference Logs:** Tracked in [`docs/buildroot/AIC8800_Porting_Action_Plan.md`](docs/buildroot/AIC8800_Porting_Action_Plan.md) and [`walkthrough.md`](.gemini/antigravity-ide/brain/061e4443-888e-4bf7-88c1-615de74a8deb/walkthrough.md).
 
@@ -60,7 +69,7 @@ As of the current bring-up phase, here is the functional status of the flight st
 ## AI Assistant & IDE Context
 
 This repository includes project-context and prompt configurations that are automatically read by AI coding assistants to enforce system architecture, package layouts, and coding conventions:
-* **Antigravity Profiles:** Loads architectural bounds and engineering mandates from [`.antigravity/profiles.json`](.antigravity/profiles.json). This defines the host domain (ARM Cortex-A55 mainline Linux) vs. the real-time domain (XuanTie RISC-V bare-metal/Melis), and states mandates like using mainline Linux syntax/vb2_dma_contig allocator and compiling the AIC8800 driver against standard mainline wireless stacks.
+* **Antigravity Profiles:** Loads architectural bounds and engineering mandates from [`.antigravity/profiles.json`](.antigravity/profiles.json). This defines the host domain (ARM Cortex-A55 / A76 mainline Linux) vs. the real-time domain (XuanTie RISC-V bare-metal/Melis), and states mandates like using mainline Linux syntax/vb2_dma_contig allocator and compiling the AIC8800 driver against standard mainline wireless stacks.
 * **Cursor / Antigravity Rules:** Enforces workspace rules via [`.cursorrules`](.cursorrules) on workspace startup.
 * **VS Code Copilot:** Reads [`.github/copilot-instructions.md`](.github/copilot-instructions.md) to bootstrap chat and inline completion context.
 
@@ -93,9 +102,14 @@ For complete build instructions and prerequisites, see [Buildroot System How-To]
 # 1. Clone Buildroot (if not already cloned)
 git clone https://github.com/buildroot/buildroot.git
 
-# 2. Configure the build
+# 2. Configure the build for your target board:
 mkdir -p bld
+
+# For Radxa Cubie A5E (Allwinner A527/T527, SDIO Wi-Fi):
 PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+
+# OR for Radxa Cubie A7A (Allwinner A733, USB Wi-Fi):
+# PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
 
 # 3. Build the SD card image
 PATH=$PWD/bld/bin:$PATH make -C bld

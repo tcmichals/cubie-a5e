@@ -56,16 +56,17 @@ These documents cover flight stack architecture, FPGA integration, and intellige
 * `project-cubie-a5e/external.desc` — Registers the external tree identity (`CUBIE_A5E`).
 * `project-cubie-a5e/external.mk` — Includes all external package makefiles.
 * `project-cubie-a5e/Config.in` — Adds package menu entries for external packages.
-* `project-cubie-a5e/configs/cubie_a5e_defconfig` — Primary configuration and package selection for this board.
+* `project-cubie-a5e/configs/cubie_a5e_defconfig` — Primary configuration and package selection for Radxa Cubie A5E (Allwinner A527/T527).
+* `project-cubie-a5e/configs/cubie_a7a_defconfig` — Configuration and package selection for Radxa Cubie A7A (Allwinner A733).
 
 ### Board Integration
-* `project-cubie-a5e/board/radxa/cubie_a5e/linux.config` — Kernel configuration fragment (including Real-Time Kernel flags).
-* `project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh` — Orchestrates post-build image assembly.
-* `project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg` — Configuration for partition layout of the final `sdcard.img`.
-* `project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/` — Files copied directly into the target filesystem at build time.
+* `project-cubie-a5e/board/radxa/cubie_a5e/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A5E.
+* `project-cubie-a5e/board/radxa/cubie_a7a/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A7A.
+* `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso` — Flight stack overlay for Cubie A5E.
+* `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-flight-stack.dtso` — Flight stack overlay for Cubie A7A.
 
 ### External Packages
-* `project-cubie-a5e/package/aic8800-driver/` — AIC8800 Wi-Fi/BT kernel driver.
+* `project-cubie-a5e/package/aic8800-driver/` — AIC8800 Wi-Fi/BT kernel driver (SDIO & USB multi-bus support).
 * `project-cubie-a5e/package/aic8800-firmware/` — AIC8800 firmware binaries.
 * `project-cubie-a5e/package/sunxi-galcore/` — NPU driver kernel package (deprecated).
 * `project-cubie-a5e/package/timvx-delegate/` — TIM-VX delegate integration (deprecated).
