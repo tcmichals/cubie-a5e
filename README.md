@@ -19,12 +19,34 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 
 ---
 
-## Supported Boards
+## Supported Boards & Hardware Comparison
 
-| Board Model | Processor (SoC) | CPU Architecture | Wi-Fi 6 Transport | Buildroot Defconfig |
-| :--- | :--- | :--- | :--- | :--- |
-| **Radxa Cubie A5E** | Allwinner A527 / T527 | 8× Arm Cortex-A55 @ 1.8GHz | AIC8800 (SDIO) | `cubie_a5e_defconfig` |
-| **Radxa Cubie A7A** | Allwinner A733 | 2× Cortex-A76 + 6× Cortex-A55 | AIC8800 (USB) | `cubie_a7a_defconfig` |
+| Hardware Feature | Radxa Cubie A5E | Radxa Cubie A7A |
+| :--- | :--- | :--- |
+| **System on Chip (SoC)** | Allwinner **A527 / T527** (`sun55i-a527`) | Allwinner **A733** (`sun60i-a733`) |
+| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 @ 2.0 GHz + 6× Cortex-A55 @ 1.8 GHz |
+| **Real-Time Co-Processor** | XuanTie E907 RISC-V @ 600 MHz (0-cycle TCM) | XuanTie E907 RISC-V @ 600 MHz (0-cycle TCM) |
+| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
+| **GPU Core** | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 |
+| **System RAM** | LPDDR4 / LPDDR4X | LPDDR5 |
+| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO** Bus) | AicSemi AIC8800 (**USB** Bus) |
+| **Storage Interfaces** | MicroSD / eMMC Module / SPI NOR | MicroSD / eMMC Module / UFS Module / SPI NOR |
+| **Flight Bus Header** | Standard 40-pin GPIO (3× SPI, 2× I2C, 2× UART) | Standard 40-pin GPIO (3× SPI, 2× I2C, 2× UART) |
+| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
+| **Buildroot Defconfig** | `cubie_a5e_defconfig` | `cubie_a7a_defconfig` |
+| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` |
+| **Flight Stack Overlay** | `cubie-a5e-flight-stack.dtbo` | `cubie-a7a-flight-stack.dtbo` |
+
+---
+
+### Shared Hardware Pinout & Flight Bus Continuity
+Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physical header assignment:
+- **SPI0 (Pins 19, 21, 23, 24):** Dedicated Link A for ultra-low latency IMU attitude estimation.
+- **SPI1 (Pins 12, 35, 38, 40):** Dedicated Link B for bidirectional AbstractX FPGA coprocessor communication.
+- **SPI2 (Pins 7, 15, 16, 18):** General Purpose expansion SPI bus.
+- **I2C1 (Pins 3, 5) & I2C3 (Pins 27, 28):** Dual I2C buses for external compass, barometer, and flight telemetry.
+- **UART0 (Pins 8, 10):** Mainline Linux serial debug console.
+- **Isolated Core 7:** Core 7 is isolated on both chips (`isolcpus=7 nohz_full=7 rcu_nocbs=7`) for jitter-free real-time flight loops.
 
 ---
 
