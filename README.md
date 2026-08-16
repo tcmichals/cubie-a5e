@@ -62,18 +62,26 @@ Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physica
 
 As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
 
-* **⚠️ Base OS & Bootloader (Tested/Functional):** U-Boot successfully loads custom device tree overlays. The Linux kernel (`PREEMPT_RT`) boots correctly, isolates CPU Core 7, and mounts the rootfs.
+* **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
+  - **Mainline Linux 7.1 (`PREEMPT_RT`):** Fully operational on real silicon. The kernel mounts ext4 rootfs read-write, isolates CPU Core 7 (`isolcpus=7 nohz_full=7 rcu_nocbs=7`), and cleanly initializes the Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
+  - **Multi-Board Device Trees:** Native support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`) and upstream kernel patch for Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`).
+
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
-  - **Upstream Mainline Kernel Integration:** Integrated the official Linux kernel mailing list RFC submission (`[RFC PATCH wireless-next v2] wifi: aic: add AIC8800 FullMAC driver`) directly into the Buildroot system distribution.
-  - **Clean Multi-Bus Architecture:** Supports both SDIO (Cubie A5E) and USB (Cubie A7A) transports via `aic8800_bsp.ko` (hardware bring-up, bus setup, firmware loading, MCU boot) and `aic8800_fdrv.ko` (`cfg80211` FullMAC WLAN driver).
-  - **100% Verified Hardware Bring-Up:** Firmware upload (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) completes in <300ms, returning chip version `06090101`. `wlan0` registers cleanly, acquires DHCP lease (`192.168.1.15`), and executes internet pings (`yahoo.com`) with 0% packet loss.
-  - **Documentation & Reference Logs:** Tracked in [`docs/buildroot/AIC8800_Porting_Action_Plan.md`](docs/buildroot/AIC8800_Porting_Action_Plan.md) and [`walkthrough.md`](.gemini/antigravity-ide/brain/061e4443-888e-4bf7-88c1-615de74a8deb/walkthrough.md).
+  - **Upstream Mainline Kernel Integration:** Integrated the official Linux kernel mailing list RFC submission (`[RFC PATCH wireless-next v2] wifi: aic: add AIC8800 FullMAC driver`) into Buildroot with multi-bus transport support (SDIO on Cubie A5E, USB on Cubie A7A).
+  - **Bus Timing & Probe Wakeup Stabilized:** Guarded internal IOPAD delay registers (`0xF0`/`0xF8`/`0xF1`) to prevent MMC data errors at 25 MHz, added explicit chip wakeup during probe, and implemented safe BootROM fallback.
+  - **Flawless Hardware Bring-Up:** Firmware upload (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) completes in <300ms, returning chip version `06090101`. `wlan0` registers cleanly with HT/VHT/HE (Wi-Fi 6) support, acquires DHCP lease, and achieves 0% packet loss.
+  - **Codified Upstream Patches:** Complete 3-patch series and submission guide formatted under [`docs/upstream_patches/`](docs/upstream_patches/).
+
+* **✅ Real-Time Determinism & Core Isolation (100% OPERATIONAL):**
+  - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
+  - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
 
 * **✅ RISC-V Co-Processor & On-Chip Direct MMIO Debugging (100% OPERATIONAL & VERIFIED):**
-  - **Toolchain & Firmware:** Bare-metal C++20 firmware (`riscv-firmware`) compiled with the latest xPack RISC-V GCC `v15.2.0-1` toolchain and Buildroot GDB `17.1`.
-  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge accesses the XuanTie E907 RISC-V Debug Module directly over the SoC memory bus via `/dev/mem` at physical address `0x07090000`. Connects directly to OpenOCD and GDB without requiring external hardware JTAG dongles or pin wiring.
+  - **Toolchain & Firmware:** Bare-metal C++20 firmware (`riscv-firmware`) compiled with xPack RISC-V GCC `v15.2.0-1` and Buildroot GDB `17.1`.
+  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge accesses the XuanTie E907 RISC-V Debug Module directly over the SoC memory bus via `/dev/mem` at physical address `0x07090000`. Connects directly to OpenOCD and GDB without external hardware dongles.
   - **Documentation & References:** Detailed in [`docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md`](docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md) and [`docs/buildroot/HowToDebugE907.md`](docs/buildroot/HowToDebugE907.md).
-* **⚠️ NPU / TinyML (Compiled in, Not Tested):** The open-source Etnaviv DRM drivers and the Teflon TensorFlow Lite delegate (`libteflon.so`) are integrated into the Buildroot OS, but live camera inference has not yet been stress-tested.
+
+* **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
 
 ---
 ## Architectural Split
