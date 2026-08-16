@@ -17,11 +17,12 @@
 
 /* Send a single character over the UART0 port */
 void uart0_putc(char c) {
-    /* Wait until the Transmit FIFO/Holding Register is empty and ready */
-    while (!(*(volatile uint32_t *)(UART0_BASE + UART_LSR) & UART_LSR_THRE));
+    /* Wait until the Transmit FIFO/Holding Register is empty and ready with timeout safety */
+    volatile uint32_t timeout = 100000;
+    while (!(*(volatile uint32_t *)(UART0_BASE + UART_LSR) & UART_LSR_THRE) && --timeout);
     
     /* Write character to register */
-    *(volatile uint32_t *)(UART0_BASE + UART_THR) = c;
+    *(volatile uint32_t *)(UART0_BASE + UART_THR) = (uint32_t)(uint8_t)c;
 }
 
 /* Send a null-terminated string over the UART0 port */

@@ -6,7 +6,6 @@ ENTRY(_enter)
 MEMORY
 {
     ITCM (rx)   : ORIGIN = 0x00000000, LENGTH = 64K
-    SRAM (rx)   : ORIGIN = 0x00028000, LENGTH = 320K
     DTCM (rwx)  : ORIGIN = 0x00080000, LENGTH = 64K
 }
 
@@ -19,33 +18,28 @@ SECTIONS
         KEEP(*(.text.startup))
     } > ITCM
 
-    /* 2. Fast critical ISR code is placed in ITCM for execution */
-    .fastcode :
+    /* 2. Fast code, main program code placed in ITCM for zero-wait execution */
+    .text :
     {
         . = ALIGN(4);
         *(.text.fastcode)
         *(.text.isr)
-        . = ALIGN(4);
-    } > ITCM
-
-    /* 3. Main program code and read-only data are placed in System SRAM C */
-    .text :
-    {
-        . = ALIGN(4);
         *(.text)
         *(.text.*)
         . = ALIGN(4);
-    } > SRAM
+    } > ITCM
 
     .rodata :
     {
         . = ALIGN(4);
         *(.rodata)
         *(.rodata.*)
+        *(.srodata)
+        *(.srodata.*)
         . = ALIGN(4);
-    } > SRAM
+    } > ITCM
 
-    /* 4. Initialized data segment is executed in DTCM but stored in SRAM C */
+    /* 3. Initialized data segment executed in DTCM, loaded from ITCM */
     .data :
     {
         . = ALIGN(4);
@@ -57,11 +51,11 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _data_end = .;
-    } > DTCM AT> SRAM
+    } > DTCM AT> ITCM
 
     _sram_data_start = LOADADDR(.data);
 
-    /* 5. Zero-initialized BSS segment in DTCM */
+    /* 4. Zero-initialized BSS segment in DTCM */
     .bss :
     {
         . = ALIGN(4);
@@ -75,10 +69,11 @@ SECTIONS
         _bss_end = .;
     } > DTCM
 
-    /* 6. Stack pointer baseline set to the top of DTCM (grows downwards) */
+    /* 5. Stack pointer baseline set to the top of DTCM (grows downwards) */
     _stack_top = ORIGIN(DTCM) + LENGTH(DTCM);
 }
 
-/* 7. Memory Bounds Assertions (Fail the build on overflow) */
-ASSERT( (SIZEOF(.vectors) + SIZEOF(.fastcode)) <= LENGTH(ITCM), "ERROR: ITCM limit exceeded! (Max 64KB)" )
+/* 6. Memory Bounds Assertions */
+ASSERT( (LOADADDR(.data) + SIZEOF(.data)) <= LENGTH(ITCM), "ERROR: ITCM limit exceeded! (Max 64KB)" )
 ASSERT( (_bss_end - ORIGIN(DTCM)) <= LENGTH(DTCM), "ERROR: DTCM limit exceeded! Data/BSS too large (Max 64KB)" )
+

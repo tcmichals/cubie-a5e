@@ -13,9 +13,14 @@
 
 #define ITCM_PHYS_BASE    0x07110000
 #define ITCM_MAP_SIZE     0x10000  /* 64 KB */
+#define DTCM_PHYS_BASE    0x07120000
+#define DTCM_MAP_SIZE     0x1000
+
+static const char *LOADER_VERSION = "1.1.0";
 
 static void usage(const char *prog) {
-    printf("Usage: %s {start|stop|status|restart} [path_to_firmware.bin]\n", prog);
+    printf("Usage: %s {start|stop|status|monitor|restart|version} [path_to_firmware.bin]\n", prog);
+    printf("%s loader version %s\n", prog, LOADER_VERSION);
 }
 
 int main(int argc, char *argv[]) {
@@ -45,11 +50,49 @@ int main(int argc, char *argv[]) {
         uint32_t rst = *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG);
         printf("MCU Bus Clock Reg (0x07010020): 0x%08X\n", clk);
         printf("MCU Reset Reg     (0x07010100): 0x%08X\n", rst);
-        if (rst & (1 << 17)) {
+        if (rst & ((1 << 17) | (1 << 16))) {
             printf("Status: RUNNING (Core active)\n");
+            volatile uint32_t *dtcm = (volatile uint32_t *)mmap(NULL, DTCM_MAP_SIZE, PROT_READ, MAP_SHARED, fd, DTCM_PHYS_BASE);
+            if (dtcm != MAP_FAILED) {
+                printf("--- Live Telemetry Block (Host 0x07120000 / E907 DTCM 0x00080000) ---\n");
+                printf("  Magic Header (0x07120000):  0x%08X (%s)\n", dtcm[0], (dtcm[0] == 0x52495343) ? "RISC" : "Unset");
+                printf("  Booted Flag  (0x07120004):  %u\n", dtcm[1]);
+                printf("  Heartbeat    (0x07120008):  %u\n", dtcm[2]);
+                printf("  Loop Counter (0x0712000C):  %u (0x%08X)\n", dtcm[3], dtcm[3]);
+                munmap((void *)dtcm, DTCM_MAP_SIZE);
+            }
         } else {
             printf("Status: HALTED (In reset)\n");
         }
+        munmap((void *)ccu_virt, CCU_MAP_SIZE);
+        close(fd);
+        return 0;
+    } else if (strcmp(action, "monitor") == 0) {
+        volatile uint32_t *dtcm = (volatile uint32_t *)mmap(NULL, DTCM_MAP_SIZE, PROT_READ, MAP_SHARED, fd, DTCM_PHYS_BASE);
+        if (dtcm == MAP_FAILED) {
+            perror("Failed to mmap DTCM telemetry space (0x07120000)");
+            munmap((void *)ccu_virt, CCU_MAP_SIZE);
+            close(fd);
+            return 1;
+        }
+        printf("=== Live XuanTie E907 Telemetry Monitor (Press Ctrl+C to stop) ===\n");
+        printf("Reading DTCM at physical 0x07120000...\n\n");
+        for (int i = 0; i < 30; i++) {
+            uint32_t magic = dtcm[0];
+            uint32_t boot = dtcm[1];
+            uint32_t hb = dtcm[2];
+            uint32_t loops = dtcm[3];
+            printf("\r[E907 Live] Magic: 0x%08X | Boot: %u | Heartbeat: %-6u | Loop Counter: %-10u", magic, boot, hb, loops);
+            fflush(stdout);
+            usleep(200000); /* 200 ms */
+        }
+        printf("\n\nMonitor finished 30 samples.\n");
+        munmap((void *)dtcm, DTCM_MAP_SIZE);
+        munmap((void *)ccu_virt, CCU_MAP_SIZE);
+        close(fd);
+        return 0;
+    } else if (strcmp(action, "version") == 0) {
+        printf("riscv-load version %s\n", LOADER_VERSION);
         munmap((void *)ccu_virt, CCU_MAP_SIZE);
         close(fd);
         return 0;
