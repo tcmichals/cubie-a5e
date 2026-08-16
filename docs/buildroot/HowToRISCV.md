@@ -166,38 +166,64 @@ DTCM            |      0 B   |   64 KB   | [--------------------]   0.0%
 
 Because the RISC-V core lacks non-volatile flash, the ARM host is responsible for loading and booting the co-processor at startup.
 
-### Step A: Enable MCU/DSP Clocks
+### Automated Loader Script: `load-riscv.sh`
+The rootfs includes an automated loader script at `/usr/bin/load-riscv.sh` and an init service at `/etc/init.d/S60riscv`:
+
+```bash
+# Boot default installed firmware (/lib/firmware/riscv-firmware.bin)
+load-riscv.sh start
+
+# Check core execution and clock status
+load-riscv.sh status
+
+# Restart / reload with new firmware
+load-riscv.sh restart
+
+# Load a custom test binary
+load-riscv.sh start /tmp/my_attitude_estimator.bin
+
+# Halt and hold core in reset
+load-riscv.sh stop
+```
+
+---
+
+### Manual Step-by-Step Sequence (Under the Hood)
+
+For manual debugging, the exact hardware sequence is:
+
+#### Step A: Enable MCU/DSP Clocks
 Before writing to memory, turn on the MCU sub-system bus clocks using the CCU registers:
 ```bash
-# Enable bus clock for MCU and DSP
-devmem2 0x07010020 w 0x00000003
+# Enable bus clock for MCU and DSP (0x07010020 -> 0x03)
+devmem 0x07010020 32 0x00000003
 ```
 
-### Step B: Assert Core Reset
-Assert reset on the RISC-V core so it does not boot from empty memory while you copy the firmware:
+#### Step B: Assert Core Reset
+Assert reset on the RISC-V core so it holds in reset while copying firmware:
 ```bash
 # Write 0 to Reset Register (assert reset)
-devmem2 0x07010100 w 0x00000000
+devmem 0x07010100 32 0x00000000
 ```
 
-### Step C: Load the Binary into SRAM
-Copy `firmware.bin` directly into the mapped SRAM memory window of the co-processor over the system bus. From the ARM host point of view, the co-processor's memory mapping is visible:
-* ITCM: Mapped from host physical address `0x07110000`.
-* SRAM C: Mapped from host physical address `0x07130000`.
+#### Step C: Load the Binary into SRAM
+Copy `firmware.bin` directly into the mapped SRAM memory window of the co-processor over the system bus:
+* **ITCM Window:** Mapped from host physical address `0x07110000`.
+* **SRAM C Window:** Mapped from host physical address `0x07130000`.
 
-Use `dd` to write the firmware binary directly to `/dev/mem` at the target offset, or use a kernel load utility:
+Using `dd` via `/dev/mem`:
 ```bash
-dd if=firmware.bin of=/dev/mem bs=4k seek=115712 count=16 conv=notrunc
+# Seek offset 28944 corresponds to 0x07110000 host physical address (118554624 / 4096 = 28944)
+dd if=/lib/firmware/riscv-firmware.bin of=/dev/mem bs=4096 seek=28944 conv=notrunc
 ```
-*(Seek offset corresponds to `0x07110000` host address).*
 
-### Step D: Release Core Reset (Boot!)
+#### Step D: Release Core Reset (Boot!)
 De-assert the reset line to boot the core:
 ```bash
 # Set Bit 17 of MCU reset register to 1 (de-assert reset)
-devmem2 0x07010100 w 0x00020000
+devmem 0x07010100 32 0x00020000
 ```
-The XuanTie core will instantly wake up, execute vectors at `0x0000_0000` (ITCM), and boot into the Attitude Estimation polling thread!
+The XuanTie core will instantly wake up, execute vectors at `0x0000_0000` (ITCM), and boot into the firmware!
 
 ---
 
