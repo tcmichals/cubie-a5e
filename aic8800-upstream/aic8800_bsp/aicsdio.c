@@ -266,6 +266,7 @@ static int aicbsp_sdio_probe(struct sdio_func *func,
 #endif
 
 	aicbsp_platform_init(sdiodev);
+	aicwf_sdio_wakeup(sdiodev);
 
 	complete(aicbsp_probe_completion);
 
@@ -1722,29 +1723,28 @@ int aicwf_sdiov3_func_init(struct aic_sdio_dev *sdiodev)
 		sdio_release_host(sdiodev->func);
 		return ret;
 	}
-	// mod sdio phase
-	if (host->ios.timing == MMC_TIMING_UHS_DDR50)
-		val = 0x20; // 0x21; //0x1D; //0x5;
-	else
-		val = 0x00; // 0x01; //0x19; //0x1;
-	val |= SDIOCLK_FREE_RUNNING_BIT;
-	sdio_f0_writeb(sdiodev->func, val, 0xF0, &ret);
-	if (ret) {
-		sdio_err("set iopad ctrl fail %d\n", ret);
-		sdio_release_host(sdiodev->func);
-		return ret;
-	}
-	sdio_f0_writeb(sdiodev->func, 0x00, 0xF8, &ret);
-	if (ret) {
-		sdio_err("set iopad delay2 fail %d\n", ret);
-		sdio_release_host(sdiodev->func);
-		return ret;
-	}
-	sdio_f0_writeb(sdiodev->func, 0x00, 0xF1, &ret);
-	if (ret) {
-		sdio_err("set iopad delay1 fail %d\n", ret);
-		sdio_release_host(sdiodev->func);
-		return ret;
+	// mod sdio phase only in DDR50 mode; leave default for SDR / HighSpeed to avoid sunxi-mmc data errors
+	if (host->ios.timing == MMC_TIMING_UHS_DDR50) {
+		val = 0x20;
+		val |= SDIOCLK_FREE_RUNNING_BIT;
+		sdio_f0_writeb(sdiodev->func, val, 0xF0, &ret);
+		if (ret) {
+			sdio_err("set iopad ctrl fail %d\n", ret);
+			sdio_release_host(sdiodev->func);
+			return ret;
+		}
+		sdio_f0_writeb(sdiodev->func, 0x00, 0xF8, &ret);
+		if (ret) {
+			sdio_err("set iopad delay2 fail %d\n", ret);
+			sdio_release_host(sdiodev->func);
+			return ret;
+		}
+		sdio_f0_writeb(sdiodev->func, 0x00, 0xF1, &ret);
+		if (ret) {
+			sdio_err("set iopad delay1 fail %d\n", ret);
+			sdio_release_host(sdiodev->func);
+			return ret;
+		}
 	}
 	usleep_range(1000, 2000);
 	sdio_dbg("Set SDIO Clock %d MHz\n", host->ios.clock / 1000000);

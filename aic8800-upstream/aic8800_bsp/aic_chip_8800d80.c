@@ -18,6 +18,8 @@ static int aic8800d80_wifi_init(struct aic_sdio_dev *sdiodev, int testmode)
 {
 	const char *fw_path = aicbsp_firmware_list[aicbsp_info.cpmode].wl_fw;
 
+	aicwf_sdio_wakeup(sdiodev);
+
 	if (rwnx_plat_bin_fw_upload(sdiodev, RAM_FMAC_FW_ADDR,
 				    fw_path)) {
 		pr_err("aicbsp 8800d80 download wifi fw fail\n");
@@ -70,14 +72,21 @@ static int aic8800d80_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable
 	u32 mem_addr;
 	struct dbg_mem_read_cfm rd_mem_addr_cfm;
 	u8 is_chip_id_h = 0;
+	int ret;
+
+	aicwf_sdio_wakeup(sdiodev);
 
 	mem_addr = 0x40500000;
 
-	if (rwnx_send_dbg_mem_read_req(sdiodev, mem_addr, &rd_mem_addr_cfm))
-		return -1;
-
-	aicbsp_info->chip_rev = (u8)((rd_mem_addr_cfm.memdata >> 16) & 0x3F);
-	is_chip_id_h = (u8)(((rd_mem_addr_cfm.memdata >> 16) & 0xC0) == 0xC0);
+	ret = rwnx_send_dbg_mem_read_req(sdiodev, mem_addr, &rd_mem_addr_cfm);
+	if (ret) {
+		pr_warn("aicbsp: 0x40500000 read failed (%d), defaulting to AIC8800D80 U02\n", ret);
+		aicbsp_info->chip_rev = CHIP_REV_U02;
+		is_chip_id_h = 0;
+	} else {
+		aicbsp_info->chip_rev = (u8)((rd_mem_addr_cfm.memdata >> 16) & 0x3F);
+		is_chip_id_h = (u8)(((rd_mem_addr_cfm.memdata >> 16) & 0xC0) == 0xC0);
+	}
 	*btenable = 1;
 	if (is_chip_id_h) {
 		AICWFDBG(LOGINFO, "IS_CHIP_ID_H\n");

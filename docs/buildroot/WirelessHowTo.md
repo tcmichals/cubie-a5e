@@ -83,21 +83,44 @@ On target:
 - start: `/etc/init.d/S40network-wifi start`
 - stop: `/etc/init.d/S40network-wifi stop`
 
-## 5) Quick diagnostics
+## 5) Upstream Driver Architecture & Mainline Patches
 
-Useful checks:
+The Wi-Fi stack uses the official `wireless-next` RFC v2 driver tree (`aic8800_bsp.ko` + `aic8800_fdrv.ko`) located in `aic8800-upstream/`, patched for modern Linux 7.1+ and Allwinner SDIO controller timing.
 
-- `ip link show wlan0`
-- `iw dev`
-- `ip addr show wlan0`
-- `logread | grep -i -E "aic|wlan|wpa|dhcp"`
+The patch series is codified under `docs/upstream_patches/`:
+1. `0001-wifi-aic-fix-stack-buffer-overflow-in-aicbt_patch_i.patch`: Bounds checks `memcpy` in `aicbt_patch_info_unpack()` to prevent `-fstack-protector` panics.
+2. `0002-wifi-aic-update-cfg80211-API-compatibility-for-mode.patch`: Modernizes callback signatures (`netif_rx`, `cfg80211_probe_status`, `remain_on_channel`) for Linux 6.x/7.x.
+3. `0003-wifi-aic-fix-sdio-phase-timing-and-wakeup-sequence.patch`: Guards IOPAD delay registers (`0xF0`, `0xF8`, `0xF1`) to prevent MMC data errors on 25 MHz SDIO, calls explicit chip wakeup on probe, and provides safe fallback if pre-boot `0x40500000` IPC is unavailable.
 
-## 6) Common issues
+## 6) Quick Diagnostics
 
-- Missing `wlan0`: driver/firmware not loaded or module name mismatch
-- No DHCP lease: AP credentials wrong, weak signal, or AP restrictions
-- Auth failures: wrong `psk`, wrong country code/reg domain
+Useful checks on the target device:
 
-## 7) Flight-use recommendation
+```bash
+# Verify kernel module load and hardware state
+dmesg | grep -iE "aic|wlan|mmc1"
+
+# Check interface link state and MAC address
+ip link show wlan0
+
+# Check wireless physical capabilities (HT / VHT / HE Wi-Fi 6)
+iw phy0 info
+
+# Check assigned IP and routing
+ip addr show wlan0
+ip route show
+
+# Scan for access points
+iw dev wlan0 scan | grep SSID
+```
+
+## 7) Common Issues and Solutions
+
+- **`sunxi-mmc: data error, sending stop command`**: Caused by incorrect IOPAD phase delays on SDR/High-Speed modes. Resolved in Patch 3 (`aicwf_sdiov3_func_init`).
+- **`regulatory.db failed with error -2`**: Missing `BR2_PACKAGE_WIRELESS_REGDB=y` in Buildroot defconfig.
+- **`cmd:1024 timed-out`**: Occurs if the chip is in sleep mode when probe begins. Resolved by explicit `aicwf_sdio_wakeup()` in probe sequence.
+- **No DHCP lease**: Check AP credentials in `/etc/wpa_supplicant.conf` or verify signal strength with `iw wlan0 scan`.
+
+## 8) Flight-use recommendation
 
 For flight-controller roles, keep Wi-Fi optional for commissioning/telemetry and avoid making core control safety depend on link availability.

@@ -10,9 +10,7 @@ case "$1" in
         # 1. Force Isolated CPU Core 7 to Performance Governor
         if [ -d /sys/devices/system/cpu/cpu7/cpufreq ]; then
             echo "Locking CPU Core 7 to performance governor..."
-            echo performance > /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor
-        else
-            echo "Warning: CPU Core 7 frequency governor node not found."
+            echo performance > /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null || true
         fi
 
         # 2. Redirect Interrupts (smp_affinity) away from Core 7 to Cores 0-6
@@ -35,8 +33,19 @@ case "$1" in
         # This guarantees that SPI and I2C driver transfers preempt the iNAV flight loop (priority 80)
         # to deliver sensor/control data with zero scheduling lag.
         echo "Elevating SPI/I2C kernel IRQ thread priorities to 85..."
-        for pid in $(pgrep -f "irq/.*(spi|twi|sunxi)"); do
-            chrt -f -p 85 "$pid" 2>/dev/null && echo "Elevated IRQ PID $pid" || true
+        if command -v pgrep >/dev/null 2>&1; then
+            pids=$(pgrep -f "irq/.*(spi|twi|sunxi)" 2>/dev/null)
+        else
+            pids=$(ps -o pid,args 2>/dev/null | grep -E "irq/.*(spi|twi|sunxi)" | grep -v grep | awk '{print $1}')
+            if [ -z "$pids" ]; then
+                pids=$(ps 2>/dev/null | grep -E "irq/.*(spi|twi|sunxi)" | grep -v grep | awk '{print $1}')
+            fi
+        fi
+
+        for pid in $pids; do
+            if [ -n "$pid" ]; then
+                chrt -f -p 85 "$pid" 2>/dev/null && echo "Elevated IRQ PID $pid" || true
+            fi
         done
 
         
