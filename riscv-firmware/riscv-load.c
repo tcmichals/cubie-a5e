@@ -52,18 +52,29 @@ int main(int argc, char *argv[]) {
         printf("MCU Reset Reg     (0x07010100): 0x%08X\n", rst);
         if (rst & ((1 << 17) | (1 << 16))) {
             printf("Status: RUNNING (Core active)\n");
-            volatile uint32_t *dtcm = (volatile uint32_t *)mmap(NULL, DTCM_MAP_SIZE, PROT_READ, MAP_SHARED, fd, DTCM_PHYS_BASE);
-            if (dtcm != MAP_FAILED) {
-                printf("--- Live Telemetry Block (Host 0x07120000 / E907 DTCM 0x00080000) ---\n");
-                printf("  Magic Header (0x07120000):  0x%08X (%s)\n", dtcm[0], (dtcm[0] == 0x52495343) ? "RISC" : "Unset");
-                printf("  Booted Flag  (0x07120004):  %u\n", dtcm[1]);
-                printf("  Heartbeat    (0x07120008):  %u\n", dtcm[2]);
-                printf("  Loop Counter (0x0712000C):  %u (0x%08X)\n", dtcm[3], dtcm[3]);
-                munmap((void *)dtcm, DTCM_MAP_SIZE);
-            }
         } else {
-            printf("Status: HALTED (In reset)\n");
+            printf("Status: HALTED / Register reads 0x0 (Checking memory...)\n");
         }
+
+        /* Check DTCM (0x07120000) for live core execution */
+        volatile uint32_t *dtcm = (volatile uint32_t *)mmap(NULL, DTCM_MAP_SIZE, PROT_READ, MAP_SHARED, fd, DTCM_PHYS_BASE);
+        if (dtcm != MAP_FAILED) {
+            printf("\n--- DTCM Telemetry (Host 0x07120000 / E907 DTCM 0x00080000) ---\n");
+            printf("  Magic Header (0x07120000):  0x%08X (%s)\n", dtcm[0], (dtcm[0] == 0x52495343) ? "RISC" : "Unset");
+            printf("  Booted Flag  (0x07120004):  %u\n", dtcm[1]);
+            printf("  Heartbeat    (0x07120008):  %u\n", dtcm[2]);
+            printf("  Loop Counter (0x0712000C):  %u (0x%08X)\n", dtcm[3], dtcm[3]);
+            munmap((void *)dtcm, DTCM_MAP_SIZE);
+        }
+
+        /* Check ITCM First Word (0x07110000) */
+        volatile uint32_t *itcm = (volatile uint32_t *)mmap(NULL, 0x1000, PROT_READ, MAP_SHARED, fd, ITCM_PHYS_BASE);
+        if (itcm != MAP_FAILED) {
+            printf("\n--- ITCM First Instruction (Host 0x07110000 / E907 0x00000000) ---\n");
+            printf("  Reset Vector Opcode (0x07110000): 0x%08X\n", itcm[0]);
+            munmap((void *)itcm, 0x1000);
+        }
+
         munmap((void *)ccu_virt, CCU_MAP_SIZE);
         close(fd);
         return 0;
@@ -120,11 +131,15 @@ int main(int argc, char *argv[]) {
 
         /* 1. Enable MCU/DSP Clocks */
         printf("Enabling MCU subsystem clocks (CCU 0x07010020 -> 0x03)...\n");
-        *(volatile uint32_t *)(ccu_virt + CCU_DSP_CLK_REG) |= 0x00000003;
+        *(volatile uint32_t *)(ccu_virt + CCU_DSP_CLK_REG) = 0x00000003;
+        uint32_t clk_val = *(volatile uint32_t *)(ccu_virt + CCU_DSP_CLK_REG);
+        printf("  Clock Reg Readback (0x07010020): 0x%08X\n", clk_val);
 
         /* 2. Assert Core Reset & Enable Subsystem Bus (bit 16=1, bit 17=0) */
         printf("Asserting RISC-V core reset...\n");
         *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) = (1 << 16);
+        uint32_t rst_hold = *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG);
+        printf("  Reset Reg Hold Readback (0x07010100): 0x%08X\n", rst_hold);
 
         /* 3. Read firmware binary into local host RAM buffer */
         uint8_t fw_buf[ITCM_MAP_SIZE];
@@ -153,12 +168,15 @@ int main(int argc, char *argv[]) {
         for (size_t i = 0; i < words; i++) {
             itcm_virt32[i] = src32[i];
         }
-        printf("Copied %zu bytes into ITCM successfully.\n", n);
+        uint32_t itcm_first = itcm_virt32[0];
+        printf("Copied %zu bytes into ITCM (First instruction readback: 0x%08X).\n", n, itcm_first);
         munmap((void *)itcm_virt32, ITCM_MAP_SIZE);
 
         /* 5. Release Core Reset (Boot XuanTie E907 at 0x00000000) */
         printf("Releasing reset (Booting XuanTie E907 at 0x00000000)...\n");
         *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) = (1 << 17) | (1 << 16);
+        uint32_t rst_boot = *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG);
+        printf("  Reset Reg Boot Readback (0x07010100): 0x%08X\n", rst_boot);
         printf("XuanTie E907 RISC-V co-processor is running.\n");
 
         munmap((void *)ccu_virt, CCU_MAP_SIZE);
