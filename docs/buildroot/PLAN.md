@@ -3,6 +3,21 @@
 **Current Milestone:** Phase 2 — Firmware Execution & Telemetry  
 **Target Hardware:** Radxa Cubie A5E (Allwinner T527 / A527)  
 **Co-Processor:** XuanTie E907 RISC-V (RV32IMAC @ 600 MHz)  
+**Build System:** Buildroot Out-of-Tree (`BR2_EXTERNAL=project-cubie-a5e`)
+
+---
+
+## Core Architecture Principles
+
+1. **100% Build-From-Source**:
+   - Zero pre-compiled binaries, objects, or images in Git.
+   - All host utilities (`riscv-load`), firmware (`firmware.bin`), and tools are compiled natively from source during the Buildroot build.
+2. **Strict `BR2_EXTERNAL` Out-of-Tree Separation**:
+   - `project-cubie-a5e/` is the clean external tree.
+   - Build directories (`bld.a5e/`, `bld.a7a/`) build out-of-tree (`O=../bld.a5e`).
+   - Rootfs overlays contain **only configuration files, scripts, and runtime assets** — never compiled binaries.
+3. **No Hidden Overrides**:
+   - Every package (`riscv-firmware`, `rbb-server`, etc.) is fully declared in `package/` and installs to `$(TARGET_DIR)`.
 
 ---
 
