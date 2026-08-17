@@ -122,30 +122,43 @@ int main(int argc, char *argv[]) {
         printf("Enabling MCU subsystem clocks (CCU 0x07010020 -> 0x03)...\n");
         *(volatile uint32_t *)(ccu_virt + CCU_DSP_CLK_REG) |= 0x00000003;
 
-        /* 2. Assert Core Reset */
+        /* 2. Assert Core Reset & Enable Subsystem Bus (bit 16=1, bit 17=0) */
         printf("Asserting RISC-V core reset...\n");
-        *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) &= ~(1 << 17);
+        *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) = (1 << 16);
 
-        /* 3. Map ITCM and Copy Firmware via mmap */
-        volatile uint8_t *itcm_virt = (volatile uint8_t *)mmap(NULL, ITCM_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, ITCM_PHYS_BASE);
-        if (itcm_virt == MAP_FAILED) {
-            perror("Failed to mmap ITCM memory");
-            fclose(fw);
+        /* 3. Read firmware binary into local host RAM buffer */
+        uint8_t fw_buf[ITCM_MAP_SIZE];
+        memset(fw_buf, 0, sizeof(fw_buf));
+        size_t n = fread(fw_buf, 1, sizeof(fw_buf), fw);
+        fclose(fw);
+        if (n == 0) {
+            fprintf(stderr, "Error: Firmware file '%s' is empty!\n", fw_path);
             munmap((void *)ccu_virt, CCU_MAP_SIZE);
             close(fd);
             return 1;
         }
 
-        printf("Copying %s to ITCM (0x07110000)...\n", fw_path);
-        memset((void *)itcm_virt, 0, ITCM_MAP_SIZE);
-        size_t n = fread((void *)itcm_virt, 1, ITCM_MAP_SIZE, fw);
-        printf("Copied %zu bytes into ITCM.\n", n);
-        fclose(fw);
-        munmap((void *)itcm_virt, ITCM_MAP_SIZE);
+        /* 4. Map ITCM and Copy Firmware via 32-bit aligned MMIO writes */
+        volatile uint32_t *itcm_virt32 = (volatile uint32_t *)mmap(NULL, ITCM_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, ITCM_PHYS_BASE);
+        if (itcm_virt32 == MAP_FAILED) {
+            perror("Failed to mmap ITCM memory");
+            munmap((void *)ccu_virt, CCU_MAP_SIZE);
+            close(fd);
+            return 1;
+        }
 
-        /* 4. Release Reset */
+        printf("Copying %zu bytes to ITCM (0x07110000)...\n", n);
+        uint32_t *src32 = (uint32_t *)fw_buf;
+        size_t words = (n + 3) / 4;
+        for (size_t i = 0; i < words; i++) {
+            itcm_virt32[i] = src32[i];
+        }
+        printf("Copied %zu bytes into ITCM successfully.\n", n);
+        munmap((void *)itcm_virt32, ITCM_MAP_SIZE);
+
+        /* 5. Release Core Reset (Boot XuanTie E907 at 0x00000000) */
         printf("Releasing reset (Booting XuanTie E907 at 0x00000000)...\n");
-        *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) |= (1 << 17) | (1 << 16);
+        *(volatile uint32_t *)(ccu_virt + CCU_DSP_RST_REG) = (1 << 17) | (1 << 16);
         printf("XuanTie E907 RISC-V co-processor is running.\n");
 
         munmap((void *)ccu_virt, CCU_MAP_SIZE);
