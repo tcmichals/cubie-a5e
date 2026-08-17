@@ -8,3 +8,4 @@
 *.bin
 *.map
 *.hex
+riscv-load

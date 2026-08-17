@@ -1,8 +1,18 @@
 # Build and external directories
 bld/
+bld.*/
 
-# Compiled firmware binaries
-riscv-firmware/*.elf
-riscv-firmware/*.bin
-riscv-firmware/*.map
-riscv-firmware/*.o
+# Compiled firmware and host binaries
+*.elf
+*.bin
+*.map
+*.o
+*.a
+*.so
+*.hex
+*.scr
+*.dtb
+*.dtbo
+*.img
+riscv-load
+boot.scr
