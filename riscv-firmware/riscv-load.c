@@ -16,11 +16,11 @@
 #define DTCM_PHYS_BASE    0x07120000
 #define DTCM_MAP_SIZE     0x1000
 
-static const char *LOADER_VERSION = "1.1.0";
+static const char *LOADER_VERSION = "1.2.0";
 
 static void usage(const char *prog) {
     printf("Usage: %s {start|stop|status|monitor|restart|version} [path_to_firmware.bin]\n", prog);
-    printf("%s loader version %s\n", prog, LOADER_VERSION);
+    printf("%s loader version %s (Built %s %s)\n", prog, LOADER_VERSION, __DATE__, __TIME__);
 }
 
 int main(int argc, char *argv[]) {
@@ -31,6 +31,9 @@ int main(int argc, char *argv[]) {
 
     const char *action = argv[1];
     const char *fw_path = (argc >= 3) ? argv[2] : "/lib/firmware/riscv-firmware.bin";
+
+    /* Always print loader version banner */
+    printf(">>> riscv-load v%s (Built: %s %s) [Action: %s] <<<\n", LOADER_VERSION, __DATE__, __TIME__, action);
 
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (fd < 0) {
