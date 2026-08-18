@@ -359,7 +359,7 @@ static int rwnx_send_msg(struct rwnx_hw *rwnx_hw, const void *msg_params,
 #ifdef AICWF_SDIO_SUPPORT
 		aicwf_set_cmd_tx((void *)(rwnx_hw->sdiodev), cmd->a2e_msg,
 				 sizeof(struct lmac_msg) + cmd->a2e_msg->param_len);
-#else
+#elif defined(AICWF_USB_SUPPORT)
 		aicwf_set_cmd_tx((void *)(rwnx_hw->usbdev), cmd->a2e_msg,
 				 sizeof(struct lmac_msg) + cmd->a2e_msg->param_len);
 #endif
@@ -2144,7 +2144,6 @@ int rwnx_send_me_chan_config_req(struct rwnx_hw *rwnx_hw)
 	struct me_chan_config_req *req;
 	struct wiphy *wiphy = rwnx_hw->wiphy;
 	int i;
-	u8_l enable = 0;
 #ifdef CONFIG_AIC8800_POWER_LIMIT
 	s8_l max_pwr;
 	struct txpwr_loss_conf txpwr_loss_tmp;

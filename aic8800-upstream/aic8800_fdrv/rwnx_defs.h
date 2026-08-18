@@ -40,6 +40,10 @@
 #include "aicwf_sdio.h"
 #include "sdio_host.h"
 #endif
+#ifdef AICWF_USB_SUPPORT
+#include "aicwf_usb.h"
+#include "usb_host.h"
+#endif
 
 #ifdef CONFIG_AIC8800_BR_SUPPORT
 #include "aic_br_ext.h"
@@ -566,6 +570,9 @@ struct rwnx_hw {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 	struct wiphy *wiphy;
 	struct list_head vifs;
 	struct rwnx_vif *
@@ -615,6 +622,9 @@ struct rwnx_hw {
 	struct ipc_host_env_tag *ipc_env;
 #ifdef AICWF_SDIO_SUPPORT
 	struct sdio_host_env_tag sdio_env;
+#endif
+#ifdef AICWF_USB_SUPPORT
+	struct usb_host_env_tag usb_env;
 #endif
 
 	struct rwnx_ipc_elem_pool e2amsgs_pool;
@@ -721,10 +731,16 @@ extern u8 chip_id;
 
 static inline bool is_multicast_sta(int sta_idx)
 {
-	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
+#ifdef AICWF_SDIO_SUPPORT
+	if (g_rwnx_plat && g_rwnx_plat->sdiodev && g_rwnx_plat->sdiodev->rwnx_hw &&
+	    g_rwnx_plat->sdiodev->rwnx_hw->chip_ops && g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
-	else
-		return (sta_idx >= NX_REMOTE_STA_MAX);
+#elif defined(AICWF_USB_SUPPORT)
+	if (g_rwnx_plat && g_rwnx_plat->usbdev && g_rwnx_plat->usbdev->rwnx_hw &&
+	    g_rwnx_plat->usbdev->rwnx_hw->chip_ops && g_rwnx_plat->usbdev->rwnx_hw->chip_ops->is_old_ic)
+		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
+#endif
+	return (sta_idx >= NX_REMOTE_STA_MAX);
 }
 
 struct rwnx_sta *rwnx_get_sta(struct rwnx_hw *rwnx_hw, const u8 *mac_addr);

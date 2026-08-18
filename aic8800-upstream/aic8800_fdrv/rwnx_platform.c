@@ -2940,8 +2940,29 @@ void rwnx_platform_deinit(struct rwnx_hw *rwnx_hw)
 struct device *rwnx_platform_get_dev(struct rwnx_plat *rwnx_plat)
 {
 #ifdef AICWF_SDIO_SUPPORT
-	return rwnx_plat->sdiodev->dev;
+	if (rwnx_plat && rwnx_plat->sdiodev)
+		return rwnx_plat->sdiodev->dev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	if (rwnx_plat && rwnx_plat->usbdev)
+		return rwnx_plat->usbdev->dev;
+#endif
+	return NULL;
+}
+
+struct rwnx_hw *rwnx_platform_get_hw(struct rwnx_plat *rwnx_plat)
+{
+	if (!rwnx_plat)
+		return NULL;
+#ifdef AICWF_SDIO_SUPPORT
+	if (rwnx_plat->sdiodev)
+		return rwnx_plat->sdiodev->rwnx_hw;
+#endif
+#ifdef AICWF_USB_SUPPORT
+	if (rwnx_plat->usbdev)
+		return rwnx_plat->usbdev->rwnx_hw;
+#endif
+	return NULL;
 }
 
 MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_AGC_FW_NAME);

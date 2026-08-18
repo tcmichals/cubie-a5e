@@ -13,6 +13,7 @@
 #include "aicwf_sdio.h"
 #include "lmac_msg.h"
 
+#ifdef AICWF_SDIO_SUPPORT
 /* ========== SDIO chip properties ========== */
 static const struct aic_sdio_chip_hw aic_sdio_chip_tbl[] = {
 	[PRODUCT_ID_AIC8801] = {
@@ -88,6 +89,7 @@ const struct aic_sdio_chip_hw *aic_sdio_get_props(u16_l chipid)
 		return &aic_sdio_chip_tbl[chipid];
 	return NULL;
 }
+#endif
 
 /*========== Chip ops wrappers ========== */
 int aic_chip_init_capa(struct rwnx_hw *rwnx_hw)
@@ -264,4 +266,28 @@ const struct aic_chip_ops *aic_chip_ops_select(u16 chipid)
 	default:
 		return NULL;
 	}
+}
+
+u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size)
+{
+	u8 i;
+	u8 crc = 0;
+
+	if (cal_size == 0)
+		return crc;
+	while (cal_size--) {
+		for (i = 0x80; i > 0; i /= 2) {
+			if (crc & 0x80) {
+				crc *= 2;
+				crc ^= 0x07; // polynomial X8 + X2 + X + 1,(0x107)
+			} else {
+				crc *= 2;
+			}
+			if ((*p_buffer) & i)
+				crc ^= 0x07;
+		}
+		p_buffer++;
+	}
+
+	return crc;
 }

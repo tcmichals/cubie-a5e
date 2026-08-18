@@ -187,5 +187,7 @@ static inline const void *aicwf_bus_get_hw_props(struct aicwf_bus *bus)
 
 int aicwf_bus_init(uint bus_hdrlen, struct device *dev);
 void aicwf_bus_deinit(struct device *dev);
+void aicwf_hostif_ready(void);
+void aicwf_hostif_fail(void);
 
 #endif /* _AIC_BUS_H_ */

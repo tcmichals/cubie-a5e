@@ -31,7 +31,8 @@ aic8800_fdrv-y := \
 	rwnx_wakelock.o		\
 	regdb.o				   \
 	aic_priv_cmd.o		\
-	aicwf_rx_prealloc.o
+	aicwf_rx_prealloc.o	\
+	aicwf_txrxif.o
 
 aic8800_fdrv-$(CONFIG_AIC8800_GENL)             		+= aicwf_genl.o
 aic8800_fdrv-$(CONFIG_AIC8800_BR_SUPPORT)       		+= aic_br_ext.o
@@ -42,8 +43,9 @@ aic8800_fdrv-$(CONFIG_NL80211_TESTMODE) 		+= rwnx_testmode.o
 aic8800_fdrv-$(CONFIG_RWNX_BFMER)       		+= rwnx_bfmer.o
 aic8800_fdrv-$(CONFIG_RWNX_MUMIMO_TX)   		+= rwnx_mu_group.o
 aic8800_fdrv-$(CONFIG_AIC8800_SDIO_SUPPORT)     		+= sdio_host.o
-aic8800_fdrv-$(CONFIG_AIC8800_SDIO_SUPPORT)     		+= aicwf_txrxif.o
 aic8800_fdrv-$(CONFIG_AIC8800_SDIO_SUPPORT)     		+= aicwf_sdio.o
+aic8800_fdrv-$(CONFIG_AIC8800_USB_SUPPORT)      		+= usb_host.o
+aic8800_fdrv-$(CONFIG_AIC8800_USB_SUPPORT)      		+= aicwf_usb.o
 aic8800_fdrv-$(CONFIG_AIC8800_FILTER_TCP_ACK)   		+= aicwf_tcp_ack.o
 aic8800_fdrv-$(CONFIG_AIC8800_SDIO_BT)   			+= aic_btsdio.o
 aic8800_fdrv-$(CONFIG_AIC8800_GKI)     				+= rwnx_gki.o
@@ -54,6 +56,8 @@ ccflags-y += -I$(srctree)
 ccflags-y += -I$(src)
 ccflags-y += -I$(src)/../aic8800_bsp
 ccflags-y += -DAIC_TRACE_INCLUDE_PATH=$(src)
+
+ccflags-$(CONFIG_AIC8800_USB_SUPPORT) 					+= -DAICWF_USB_SUPPORT
 
 ccflags-$(CONFIG_RWNX_DEBUGFS) 					+= -DCONFIG_RWNX_DEBUGFS
 ccflags-$(CONFIG_RWNX_P2P_DEBUGFS) 				+= -DCONFIG_RWNX_P2P_DEBUGFS

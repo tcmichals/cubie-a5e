@@ -3,6 +3,7 @@
 #define _AICWF_SDMMC_H_
 
 #ifdef AICWF_SDIO_SUPPORT
+#include "aicwf_chip_ops.h"
 #include "aicwf_rx_prealloc.h"
 #include "rwnx_cmds.h"
 #include <linux/ieee80211.h>
@@ -87,13 +88,6 @@ enum sdio_type {
 #define SDIO_DEVICE_ID_AIC8801    0x0145
 #define SDIO_DEVICE_ID_AIC8800DC  0xc08d
 #define SDIO_DEVICE_ID_AIC8800D80 0x0082
-
-enum AICWF_IC {
-	PRODUCT_ID_AIC8801 = 0,
-	PRODUCT_ID_AIC8800DC,
-	PRODUCT_ID_AIC8800DW,
-	PRODUCT_ID_AIC8800D80
-};
 
 struct rwnx_hw;
 

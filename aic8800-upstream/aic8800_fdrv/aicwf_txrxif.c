@@ -35,7 +35,7 @@
 #endif
 #include "aic_bsp_export.h"
 
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 void aicwf_rxframe_queue_init_2(struct rx_frame_queue *pq, int max_len)
 {
 	memset(pq, 0,
@@ -101,6 +101,13 @@ int aicwf_bus_init(uint bus_hdrlen, struct device *dev)
 	}
 #endif // CONFIG_OOB
 #endif
+#ifdef AICWF_USB_SUPPORT
+	bus_if->bustx_thread =
+		kthread_run(usb_bustx_thread, (void *)bus_if, "aicwf_bustx_thread");
+	bus_if->busrx_thread =
+		kthread_run(usb_busrx_thread, (void *)bus_if->bus_priv.usb->rx_priv,
+			    "aicwf_busrx_thread");
+#endif
 
 	if (IS_ERR(bus_if->bustx_thread)) {
 		bus_if->bustx_thread = NULL;
@@ -140,7 +147,7 @@ void aicwf_bus_deinit(struct device *dev)
 
 #ifdef AICWF_SDIO_SUPPORT
 	sdiodev = bus_if->bus_priv.sdio;
-	if (g_rwnx_plat && g_rwnx_plat->enabled)
+	if (g_rwnx_plat && g_rwnx_plat->enabled && sdiodev)
 		rwnx_platform_deinit(sdiodev->rwnx_hw);
 #endif
 
@@ -163,12 +170,12 @@ void aicwf_frame_tx(void *dev, struct sk_buff *skb)
 	struct aic_sdio_dev *sdiodev = (struct aic_sdio_dev *)dev;
 
 	aicwf_bus_txdata(sdiodev->bus_if, skb);
-#else
+#elif defined(AICWF_USB_SUPPORT)
 	struct aic_usb_dev *usbdev = (struct aic_usb_dev *)dev;
 
-	if (!usbdev->state) {
+	if (!usbdev || !usbdev->state) {
 		txrx_err("down\n");
-		aicwf_usb_tx_flowctrl(usbdev->rwnx_hw, true);
+		aicwf_usb_tx_flowctrl(usbdev ? usbdev->rwnx_hw : NULL, true);
 		dev_kfree_skb(skb);
 		return;
 	}
@@ -187,12 +194,12 @@ struct aicwf_tx_priv *aicwf_tx_init(void *arg)
 
 #ifdef AICWF_SDIO_SUPPORT
 	tx_priv->sdiodev = (struct aic_sdio_dev *)arg;
-#else
+#elif defined(AICWF_USB_SUPPORT)
 	tx_priv->usbdev = (struct aic_usb_dev *)arg;
 #endif
 
 	atomic_set(&tx_priv->aggr_count, 0);
-#ifdef CONFIG_RESV_MEM_SUPPORT
+#if defined(CONFIG_RESV_MEM_SUPPORT) && defined(AICWF_SDIO_SUPPORT)
 	tx_priv->aggr_buf =
 		aicbsp_resv_mem_alloc_skb(MAX_AGGR_TXPKT_LEN, AIC_RESV_MEM_TXDATA);
 #else
@@ -213,7 +220,7 @@ struct aicwf_tx_priv *aicwf_tx_init(void *arg)
 void aicwf_tx_deinit(struct aicwf_tx_priv *tx_priv)
 {
 	if (tx_priv && tx_priv->aggr_buf) {
-#ifdef CONFIG_RESV_MEM_SUPPORT
+#if defined(CONFIG_RESV_MEM_SUPPORT) && defined(AICWF_SDIO_SUPPORT)
 		aicbsp_resv_mem_kfree_skb(tx_priv->aggr_buf, AIC_RESV_MEM_TXDATA);
 #else
 		dev_kfree_skb(tx_priv->aggr_buf);
@@ -439,6 +446,8 @@ int aicwf_process_rxframes(struct aicwf_rx_priv *rx_priv)
 #endif
 
 	return ret;
+#else
+	return 0;
 #endif
 }
 
@@ -472,17 +481,17 @@ struct aicwf_rx_priv *aicwf_rx_init(void *arg)
 
 #ifdef AICWF_SDIO_SUPPORT
 	rx_priv->sdiodev = (struct aic_sdio_dev *)arg;
-#else
+#elif defined(AICWF_USB_SUPPORT)
 	rx_priv->usbdev = (struct aic_usb_dev *)arg;
 #endif
 
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	aicwf_rxframe_queue_init_2(&rx_priv->rxq, MAX_RXQLEN);
 #else
 	aicwf_frame_queue_init(&rx_priv->rxq, 1, MAX_RXQLEN);
 #endif
 	spin_lock_init(&rx_priv->rxqlock);
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	spin_lock_init(&rx_priv->rxbuff_lock);
 	aicwf_prealloc_init();
 #endif
@@ -529,16 +538,16 @@ void aicwf_rx_deinit(struct aicwf_rx_priv *rx_priv)
 
 #ifdef AICWF_SDIO_SUPPORT
 	AICWFDBG(LOGINFO, "sdio rx thread\n");
-	if (rx_priv->sdiodev->bus_if->busrx_thread) {
+	if (rx_priv->sdiodev && rx_priv->sdiodev->bus_if && rx_priv->sdiodev->bus_if->busrx_thread) {
 		sched_set_normal(rx_priv->sdiodev->bus_if->busrx_thread, 0);
 		complete_all(&rx_priv->sdiodev->bus_if->busrx_trgg);
 		kthread_stop(rx_priv->sdiodev->bus_if->busrx_thread);
 		rx_priv->sdiodev->bus_if->busrx_thread = NULL;
 	}
 #ifdef CONFIG_OOB
-	if (rx_priv->sdiodev->oob_enable) {
+	if (rx_priv->sdiodev && rx_priv->sdiodev->oob_enable) {
 		// new oob feature
-		if (rx_priv->sdiodev->bus_if->busirq_thread) {
+		if (rx_priv->sdiodev->bus_if && rx_priv->sdiodev->bus_if->busirq_thread) {
 			complete_all(&rx_priv->sdiodev->bus_if->busirq_trgg);
 			kthread_stop(rx_priv->sdiodev->bus_if->busirq_thread);
 			rx_priv->sdiodev->bus_if->busirq_thread = NULL;
@@ -547,7 +556,17 @@ void aicwf_rx_deinit(struct aicwf_rx_priv *rx_priv)
 #endif // CONFIG_OOB
 #endif
 
-#ifdef CONFIG_PREALLOC_RX_SKB
+#ifdef AICWF_USB_SUPPORT
+	AICWFDBG(LOGINFO, "usb rx thread\n");
+	if (rx_priv->usbdev && rx_priv->usbdev->bus_if && rx_priv->usbdev->bus_if->busrx_thread) {
+		sched_set_normal(rx_priv->usbdev->bus_if->busrx_thread, 0);
+		complete_all(&rx_priv->usbdev->bus_if->busrx_trgg);
+		kthread_stop(rx_priv->usbdev->bus_if->busrx_thread);
+		rx_priv->usbdev->bus_if->busrx_thread = NULL;
+	}
+#endif
+
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	rxbuff_queue_flush(rx_priv);
 #else
 	aicwf_frame_queue_flush(&rx_priv->rxq);
@@ -559,7 +578,7 @@ void aicwf_rx_deinit(struct aicwf_rx_priv *rx_priv)
 		vfree(rx_priv->recv_frames);
 #endif
 
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	aicwf_prealloc_exit();
 #endif
 	kfree(rx_priv);

@@ -1255,9 +1255,11 @@ struct reord_ctrl_info *reord_init_sta(struct aicwf_rx_priv *rx_priv,
 	struct reord_ctrl *preorder_ctrl = NULL;
 	struct reord_ctrl_info *reord_info;
 #ifdef AICWF_SDIO_SUPPORT
-	struct aicwf_bus *bus_if = rx_priv->sdiodev->bus_if;
+	struct aicwf_bus *bus_if = rx_priv->sdiodev ? rx_priv->sdiodev->bus_if : NULL;
+#elif defined(AICWF_USB_SUPPORT)
+	struct aicwf_bus *bus_if = rx_priv->usbdev ? rx_priv->usbdev->bus_if : NULL;
 #else
-	struct aicwf_bus *bus_if = rx_priv->usbdev->bus_if;
+	struct aicwf_bus *bus_if = NULL;
 #endif
 
 	if (bus_if->state == BUS_DOWN_ST || !rx_priv) {

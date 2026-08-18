@@ -25,12 +25,13 @@ int rwnx_init_aic(struct rwnx_hw *rwnx_hw)
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 #ifdef AICWF_SDIO_SUPPORT
 	aicwf_sdio_host_init(&rwnx_hw->sdio_env, NULL, NULL, rwnx_hw);
-#else
+	rwnx_hw->testmode = get_testmode();
+#endif
+#ifdef AICWF_USB_SUPPORT
 	aicwf_usb_host_init(&rwnx_hw->usb_env, NULL, NULL, rwnx_hw);
+	rwnx_hw->testmode = 0;
 #endif
 	rwnx_cmd_mgr_init(rwnx_hw->cmd_mgr);
-
-	rwnx_hw->testmode = get_testmode();
 
 	return 0;
 }

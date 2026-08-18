@@ -2680,30 +2680,6 @@ fail:
 	return NULL;
 }
 
-u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size)
-{
-	u8 i;
-	u8 crc = 0;
-
-	if (cal_size == 0)
-		return crc;
-	while (cal_size--) {
-		for (i = 0x80; i > 0; i /= 2) {
-			if (crc & 0x80) {
-				crc *= 2;
-				crc ^= 0x07; // polynomial X8 + X2 + X + 1,(0x107)
-			} else {
-				crc *= 2;
-			}
-			if ((*p_buffer) & i)
-				crc ^= 0x07;
-		}
-		p_buffer++;
-	}
-
-	return crc;
-}
-
 /* ================================================================
  *  Bus abstraction layer - SDIO bus_ops callbacks
  *

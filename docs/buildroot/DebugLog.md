@@ -153,3 +153,24 @@ We transitioned the Buildroot package to pull from the cleaner `shenmintao` tree
    - This patch is now queued for a Pull Request to the upstream `shenmintao` repository.
 
 ---
+
+## Case Study 5: Unified Dual-Bus Driver (SDIO + USB) for Cubie A5E & A7A on Linux 7.1
+**Date:** August 18, 2026  
+**Component:** AIC8800 Upstream Wireless Driver (`aic8800-upstream`)
+
+### 🚨 The Goal & Symptoms
+The Radxa Cubie A5E (Allwinner A527/T527) operates over **SDIO**, whereas the Radxa Cubie A7A (Allwinner A733) operates over **USB** (`0xA69C:0x8800`). Previous vendor codebases maintained separate, broken out-of-tree repositories or relied on tangled `#ifdef` chains that broke modern kernel builds on Linux 7.1 `PREEMPT_RT`. Furthermore, the upstream `wireless-next` RFC v2 patch submission was strictly SDIO-only.
+
+### 🛠️ The Architectural Solution & Fixes
+1. **Clean USB Transport Integration**:
+   - Ported and modernised `aicwf_usb.c`, `aicwf_usb.h`, `usb_host.c`, and `usb_host.h` into `aic8800-upstream/aic8800_fdrv/`.
+   - Replaced legacy APIs with standard Linux `usbcore` registration, asynchronous URB anchors, dynamic skb allocations, and modern timer APIs.
+2. **Bus-Agnostic Core Abstraction**:
+   - Added helper functions `rwnx_platform_get_dev()` and `rwnx_platform_get_hw()` in `rwnx_platform.c` so higher-level MAC layers (`rwnx_tx.c`, `rwnx_txq.c`, `rwnx_main.c`, `aic_priv_cmd.c`) access hardware state independently of transport type.
+   - Unified CRC-8 calculations in `aicwf_chip_ops.c` and guarded SDIO-specific structures (`aic8800_bsp.ko`, `rx_frame_queue`) so USB mode builds a single, standalone `aic8800_fdrv.ko` module.
+3. **Buildroot Multi-Target Support**:
+   - `bld.a5e` builds `aic8800_bsp.ko` + `aic8800_fdrv.ko` for SDIO.
+   - `bld.a7a` builds standalone `aic8800_fdrv.ko` for USB.
+   - Both build warning-free against Linux 7.1 and generate full `sdcard.img` target artifacts.
+
+---

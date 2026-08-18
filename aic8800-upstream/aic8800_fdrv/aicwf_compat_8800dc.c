@@ -233,7 +233,11 @@ static u32 wifi_rxgain_table_24g_40m_8800dcdw[64] = {
 #if (defined(CONFIG_DPD) && !defined(CONFIG_FORCE_DPD_CALIB))
 extern int is_file_exist(char *name);
 #endif
+#ifdef AICWF_SDIO_SUPPORT
 extern struct rf_misc_ram_lite_t dpd_res;
+#else
+struct rf_misc_ram_lite_t dpd_res;
+#endif
 
 int aicwf_fdrv_dpd_result_apply_8800dc(struct rwnx_hw *rwnx_hw,
 				       struct rf_misc_ram_lite_t *dpd_res)

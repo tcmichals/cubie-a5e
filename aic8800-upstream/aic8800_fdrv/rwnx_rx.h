@@ -269,7 +269,7 @@ struct hw_rxhdr {
 	u32 flags_is_80211_mpdu : 1;
 	u32 flags_is_4addr : 1;
 	u32 flags_new_peer : 1;
-#if defined(AICWF_SDIO_SUPPORT)
+#if defined(AICWF_SDIO_SUPPORT) || defined(AICWF_USB_SUPPORT)
 	u32 flags_user_prio : 1; // aic: fw not fill any more
 	u32 flags_need_reord : 1;
 	u32 flags_upload : 1;

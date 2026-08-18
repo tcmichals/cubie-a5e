@@ -8,7 +8,8 @@
 #include <linux/skbuff.h>
 #ifdef AICWF_SDIO_SUPPORT
 #include "aicwf_sdio.h"
-#else
+#endif
+#ifdef AICWF_USB_SUPPORT
 #include "aicwf_usb.h"
 #endif
 #include "aic_bus.h"
@@ -93,6 +94,9 @@ struct aicwf_tx_priv {
 	spinlock_t txqlock;
 	struct semaphore txctl_sema;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 	struct sk_buff *aggr_buf;
 	atomic_t aggr_count;
 	u8 *head;
@@ -145,12 +149,15 @@ struct aicwf_rx_priv {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 	void *rwnx_vif;
 	atomic_t rx_cnt;
 	u32 data_len;
 	/* lock for aicwf_rx */
 	spinlock_t rxqlock;
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	struct rx_frame_queue rxq;
 #else
 	struct frame_queue rxq;
@@ -165,7 +172,7 @@ struct aicwf_rx_priv {
 	spinlock_t stas_reord_lock;
 	struct recv_msdu *recv_frames;
 #endif
-#ifdef CONFIG_PREALLOC_RX_SKB
+#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
 	/* lock for rxbuff */
 	spinlock_t rxbuff_lock;
 #endif

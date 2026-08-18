@@ -1,19 +1,27 @@
-# WirelessHowTo
+# WirelessHowTo (Dual-Bus: SDIO & USB)
 
-This guide covers Wi-Fi bring-up for the Cubie A5E image in this repo.
+This guide covers Wi-Fi bring-up for both target platforms in this repository:
+1. **Radxa Cubie A5E** (Allwinner A527/T527) via **SDIO**
+2. **Radxa Cubie A7A** (Allwinner A733) via **USB**
 
-## 1) Hardware Wiring and Device Tree Configuration
+---
 
-The onboard AIC8800 Wi-Fi chip operates over the SDIO interface. It is crucial that the Device Tree is correctly configured to power up and reset the chip so the MMC subsystem can probe it.
+## 1) Hardware Wiring and Transport Configurations
 
-The chip is wired as follows:
-- **SDIO Interface**: Connected to `mmc1`. It requires `bus-width = <4>` and must be marked as `non-removable`.
-- **Power (VCC)**: A dedicated `3v3-wifi` regulator must be enabled by driving `PIO 0 7` high. This regulator is assigned to `vmmc-supply`.
-- **I/O Power (VCC-IO)**: Driven by the internal `reg_bldo1` (`vcc-pg-iowifi`), assigned to `vqmmc-supply`.
-- **Reset Sequence**: Controlled by a `mmc-pwrseq-simple` node. The chip is pulled out of reset by driving `PIO 1 1` low.
-- **Interrupts**: The host wake-up interrupt is wired to `PIO 1 0` (active low).
+### A. Radxa Cubie A5E (SDIO Transport)
+The onboard AIC8800D80 Wi-Fi chip on Cubie A5E connects over SDIO (`mmc1`):
+- **SDIO Interface**: Connected to `mmc1`, `bus-width = <4>`, marked `non-removable`.
+- **Power (VCC)**: `3v3-wifi` regulator enabled via `PIO 0 7` (assigned to `vmmc-supply`).
+- **I/O Power (VCC-IO)**: Internal `reg_bldo1` (`vcc-pg-iowifi`), assigned to `vqmmc-supply`.
+- **Reset Sequence**: Controlled by `mmc-pwrseq-simple` node driving `PIO 1 1` low.
+- **Interrupts**: Host wake-up interrupt on `PIO 1 0` (active low).
+- **Modules Loaded**: `aic8800_bsp.ko` + `aic8800_fdrv.ko`.
 
-A proper overlay configures `&mmc1` with these regulators and power sequences to ensure the kernel detects the SDIO card at boot.
+### B. Radxa Cubie A7A (USB Transport)
+The AIC8800 Wi-Fi chip on Cubie A7A is wired to the internal USB controller:
+- **USB Device ID**: `0xA69C:0x8800` (Wi-Fi only) or `0xA69C:0x8801` (Wi-Fi + BT Combo).
+- **Driver Architecture**: Native `usbcore` registration using standalone `aic8800_fdrv.ko` (no BSP module required).
+- **Module Loaded**: `aic8800_fdrv.ko`.
 
 ## 2) Included components
 

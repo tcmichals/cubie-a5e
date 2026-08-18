@@ -83,6 +83,9 @@ struct rwnx_plat {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 
 	bool enabled;
 
@@ -169,6 +172,7 @@ u16_l phy_channel_to_freq(u8_l band, int channel);
 #endif
 
 struct device *rwnx_platform_get_dev(struct rwnx_plat *rwnx_plat);
+struct rwnx_hw *rwnx_platform_get_hw(struct rwnx_plat *rwnx_plat);
 
 int rwnx_request_firmware_common(struct rwnx_hw *rwnx_hw, u32 **buffer,
 				 const char *filename);

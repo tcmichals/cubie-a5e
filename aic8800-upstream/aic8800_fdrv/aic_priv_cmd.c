@@ -125,7 +125,6 @@ unsigned int command_strtoul(const char *cp, char **endp, unsigned int base)
 static int aic_priv_cmd_set_tx(struct rwnx_hw *rwnx_hw, int argc, char *argv[],
 			       char *command)
 {
-	u8_l enable = 0;
 	struct cmd_rf_settx settx_param;
 #ifdef CONFIG_AIC8800_POWER_LIMIT
 	s8 max_pwr;
@@ -976,9 +975,10 @@ static int aic_priv_cmd_set_txpwr_loss(struct rwnx_hw *rwnx_hw, int argc,
 	if (argc > 1) {
 		func = (s8_l)command_strtoul(argv[1], NULL, 10);
 		pr_info("set txpwr loss: %d\n", func);
-		if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->support_priv_cmd_set_txpwr_loss) {
+		struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
+		if (hw && hw->chip_ops && hw->chip_ops->support_priv_cmd_set_txpwr_loss) {
 			set_txpwr_loss_ofst(func);
-			rwnx_send_txpwr_lvl_v3_req(g_rwnx_plat->sdiodev->rwnx_hw, 0);
+			rwnx_send_txpwr_lvl_v3_req(hw, 0);
 		} else {
 			AICWFDBG(LOGINFO, "error:don't support ,now only support D40 D80");
 		}
@@ -1936,12 +1936,14 @@ int android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		skip = strlen(CMD_SETSUSPENDMODE) + 1;
 		setsusp_mode = command_strtoul(command + skip, NULL, 10);
 #ifdef AICWF_LATENCY_MODE
+		struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
 		if (setsusp_mode)
-			rwnx_send_me_set_lp_level(g_rwnx_plat->sdiodev->rwnx_hw, setsusp_mode, 0);
+			rwnx_send_me_set_lp_level(hw, setsusp_mode, 0);
 		else
-			rwnx_send_me_set_lp_level(g_rwnx_plat->sdiodev->rwnx_hw, 1, 1);
+			rwnx_send_me_set_lp_level(hw, 1, 1);
 #else
-		rwnx_send_me_set_lp_level(g_rwnx_plat->sdiodev->rwnx_hw,
+		struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
+		rwnx_send_me_set_lp_level(hw,
 					  setsusp_mode, !setsusp_mode);
 #endif
 

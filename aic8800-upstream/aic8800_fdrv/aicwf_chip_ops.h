@@ -12,6 +12,13 @@
 #include "lmac_types.h"
 #include "lmac_msg.h"
 
+enum AICWF_IC {
+	PRODUCT_ID_AIC8801 = 0,
+	PRODUCT_ID_AIC8800DC,
+	PRODUCT_ID_AIC8800DW,
+	PRODUCT_ID_AIC8800D80
+};
+
 struct rwnx_hw;
 struct mm_set_rf_calib_req;
 struct mm_set_rf_calib_cfm;
@@ -183,4 +190,6 @@ int aic_chip_priv_cmd_rdwr_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 				   char *argv[], char *command);
 int aic_chip_priv_cmd_rdwr_efuse_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 					 char *argv[], char *command);
+u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size);
+
 #endif /* _AICWF_CHIP_OPS_H_ */

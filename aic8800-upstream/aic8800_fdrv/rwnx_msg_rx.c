@@ -763,6 +763,7 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 	return 0;
 }
 
+#ifdef CONFIG_AIC8800_AUTO_CUSTREG
 static void parse_ssid_from_id(const u8 *ssid_id, char ssid_name[33], u8 *ssid_len)
 {
 	u8 len;
@@ -810,6 +811,7 @@ static void rwnx_update_country(struct rwnx_hw *rwnx_hw,
 		rwnx_regulatory_set_wiphy_regd(rwnx_hw->wiphy, *regdomain);
 	}
 }
+#endif
 
 static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 					   struct rwnx_cmd *cmd,
