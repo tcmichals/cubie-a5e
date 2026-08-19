@@ -174,3 +174,37 @@ The Radxa Cubie A5E (Allwinner A527/T527) operates over **SDIO**, whereas the Ra
    - Both build warning-free against Linux 7.1 and generate full `sdcard.img` target artifacts.
 
 ---
+
+## Case Study 6: Retiring Fragile Userspace `/dev/mem` Loader (`riscv-loader`) for Linux `remoteproc`
+**Date:** August 19, 2026  
+**Component:** XuanTie E907 Co-Processor Lifecycle Management & `sunxi_rproc.c`
+
+### 🚨 The Problem & Circling Around `riscv-loader`
+During early bring-up of the XuanTie E907 co-processor, we developed a userspace `/dev/mem` MMIO tool (`riscv-load` / `load-riscv.sh`) to poke CCU clock registers (`0x07010020` / `0x07010100`) and copy flat binary payloads (`firmware.bin`) directly to ITCM (`0x07110000`). This repeatedly stalled progress:
+1. **Security & Kernel Restrictions**: Modern Linux 7.1 enforces `CONFIG_STRICT_DEVMEM` and `CONFIG_IO_STRICT_DEVMEM`. Direct userspace `mmap()` of physical memory was blocked or unstable without insecure bootargs (`iomem=relaxed`).
+2. **Missing Section Mapping**: Dumping a raw `.bin` payload into `0x07110000` failed to handle multi-region memory layouts where `.text` belongs in ITCM (`0x00000000`), `.data`/`.bss` belongs in DTCM (`0x00080000`), and static pools reside in System SRAM C (`0x07130000`).
+3. **Clock Tree Desynchronization**: Userspace `devmem` writes to CCU registers fought against the kernel Common Clock Framework (CCF), runtime PM, and suspend hooks, causing cores to silently drop into `HALTED` / `In reset` states without error messages.
+4. **Tooling & Build Disconnects**: Buildroot package compilation of `riscv-load` frequently fell out of sync with rootfs overlays and shell script fallback paths.
+
+### 🛠️ The Architectural Resolution: Full Standardisation on `remoteproc`
+We officially retired the userspace `riscv-loader` approach in favor of the **Linux Mainline Remote Processor (`remoteproc`) Framework** via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md):
+
+1. **Kernel-Level ELF Parsing & Memory Routing**:
+   - `sunxi_rproc` natively parses standard `firmware.elf` binaries from `/lib/firmware/`.
+   - ELF Program Headers (`paddr`) are automatically mapped via `da_to_va` handlers directly into ITCM (`0x07110000`), DTCM (`0x07120000`), and SRAM C (`0x07130000`), with zero-padding of `.bss`.
+2. **Integrated CCF Clocks & Reset Handles**:
+   - Clock gates and resets are acquired through `devm_clk_get()` and `devm_reset_control_get()`, ensuring proper parent clock enable sequencing and refcounting.
+3. **Automatic Debugfs Trace Buffers**:
+   - The `.resource_table` embedded in the ELF automatically generates `/sys/kernel/debug/remoteproc/remoteproc0/trace0`, enabling live firmware log streaming without extra UART lines.
+4. **Standard Sysfs Lifecycle Interface**:
+   ```bash
+   echo "riscv-firmware.elf" > /sys/class/remoteproc/remoteproc0/firmware
+   echo start > /sys/class/remoteproc/remoteproc0/state
+   cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+   ```
+5. **Independent Debug Validation**:
+   - Paired with our Python DMI test harness (`tools/dmi_test.py`), we use OpenOCD over JTAG/DAP to verify the core's hardware Debug Module status (`dmstatus` at DMI `0x11`) independently of firmware execution state.
+6. **Purged `iomem=relaxed` Bootargs**:
+   - Because `remoteproc` operates inside kernel space with native `ioremap_wc()`, insecure `/dev/mem` relaxations are obsolete. We permanently removed `iomem=relaxed` from `boot.cmd` and `uboot-env.txt` for both Cubie A5E and Cubie A7A, restoring standard `CONFIG_STRICT_DEVMEM` physical memory protections.
+
+

@@ -56,6 +56,22 @@ These documents cover flight stack architecture, FPGA integration, and intellige
 
 ---
 
+## 3. Technical Articles & Deep Dives (`docs/articles/`)
+
+Long-form engineering articles and case studies:
+
+* **[Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Multi-Part Series)](articles/README.md)**
+  * **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`sun55i`), TRM memory maps, why `/dev/mem` loaders fail, and JTAG-less on-chip debugging over OpenOCD.
+  * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](articles/part2_building_remoteproc_and_hardware_proof.md)** — Implementing `sunxi_rproc.c`, multi-segment ELF placement (ITCM/DTCM/SRAM), debugfs trace logging, and the 3-step hardware proof via Python (`dmi_test.py`).
+  * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)** — Zero-wait TCM determinism, lightweight lock-free ring buffers + Mailbox interrupts, live GDB workflows, and an introduction to stackless C++20 coroutines.
+  * **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](articles/part4_deep_dive_baremetal_cpp_coroutines.md)** — Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO optimizations (0 cycles / 0 bytes), benchmarks vs FreeRTOS (19x speedup, <400 B RAM), and non-blocking hardware awaiters.
+* **[Mainline Flightstack Bring-up Case Study](buildroot/Mainline_Flightstack_Bringup_Article.md)**
+  * Architecture breakdown of the 6 core blueprints powering the tri-domain Linux/RISC-V/FPGA avionics system.
+* **[Open-Source NPU FOSS Migration Case Study](buildroot/FOSS_NPU_Migration_Article.md)**
+  * Case study detailing the transition from vendor binary blobs to upstream Linux `etnaviv` and Mesa Teflon.
+
+---
+
 ## Source-of-Truth Project Files
 
 ### Buildroot External Tree Core

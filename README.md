@@ -78,29 +78,37 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
   - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
 
-* **✅ RISC-V Co-Processor & On-Chip Direct MMIO Debugging (100% OPERATIONAL & VERIFIED):**
-  - **Toolchain & Firmware:** Bare-metal C++20 firmware (`riscv-firmware`) compiled with xPack RISC-V GCC `v15.2.0-1` and Buildroot GDB `17.1`.
-  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge accesses the XuanTie E907 RISC-V Debug Module directly over the SoC memory bus via `/dev/mem` at physical address `0x07090000`. Connects directly to OpenOCD and GDB without external hardware dongles.
-  - **Documentation & References:** Detailed in [`docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md`](docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md) and [`docs/buildroot/HowToDebugE907.md`](docs/buildroot/HowToDebugE907.md).
+* **✅ RISC-V Co-Processor Lifecycle & JTAG-less Debugging (100% OPERATIONAL & VERIFIED):**
+  - **Linux RemoteProc Standard:** Co-processor lifecycle managed via the mainline Linux 7.1 `sunxi_rproc.c` driver with surgical multi-segment ELF placement (ITCM, DTCM, SRAM C) and live debugfs trace streaming (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
+  - **Toolchain & Firmware:** Bare-metal C++20 firmware compiled with xPack RISC-V GCC `v15.2.0-1` and Buildroot GDB `17.1`.
+  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge and OpenOCD access the XuanTie E907 Debug Module directly over the SoC bus (`0x07090000`) without physical hardware dongles.
+  - **Automated DMI Verification:** Built-in Python test harness ([`tools/dmi_test.py`](tools/dmi_test.py)) validates the 3-step hardware proof (`dmstatus`, `dmactive`, and halt/resume transitions).
+  - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 
 * **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
 
 ---
-## Architectural Documentation & Guides
+## Architectural Documentation & Technical Articles
 
-1. **[Heterogeneous Avionics Architecture & Bring-Up Guide](docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**:
+1. **[Bringing Up Heterogeneous RISC-V on Allwinner SoCs (4-Part Technical Series)](docs/articles/README.md)**:
+   * **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](docs/articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`A733`/`sun55i`), TRM memory maps, and JTAG-less on-chip debugging over OpenOCD.
+   * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](docs/articles/part2_building_remoteproc_and_hardware_proof.md)** — `sunxi_rproc.c` driver, surgical ELF mapping, debugfs trace logs, and automated Python DMI hardware verification.
+   * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](docs/articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)** — Zero-wait TCM determinism, lightweight lock-free shared SRAM ring buffers + Mailbox interrupts, and live GDB workflows.
+   * **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](docs/articles/part4_deep_dive_baremetal_cpp_coroutines.md)** — Deploying AbstractX on bare-metal RISC-V, HALO compiler optimizations (0 cycles / 0 bytes), benchmarks vs FreeRTOS (19x speedup), and non-blocking hardware awaiters.
+
+2. **[Heterogeneous Avionics Architecture & Bring-Up Guide](docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**:
    Comprehensive system architecture covering the Cortex-A76 isolated Core 7 flight loop, C++20 Coroutine Async Engine (`when_any`, `when_all`), 16-channel DMA partitioning, MSGBOX mailbox doorbells, and Dual-SPI FPGA TLP packet streaming.
 
-2. **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**:
+3. **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**:
    Technical deep-dive into the mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, and `/sys/class/remoteproc/` user-space control.
 
-3. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
+4. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
    Exhaustive analysis of the A733 BROM 128 KB search offset, multi-stage bootloader staging, and 16 MB partition alignment.
 
-4. **[Buildroot OS Documentation](docs/buildroot/)**:
+5. **[Buildroot OS Documentation](docs/buildroot/)**:
    How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`).
 
-5. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
+6. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
    High-level flight logic, rate PID dynamics, TinyML/NPU models, and real-time FPGA co-processor communication over SPI.
 
 ---

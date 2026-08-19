@@ -70,15 +70,27 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 This uses the **target-side `rbb_server` bridge** combined with a **software MMIO OpenOCD bridge** that reads co-processor registers through `/dev/mem` at physical address `0x07090000`.
 
-### Step 4: Verify hardware Debug Module accessibility
-On the target (ARM Linux shell):
-```bash
-# Run the automated RISC-V debug probe
-probe_riscv_debug.sh
+### Step 4: Verify Hardware Debug Module Accessibility (The 3-Step Proof)
 
-# Or verify the Debug Module base address directly via devmem:
+Before attaching GDB, verify that the physical Debug Module registers are mapped, clocked, and responding:
+
+```bash
+# 1. Start OpenOCD in the background
+openocd -f /etc/openocd/openocd_t527_local.cfg &
+
+# 2. Run the automated Python DMI verification tool
+dmi_test.py
+```
+
+The script automatically executes the **3-Step Hardware Proof**:
+1. **`dmstatus` Signature Check (DMI 0x11)**: Confirms `version = 2` (RISC-V Debug Spec 0.13.2) and `authenticated = 1` (returns valid hex like `0x00000482`, proving the bus is not floating/clock-gated).
+2. **`dmactive` Loopback Flip Test (DMI 0x10)**: Writes `1` then `0` to bit 0 to verify true bidirectional read/write access.
+3. **Core Halt & Resume Transitions**: Asserts `haltreq` (bit 31) and `resumereq` (bit 30), verifying that `dmstatus` toggles between `allhalted` and `allrunning`.
+
+```bash
+# Or verify base address directly via devmem:
 devmem 0x07090000 32
-# Expected response: 0x00004010 (dmstatus active)
+# Expected response: 0x00000482 or 0x00004010 (dmstatus active)
 ```
 
 ### Step 5: Start rbb_server and OpenOCD on target
@@ -86,7 +98,7 @@ devmem 0x07090000 32
 # Start the On-Chip Direct MMIO Debug Bridge daemon
 rbb_server 0x07090000 &
 
-# Start OpenOCD (listens on TCP port 3333 for GDB)
+# Start OpenOCD (listens on TCP port 3333 for GDB and 4444 for Telnet/Python)
 openocd -f /etc/openocd/openocd_t527_local.cfg &
 ```
 

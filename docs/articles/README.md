@@ -1,0 +1,28 @@
+# Technical Articles & Engineering Publications
+
+This directory contains long-form technical articles, multi-part engineering series, and case studies derived from the active bring-up of the Radxa Cubie A5E and Cubie A7A hardware platforms.
+
+---
+
+## 📚 Multi-Part Series: Bringing Up Heterogeneous RISC-V on Allwinner SoCs
+
+A comprehensive 4-part series documenting the architecture, Linux driver development, verification, and bare-metal firmware design for the **XuanTie E907 RISC-V co-processor** on the **Allwinner T527 / A527 (`sun55i`)**:
+
+1. **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](part1_heterogeneous_riscv_intro_architecture.md)**
+   * **Topics**: Heterogeneous SoC landscape, silicon naming taxonomy (`T527` vs `A527` vs `sun55i-a523`), why userspace `/dev/mem` loaders fail, TRM physical memory maps (`0x07000000 - 0x071FFFFF`), and on-chip JTAG-less memory-mapped debugging over OpenOCD.
+2. **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](part2_building_remoteproc_and_hardware_proof.md)**
+   * **Topics**: Implementing `sunxi_rproc.c` on Linux 7.1, surgical `da_to_va` multi-segment ELF placement (ITCM, DTCM, SRAM C), live trace logging via `.resource_table`, purging `iomem=relaxed`, and the 3-step hardware proof with automated Python socket tooling (`dmi_test.py`).
+3. **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
+   * **Topics**: Memory determinism (zero-wait-state 1-cycle TCM vs DDR DRAM arbitration), lightweight lock-free circular ring buffer (libmetal) + Hardware Mailbox doorbell interrupts, interactive OpenOCD/GDB debugging, and introduction to stackless C++20 coroutines.
+4. **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
+   * **Topics**: Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO (Heap Allocation eLision Optimization) for zero-cost coroutines, benchmarks vs FreeRTOS (19x speedup, <400 B RAM for 8 tasks), and non-blocking hardware awaiters.
+
+---
+
+## 📖 Case Studies & Deep Dives
+
+* **[Mainline Flightstack Bring-Up Case Study](../buildroot/Mainline_Flightstack_Bringup_Article.md)**
+  * **Topics**: Tri-domain real-time architecture across Linux PREEMPT_RT, XuanTie RISC-V, and FPGA domains.
+
+* **[Open-Source NPU Migration Case Study](../buildroot/FOSS_NPU_Migration_Article.md)**
+  * **Topics**: Migrating from proprietary vendor NPU binary blobs to upstream Linux `etnaviv` DRM driver and Mesa Teflon TFLite delegate.

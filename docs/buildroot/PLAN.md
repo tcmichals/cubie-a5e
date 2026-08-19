@@ -34,16 +34,17 @@ flowchart TD
 
 ## Active & Upcoming Phases
 
-### Phase 1: Loader & Control Parity ✅ (Completed)
-- [x] Fixed `riscv-load.c` (v1.1.0) to map CCU, copy firmware directly into ITCM (`0x07110000`), check dual-bit reset register status, and support live `monitor`.
-- [x] Fixed `load-riscv.sh` (v1.1.0) smart delegator searching `$SCRIPT_DIR/riscv-load`, `/usr/bin/riscv-load`, and `$PATH`. Removed all broken shell fallbacks.
-- [x] Synchronized `riscv-firmware.mk` to install both binary and wrapper script in target `/usr/bin/`.
-- [x] Documented complete root-cause autopsy in [`docs/buildroot/RISCV_LOADER_REVIEW.md`](RISCV_LOADER_REVIEW.md).
+## Active & Upcoming Phases
+
+### Phase 1: Remoteproc Lifecycle & Hardware Debug Validation ✅ (Completed / Standardized)
+- [x] Standardized on Linux Mainline `remoteproc` framework via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md), eliminating userspace `/dev/mem` permissions issues and memory mapping bugs.
+- [x] Implemented automated Python DMI verification test harness (`tools/dmi_test.py`) to query RISC-V Debug Module status (`dmstatus` at DMI `0x11`) over OpenOCD.
+- [x] Documented complete root-cause autopsy of legacy userspace loader in [`docs/buildroot/DebugLog.md`](DebugLog.md) (Case Study 6).
 
 ### Phase 2: Firmware Execution & Telemetry (Active Milestone)
-- [ ] Verify clean execution of `firmware.bin` in ITCM (`0x00000000` / host `0x07110000`).
-- [ ] Validate `melis_hello_world.c` UART0 console output (`0x02500000`).
-- [ ] Validate stack setup in DTCM (`0x07120000`), `.text` in SRAM C (`0x07130000`), and vector table jumps.
+- [ ] Deploy `firmware.elf` via remoteproc sysfs (`/sys/class/remoteproc/remoteproc0/state`).
+- [ ] Verify execution of vector table and CRT0 in ITCM (`0x00000000`) / DTCM (`0x00080000`) / SRAM C (`0x07130000`).
+- [ ] Verify live trace log streaming via debugfs (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
 
 ### Phase 3: Shared SRAM Ring Buffer & Mailbox IPC
 - [ ] Configure Allwinner Message Box (`0x03003000`) for bidirectional doorbell IRQs (ARM GIC IRQ 147 / RISC-V PLIC).
@@ -56,7 +57,7 @@ flowchart TD
 
 ---
 
-## Quick Reference Commands
+## Quick Reference Commands (RemoteProc Standard)
 
 - **Compile RISC-V Firmware standalone:**
   ```bash
@@ -64,14 +65,19 @@ flowchart TD
   ```
 - **Deploy to board:**
   ```bash
-  scp riscv-firmware/riscv-load root@<IP>:/usr/bin/
-  scp riscv-firmware/load-riscv.sh root@<IP>:/usr/bin/
-  scp riscv-firmware/firmware.bin root@<IP>:/lib/firmware/riscv-firmware.bin
-  ssh root@<IP> "chmod +x /usr/bin/riscv-load /usr/bin/load-riscv.sh"
+  scp riscv-firmware/firmware.elf root@<IP>:/lib/firmware/riscv-firmware.elf
   ```
-- **Run on board:**
+- **Boot and verify on board via RemoteProc:**
   ```bash
-  /usr/bin/load-riscv.sh version
-  /usr/bin/load-riscv.sh start /lib/firmware/riscv-firmware.bin
-  /usr/bin/load-riscv.sh status
+  echo "riscv-firmware.elf" > /sys/class/remoteproc/remoteproc0/firmware
+  echo start > /sys/class/remoteproc/remoteproc0/state
+  cat /sys/class/remoteproc/remoteproc0/state
+  # Read live firmware trace output:
+  cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
   ```
+- **Validate Hardware Debug Module (OpenOCD + Python DMI):**
+  ```bash
+  openocd -f /etc/openocd/openocd_t527_local.cfg &
+  dmi_test.py
+  ```
+
