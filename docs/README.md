@@ -62,6 +62,7 @@ These documents cover flight stack architecture, FPGA integration, and intellige
 ### Board Integration
 * `project-cubie-a5e/board/radxa/cubie_a5e/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A5E.
 * `project-cubie-a5e/board/radxa/cubie_a7a/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A7A.
+* `docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md` — Allwinner A733 boot sequence, BROM 128KB offset, and 16MB partition layout guide.
 * `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso` — Flight stack overlay for Cubie A5E.
 * `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-flight-stack.dtso` — Flight stack overlay for Cubie A7A.
 

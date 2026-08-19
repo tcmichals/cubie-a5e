@@ -65,3 +65,12 @@ fdt addr ${fdt_addr_r}
 fdt resize 65536  # <-- CRITICAL
 fdt apply ${ramdisk_addr_r}
 ```
+
+---
+
+## 4. Radxa Cubie A7A (Allwinner A733) Differences
+
+For the **Radxa Cubie A7A (Allwinner A733 / `sun60i`)**, the boot geometry differs significantly from the A527/T527:
+- **BROM Search Offset:** **128 KB** (sector 256) instead of 8 KB (sector 16).
+- **Partition 1 Offset:** **16 MB** (sector 32768) instead of 4 MB (sector 8192) to accommodate the ~14MB multi-stage vendor bootloader.
+- **Full Documentation:** See [`A733_Boot_Architecture_And_Disk_Layout.md`](./A733_Boot_Architecture_And_Disk_Layout.md).

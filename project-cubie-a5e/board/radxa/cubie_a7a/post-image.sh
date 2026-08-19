@@ -9,6 +9,10 @@ ${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "$(dirname $0)/boot.cmd" "
 # Compile uboot-env.txt into uboot.env binary using host mkenvimage
 ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "$(dirname $0)/uboot-env.txt"
 
+# Stage verified vendor A733 bootloader and DTB into BINARIES_DIR
+cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
+cp -f "${BOARD_DIR}/sun60i-a733-cubie-a7a.dtb" "${BINARIES_DIR}/sun60i-a733-cubie-a7a.dtb"
+
 # Run genimage packaging pipeline
 rm -rf "${GENIMAGE_TMP}"
 genimage --config "${GENIMAGE_CFG}" --rootpath "${TARGET_DIR}" --tmppath "${GENIMAGE_TMP}" --inputpath "${BINARIES_DIR}" --outputpath "${BINARIES_DIR}"

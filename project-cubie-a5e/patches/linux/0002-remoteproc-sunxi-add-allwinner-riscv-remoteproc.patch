@@ -1,0 +1,255 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tcmichals <tcmichals@gmail.com>
+Date: Tue, 18 Aug 2026 22:35:00 -0500
+Subject: [PATCH] remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver
+
+Add support for the embedded XuanTie E907/E902 RISC-V co-processor on
+Allwinner A523, A527, T527, and A733 SoCs via the Linux Remote Processor
+framework.
+
+Signed-off-by: tcmichals <tcmichals@gmail.com>
+---
+ drivers/remoteproc/Kconfig       |   6 ++
+ drivers/remoteproc/Makefile      |   1 +
+ drivers/remoteproc/sunxi_rproc.c | 171 +++++++++++++++++++++++++++++++
+ 3 files changed, 178 insertions(+)
+ create mode 100644 drivers/remoteproc/sunxi_rproc.c
+
+diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+index 1234567890ab..abcdef123456 100644
+--- a/drivers/remoteproc/Kconfig
++++ b/drivers/remoteproc/Kconfig
+@@ -380,4 +380,10 @@ config XLNX_R5_REMOTEPROC
+ 	  Say y or m here to support Xilinx R5 remote processors via the remote
+ 	  processor framework.
+ 
++config SUNXI_REMOTEPROC
++	tristate "Allwinner XuanTie RISC-V Remote Processor support"
++	depends on OF && (ARM64 || COMPILE_TEST)
++	help
++	  Say y or m here to support the embedded XuanTie E907/E902 RISC-V
++	  co-processor on Allwinner A523, A527, T527, and A733 SoCs.
++
+ endif # REMOTEPROC
+diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
+index 234567890abc..bcdef1234567 100644
+--- a/drivers/remoteproc/Makefile
++++ b/drivers/remoteproc/Makefile
+@@ -40,3 +40,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
+ obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
+ obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
++obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
+diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
+new file mode 100644
+index 000000000000..8d251d2c676c
+--- /dev/null
++++ b/drivers/remoteproc/sunxi_rproc.c
+@@ -0,0 +1,173 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
++ *
++ * Copyright (C) 2024-2026 Allwinner Technology Co., Ltd.
++ * Copyright (C) 2026 tcmichals <tcmichals@gmail.com>
++ *
++ * Supports Allwinner A523, A527, T527, and A733 SoCs.
++ * Manages core lifecycle (clock gate, reset de-assertion) and ELF segment
++ * memory mapping to ITCM (0x07110000) and DTCM (0x07120000/0x07130000).
++ */
++
++#include <linux/err.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of_device.h>
++#include <linux/platform_device.h>
++#include <linux/remoteproc.h>
++
++#include "remoteproc_internal.h"
++
++#define DRIVER_NAME "sunxi-rproc"
++
++/* CCU Registers */
++#define CCU_DSP_CLK_REG   0x0020
++#define CCU_DSP_RST_REG   0x0100
++
++/* Bit definitions */
++#define CCU_DSP_CLK_ENABLE  0x00000003
++#define CCU_DSP_BUS_RST     BIT(16)
++#define CCU_DSP_CORE_RST    BIT(17)
++
++/* Memory Regions */
++#define ITCM_PHYS_BASE      0x07110000
++#define ITCM_SIZE           0x00010000  /* 64 KB */
++#define DTCM_PHYS_BASE      0x07120000
++#define DTCM_SIZE           0x00010000  /* 64 KB */
++#define SRAM_PHYS_BASE      0x07130000
++#define SRAM_SIZE           0x00050000  /* 320 KB */
++
++/* Core Local Virtual Aliases */
++#define CORE_ITCM_BASE      0x00000000
++#define CORE_DTCM_BASE      0x00080000
++
++struct sunxi_rproc {
++	struct rproc *rproc;
++	struct device *dev;
++	void __iomem *ccu_va;
++	void __iomem *itcm_va;
++	void __iomem *dtcm_va;
++	void __iomem *sram_va;
++};
++
++static int sunxi_rproc_start(struct rproc *rproc)
++{
++	struct sunxi_rproc *priv = rproc->priv;
++	u32 val;
++
++	dev_info(priv->dev, "Starting XuanTie RISC-V co-processor...\n");
++
++	/* 1. Enable MCU subsystem clock */
++	writel(CCU_DSP_CLK_ENABLE, priv->ccu_va + CCU_DSP_CLK_REG);
++
++	/* 2. Assert core reset, enable bus reset */
++	writel(CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
++
++	/* 3. Release core reset to boot from ITCM (0x00000000) */
++	writel(CCU_DSP_CORE_RST | CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
++
++	val = readl(priv->ccu_va + CCU_DSP_RST_REG);
++	dev_info(priv->dev, "RISC-V core started (RST REG: 0x%08x)\n", val);
++
++	return 0;
++}
++
++static int sunxi_rproc_stop(struct rproc *rproc)
++{
++	struct sunxi_rproc *priv = rproc->priv;
++
++	dev_info(priv->dev, "Halting XuanTie RISC-V co-processor...\n");
++
++	/* Assert core reset (clear bit 17) */
++	writel(CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
++
++	dev_info(priv->dev, "RISC-V core is held in reset\n");
++
++	return 0;
++}
++
++static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
++{
++	struct sunxi_rproc *priv = rproc->priv;
++
++	if (is_iomem)
++		*is_iomem = true;
++
++	/* ITCM: physical 0x07110000 or core local 0x00000000 */
++	if (da >= ITCM_PHYS_BASE && (da + len) <= (ITCM_PHYS_BASE + ITCM_SIZE))
++		return priv->itcm_va + (da - ITCM_PHYS_BASE);
++	if (da >= CORE_ITCM_BASE && (da + len) <= (CORE_ITCM_BASE + ITCM_SIZE))
++		return priv->itcm_va + (da - CORE_ITCM_BASE);
++
++	/* DTCM: physical 0x07120000 or core local 0x00080000 */
++	if (da >= DTCM_PHYS_BASE && (da + len) <= (DTCM_PHYS_BASE + DTCM_SIZE))
++		return priv->dtcm_va + (da - DTCM_PHYS_BASE);
++	if (da >= CORE_DTCM_BASE && (da + len) <= (CORE_DTCM_BASE + DTCM_SIZE))
++		return priv->dtcm_va + (da - CORE_DTCM_BASE);
++
++	/* SRAM / Shared Memory: physical 0x07130000 */
++	if (priv->sram_va && da >= SRAM_PHYS_BASE && (da + len) <= (SRAM_PHYS_BASE + SRAM_SIZE))
++		return priv->sram_va + (da - SRAM_PHYS_BASE);
++
++	dev_warn(priv->dev, "da_to_va: unmapped device address 0x%llx (len %zu)\n", da, len);
++	return NULL;
++}
++
++static const struct rproc_ops sunxi_rproc_ops = {
++	.start		= sunxi_rproc_start,
++	.stop		= sunxi_rproc_stop,
++	.da_to_va	= sunxi_rproc_da_to_va,
++	.get_boot_addr	= rproc_elf_get_boot_addr,
++	.load		= rproc_elf_load_segments,
++	.parse_fw	= rproc_elf_load_rsc_table,
++	.sanity_check	= rproc_elf_sanity_check,
++};
++
++static int sunxi_rproc_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct sunxi_rproc *priv;
++	struct rproc *rproc;
++	int ret;
++
++	rproc = devm_rproc_alloc(dev, dev_name(dev), &sunxi_rproc_ops,
++				 "riscv-firmware.elf", sizeof(*priv));
++	if (!rproc) {
++		dev_err(dev, "failed to allocate rproc\n");
++		return -ENOMEM;
++	}
++
++	priv = rproc->priv;
++	priv->rproc = rproc;
++	priv->dev = dev;
++
++	/* 1. Map CCU Control Registers */
++	priv->ccu_va = devm_platform_ioremap_resource_byname(pdev, "ccu");
++	if (IS_ERR(priv->ccu_va)) {
++		priv->ccu_va = devm_platform_ioremap_resource(pdev, 0);
++		if (IS_ERR(priv->ccu_va)) {
++			dev_err(dev, "failed to map CCU registers\n");
++			return PTR_ERR(priv->ccu_va);
++		}
++	}
++
++	/* 2. Map ITCM Instruction Memory */
++	priv->itcm_va = devm_platform_ioremap_resource_byname(pdev, "itcm");
++	if (IS_ERR(priv->itcm_va)) {
++		priv->itcm_va = devm_platform_ioremap_resource(pdev, 1);
++		if (IS_ERR(priv->itcm_va)) {
++			dev_err(dev, "failed to map ITCM memory\n");
++			return PTR_ERR(priv->itcm_va);
++		}
++	}
++
++	/* 3. Map DTCM / SRAM */
++	priv->dtcm_va = devm_platform_ioremap_resource_byname(pdev, "dtcm");
++	if (IS_ERR(priv->dtcm_va)) {
++		priv->dtcm_va = devm_ioremap(dev, DTCM_PHYS_BASE, DTCM_SIZE);
++	}
++
++	priv->sram_va = devm_platform_ioremap_resource_byname(pdev, "sram");
++	if (IS_ERR(priv->sram_va))
++		priv->sram_va = NULL;
++
++	platform_set_drvdata(pdev, rproc);
++
++	ret = devm_rproc_add(dev, rproc);
++	if (ret) {
++		dev_err(dev, "failed to add rproc device: %d\n", ret);
++		return ret;
++	}
++
++	dev_info(dev, "Allwinner XuanTie RISC-V Remote Processor registered successfully\n");
++	return 0;
++}
++
++static const struct of_device_id sunxi_rproc_of_match[] = {
++	{ .compatible = "allwinner,sun55i-a523-rproc" },
++	{ .compatible = "allwinner,sun55i-a527-rproc" },
++	{ .compatible = "allwinner,sun60i-a733-rproc" },
++	{ .compatible = "allwinner,sunxi-rproc" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, sunxi_rproc_of_match);
++
++static struct platform_driver sunxi_rproc_driver = {
++	.probe = sunxi_rproc_probe,
++	.driver = {
++		.name = DRIVER_NAME,
++		.of_match_table = sunxi_rproc_of_match,
++	},
++};
++module_platform_driver(sunxi_rproc_driver);
++
++MODULE_AUTHOR("Allwinner Technology Co., Ltd.");
++MODULE_AUTHOR("tcmichals <tcmichals@yahoo.com>");
++MODULE_DESCRIPTION("Allwinner XuanTie E907/E902 RISC-V Remoteproc Driver");
++MODULE_LICENSE("GPL");
