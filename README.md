@@ -86,15 +86,22 @@ As of the current bring-up phase, here is the functional status of the flight st
 * **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
 
 ---
-## Architectural Split
+## Architectural Documentation & Guides
 
-1. **Buildroot OS (Creating the Distribution):**
-   How we use Buildroot to configure, build, and package the custom Linux operating system. This outputs the bootable `sdcard.img` containing the kernel, Wi-Fi drivers, NPU drivers, and custom device tree overlays.
-   * **Documentation:** See [Buildroot OS Documentation](docs/buildroot/)
+1. **[Heterogeneous Avionics Architecture & Bring-Up Guide](docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**:
+   Comprehensive system architecture covering the Cortex-A76 isolated Core 7 flight loop, C++20 Coroutine Async Engine (`when_any`, `when_all`), 16-channel DMA partitioning, MSGBOX mailbox doorbells, and Dual-SPI FPGA TLP packet streaming.
 
-2. **Flight Controller (Using the Distribution):**
-   How the flight controller application runs on top of this OS distribution. It performs high-level flight logic, runs TinyML/NPU models, and communicates with a real-time FPGA co-processor over SPI.
-   * **Documentation:** See [Flight Controller Application Documentation](docs/flightcontroller/)
+2. **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**:
+   Technical deep-dive into the mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, and `/sys/class/remoteproc/` user-space control.
+
+3. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
+   Exhaustive analysis of the A733 BROM 128 KB search offset, multi-stage bootloader staging, and 16 MB partition alignment.
+
+4. **[Buildroot OS Documentation](docs/buildroot/)**:
+   How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`).
+
+5. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
+   High-level flight logic, rate PID dynamics, TinyML/NPU models, and real-time FPGA co-processor communication over SPI.
 
 ---
 

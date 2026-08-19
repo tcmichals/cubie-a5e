@@ -27,6 +27,12 @@ These documents cover the base operating system build, hardware interfaces, and 
 * **[Camera Verification & Testing](buildroot/CameraTesting.md)**
   * Documents mainline **Media Controller** topology (`media-ctl`) and memory-mapped `mmap` streaming.
   * Details diagnostic commands (`v4l2-ctl`) and direct frame extraction scripts.
+* **[Heterogeneous Avionics Architecture & Bring-Up Guide](../docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**
+  * Master technical guide covering Cortex-A76 Core 7 isolation, C++20 coroutine concurrency, 16-channel DMA allocation, and Dual-SPI FPGA streaming.
+* **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](../docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**
+  * Details the Linux 7.1 `sunxi_rproc` driver, memory mappings (ITCM/DTCM/SRAM), patch contents, and `/sys/class/remoteproc/` control.
+* **[Allwinner A733 Boot Architecture & Disk Layout](buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**
+  * Explains the A733 BROM 128KB search offset, multi-stage vendor bootloader staging, and 16MB partition alignment.
 * **[NPU FOSS Migration Case Study](buildroot/FOSS_NPU_Migration_Article.md)**
   * Case study documenting the transition of the NPU stack from out-of-tree vendor blocks to upstream FOSS drivers.
 * **[Master Flightstack Bring-up Article](buildroot/Mainline_Flightstack_Bringup_Article.md)**
