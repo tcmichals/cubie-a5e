@@ -14,13 +14,19 @@
 
 #ifdef AICWF_USB_SUPPORT
 
-/* USB Device ID */
+/* USB Device IDs */
 #define USB_VENDOR_ID_AIC                0xA69C
 
+#define USB_PRODUCT_ID_AIC8800           0x8800 /* AIC8800DC / 8800 USB Wi-Fi */
+#define USB_PRODUCT_ID_AIC8801           0x8801 /* AIC8800DC / 8801 USB Combo */
+#define USB_PRODUCT_ID_AIC8800D80_BOOT   0x8D80 /* AIC8800D80 BootROM Mode */
+#define USB_PRODUCT_ID_AIC8800D80_COMBO  0x8D81 /* AIC8800D80 Wi-Fi + BT Combo */
+#define USB_PRODUCT_ID_AIC8800D80_WIFI   0x8D83 /* AIC8800D80 Wi-Fi Only */
+
 #ifndef CONFIG_USB_BT
-#define USB_PRODUCT_ID_AIC               0x8800
+#define USB_PRODUCT_ID_AIC               USB_PRODUCT_ID_AIC8800
 #else
-#define USB_PRODUCT_ID_AIC               0x8801
+#define USB_PRODUCT_ID_AIC               USB_PRODUCT_ID_AIC8801
 #endif
 
 #define AICWF_USB_RX_URBS               (200)

@@ -330,3 +330,57 @@ The driver tree in `aic8800-upstream/` has completed transition to a **Unified D
 1. **Cubie A5E SDIO Re-Test**: Flash `bld.a5e/images/sdcard.img` -> Verify `aic8800_bsp.ko` and `aic8800_fdrv.ko` load -> Confirm `wlan0` connectivity.
 2. **Cubie A7A USB Test**: Flash `bld.a7a/images/sdcard.img` -> Boot A7A board -> Verify `lsusb` and `aic8800_fdrv` probe -> Test `wpa_supplicant` association and throughput.
 3. **Upstream RFC Patch 3 Preparation**: Following A7A hardware sign-off, submit unified dual-bus patch series to `linux-wireless@vger.kernel.org`.
+
+---
+
+## Hardware Silicon & Interface ID Reference (SDIO vs USB)
+
+### 1. Radxa Cubie A5E — SDIO Hardware Match (`mmc1`)
+- **Transport**: SDIO 4-bit bus width (`mmc1:390b:1`)
+- **Chip ID Register (`0x40500000`)**: `0xfb078820`
+  - `chip_id`: `0x07` (`PRODUCT_ID_AIC8800D80`)
+  - `chip_sub_id`: `0x02` (U02 silicon revision)
+- **Firmware Version**: `06090101`
+
+### 2. Radxa Cubie A7A & External Dongles — USB Hardware Identification
+On the USB bus, AIC8800 devices use Vendor ID `0xA69C`. Multiple silicon generations and boot modes exist across onboard modules and consumer USB dongles:
+
+| State / Hardware | USB VID:PID | Description | Driver Handling |
+|---|---|---|---|
+| **ZeroCD (Consumer Dongles)** | `1111:1111` | Initial fake CD-ROM mass storage mode | Requires 16-byte SCSI CDB mode-switch (`FD 00 00 ... F2`) |
+| **BootROM Mode** | `A69C:8D80` | AIC8800D80 BootROM stage | Firmware upload via USB control transfers |
+| **A7A Standard Wi-Fi** | `A69C:8800` | AIC8800DC / 8800 USB Wi-Fi | Matched in `aicwf_usb_id_table` (`chipid = AIC8801`) |
+| **A7A Standard Combo** | `A69C:8801` | AIC8800DC / 8801 USB Wi-Fi + BT | Matched in `aicwf_usb_id_table` (`chipid = AIC8801`) |
+| **D80 Combo (BW22, AX900)** | `A69C:8D81` | AIC8800D80 Wi-Fi 6 + BT 5.4 | Matched in `aicwf_usb_id_table` (`chipid = AIC8800D80`) |
+| **D80 Wi-Fi Only** | `A69C:8D83` | AIC8800D80 Wi-Fi 6 Only | Matched in `aicwf_usb_id_table` (`chipid = AIC8800D80`) |
+
+### 3. USB Multi-Stage Boot Sequence & Mode-Switching (ZeroCD)
+For USB dongles that initialize in fake mass-storage mode:
+1. **SCSI Mode Switch Command**:
+   ```text
+   FD 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F2
+   ```
+2. **Re-enumeration**: Device disconnects from USB storage class and re-enumerates as `A69C:8D80` (BootROM) or `A69C:8D81` (Operational).
+3. **Driver Attachment**: `aic8800_fdrv.ko` attaches to USB interface `0xFF` (vendor specific network device) and initializes `wlan0`.
+4. **Bluetooth USB (`aic_btusb`)**: USB interface `0xE0` binds to `aic_btusb`. Standard kernel `btusb` must be blacklisted for `0xA69C:0x8D81` to prevent claim timeouts.
+
+---
+
+## Community USB Reference: `olamellberg/AIC8800D80`
+
+- **Repository**: [https://github.com/olamellberg/AIC8800D80](https://github.com/olamellberg/AIC8800D80)
+- **Primary Role**: The leading community reverse-engineering project and DKMS installer for consumer AIC8800D80 USB Wi-Fi 6 + Bluetooth dongles (e.g., *BW22*, *BW23*, *AX900*, *88M80*).
+
+### Key Architectural Findings & Value:
+1. **Windows Driver Disassembly (`Usb_Driver.dll`)**:
+   - Reverse-engineered the proprietary 16-byte SCSI CDB (`FD 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F2`) issued via `IOCTL_SCSI_PASS_THROUGH` (`0x0004D004`).
+   - Solved the "fake CD-ROM" issue on Linux where dongles stall in `1111:1111` mode.
+2. **USB Enumeration & Product ID Mapping**:
+   - Fully mapped the multi-stage USB lifecycle: `1111:1111` (Storage) → `A69C:8D80` (BootROM) → `A69C:8D81` (Combo) / `A69C:8D83` (Wi-Fi Only).
+3. **Bluetooth USB (`aic_btusb`) & BlueZ Stack**:
+   - Documented the interaction with Linux BlueZ and the required `modprobe` blacklisting to prevent the kernel's default `btusb` driver from claiming the device and timing out (`-110`).
+4. **Relationship to Our Upstream Driver (`aic8800-upstream`)**:
+   - The `olamellberg` project acts as a userspace/DKMS wrapper around the out-of-tree `radxa-pkg/aic8800` vendor driver for desktop Linux (Ubuntu/Debian).
+   - Our `aic8800-upstream` project provides the permanent, upstream-compliant `cfg80211` mainline kernel driver for both SDIO and USB, superseding the need for out-of-tree DKMS builds once merged into `linux-wireless`.
+
+

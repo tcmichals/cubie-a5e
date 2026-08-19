@@ -14,6 +14,7 @@
 #include "rwnx_defs.h"
 #include "usb_host.h"
 #include "rwnx_platform.h"
+#include "aicwf_chip_ops.h"
 
 void aicwf_usb_tx_flowctrl(struct rwnx_hw *rwnx_hw, bool state)
 {
@@ -807,7 +808,13 @@ static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_i
 
 	usb_dev->udev = usb;
 	usb_dev->dev = &usb->dev;
-	usb_dev->chipid = PRODUCT_ID_AIC8801;
+	if (le16_to_cpu(usb->descriptor.idProduct) == USB_PRODUCT_ID_AIC8800D80_COMBO ||
+	    le16_to_cpu(usb->descriptor.idProduct) == USB_PRODUCT_ID_AIC8800D80_WIFI ||
+	    le16_to_cpu(usb->descriptor.idProduct) == USB_PRODUCT_ID_AIC8800D80_BOOT) {
+		usb_dev->chipid = PRODUCT_ID_AIC8800D80;
+	} else {
+		usb_dev->chipid = PRODUCT_ID_AIC8801;
+	}
 	usb_set_intfdata(intf, usb_dev);
 
 	ret = aicwf_parse_usb(usb_dev, intf);
@@ -919,9 +926,17 @@ static int aicwf_usb_reset_resume(struct usb_interface *intf)
 
 static struct usb_device_id aicwf_usb_id_table[] = {
 #ifndef CONFIG_USB_BT
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8801)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_BOOT)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_COMBO)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_WIFI)},
 #else
-	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC, 0xff, 0xff, 0xff)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800, 0xff, 0xff, 0xff)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8801, 0xff, 0xff, 0xff)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_BOOT, 0xff, 0xff, 0xff)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_COMBO, 0xff, 0xff, 0xff)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_WIFI, 0xff, 0xff, 0xff)},
 #endif
 	{}
 };
