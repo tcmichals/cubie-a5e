@@ -168,7 +168,82 @@ Here is the exact blueprint to execute this integration:
 
 ---
 
-## 6. Automated Upstream Patch Watcher Tool
+## 6. Phase 2: Upgrading to Mainline U-Boot 2026.x (Post-Linux Boot)
+
+Once Linux 7.1 is verified booting to userspace on real hardware via the kernel CCU/Pinctrl patches, we execute **Phase 2: Modernizing the Bootloader** to eliminate the legacy vendor U-Boot 2018.07.
+
+### Architecture: Decoupling SRAM DRAM Training from U-Boot Proper
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ STAGE 1: First-Stage Bootloader (boot0 in SRAM at 128KB)    │
+│ • Powers PMIC rails (AXP) & trains 6 GiB LPDDR5 RAM PHY     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ (RAM initialized & active)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ STAGE 2: Modern ARM Trusted Firmware (TF-A BL31 in DRAM)    │
+│ • Configures GICv3 system registers & PSCI v0.2 services    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ STAGE 3: Modern Mainline U-Boot 2026.x (BL33 in DRAM)       │
+│ • Pure upstream U-Boot 2026.01 running in AArch64 EL2       │
+│ • Native extlinux, modern DT overlays (fdt apply), Fastboot │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Upstream U-Boot A733 Patch Series (Yixun Lan / Series 491919)
+
+The following 10-patch series from U-Boot Patchwork (`patchwork.ozlabs.org`) provides native A733 support in U-Boot:
+
+| Patch ID | Subject / Functional Area | Target Source Files in U-Boot |
+| :--- | :--- | :--- |
+| **`[01/10]`** | **SoC Architecture Base** | `arch/arm/mach-sunxi/Kconfig`, `include/configs/sun60i.h` |
+| **`[02/10]`** | **SPL Text/Stack Alignment** | `include/configs/sunxi-common.h`, `arch/arm/mach-sunxi/spl.c` |
+| **`[03/10]`** | **CCU Clocks & Reset** | `drivers/clk/sunxi/clk_a733.c`, `drivers/reset/reset-sunxi.c` |
+| **`[04/10]`** | **Pinctrl Driver** | `drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c` |
+| **`[05/10]`** | **GPIO Controller & PIO_OFFSET** | `drivers/gpio/sunxi_gpio.c` (adds 0x80 port offset) |
+| **`[06/10]`** | **MMC / SD / eMMC Driver** | `drivers/mmc/sunxi_mmc.c` |
+| **`[07/10]`** | **AXP318W / AXP717 PMIC** | `drivers/power/pmic/axp318w.c` |
+| **`[08/10]`** | **Base SoC Device Tree** | `arch/arm/dts/sun60i-a733.dtsi` |
+| **`[09/10]`** | **Radxa Cubie A7A Board DTS** | `arch/arm/dts/sun60i-a733-cubie-a7a.dts` |
+| **`[10/10]`** | **Defconfig Definition** | `configs/radxa_cubie_a7a_defconfig` |
+
+### Buildroot Configuration Blueprint for U-Boot 2026.01
+
+To enable mainline U-Boot once Phase 1 is validated:
+
+1. **Place Patches in Buildroot Tree:**
+   ```bash
+   mkdir -p project-cubie-a5e/patches/uboot/
+   # Drop patches 0001-0010 into project-cubie-a5e/patches/uboot/
+   ```
+2. **Enable U-Boot in `cubie_a7a_defconfig`:**
+   ```kconfig
+   BR2_TARGET_ARM_TRUSTED_FIRMWARE=y
+   BR2_TARGET_ARM_TRUSTED_FIRMWARE_CUSTOM_GIT=y
+   BR2_TARGET_ARM_TRUSTED_FIRMWARE_PLATFORM="sun60i"
+   BR2_TARGET_ARM_TRUSTED_FIRMWARE_BL31=y
+
+   BR2_TARGET_UBOOT=y
+   BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+   BR2_TARGET_UBOOT_CUSTOM_VERSION=y
+   BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE="2026.01"
+   BR2_TARGET_UBOOT_BOARD_DEFCONFIG="radxa_cubie_a7a"
+   BR2_TARGET_UBOOT_NEEDS_DTC=y
+   BR2_TARGET_UBOOT_NEEDS_PYLIBFDT=y
+   BR2_TARGET_UBOOT_NEEDS_OPENSSL=y
+   BR2_TARGET_UBOOT_NEEDS_ATF_BL31=y
+   BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/patches/uboot"
+   ```
+3. **Packaging with `boot0` Header (`post-image.sh`):**
+   `post-image.sh` embeds `boot0` at 128KB (Sector 256) for DRAM training and packages the compiled `u-boot.itb` (BL31 + U-Boot 2026.01) at Sector 24576 (~12.6 MB).
+
+---
+
+## 7. Automated Upstream Patch Watcher Tool
 
 To inspect the latest patches and check if newer revisions exist:
 
@@ -179,11 +254,11 @@ python3 tools/watch_a733_upstream.py
 This queries:
 - `lore.kernel.org/linux-sunxi` (A733 / sun60i kernel patches)
 - `lore.kernel.org/linux-clk` (CCU and clock controller pull requests)
-- `patchwork.ozlabs.org` (U-Boot A733 series)
+- `patchwork.ozlabs.org` (U-Boot A733 series 491919)
 
 ---
 
-## 7. Build Commands for A7A Reference
+## 8. Build Commands for A7A Reference
 
 ```bash
 # In build directory (e.g. bld.a7a)
