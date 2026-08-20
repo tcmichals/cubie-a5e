@@ -207,4 +207,76 @@ We officially retired the userspace `riscv-loader` approach in favor of the **Li
 6. **Purged `iomem=relaxed` Bootargs**:
    - Because `remoteproc` operates inside kernel space with native `ioremap_wc()`, insecure `/dev/mem` relaxations are obsolete. We permanently removed `iomem=relaxed` from `boot.cmd` and `uboot-env.txt` for both Cubie A5E and Cubie A7A, restoring standard `CONFIG_STRICT_DEVMEM` physical memory protections.
 
+---
+
+## Case Study 7: Radxa Cubie A7A (Allwinner A733) Boot Handoff, GICv3 Migration & DTB Parity
+**Date:** August 20, 2026  
+**Component:** Device Tree (`sun60i-a733-cubie-a7a.dts`), ARM Trusted Firmware (BL31), GICv3 (`arm,gic-v3`), and Vendor U-Boot 2018.07
+
+### 🚨 Symptoms & The Boot Loops Encountered
+During early bring-up of the **Radxa Cubie A7A (Allwinner A733 / `sun60iw2`)** running Linux 7.1 `PREEMPT_RT`, three distinct boot behaviors were observed:
+
+1. **Boot Failure 1 (GICv2 vs GICv3 Firmware Mismatch)**:
+   - Kernel booted via earlycon (`[ 0.000000] earlycon: uart8250 at MMIO32 0x0000000002500000`), initialized DMA zones and CPUs, but aborted at IRQ init:
+   ```text
+   [ 0.000000] Root IRQ handler: gic_handle_irq
+   [ 0.000000] GIC CPU mask not found - kernel will fail to boot.
+   [ 0.000000] GICv3 system registers enabled, broken firmware!
+   [ 0.000000] WARNING: drivers/irqchip/irq-gic.c:57 at gic_cpu_init+0x100/0x108
+   ```
+   - **Root Cause**: The legacy vendor device tree declared GICv2 (`compatible = "arm,cortex-a15-gic"` at `0x03021000`), but Allwinner ARM Trusted Firmware (BL31) configured the CPU interfaces with GICv3 System Register Enable (`ICC_SRE_EL1.SRE = 1`). Mainline Linux 7.1 strictly rejects GICv2 register access when GICv3 system registers are active.
+
+2. **Boot Failure 2 (The Incompatible DTSI Substitution Trap)**:
+   - To fix the GIC definition, we attempted to write a minimal 340-line DTS including `sun55i-a523.dtsi` (producing a 30,886-byte DTB).
+   - The board hung silently after BL31 jumped to kernel entry:
+   ```text
+   NOTICE:  BL3-1: Next image address = 0x40200000
+   NOTICE:  BL3-1: Next image spsr = 0x3c5
+   ```
+   - **Root Cause**: The Allwinner **A733 (`sun60iw2`)** has a **2× Cortex-A76 + 6× Cortex-A55 DynamIQ** cluster, distinct CCU clock register base addresses, and different power domains from the **A523/A527 (`sun55i`)** 8× Cortex-A55 SoC. Substituting the A523 DTSI starved early clocks and broke earlycon before the kernel could print a single character.
+
+3. **Boot Failure 3 (Vendor U-Boot 2018.07 `/memory` Query Failure)**:
+   - In Allwinner's vendor U-Boot 2018.07, `update_fdt_dram_para_from_bootpara()` queries for an *existing* `/memory` or `/memory@40000000` node.
+   - If missing from the DTS, vendor U-Boot logs `## error: update_fdt_dram_para_from_bootpara : FDT_ERR_NOTFOUND` and skips adding memory banks, causing `early_init_dt_scan_memory()` to find 0 bytes of RAM.
+
+### 🛠️ The Architectural Resolution
+We permanently aligned the device tree and build pipeline:
+
+1. **Restored Full A733 Hardware Tree with Surgical GICv3 Mapping**:
+   - Re-instated the complete 2564-line A733 vendor hardware map (covering all 2× A76 + 6× A55 CPU nodes, clocks, and power domains).
+   - Replaced `interrupt-controller@3020000` with the native GICv3 distributor and redistributors:
+   ```dts
+   interrupt-controller@3400000 {
+       compatible = "arm,gic-v3";
+       #interrupt-cells = <0x03>;
+       #address-cells = <0x02>;
+       #size-cells = <0x02>;
+       ranges;
+       interrupt-controller;
+       reg = <0x00 0x03400000 0x00 0x10000>,
+             <0x00 0x03460000 0x00 0x100000>;
+       interrupts = <0x01 0x09 0x04>;
+       interrupt-parent = <0x9b>;
+       dma-noncoherent;
+       phandle = <0x9b>;
+
+       its: msi-controller@3440000 {
+           compatible = "arm,gic-v3-its";
+           reg = <0x00 0x03440000 0x00 0x20000>;
+           msi-controller;
+           #msi-cells = <0x01>;
+           dma-noncoherent;
+       };
+   };
+   ```
+   - Maintained `phandle = <0x9b>` so all 2500+ lines of peripheral nodes connect directly to the GICv3 interrupt controller without breaking phandle references.
+
+2. **Fixed `post-image.sh` DTB Overwrite**:
+   - Removed the stale `cp -f` in `board/radxa/cubie_a7a/post-image.sh` that was previously overwriting the kernel's freshly-compiled DTB with an outdated vendor binary.
+
+3. **Metrics & Artifacts Summary**:
+   - **DTB Size**: `42,605 bytes` (compiled as `sun60i-a733-cubie-a7a.dtb`).
+   - **Kernel**: Linux 7.1.0 `PREEMPT_RT` with built-in `sunxi_rproc.o`.
+   - **Disk Image**: `sdcard.img` (620,756,992 bytes) ready in `bld.a7a/images/`.
+
 

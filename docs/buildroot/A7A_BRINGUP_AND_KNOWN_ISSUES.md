@@ -1,0 +1,124 @@
+# 🚀 Radxa Cubie A7A (Allwinner A733 / `sun60iw2`) Bring-Up & Known Issues
+
+This document provides a comprehensive technical reference for the **Radxa Cubie A7A** single-board computer powered by the **Allwinner A733 (`sun60iw2`)** SoC running **Linux 7.1 PREEMPT_RT**. It details the hardware architecture, upstream mainline status, every bring-up issue encountered, root cause analyses, and verified fixes for community sharing and upstream submission.
+
+---
+
+## 1. Hardware & System Architecture
+
+| Subsystem | Specification | Notes |
+| :--- | :--- | :--- |
+| **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) DynamIQ Cluster |
+| **Co-Processor** | XuanTie E907 RISC-V (32-bit RV32IMAFCP) | Deterministic real-time I/O & flight control coprocessor |
+| **RAM** | 6 GiB LPDDR5 (400 MHz to 2400 MHz) | Multi-PState dynamic hardware calibration via `boot0` |
+| **Interrupts** | ARM GICv3 (GIC-600) | Distributor: `0x03400000`, Redistributors: `0x03460000` |
+| **Boot Chain** | `BROM` $\rightarrow$ `boot0` (SRAM) $\rightarrow$ `BL31` $\rightarrow$ `U-Boot 2018.07` | Packaged as 16 MB binary blob `radxa_a733_bootloader.bin` |
+| **Mainline Status** | **Out-of-Tree** (Kernel & U-Boot) | A527 (`sun55i`) is in mainline; A733 (`sun60i`) is not yet merged upstream |
+| **Wi-Fi / BT** | AIC8800D80 via **USB 2.0 High-Speed** | `0xA69C:0x8800` (Unlike Cubie A5E which uses SDIO) |
+
+---
+
+## 2. Issues Encountered, Root Causes & Verified Fixes
+
+### Issue 1: GICv2 vs GICv3 Firmware Panic
+- **Symptom**:
+  ```text
+  [ 0.000000] Root IRQ handler: gic_handle_irq
+  [ 0.000000] GIC CPU mask not found - kernel will fail to boot.
+  [ 0.000000] GICv3 system registers enabled, broken firmware!
+  [ 0.000000] WARNING: drivers/irqchip/irq-gic.c:57 at gic_cpu_init+0x100/0x108
+  ```
+- **Root Cause**: The legacy vendor device tree declared GICv2 (`compatible = "arm,cortex-a15-gic"` at `0x03021000`), but Allwinner ARM Trusted Firmware (BL31) configured the CPU interfaces with GICv3 System Register Enable (`ICC_SRE_EL1.SRE = 1`). Mainline Linux 7.1 strictly rejects GICv2 MMIO access when GICv3 system registers are active.
+- **Fix**: Replaced the interrupt-controller node in `sun60i-a733-cubie-a7a.dts` with native GICv3 mapping:
+  ```dts
+  interrupt-controller@3400000 {
+      compatible = "arm,gic-v3";
+      #interrupt-cells = <0x03>;
+      #address-cells = <0x02>;
+      #size-cells = <0x02>;
+      ranges;
+      interrupt-controller;
+      reg = <0x00 0x03400000 0x00 0x10000>,
+            <0x00 0x03460000 0x00 0x100000>;
+      interrupts = <0x01 0x09 0x04>;
+      interrupt-parent = <0x9b>;
+      dma-noncoherent;
+      phandle = <0x9b>;
+
+      its: msi-controller@3440000 {
+          compatible = "arm,gic-v3-its";
+          reg = <0x00 0x03440000 0x00 0x20000>;
+          msi-controller;
+          #msi-cells = <0x01>;
+          dma-noncoherent;
+      };
+  };
+  ```
+
+---
+
+### Issue 2: Silent Hang at BL3-1 Entry (The `sun55i-a523.dtsi` Inclusion Trap)
+- **Symptom**:
+  ```text
+  NOTICE:  BL3-1: Next image address = 0x40200000
+  NOTICE:  BL3-1: Next image spsr = 0x3c5
+  <hang - no earlycon output>
+  ```
+- **Root Cause**: Attempting to clean up the A733 DTS by including `sun55i-a523.dtsi` (the A523 SoC tree) caused silent failure. The Allwinner A733 (`sun60iw2`) has an entirely distinct clock control unit (CCU), power domain map, and CPU topology (2× A76 + 6× A55 DynamIQ vs 8× A55). The A523 CCU starved the kernel UART and CPUs of required clocks.
+- **Fix**: Retain the complete 2,564-line native `sun60i` hardware device tree and apply fixes surgically without including `sun55i-a523.dtsi`.
+
+---
+
+### Issue 3: Vendor U-Boot 2018.07 DRAM Scan Failure
+- **Symptom**:
+  ```text
+  [15.485]## error: update_fdt_dram_para_from_bootpara : FDT_ERR_NOTFOUND
+  ```
+- **Root Cause**: In modern mainline Linux and U-Boot, `/memory` nodes are omitted from board DTS files because modern U-Boot injects the node dynamically. However, Allwinner's vendor U-Boot 2018.07 calls `fdt_path_offset(fdt, "/memory")` to look up an *existing* node. When absent, vendor U-Boot fails to pass the physical memory map to Linux, leaving the kernel with 0 MB RAM.
+- **Fix**: Explicitly define the base 6 GiB memory node in `sun60i-a733-cubie-a7a.dts`:
+  ```dts
+  memory@40000000 {
+      device_type = "memory";
+      reg = <0x00 0x40000000 0x01 0x80000000>; /* 6 GiB: 0x40000000 - 0x1C0000000 */
+  };
+  ```
+
+---
+
+### Issue 4: Stale DTB Overwrite in `post-image.sh`
+- **Symptom**: DTB modifications compiled during `make linux-rebuild` (30,886 bytes) were mysteriously reverting to 42,471 bytes in the final `sdcard.img`.
+- **Root Cause**: `board/radxa/cubie_a7a/post-image.sh` contained a legacy copy line:
+  ```bash
+  cp -f "${BOARD_DIR}/sun60i-a733-cubie-a7a.dtb" "${BINARIES_DIR}/sun60i-a733-cubie-a7a.dtb"
+  ```
+  which silently overwrote the kernel's compiled DTB with a stale binary on every `make` invocation.
+- **Fix**: Removed the `cp -f` line in `post-image.sh` so the build system always packages the freshly compiled kernel DTB.
+
+---
+
+### Issue 5: XuanTie E907 RISC-V Co-Processor Lifecycle Management
+- **Symptom**: Userspace `/dev/mem` memory pokers (`riscv-load`) caused memory corruption, violated Linux 7.1 `CONFIG_STRICT_DEVMEM`, and required insecure `iomem=relaxed` boot arguments.
+- **Fix**: Ported a clean kernel-level `sunxi_rproc.c` remoteproc driver ([`patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)) supporting:
+  - Automatic ELF parsing into ITCM (`0x07110000`), DTCM (`0x07120000`), and SRAM C (`0x07130000`).
+  - Kernel CCF clock gating and reset assertions (`0x07010020` / `0x07010100`).
+  - Standard `/sys/class/remoteproc/remoteproc0/state` lifecycle control.
+  - Purged `iomem=relaxed` from bootargs, restoring hardware memory safety.
+
+---
+
+### Issue 6: AIC8800 Wi-Fi Bus Mismatch (USB on A7A vs SDIO on A5E)
+- **Symptom**: Upstream `wireless-next` RFC v2 patch for AIC8800 was SDIO-only. On the Cubie A7A, the AIC8800 is wired to USB (`0xA69C:0x8800`), causing probe failures.
+- **Fix**: Unified the driver codebase into [`aic8800-upstream`](file:///home/tcmichals/projects/cubie/cubie-a5e/aic8800-upstream/):
+  - Added clean USB transport (`aicwf_usb.c`, `usb_host.c`) with asynchronous URBs.
+  - Built `bld.a7a` with `CONFIG_USB_SUPPORT=y` (generating standalone `aic8800_fdrv.ko`).
+  - Built `bld.a5e` with `CONFIG_SDIO_SUPPORT=y` (generating `aic8800_bsp.ko` + `aic8800_fdrv.ko`).
+
+---
+
+## 3. Verified Artifacts & Verification Checklist
+
+| Artifact | Size | Target Location | Verification |
+| :--- | :--- | :--- | :--- |
+| **`sun60i-a733-cubie-a7a.dtb`** | `42,605 bytes` | `bld.a7a/images/sun60i-a733-cubie-a7a.dtb` | Contains GICv3 (`0x03400000`) & 6 GiB RAM |
+| **`Image` (Linux 7.1 PREEMPT_RT)** | `44,395,008 bytes` | `bld.a7a/images/Image` | Built-in `sunxi_rproc.o` |
+| **`sdcard.img`** | `620,756,992 bytes` | `bld.a7a/images/sdcard.img` | Ready to flash |

@@ -1,95 +1,73 @@
-# Documentation Index
+# 📖 Avionics Flight Stack & Board Documentation Index
 
-This folder is the documentation front door for the Cubie A5E flight controller project. The project is divided into two distinct areas: the **Buildroot OS base system** and the **Flight Controller software stack**.
-
----
-
-## 1. Buildroot OS & Board Bring-Up (`docs/buildroot/`)
-
-These documents cover the base operating system build, hardware interfaces, and kernel configurations.
-
-* **[Buildroot System How-To](buildroot/BuildRootHowTo.md)**
-  * Details out-of-tree package development (`Config.in` and `.mk` files).
-  * Explains tool groups (eudev, SPI/I2C/GPIO tools, camera/video, Python, NPU, GDB).
-  * Outlines the build/rebuild/image-generation flow.
-* **[Device Tree & Overlay Guide](buildroot/DeviceTreeHowTo.md)**
-  * Details how overlays are loaded using U-Boot (`fdt apply`) and why it is chosen over other architectures.
-  * Documents the `sdcard.img` partition layout and overlay compilation commands.
-* **[Wireless Configuration How-To](buildroot/WirelessHowTo.md)**
-  * Documents Wi-Fi bring-up flow (`aic8800` driver + firmware + `wpa_supplicant`).
-  * Describes network startup scripts (`/etc/init.d/S40network-wifi`) and wireless diagnostics.
-* **[Open-Source NPU Configuration](buildroot/HowToNPU.md)**
-  * Explains the open-source NPU compute stack (mainline kernel `etnaviv` DRM driver + Mesa Teflon delegate).
-  * Documents verification commands (`dmesg`, `/dev/dri/*`) and TFLite delegate scripting examples.
-* **[RISC-V Co-processor Programming & Bring-up](buildroot/HowToRISCV.md)**
-  * Details the XuanTie co-processor architecture, memory interface mappings (ITCM, DTCM, SRAM C).
-  * Documents firmware compilation using `riscv-none-elf` cross-compiler and host-side boot-up commands.
-* **[Camera Verification & Testing](buildroot/CameraTesting.md)**
-  * Documents mainline **Media Controller** topology (`media-ctl`) and memory-mapped `mmap` streaming.
-  * Details diagnostic commands (`v4l2-ctl`) and direct frame extraction scripts.
-* **[Heterogeneous Avionics Architecture & Bring-Up Guide](../docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**
-  * Master technical guide covering Cortex-A76 Core 7 isolation, C++20 coroutine concurrency, 16-channel DMA allocation, and Dual-SPI FPGA streaming.
-* **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](../docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**
-  * Details the Linux 7.1 `sunxi_rproc` driver, memory mappings (ITCM/DTCM/SRAM), patch contents, and `/sys/class/remoteproc/` control.
-* **[Allwinner A733 Boot Architecture & Disk Layout](buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**
-  * Explains the A733 BROM 128KB search offset, multi-stage vendor bootloader staging, and 16MB partition alignment.
-* **[NPU FOSS Migration Case Study](buildroot/FOSS_NPU_Migration_Article.md)**
-  * Case study documenting the transition of the NPU stack from out-of-tree vendor blocks to upstream FOSS drivers.
-* **[Master Flightstack Bring-up Article](buildroot/Mainline_Flightstack_Bringup_Article.md)**
-  * Unified technical article detailing the tri-domain system architecture and bring-up of all 6 blueprints.
+This repository contains the complete embedded Linux OS, real-time co-processor firmware, and flight control software stack for the **Radxa Cubie family** (Cubie A5E & Cubie A7A).
 
 ---
 
-## 2. Flight Controller & Application Stack (`docs/flightcontroller/`)
+## 🧭 Master Documentation Roadmap
 
-These documents cover flight stack architecture, FPGA integration, and intelligent TinyML/NPU applications.
-
-* **[Flight Controller Architecture & AbstractX](flightcontroller/ArchitectureAndAbstractX.md)**
-  * Details the split-responsibility model between the high-level Linux A5E and the real-time FPGA.
-  * Explains SPI links, timing domains, safety watchdogs, and the AbstractX integration.
-* **[Vision-Based Landing Assist](flightcontroller/LandingAssistML.md)**
-  * Details the landing-assist guidance system, sensor fusion (camera + ToF rangefinder), and autonomous safety gating.
-  * Provides the reference Python TinyML inference loop.
-* **[C/C++ Development and Debugging Guide](flightcontroller/DevelopmentAndDebugging.md)**
-  * Documents cross-compiling application code using the Buildroot toolchain.
-  * Explains remote debugging using VS Code task scripts (automating scp and spawning remote `gdbserver` or native GDB).
+```
+docs/
+├── README.md                                  <-- You are here (Master Index & Sitemap)
+│
+├── common/                                    <-- Shared Subsystem Architectures
+│   ├── WIFI_AIC8800_GUIDE.md                  <-- AIC8800 Wi-Fi 6 / BT (Dual SDIO / USB Architecture)
+│   ├── CAMERA_V4L2_GUIDE.md                   <-- Camera Subsystem, Media Controller & V4L2 Pipelines
+│   ├── RISCV_REMOTEPROC_GUIDE.md              <-- XuanTie E907 Co-Processor & Linux remoteproc Framework
+│   └── REALTIME_FLIGHT_ARCHITECTURE.md        <-- Real-Time Linux OS Isolation (isolcpus=7, UIO Mailbox, Ringbuffers)
+│
+├── platforms/                                 <-- Dedicated Hardware & Bootloader Specifications
+│   ├── CUBIE_A5E_PLATFORM_GUIDE.md            <-- Radxa Cubie A5E (Allwinner A527/T527, Mainline U-Boot, SDIO)
+│   └── CUBIE_A7A_PLATFORM_GUIDE.md            <-- Radxa Cubie A7A (Allwinner A733, LPDDR5 boot0, GICv3, USB)
+│
+├── buildroot/                                 <-- Buildroot Build System & Historical Case Studies
+│   ├── BuildRootHowTo.md                      <-- Buildroot Package Management & Build Flow
+│   ├── DeviceTreeHowTo.md                     <-- Device Tree & Overlay (DTBO) Guide
+│   ├── DebugLog.md                            <-- Chronological Engineering Case Studies & Bug History (Cases 1–7)
+│   └── A7A_BRINGUP_AND_KNOWN_ISSUES.md        <-- A7A Bring-Up Post-Mortem & Verified Fixes
+│
+├── flightcontroller/                          <-- High-Level Avionics, FPGA & Application Stack
+│   ├── ArchitectureAndAbstractX.md            <-- Flight Stack Split-Responsibility Model (Linux + FPGA)
+│   ├── DevelopmentAndDebugging.md             <-- Cross-Compilation & VS Code Remote GDB Workflows
+│   └── LandingAssistML.md                     <-- Vision-Based Landing Guidance & TinyML Sensor Fusion
+│
+└── articles/                                  <-- Long-Form Engineering Whitepapers & Deep Dives
+    ├── README.md                              <-- 4-Part XuanTie Heterogeneous RISC-V Series
+    ├── Mainline_Flightstack_Bringup_Article.md<-- Master 6-Blueprint Avionics Architecture Case Study
+    └── FOSS_NPU_Migration_Article.md          <-- Transition from Proprietary Blobs to Upstream Mesa Teflon
+```
 
 ---
 
-## 3. Technical Articles & Deep Dives (`docs/articles/`)
+## ⚡ Hardware Comparison: Cubie A5E vs. Cubie A7A
 
-Long-form engineering articles and case studies:
-
-* **[Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Multi-Part Series)](articles/README.md)**
-  * **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`sun55i`), TRM memory maps, why `/dev/mem` loaders fail, and JTAG-less on-chip debugging over OpenOCD.
-  * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](articles/part2_building_remoteproc_and_hardware_proof.md)** — Implementing `sunxi_rproc.c`, multi-segment ELF placement (ITCM/DTCM/SRAM), debugfs trace logging, and the 3-step hardware proof via Python (`dmi_test.py`).
-  * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)** — Zero-wait TCM determinism, lightweight lock-free ring buffers + Mailbox interrupts, live GDB workflows, and an introduction to stackless C++20 coroutines.
-  * **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](articles/part4_deep_dive_baremetal_cpp_coroutines.md)** — Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO optimizations (0 cycles / 0 bytes), benchmarks vs FreeRTOS (19x speedup, <400 B RAM), and non-blocking hardware awaiters.
-* **[Mainline Flightstack Bring-up Case Study](buildroot/Mainline_Flightstack_Bringup_Article.md)**
-  * Architecture breakdown of the 6 core blueprints powering the tri-domain Linux/RISC-V/FPGA avionics system.
-* **[Open-Source NPU FOSS Migration Case Study](buildroot/FOSS_NPU_Migration_Article.md)**
-  * Case study detailing the transition from vendor binary blobs to upstream Linux `etnaviv` and Mesa Teflon.
+| Feature / Subsystem | Radxa Cubie A5E | Radxa Cubie A7A | Documentation |
+| :--- | :--- | :--- | :--- |
+| **SoC Silicon** | Allwinner A527 / T527 (`sun55iw3`) | Allwinner A733 (`sun60iw2p1`) | [A5E Guide](platforms/CUBIE_A5E_PLATFORM_GUIDE.md) / [A7A Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
+| **CPU Cluster** | 8× Cortex-A55 (Octa-core) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) | [Real-Time OS Isolation](common/REALTIME_FLIGHT_ARCHITECTURE.md) |
+| **RAM Subsystem** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | 6 GiB LPDDR5 (Dynamic multi-PState training) | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
+| **Interrupt Controller** | ARM GICv3 (`0x03400000`/`0x03460000`) | ARM GICv3 (`0x03400000`/`0x03460000`) | [A7A Bring-Up Issues](buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md) |
+| **Co-Processor** | XuanTie E906/E907 (RV32IMAFCP) | XuanTie E907 (RV32IMAFCP) | [RemoteProc Guide](common/RISCV_REMOTEPROC_GUIDE.md) |
+| **Boot Chain** | Mainline TF-A + Mainline U-Boot 2026.01 | Vendor `boot0` + BL31 + Vendor U-Boot 2018.07 | [A5E Guide](platforms/CUBIE_A5E_PLATFORM_GUIDE.md) / [A7A Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
+| **Mainline Kernel** | **100% In Mainline Linux** (`sun55i-a523`) | **Out-of-Tree Patch** (`sun60i-a733`) | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
+| **Wi-Fi / BT Bus** | **SDIO 3.0** (`aic8800_bsp.ko` + `_fdrv.ko`) | **USB 2.0 High-Speed** (`aic8800_fdrv.ko` standalone) | [Wi-Fi AIC8800 Guide](common/WIFI_AIC8800_GUIDE.md) |
+| **Camera Interface**| 2-Lane MIPI CSI-2 via Media Controller | 2-Lane MIPI CSI-2 via Media Controller | [Camera V4L2 Guide](common/CAMERA_V4L2_GUIDE.md) |
+| **Real-Time Core 7**| `isolcpus=7` + `mlockall` + UIO Mailbox | `isolcpus=7` + `mlockall` + UIO Mailbox | [Real-Time OS Isolation](common/REALTIME_FLIGHT_ARCHITECTURE.md) |
 
 ---
 
-## Source-of-Truth Project Files
+## 🛠️ Buildroot Quick Start
 
-### Buildroot External Tree Core
-* `project-cubie-a5e/external.desc` — Registers the external tree identity (`CUBIE_A5E`).
-* `project-cubie-a5e/external.mk` — Includes all external package makefiles.
-* `project-cubie-a5e/Config.in` — Adds package menu entries for external packages.
-* `project-cubie-a5e/configs/cubie_a5e_defconfig` — Primary configuration and package selection for Radxa Cubie A5E (Allwinner A527/T527).
-* `project-cubie-a5e/configs/cubie_a7a_defconfig` — Configuration and package selection for Radxa Cubie A7A (Allwinner A733).
+### Building Radxa Cubie A5E
+```bash
+make cubie_a5e_defconfig
+make
+# Output image: images/sdcard.img
+```
 
-### Board Integration
-* `project-cubie-a5e/board/radxa/cubie_a5e/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A5E.
-* `project-cubie-a5e/board/radxa/cubie_a7a/` — Board scripts, kernel fragment, and overlays for Radxa Cubie A7A.
-* `docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md` — Allwinner A733 boot sequence, BROM 128KB offset, and 16MB partition layout guide.
-* `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso` — Flight stack overlay for Cubie A5E.
-* `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-flight-stack.dtso` — Flight stack overlay for Cubie A7A.
-
-### External Packages
-* `project-cubie-a5e/package/aic8800-driver/` — AIC8800 Wi-Fi/BT kernel driver (SDIO & USB multi-bus support).
-* `project-cubie-a5e/package/aic8800-firmware/` — AIC8800 firmware binaries.
-* `project-cubie-a5e/package/sunxi-galcore/` — NPU driver kernel package (deprecated).
-* `project-cubie-a5e/package/timvx-delegate/` — TIM-VX delegate integration (deprecated).
+### Building Radxa Cubie A7A
+```bash
+make cubie_a7a_defconfig
+make
+# Output image: images/sdcard.img
+```

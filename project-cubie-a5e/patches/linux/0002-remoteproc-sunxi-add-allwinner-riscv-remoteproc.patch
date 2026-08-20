@@ -11,17 +11,15 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   6 ++
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 171 +++++++++++++++++++++++++++++++
- 3 files changed, 178 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 173 +++++++++++++++++++++++++++++++
+ 3 files changed, 180 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
-diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
-index 1234567890ab..abcdef123456 100644
---- a/drivers/remoteproc/Kconfig
-+++ b/drivers/remoteproc/Kconfig
-@@ -380,4 +380,10 @@ config XLNX_R5_REMOTEPROC
- 	  Say y or m here to support Xilinx R5 remote processors via the remote
- 	  processor framework.
+--- a/b/drivers/remoteproc/Kconfig	2026-08-19 17:59:11.722373088 -0500
++++ b/drivers/remoteproc/Kconfig	2026-08-19 17:59:14.011745194 -0500
+@@ -380,6 +380,13 @@
+ 
+ 	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
 +	tristate "Allwinner XuanTie RISC-V Remote Processor support"
@@ -31,20 +29,18 @@ index 1234567890ab..abcdef123456 100644
 +	  co-processor on Allwinner A523, A527, T527, and A733 SoCs.
 +
  endif # REMOTEPROC
-diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
-index 234567890abc..bcdef1234567 100644
---- a/drivers/remoteproc/Makefile
-+++ b/drivers/remoteproc/Makefile
-@@ -40,3 +40,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
+ 
+ endmenu
+--- a/b/drivers/remoteproc/Makefile	2026-08-19 17:59:11.723953047 -0500
++++ b/drivers/remoteproc/Makefile	2026-08-19 17:59:17.636751109 -0500
+@@ -40,3 +40,4 @@
+ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
-diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
-new file mode 100644
-index 000000000000..8d251d2c676c
---- /dev/null
-+++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,173 @@
+--- a/b/drivers/remoteproc/sunxi_rproc.c	2026-08-19 17:39:04.722474691 -0500
++++ b/drivers/remoteproc/sunxi_rproc.c	2026-08-19 17:59:24.265761927 -0500
+@@ -0,0 +1,208 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -253,3 +249,5 @@ index 000000000000..8d251d2c676c
 +MODULE_AUTHOR("tcmichals <tcmichals@yahoo.com>");
 +MODULE_DESCRIPTION("Allwinner XuanTie E907/E902 RISC-V Remoteproc Driver");
 +MODULE_LICENSE("GPL");
+-- 
+2.44.0

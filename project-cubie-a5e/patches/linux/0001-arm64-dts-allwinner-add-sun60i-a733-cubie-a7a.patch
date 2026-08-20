@@ -10,8 +10,8 @@ XuanTie E907/E902 RISC-V co-processor).
 Signed-off-by: tcmichals <tcmichals@gmail.com>
 ---
  arch/arm64/boot/dts/allwinner/Makefile                   |    1 +
- arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 2564 ++++++++++++++++++++
- 2 files changed, 2565 insertions(+)
+ arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 2574 ++++++++++++++++++++
+ 2 files changed, 2575 insertions(+)
  create mode 100644 arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
 
 diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
@@ -23,12 +23,9 @@ index a1b2c3d4e5f6..b2c3d4e5f6a1 100644
  dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-avaota-a1.dtb
  dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-orangepi-4a.dtb
 +dtb-$(CONFIG_ARCH_SUNXI) += sun60i-a733-cubie-a7a.dtb
-diff --git a/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-new file mode 100644
-index 000000000000..c1d2e3f4a5b6
---- /dev/null
-+++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,2564 @@
+--- a/b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts	2026-08-19 17:39:04.722474691 -0500
++++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts	2026-08-20 06:04:45.198036280 -0500
+@@ -0,0 +1,2574 @@
 +/dts-v1/;
 +
 +/ {
@@ -2510,16 +2507,26 @@ index 000000000000..c1d2e3f4a5b6
 +		};
 +	};
 +
-+	interrupt-controller@3020000 {
-+		compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
++	interrupt-controller@3400000 {
++		compatible = "arm,gic-v3";
 +		#interrupt-cells = <0x03>;
-+		#address-cells = <0x00>;
-+		device_type = "gic";
++		#address-cells = <0x02>;
++		#size-cells = <0x02>;
++		ranges;
 +		interrupt-controller;
-+		reg = <0x00 0x3021000 0x00 0x1000 0x00 0x3022000 0x00 0x2000 0x00 0x3024000 0x00 0x2000 0x00 0x3026000 0x00 0x2000>;
-+		interrupts = <0x01 0x09 0xf04>;
++		reg = <0x00 0x03400000 0x00 0x10000 0x00 0x03460000 0x00 0x100000>;
++		interrupts = <0x01 0x09 0x04>;
 +		interrupt-parent = <0x9b>;
++		dma-noncoherent;
 +		phandle = <0x9b>;
++
++		its: msi-controller@3440000 {
++			compatible = "arm,gic-v3-its";
++			reg = <0x00 0x03440000 0x00 0x20000>;
++			msi-controller;
++			#msi-cells = <0x01>;
++			dma-noncoherent;
++		};
 +	};
 +
 +	aliases@45100000 {
@@ -2593,3 +2600,6 @@ index 000000000000..c1d2e3f4a5b6
 +		};
 +	};
 +};
+\ No newline at end of file
+-- 
+2.44.0
