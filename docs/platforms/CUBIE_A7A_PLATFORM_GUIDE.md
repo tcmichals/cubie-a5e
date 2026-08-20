@@ -88,26 +88,102 @@ This document is the dedicated hardware, bootloader, and bring-up specification 
 
 ---
 
-## 4. Engineering Status & Decision: Pausing Mainline Bring-Up on A7A
+## 4. Engineering Status & Roadmap: Mainline Upstream Patch Integration
 
-### Why Mainline Bring-Up on A7A is Paused
+### Upstream Mainline Status & Patch Series Discovery
 
-| Issue Category | Upstream Mainline Status | Impact on A7A Bring-Up |
-| :--- | :--- | :--- |
-| **SoC Upstream Status** | ❌ **0% Upstream Support** | The Allwinner A733 (`sun60iw2`) is a brand new architecture not yet upstreamed into mainline Linux or mainline U-Boot. |
-| **Clock Controller (CCU)** | ❌ **Missing Driver** | Mainline Linux 7.1 has `ccu-sun55i-a523.c` (for A5E), but **no** `ccu-sun60iw2.c`. Peripherals cannot establish clock gates/resets. |
-| **Pin Controller (Pinctrl)** | ❌ **Missing Driver** | Mainline Linux 7.1 has `pinctrl-sun55i-a523.c` (for A5E), but **no** `pinctrl-sun60iw2.c`. GPIOs, UARTs, and I2C/SPI muxing lack kernel binding. |
-| **DRAM Training & U-Boot** | ❌ **Closed-Source Blob** | Upstream U-Boot 2026.01 cannot train A733 LPDDR5 RAM; requires vendor `boot0` + U-Boot 2018.07. |
-| **Firmware / DT Alignment** | ⚠️ **GICv2/GICv3 Mismatch** | Factory BL31 enables GICv3 system registers, but factory DT declares legacy GICv2, causing strict mainline security aborts. |
+While the base Linux kernel does not yet have stable out-of-the-box A733 drivers, active patch series are currently under review in the `linux-sunxi`, `linux-clk`, and U-Boot communities to bring full upstream support:
 
-### Strategic Recommendation
+| Subsystem / Driver | Author & Patch Series | Current Status | Integration in Our Stack |
+| :--- | :--- | :--- | :--- |
+| **Clock Controller (CCU & PRCM)** | Junhui Liu (`clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM`) | Active Review (v2/v7) on `linux-clk` & `lore.kernel.org` | Pull `ccu-sun60i-a733.c` & headers into `project-cubie-a5e/patches/linux/` |
+| **RTC & Main Oscillator** | Jerome Brunet & Chen-Yu Tsai (`clk: sun6i-rtc: Add support for Allwinner A733 SoC`) | Queued for Linux 7.3 merge window (`clk-next`) | Included via upstream `sun6i-rtc` driver patches |
+| **Pin Controller (Pinctrl)** | Yixun Lan (`pinctrl: sunxi: a733: add initial support`) | Active Review (v2) on `linux-sunxi` | Pull `pinctrl-sun60i-a733.c` into `project-cubie-a5e/patches/linux/` |
+| **U-Boot Base SoC Support** | Yixun Lan (`sunxi: Add support for A733 SoC`) | Active Review (v2) on U-Boot Patchwork | Basic UART/MMC pinctrl; in review |
+| **LPDDR5 DRAM Dynamic Training** | Closed vendor `boot0` sequence | Upstream Work In Progress | Handled by `radxa_a733_bootloader.bin` (Hybrid Boot) |
 
-1. **Primary Production Flight Platform**: Focus all flight controller runtime, INAV algorithms, PREEMPT_RT, XuanTie E907 remoteproc, and hardware drivers on the **Radxa Cubie A5E (Allwinner A527 / T527)**, which has **100% upstream mainline Linux 7.1 + U-Boot 2026.01 support**.
-2. **A7A Hardware & Feature Testing**: When testing the A7A hardware (6 GiB LPDDR5, 3 TOPS NPU, Dual-Camera ISP), use the official Radxa Debian Bullseye image (`/home/tcmichals/Downloads/radxa-a733_bullseye_kde_r6.output_512.img.xz`).
+### Strategic Architecture: The Hybrid Mainline Approach
+
+Rather than waiting 3–6 months for these patches to land in stable kernel releases, we leverage Buildroot's patch overlay mechanism:
+
+1. **Hybrid Bootloader**: We use `radxa_a733_bootloader.bin` (vendor `boot0` + BL31 + U-Boot 2018.07) to initialize the complex LPDDR5 multi-PState memory controller.
+2. **Mainline Linux 7.1 Kernel + Patches**: Buildroot applies the `ccu-sun60i-a733` and `pinctrl-sun60i-a733` patch series directly against Linux 7.1 `PREEMPT_RT`.
+3. **Automated Upstream Patch Tracking**: We maintain a dedicated tool (`tools/watch_a733_upstream.py`) to query `lore.kernel.org` and U-Boot Patchwork for new patch revisions (v3, v4, etc.) so we can update our local patch tree cleanly as upstream stabilizes.
 
 ---
 
-## 5. Build Commands for A7A Reference
+## 5. The Step-by-Step Implementation Path for A7A Mainline Bring-Up
+
+Here is the exact blueprint to execute this integration:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. INGEST KERNEL PATCHES                                                    │
+│    • Add 0003-clk-sunxi-ng-add-allwinner-a733-ccu-and-prcm.patch            │
+│      (drivers/clk/sunxi-ng/ccu-sun60i-a733.c, ccu-sun60i-a733-r.c)          │
+│      (include/dt-bindings/clock/sun60i-a733-ccu.h, reset/sun60i-a733-ccu.h) │
+│    • Add 0004-pinctrl-sunxi-add-allwinner-a733-pinctrl.patch                │
+│      (drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c, pinctrl-sun60i-a733-r.c) │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. ENABLE KERNEL KCONFIG SYMBOLS                                            │
+│    • Update project-cubie-a5e/board/radxa/cubie_a7a/linux.config:           │
+│      CONFIG_SUNXI_CCU=y                                                     │
+│      CONFIG_SUN60I_A733_CCU=y                                               │
+│      CONFIG_SUN60I_A733_R_CCU=y                                             │
+│      CONFIG_PINCTRL_SUNXI=y                                                 │
+│      CONFIG_PINCTRL_SUN60I_A733=y                                           │
+│      CONFIG_PINCTRL_SUN60I_A733_R=y                                         │
+│      CONFIG_SERIAL_8250_SUNXI=y                                             │
+│      CONFIG_MMC_SUNXI=y                                                     │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. MODERNIZE DEVICE TREE (sun60i-a733-cubie-a7a.dts)                        │
+│    • Remove legacy 400-line `clocks { compatible = "allwinner,clk-init"; }` │
+│    • Add clean CCU nodes: `ccu: clock-controller@2001000` and `r_ccu`       │
+│    • Add standard PIO nodes: `pio: pinctrl@2000000` and `r_pio`             │
+│    • Link peripheral phandles (UART0, MMC0, MMC2, USB, GMAC0, SPI0, I2C1)   │
+│      to `<&ccu CLK_...>`, `<&ccu RST_...>`, and `<&pio ...>`                 │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. COMPILE & FLASH SD CARD IMAGE                                            │
+│    • In bld.a7a: `make cubie_a7a_defconfig && make`                         │
+│    • Produces complete bootable `images/sdcard.img`                         │
+│    • Flash to MicroSD: `sudo dd if=images/sdcard.img of=/dev/sdX bs=4M`     │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 5. CONTINUOUS UPSTREAM MONITORING                                           │
+│    • Run `python3 tools/watch_a733_upstream.py` to check for new v3/v4      │
+│      revisions or upstream git pull requests on lore.kernel.org             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 6. Automated Upstream Patch Watcher Tool
+
+To inspect the latest patches and check if newer revisions exist:
+
+```bash
+python3 tools/watch_a733_upstream.py
+```
+
+This queries:
+- `lore.kernel.org/linux-sunxi` (A733 / sun60i kernel patches)
+- `lore.kernel.org/linux-clk` (CCU and clock controller pull requests)
+- `patchwork.ozlabs.org` (U-Boot A733 series)
+
+---
+
+## 7. Build Commands for A7A Reference
 
 ```bash
 # In build directory (e.g. bld.a7a)

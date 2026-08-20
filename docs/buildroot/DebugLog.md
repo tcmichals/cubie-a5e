@@ -297,8 +297,25 @@ To eliminate ambiguity, we extracted and disassembled the official Radxa factory
 - **Upstream Linux 7.1**: 0% mainline support. While `CONFIG_ARCH_SUNXI` supports A527/T527 (`sun55i`) via `ccu-sun55i-a523.c` and `pinctrl-sun55i-a523.c`, there are no `ccu-sun60iw2.c` or `pinctrl-sun60iw2.c` drivers in upstream Linux.
 
 ### 🎯 Engineering Decision
-1. **Pause Mainline Bring-Up for A7A**: Do not attempt to force an out-of-tree, un-upstreamed SoC onto mainline Linux 7.1 without upstream clock and pin controllers.
-2. **Standardize on Radxa Cubie A5E**: The **Cubie A5E (Allwinner A527 / T527 / `sun55i`)** is **100% upstream mainline** across U-Boot 2026.01, Linux 7.1 PREEMPT_RT, CCU clocks, pinctrl, and device trees. All flight control software, real-time deterministic isolation (`isolcpus=7`), and INAV algorithms will target the Cubie A5E as the primary hardware platform.
-3. **A7A Hardware Reference**: Use the official Radxa factory image (`radxa-a733_bullseye_kde_r6.output_512.img.xz`) for standalone A7A hardware, NPU, and ISP validation.
+1. **Focus on A5E as Primary Platform**: The **Cubie A5E (Allwinner A527 / T527 / `sun55i`)** remains our verified 100% upstream mainline production platform.
+2. **A7A Hardware Reference**: Use the official Radxa factory image (`radxa-a733_bullseye_kde_r6.output_512.img.xz`) for standalone A7A hardware, NPU, and ISP validation.
+
+---
+
+## Case Study 9: Discovery of Upstream A733 CCU & Pinctrl Patch Series and Automated Watcher Strategy
+**Date:** August 20, 2026  
+**Component:** `drivers/clk/sunxi-ng/ccu-sun60i-a733.c`, `drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c`, `tools/watch_a733_upstream.py`
+
+### 🔍 Discovery: Active Upstream Review of A733 Drivers
+Following our investigation into the root cause of the peripheral clock starvation on the A733, we traced upstream kernel and U-Boot mailing list submissions:
+1. **Clock Controller (CCU & PRCM)**: Junhui Liu submitted `clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM` (under active v2/v7 review on `linux-clk` & `linux-sunxi`), introducing `ccu-sun60i-a733.c` and `ccu-sun60i-a733-r.c`.
+2. **RTC & Base Clocks**: Jerome Brunet and Chen-Yu Tsai queued `clk: sun6i-rtc: Add support for Allwinner A733 SoC` for the Linux 7.3 merge window.
+3. **Pin Controller (Pinctrl)**: Yixun Lan submitted `pinctrl: sunxi: a733: add initial support` (`pinctrl-sun60i-a733.c`) covering PIO and R-PIO blocks.
+4. **U-Boot Base Support**: Yixun Lan submitted initial A733 U-Boot support on Patchwork.
+
+### 🛠️ Strategic Solution: Buildroot Patch Integration + Upstream Watcher
+1. **Hybrid Mainline Route**: Rather than waiting for a full 6-month kernel release cycle, we can integrate the `ccu-sun60i-a733` and `pinctrl-sun60i-a733` patch series into `project-cubie-a5e/patches/linux/` and combine it with the working `radxa_a733_bootloader.bin` LPDDR5 DRAM trainer.
+2. **Automated Tracking Tool (`tools/watch_a733_upstream.py`)**: Developed an automated tool that queries `lore.kernel.org` (linux-sunxi, linux-clk) and U-Boot Patchwork to monitor for new patch revisions (v3, v4, etc.) and git pull requests.
+
 
 

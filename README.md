@@ -102,13 +102,16 @@ As of the current bring-up phase, here is the functional status of the flight st
 3. **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**:
    Technical deep-dive into the mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, and `/sys/class/remoteproc/` user-space control.
 
-4. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
+4. **[Radxa Cubie A7A Platform Specification & Patch Roadmap](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
+   Hardware specs, LPDDR5 dynamic training architecture, GICv3 interrupt controller mapping, and upstream patch series tracking ([`tools/watch_a733_upstream.py`](tools/watch_a733_upstream.py)).
+
+5. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
    Exhaustive analysis of the A733 BROM 128 KB search offset, multi-stage bootloader staging, and 16 MB partition alignment.
 
-5. **[Buildroot OS Documentation](docs/buildroot/)**:
+6. **[Buildroot OS Documentation](docs/buildroot/)**:
    How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`).
 
-6. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
+7. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
    High-level flight logic, rate PID dynamics, TinyML/NPU models, and real-time FPGA co-processor communication over SPI.
 
 ---

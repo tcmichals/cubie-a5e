@@ -13,7 +13,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 2400 MHz) | Multi-PState dynamic hardware calibration via `boot0` |
 | **Interrupts** | ARM GICv3 (GIC-600) | Distributor: `0x03400000`, Redistributors: `0x03460000` |
 | **Boot Chain** | `BROM` $\rightarrow$ `boot0` (SRAM) $\rightarrow$ `BL31` $\rightarrow$ `U-Boot 2018.07` | Packaged as 16 MB binary blob `radxa_a733_bootloader.bin` |
-| **Mainline Status** | **Out-of-Tree** (Kernel & U-Boot) | A527 (`sun55i`) is in mainline; A733 (`sun60i`) is not yet merged upstream |
+| **Mainline Status** | **Active Upstream Review** (Patches in `linux-sunxi`/`linux-clk`) | Integrating `ccu-sun60i-a733` & `pinctrl-sun60i-a733` series |
 | **Wi-Fi / BT** | AIC8800D80 via **USB 2.0 High-Speed** | `0xA69C:0x8800` (Unlike Cubie A5E which uses SDIO) |
 
 ---
@@ -115,10 +115,22 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ---
 
-## 3. Verified Artifacts & Verification Checklist
+## 3. Upstream Patch Tracking & Mainline Integration Roadmap
+
+The fundamental blockers to running vanilla mainline on the A733 are currently being reviewed in the Linux kernel and U-Boot communities:
+
+1. **Clock Controller (`drivers/clk/sunxi-ng/ccu-sun60i-a733.c`)**: Authored by Junhui Liu, introduces clock gates, PLL dividers, and reset controls.
+2. **RTC & Base Clocks (`drivers/clk/sunxi-ng/sun6i-rtc.c`)**: Authored by Jerome Brunet & Chen-Yu Tsai, queued for Linux 7.3.
+3. **Pin Controller (`drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c`)**: Authored by Yixun Lan, provides PIO and R-PIO pin muxing.
+4. **Automated Tracking Tool (`tools/watch_a733_upstream.py`)**: Live CLI monitoring tool that queries `lore.kernel.org` and U-Boot Patchwork to notify developers when newer patch revisions (v3, v4, etc.) are available.
+
+---
+
+## 4. Verified Artifacts & Verification Checklist
 
 | Artifact | Size | Target Location | Verification |
 | :--- | :--- | :--- | :--- |
-| **`sun60i-a733-cubie-a7a.dtb`** | `42,605 bytes` | `bld.a7a/images/sun60i-a733-cubie-a7a.dtb` | Contains GICv3 (`0x03400000`) & 6 GiB RAM |
+| **`sun60i-a733-cubie-a7a.dtb`** | `41,583 bytes` | `bld.a7a/images/sun60i-a733-cubie-a7a.dtb` | Contains GICv3 (`0x03400000`) & 6 GiB RAM |
 | **`Image` (Linux 7.1 PREEMPT_RT)** | `44,395,008 bytes` | `bld.a7a/images/Image` | Built-in `sunxi_rproc.o` |
 | **`sdcard.img`** | `620,756,992 bytes` | `bld.a7a/images/sdcard.img` | Ready to flash |
+
