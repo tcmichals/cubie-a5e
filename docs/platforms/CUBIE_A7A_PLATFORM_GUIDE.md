@@ -86,14 +86,35 @@ This document is the dedicated hardware, bootloader, and bring-up specification 
 
 ---
 
-## 4. Build Commands for A7A
+---
+
+## 4. Engineering Status & Decision: Pausing Mainline Bring-Up on A7A
+
+### Why Mainline Bring-Up on A7A is Paused
+
+| Issue Category | Upstream Mainline Status | Impact on A7A Bring-Up |
+| :--- | :--- | :--- |
+| **SoC Upstream Status** | ❌ **0% Upstream Support** | The Allwinner A733 (`sun60iw2`) is a brand new architecture not yet upstreamed into mainline Linux or mainline U-Boot. |
+| **Clock Controller (CCU)** | ❌ **Missing Driver** | Mainline Linux 7.1 has `ccu-sun55i-a523.c` (for A5E), but **no** `ccu-sun60iw2.c`. Peripherals cannot establish clock gates/resets. |
+| **Pin Controller (Pinctrl)** | ❌ **Missing Driver** | Mainline Linux 7.1 has `pinctrl-sun55i-a523.c` (for A5E), but **no** `pinctrl-sun60iw2.c`. GPIOs, UARTs, and I2C/SPI muxing lack kernel binding. |
+| **DRAM Training & U-Boot** | ❌ **Closed-Source Blob** | Upstream U-Boot 2026.01 cannot train A733 LPDDR5 RAM; requires vendor `boot0` + U-Boot 2018.07. |
+| **Firmware / DT Alignment** | ⚠️ **GICv2/GICv3 Mismatch** | Factory BL31 enables GICv3 system registers, but factory DT declares legacy GICv2, causing strict mainline security aborts. |
+
+### Strategic Recommendation
+
+1. **Primary Production Flight Platform**: Focus all flight controller runtime, INAV algorithms, PREEMPT_RT, XuanTie E907 remoteproc, and hardware drivers on the **Radxa Cubie A5E (Allwinner A527 / T527)**, which has **100% upstream mainline Linux 7.1 + U-Boot 2026.01 support**.
+2. **A7A Hardware & Feature Testing**: When testing the A7A hardware (6 GiB LPDDR5, 3 TOPS NPU, Dual-Camera ISP), use the official Radxa Debian Bullseye image (`/home/tcmichals/Downloads/radxa-a733_bullseye_kde_r6.output_512.img.xz`).
+
+---
+
+## 5. Build Commands for A7A Reference
 
 ```bash
 # In build directory (e.g. bld.a7a)
 make cubie_a7a_defconfig
 make
 ```
-- Output DTB: `images/sun60i-a733-cubie-a7a.dtb` (`42,605 bytes`)
+- Output DTB: `images/sun60i-a733-cubie-a7a.dtb` (`41,583 bytes`)
 - Output Disk Image: `images/sdcard.img` (`620,756,992 bytes`)
 
 ### Flashing SD Card

@@ -1,4 +1,6 @@
 setenv bootargs console=ttyS0,115200 earlycon=uart8250,mmio32,0x02500000 root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7 loglevel=8
+setenv kernel_addr_r 0x40080000
+setenv fdt_addr_r 0x4fa00000
 
 # Load the base device tree into memory slots
 load mmc 0:1 ${fdt_addr_r} sun60i-a733-cubie-a7a.dtb

@@ -275,8 +275,30 @@ We permanently aligned the device tree and build pipeline:
    - Removed the stale `cp -f` in `board/radxa/cubie_a7a/post-image.sh` that was previously overwriting the kernel's freshly-compiled DTB with an outdated vendor binary.
 
 3. **Metrics & Artifacts Summary**:
-   - **DTB Size**: `42,605 bytes` (compiled as `sun60i-a733-cubie-a7a.dtb`).
+   - **DTB Size**: `41,583 bytes` (compiled as `sun60i-a733-cubie-a7a.dtb`).
    - **Kernel**: Linux 7.1.0 `PREEMPT_RT` with built-in `sunxi_rproc.o`.
    - **Disk Image**: `sdcard.img` (620,756,992 bytes) ready in `bld.a7a/images/`.
+
+---
+
+## Case Study 8: Analysis of Allwinner A733 (`sun60iw2`) Official Factory Image vs Mainline Linux 7.1 & Decision to Pause Mainline A7A Bring-Up
+**Date:** August 20, 2026  
+**Component:** Official Radxa Image (`radxa-a733_bullseye_kde_r6.output_512.img.xz`), Mainline Linux 7.1 PREEMPT_RT, Mainline U-Boot 2026.01
+
+### 🔍 Deep Dive: Official Factory Image Extraction & DTB Comparison
+To eliminate ambiguity, we extracted and disassembled the official Radxa factory image (`radxa-a733_bullseye_kde_r6.output_512.img.xz`):
+- **Extracted Factory DTB**: `extracted_official.dtb` (41,449 bytes from sector 26902).
+- **Line-by-Line DTS Comparison**: Across 2,500+ lines, our hardware map is 100% identical to the factory image, except:
+  1. Factory DTB omits `/cpus`, `/timer`, `/psci`, and `/memory` because vendor U-Boot and BL31 create/patch those at runtime.
+  2. Factory DTB declares legacy GICv2 (`interrupt-controller@3020000`). Radxa's vendor kernel (Linux 5.10 / 6.1 BSP) includes vendor patches in `drivers/irqchip/irq-gic.c` to accept GICv2 even with `ICC_SRE_EL1.SRE=1`. Mainline Linux 7.1 enforces strict upstream ARM64 security and aborts.
+
+### 🛑 Root Cause: Allwinner A733 Is Not Yet in Upstream Mainline
+- **Upstream U-Boot**: 0% mainline support. No `sun60iw2` CCU, pinctrl, or LPDDR5 multi-PState training driver. It depends completely on Allwinner's closed-source `boot0` binary blob.
+- **Upstream Linux 7.1**: 0% mainline support. While `CONFIG_ARCH_SUNXI` supports A527/T527 (`sun55i`) via `ccu-sun55i-a523.c` and `pinctrl-sun55i-a523.c`, there are no `ccu-sun60iw2.c` or `pinctrl-sun60iw2.c` drivers in upstream Linux.
+
+### 🎯 Engineering Decision
+1. **Pause Mainline Bring-Up for A7A**: Do not attempt to force an out-of-tree, un-upstreamed SoC onto mainline Linux 7.1 without upstream clock and pin controllers.
+2. **Standardize on Radxa Cubie A5E**: The **Cubie A5E (Allwinner A527 / T527 / `sun55i`)** is **100% upstream mainline** across U-Boot 2026.01, Linux 7.1 PREEMPT_RT, CCU clocks, pinctrl, and device trees. All flight control software, real-time deterministic isolation (`isolcpus=7`), and INAV algorithms will target the Cubie A5E as the primary hardware platform.
+3. **A7A Hardware Reference**: Use the official Radxa factory image (`radxa-a733_bullseye_kde_r6.output_512.img.xz`) for standalone A7A hardware, NPU, and ISP validation.
 
 
