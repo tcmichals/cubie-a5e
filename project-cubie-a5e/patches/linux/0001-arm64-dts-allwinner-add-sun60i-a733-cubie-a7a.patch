@@ -311,6 +311,25 @@ index 0000000..155066b
 +			pinctrl-0 = <&r_i2c0_pins>;
 +			status = "okay";
 +		};
++
++		msgbox: mailbox@3003000 {
++			compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun6i-a31-msgbox";
++			reg = <0x03003000 0x1000>;
++			interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
++			#mbox-cells = <1>;
++			status = "okay";
++		};
++
++		rproc: remoteproc@7010000 {
++			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
++			reg = <0x07010000 0x0200>,
++			      <0x07110000 0x10000>,
++			      <0x07130000 0x50000>;
++			reg-names = "ccu", "itcm", "sram";
++			mboxes = <&msgbox 0>, <&msgbox 1>;
++			mbox-names = "rx", "tx";
++			status = "okay";
++		};
 +	};
 +};
 -- 
