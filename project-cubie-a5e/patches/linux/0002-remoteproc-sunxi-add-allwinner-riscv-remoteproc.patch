@@ -64,14 +64,18 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
-+/* CCU Registers */
-+#define CCU_DSP_CLK_REG   0x0020
-+#define CCU_DSP_RST_REG   0x0100
++/* MCU CCU Registers (Base 0x07102000) */
++#define MCU_CCU_PUBSRAM_REG   0x0114
++#define MCU_CCU_RISCV_CLK_REG 0x0120
++#define MCU_CCU_RISCV_RST_REG 0x0124
++#define MCU_CCU_MSGBOX_REG    0x0128
 +
-+/* Bit definitions */
-+#define CCU_DSP_CLK_ENABLE  0x00000003
-+#define CCU_DSP_BUS_RST     BIT(16)
-+#define CCU_DSP_CORE_RST    BIT(17)
++/* Clock & Reset Values */
++#define MCU_PUBSRAM_ENABLE    0x00010001
++#define MCU_RISCV_CLK_ENABLE  0x80000000
++#define MCU_RISCV_CORE_BOOT   0x00070001
++#define MCU_RISCV_CORE_HOLD   0x00030001
++#define MCU_MSGBOX_ENABLE     0x00010001
 +
 +/* Memory Regions */
 +#define ITCM_PHYS_BASE      0x07110000
@@ -84,6 +88,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +/* Core Local Virtual Aliases */
 +#define CORE_ITCM_BASE      0x00000000
 +#define CORE_DTCM_BASE      0x00080000
++#define CORE_SRAM_BASE      0x00020000
 +
 +struct sunxi_rproc {
 +	struct rproc *rproc;
@@ -101,17 +106,16 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +	dev_info(priv->dev, "Starting XuanTie RISC-V co-processor...\n");
 +
-+	/* 1. Enable MCU subsystem clock */
-+	writel(CCU_DSP_CLK_ENABLE, priv->ccu_va + CCU_DSP_CLK_REG);
++	/* 1. Enable PubSRAM, RISC-V Clock, and Mailbox in MCU CCU */
++	writel(MCU_PUBSRAM_ENABLE, priv->ccu_va + MCU_CCU_PUBSRAM_REG);
++	writel(MCU_RISCV_CLK_ENABLE, priv->ccu_va + MCU_CCU_RISCV_CLK_REG);
++	writel(MCU_MSGBOX_ENABLE, priv->ccu_va + MCU_CCU_MSGBOX_REG);
 +
-+	/* 2. Assert core reset, enable bus reset */
-+	writel(CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
++	/* 2. Release Core Reset (de-assert core reset bit 18, debug bit 17, cfg bit 16, clk bit 0) */
++	writel(MCU_RISCV_CORE_BOOT, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
 +
-+	/* 3. Release core reset to boot from ITCM (0x00000000) */
-+	writel(CCU_DSP_CORE_RST | CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
-+
-+	val = readl(priv->ccu_va + CCU_DSP_RST_REG);
-+	dev_info(priv->dev, "RISC-V core started (RST REG: 0x%08x)\n", val);
++	val = readl(priv->ccu_va + MCU_CCU_RISCV_RST_REG);
++	dev_info(priv->dev, "RISC-V core started (MCU RST REG: 0x%08x)\n", val);
 +
 +	return 0;
 +}
@@ -122,8 +126,8 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +	dev_info(priv->dev, "Halting XuanTie RISC-V co-processor...\n");
 +
-+	/* Assert core reset (clear bit 17) */
-+	writel(CCU_DSP_BUS_RST, priv->ccu_va + CCU_DSP_RST_REG);
++	/* Hold core in reset (clear bit 18) */
++	writel(MCU_RISCV_CORE_HOLD, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
 +
 +	dev_info(priv->dev, "RISC-V core is held in reset\n");
 +
