@@ -182,11 +182,6 @@ def cmd_start():
     print("[+] Starting XuanTie RISC-V Co-Processor...")
     cmd_enable_clocks()
     
-    # Switch SRAM C MUX to RISC-V Co-Processor (Clear bit 24 in 0x03000004)
-    sys_cfg = MMIO(SYS_CFG_BASE, 0x1000)
-    sys_cfg.write32(0x0004, 0x00000000)
-    print("[+] Switched SRAM C Mux to RISC-V Co-Processor (0x03000004 -> 0x00000000)")
-
     mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
     mcu_ccu.write32(0x124, 0x00030001) # Hold core in reset
     time.sleep(0.01)
@@ -197,31 +192,24 @@ def cmd_stop():
     print("[+] Stopping XuanTie RISC-V Co-Processor...")
     mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
     mcu_ccu.write32(0x124, 0x00030001)
-    # Switch SRAM C back to ARM host
-    sys_cfg = MMIO(SYS_CFG_BASE, 0x1000)
-    sys_cfg.write32(0x0004, 0x01000000)
-    print("[+] Core held in reset, SRAM C switched to Host.")
+    print("[+] Core held in reset.")
 
 def cmd_monitor(duration=10):
     print("=" * 80)
     print(f"MONITORING XUANTIE RISC-V TELEMETRY (0x00028000) for {duration} seconds...")
     print("=" * 80)
-    sys_cfg = MMIO(SYS_CFG_BASE, 0x1000)
     sram_c  = MMIO(SRAM_C_BASE,   0x20000)
     start_time = time.time()
     last_hb = None
     last_loops = None
 
     while time.time() - start_time < duration:
-        # Briefly switch to CPU to sample telemetry, then switch back to RISC-V
-        sys_cfg.write32(0x0004, 0x01000000)
         magic = sram_c.read32(TELEMETRY_OFF)
         boot  = sram_c.read32(TELEMETRY_OFF + 4)
         hb    = sram_c.read32(TELEMETRY_OFF + 8)
         loops = sram_c.read32(TELEMETRY_OFF + 12)
         stat  = sram_c.read32(TELEMETRY_OFF + 16)
         trap  = sram_c.read32(TELEMETRY_OFF + 32)
-        sys_cfg.write32(0x0004, 0x00000000)
         
         is_active = (hb != last_hb or loops != last_loops) and last_hb is not None
         status_str = "\033[92m>>> CORE IS EXECUTING LIVE <<<\033[0m" if is_active else "\033[93mIDLE / WAITING\033[0m"
