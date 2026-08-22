@@ -215,21 +215,21 @@ index 000000000..c70f465f9
 +};
 +
 +static SUNXI_CCU_M_HWS(pll_periph0_2x_clk, "pll-periph0-2x",
-+		       pll_periph0_4x_hws, 0x020, 16, 3, 0);
++		       pll_periph0_4x_hws, 0x020, 16, 3, CLK_IS_CRITICAL);
 +
 +static const struct clk_hw *pll_periph0_2x_hws[] = {
 +	&pll_periph0_2x_clk.common.hw
 +};
 +
 +static SUNXI_CCU_M_HWS(pll_periph0_1x_clk, "pll-periph0-1x",
-+		       pll_periph0_2x_hws, 0x020, 20, 3, 0);
++		       pll_periph0_2x_hws, 0x020, 20, 3, CLK_IS_CRITICAL);
 +
 +static const struct clk_parent_data ahb_parents[] = {
 +	{ .fw_name = "hosc" },
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
 +};
 +static SUNXI_CCU_M_DATA_WITH_MUX(psi_ahb1_ahb2_clk, "psi-ahb1-ahb2",
-+				 ahb_parents, 0x510, 0, 5, 24, 2, 0);
++				 ahb_parents, 0x510, 0, 5, 24, 2, CLK_IS_CRITICAL);
 +
 +static const struct clk_hw *ahb_hws[] = {
 +	&psi_ahb1_ahb2_clk.common.hw
@@ -240,7 +240,7 @@ index 000000000..c70f465f9
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
 +};
 +static SUNXI_CCU_M_DATA_WITH_MUX(apb1_clk, "apb1", apb1_parents,
-+				 0x520, 0, 5, 24, 2, 0);
++				 0x520, 0, 5, 24, 2, CLK_IS_CRITICAL);
 +
 +static const struct clk_hw *apb1_hws[] = {
 +	&apb1_clk.common.hw
@@ -251,7 +251,7 @@ index 000000000..c70f465f9
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
 +};
 +static SUNXI_CCU_M_DATA_WITH_MUX(apb2_clk, "apb2", apb2_parents,
-+				 0x524, 0, 5, 24, 2, 0);
++				 0x524, 0, 5, 24, 2, CLK_IS_CRITICAL);
 +
 +static const struct clk_hw *apb2_hws[] = {
 +	&apb2_clk.common.hw
