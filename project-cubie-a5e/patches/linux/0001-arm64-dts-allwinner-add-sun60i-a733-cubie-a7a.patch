@@ -266,9 +266,9 @@ index 0000000..155066b
 +			pinctrl-0 = <&mmc0_pins>;
 +			status = "okay";
 +			bus-width = <4>;
-+			broken-cd;
++			non-removable;
 +			vmmc-supply = <&reg_vcc3v3>;
-+			max-frequency = <150000000>;
++			max-frequency = <50000000>;
 +			cap-sd-highspeed;
 +			cap-mmc-highspeed;
 +		};
@@ -285,9 +285,9 @@ index 0000000..155066b
 +		r_pio: pinctrl@7022000 {
 +			compatible = "allwinner,sun60i-a733-r-pinctrl";
 +			reg = <0x07022000 0x400>;
-+			interrupts = <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH>,
-+				     <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&r_ccu CLK_R_APB2>, <&osc24M>, <&osc32k>;
++			interrupts = <GIC_SPI 122 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 124 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&r_ccu CLK_R_AHB>, <&osc24M>, <&osc32k>;
 +			clock-names = "apb", "hosc", "losc";
 +			#gpio-cells = <3>;
 +			gpio-controller;
@@ -316,6 +316,8 @@ index 0000000..155066b
 +			compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun6i-a31-msgbox";
 +			reg = <0x03003000 0x1000>;
 +			interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_MSGBOX0>;
++			resets = <&ccu RST_BUS_MSGBOX0>;
 +			#mbox-cells = <1>;
 +			status = "okay";
 +		};
