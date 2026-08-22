@@ -164,12 +164,11 @@
         status = "okay";
     };
 
-    rproc: remoteproc@7010000 {
+    rproc: remoteproc@7102000 {
         compatible = "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
         reg = <0x07102000 0x1000>,
-              <0x07110000 0x10000>,
-              <0x07130000 0x50000>;
-        reg-names = "ccu", "itcm", "sram";
+              <0x00020000 0x20000>;
+        reg-names = "ccu", "sram";
         mboxes = <&msgbox 0>, <&msgbox 1>;
         mbox-names = "rx", "tx";
         status = "okay";

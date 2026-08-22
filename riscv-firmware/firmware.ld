@@ -1,24 +1,23 @@
-/* Linker script for XuanTie E906/E907 bare-metal co-processor */
+/* Linker script for XuanTie E906/E907 bare-metal co-processor in SRAM C */
 
 OUTPUT_ARCH("riscv")
 ENTRY(_enter)
 
 MEMORY
 {
-    ITCM (rx)   : ORIGIN = 0x00000000, LENGTH = 64K
-    DTCM (rwx)  : ORIGIN = 0x00080000, LENGTH = 64K
+    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
 }
 
 SECTIONS
 {
-    /* 1. Vector table and entry point bootstrap placed at the start of ITCM */
+    /* 1. Vector table and entry point bootstrap placed at start of SRAM */
     .vectors :
     {
         KEEP(*(.vectors))
         KEEP(*(.text.startup))
-    } > ITCM
+    } > SRAM
 
-    /* 2. Fast code, main program code placed in ITCM for zero-wait execution */
+    /* 2. Program code */
     .text :
     {
         . = ALIGN(4);
@@ -27,7 +26,7 @@ SECTIONS
         *(.text)
         *(.text.*)
         . = ALIGN(4);
-    } > ITCM
+    } > SRAM
 
     .rodata :
     {
@@ -37,9 +36,9 @@ SECTIONS
         *(.srodata)
         *(.srodata.*)
         . = ALIGN(4);
-    } > ITCM
+    } > SRAM
 
-    /* 3. Initialized data segment executed in DTCM, loaded from ITCM */
+    /* 3. Initialized data segment */
     .data :
     {
         . = ALIGN(4);
@@ -51,11 +50,11 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _data_end = .;
-    } > DTCM AT> ITCM
+    } > SRAM
 
     _sram_data_start = LOADADDR(.data);
 
-    /* 4. Zero-initialized BSS segment in DTCM */
+    /* 4. Zero-initialized BSS segment */
     .bss :
     {
         . = ALIGN(4);
@@ -67,13 +66,17 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
-    } > DTCM
+    } > SRAM
 
-    /* 5. Stack pointer baseline set to the top of DTCM (grows downwards) */
-    _stack_top = ORIGIN(DTCM) + LENGTH(DTCM);
+    /* 5. Stack allocation in SRAM (4KB) */
+    .stack (NOLOAD) :
+    {
+        . = ALIGN(16);
+        _stack_bottom = .;
+        . += 0x1000;
+        _stack_top = .;
+    } > SRAM
 }
 
 /* 6. Memory Bounds Assertions */
-ASSERT( (LOADADDR(.data) + SIZEOF(.data)) <= LENGTH(ITCM), "ERROR: ITCM limit exceeded! (Max 64KB)" )
-ASSERT( (_bss_end - ORIGIN(DTCM)) <= LENGTH(DTCM), "ERROR: DTCM limit exceeded! Data/BSS too large (Max 64KB)" )
-
+ASSERT( (_stack_top <= (ORIGIN(SRAM) + LENGTH(SRAM))), "ERROR: SRAM limit exceeded!" )

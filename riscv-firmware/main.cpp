@@ -10,9 +10,8 @@
 
 using namespace hardware;
 
-/* Fixed Telemetry Addresses for Linux Host devmem inspection */
-#define DTCM_BASE           0x00080000   /* Host Physical: 0x07120000 */
-#define SHARED_WINDOW_BASE  0x00078000   /* Host Physical: 0x07180000 */
+/* Fixed Telemetry Address in Shared SRAM for Linux Host devmem inspection */
+#define TELEMETRY_BASE      0x00028000   /* Host Physical: 0x00028000 */
 
 /* Telemetry Block Structure (24 bytes) */
 struct TelemetryBlock {
@@ -24,24 +23,16 @@ struct TelemetryBlock {
     volatile uint32_t last_cmd;      /* 0x14: Last received mailbox command */
 };
 
-static TelemetryBlock *dtcm_telem = (TelemetryBlock *)DTCM_BASE;
-static TelemetryBlock *sram_telem = (TelemetryBlock *)SHARED_WINDOW_BASE;
+static TelemetryBlock *telem = (TelemetryBlock *)TELEMETRY_BASE;
 
 int main(void) {
-    /* Initialize Telemetry Blocks in both DTCM and SRAM C */
-    dtcm_telem->magic = 0x52495343;        /* "RISC" */
-    dtcm_telem->boot_flag = 0x00000001;
-    dtcm_telem->heartbeat = 0;
-    dtcm_telem->loop_counter = 0;
-    dtcm_telem->status_magic = 0x414C4956; /* "ALIV" */
-    dtcm_telem->last_cmd = 0;
-
-    sram_telem->magic = 0x52495343;        /* "RISC" */
-    sram_telem->boot_flag = 0x00000001;
-    sram_telem->heartbeat = 0;
-    sram_telem->loop_counter = 0;
-    sram_telem->status_magic = 0x414C4956; /* "ALIV" */
-    sram_telem->last_cmd = 0;
+    /* Initialize Telemetry Block in Shared SRAM C */
+    telem->magic = 0x52495343;        /* "RISC" */
+    telem->boot_flag = 0x00000001;
+    telem->heartbeat = 0;
+    telem->loop_counter = 0;
+    telem->status_magic = 0x414C4956; /* "ALIV" */
+    telem->last_cmd = 0;
 
     /* 1. Print Hello World over physical UART0 serial port */
     uart0_puts("\n========================================\n");
@@ -68,14 +59,12 @@ int main(void) {
     while (1) {
         /* Update fast loop counters on every single iteration */
         fast_loops++;
-        dtcm_telem->loop_counter = fast_loops;
-        sram_telem->loop_counter = fast_loops;
+        telem->loop_counter = fast_loops;
 
         /* Check for incoming mailbox messages from ARM Linux host */
         if (Mailbox::has_new_msg(0)) {
             uint32_t cmd = Mailbox::read_msg(0);
-            dtcm_telem->last_cmd = cmd;
-            sram_telem->last_cmd = cmd;
+            telem->last_cmd = cmd;
             trace_puts("[RISC-V E907] Received Mailbox CMD from host!\n");
             
             /* Respond with echo payload incremented by 1 */
@@ -88,8 +77,7 @@ int main(void) {
             delay_counter = 0;
             heartbeat++;
 
-            dtcm_telem->heartbeat = heartbeat;
-            sram_telem->heartbeat = heartbeat;
+            telem->heartbeat = heartbeat;
 
             /* Periodic print on UART0 every ~2 seconds (100 heartbeats) */
             if ((heartbeat % 100) == 0) {
