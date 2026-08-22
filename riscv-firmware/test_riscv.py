@@ -165,7 +165,9 @@ def cmd_load(bin_path="/lib/firmware/riscv-firmware.bin"):
 
     first_word = sram_c.read32(0x0)
     magic = sram_c.read32(0x4)
-    print(f"[+] Loaded! First word: 0x{first_word:08X}, eGON Magic: 0x{magic:08X}")
+    chksum = sram_c.read32(0xc)
+    length = sram_c.read32(0x10)
+    print(f"[+] Loaded! First: 0x{first_word:08X}, Magic: 0x{magic:08X}, Checksum: 0x{chksum:08X}, Length: {length} bytes")
     return True
 
 def cmd_start():
@@ -190,6 +192,7 @@ def cmd_monitor(duration=10):
     sram_c = MMIO(SRAM_C_BASE, 0x20000)
     start_time = time.time()
     last_hb = None
+    last_loops = None
 
     while time.time() - start_time < duration:
         magic = sram_c.read32(TELEMETRY_OFF)
@@ -199,11 +202,28 @@ def cmd_monitor(duration=10):
         stat  = sram_c.read32(TELEMETRY_OFF + 16)
         trap  = sram_c.read32(TELEMETRY_OFF + 32)
         
-        status_str = "ALIVE" if hb != last_hb and last_hb is not None else "POLLING"
+        is_active = (hb != last_hb or loops != last_loops) and last_hb is not None
+        status_str = "\033[92m>>> CORE IS EXECUTING LIVE <<<\033[0m" if is_active else "\033[93mIDLE / WAITING\033[0m"
         last_hb = hb
-        print(f"\r[Telemetry] Magic: 0x{magic:08X} | Boot: {boot} | Heartbeat: {hb:<8} | Loops: {loops:<10} | Traps: {trap} | State: {status_str}", end="", flush=True)
+        last_loops = loops
+        print(f"\r[Telemetry] Magic: 0x{magic:08X} | Boot: {boot} | Heartbeat: {hb:<8} | Loops: {loops:<10} | State: {status_str}", end="", flush=True)
         time.sleep(0.5)
     print("\n")
+
+def cmd_probe():
+    print("=" * 80)
+    print("PHYSICAL HARDWARE CLOCK & BUS TICK PROBE")
+    print("=" * 80)
+    cmd_enable_clocks()
+    mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
+    
+    print("[+] Checking if MCU peripheral bus and registers are accessible...")
+    val1 = mcu_ccu.read32(0x120)
+    print(f"[+] MCU CCU RISCV_CLK register readback: 0x{val1:08X}")
+    if val1 & 0x80000000:
+        print("[+] SUCCESS: MCU CCU Clock Gate is OPEN (Root Clock Active)!")
+    else:
+        print("[-] WARNING: MCU CCU Clock Gate read as CLOSED!")
 
 def cmd_run(bin_path="/lib/firmware/riscv-firmware.bin"):
     print("=" * 80)
@@ -219,7 +239,7 @@ def cmd_run(bin_path="/lib/firmware/riscv-firmware.bin"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Allwinner XuanTie RISC-V Bring-up & Diagnostic Tool")
-    parser.add_argument("action", choices=["status", "enable-clocks", "test-sram", "load", "start", "stop", "monitor", "run"], default="status", nargs="?")
+    parser.add_argument("action", choices=["status", "enable-clocks", "test-sram", "load", "start", "stop", "monitor", "probe", "run"], default="status", nargs="?")
     parser.add_argument("--fw", default="/lib/firmware/riscv-firmware.bin", help="Path to firmware binary")
     parser.add_argument("--duration", type=int, default=10, help="Monitor duration in seconds")
     args = parser.parse_args()
@@ -238,5 +258,7 @@ if __name__ == "__main__":
         cmd_stop()
     elif args.action == "monitor":
         cmd_monitor(args.duration)
+    elif args.action == "probe":
+        cmd_probe()
     elif args.action == "run":
         cmd_run(args.fw)
