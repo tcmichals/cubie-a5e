@@ -162,68 +162,50 @@ DTCM            |      0 B   |   64 KB   | [--------------------]   0.0%
 
 ---
 
-## 5. Booting the Core from Linux (ARM Host)
+## 5. Booting the Core from Linux (ARM Host) via RemoteProc
 
-Because the RISC-V core lacks non-volatile flash, the ARM host is responsible for loading and booting the co-processor at startup.
+The co-processor lifecycle is managed using the standard Linux **Remote Processor (`remoteproc`)** framework ([`sunxi_rproc.c`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)). 
 
-### Automated Loader Script: `load-riscv.sh`
-The rootfs includes an automated loader script at `/usr/bin/load-riscv.sh` and an init service at `/etc/init.d/S60riscv`:
+Instead of manual `devmem` or raw binary copies, the kernel driver handles clock gating, reset sequencing, and ELF binary segment relocation into ITCM, DTCM, and SRAM directly.
+
+### RemoteProc Sysfs Interface (`/sys/class/remoteproc/remoteproc0/`)
+
+The Linux kernel registers the XuanTie E907 core under sysfs:
 
 ```bash
-# Boot default installed firmware (/lib/firmware/riscv-firmware.bin)
-load-riscv.sh start
+# Check current core state (offline / running)
+cat /sys/class/remoteproc/remoteproc0/state
 
-# Check core execution and clock status
-load-riscv.sh status
+# Check current active firmware file name
+cat /sys/class/remoteproc/remoteproc0/firmware
 
-# Restart / reload with new firmware
-load-riscv.sh restart
+# Boot the co-processor with default firmware (/lib/firmware/riscv-firmware.elf)
+echo start > /sys/class/remoteproc/remoteproc0/state
 
-# Load a custom test binary
-load-riscv.sh start /tmp/my_attitude_estimator.bin
+# Halt the co-processor and hold in reset
+echo stop > /sys/class/remoteproc/remoteproc0/state
 
-# Halt and hold core in reset
-load-riscv.sh stop
+# Load and boot a custom firmware executable
+echo my_attitude_estimator.elf > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
 ```
 
----
-
-### Manual Step-by-Step Sequence (Under the Hood)
-
-For manual debugging, the exact hardware sequence is:
-
-#### Step A: Enable MCU/DSP Clocks
-Before writing to memory, turn on the MCU sub-system bus clocks using the CCU registers:
+### Automated System Service (`/etc/init.d/S60riscv`)
+On boot, Buildroot automatically manages the RISC-V co-processor via the standard init service:
 ```bash
-# Enable bus clock for MCU and DSP (0x07010020 -> 0x03)
-devmem 0x07010020 32 0x00000003
+/etc/init.d/S60riscv start
+/etc/init.d/S60riscv stop
+/etc/init.d/S60riscv restart
+/etc/init.d/S60riscv status
 ```
 
-#### Step B: Assert Core Reset
-Assert reset on the RISC-V core so it holds in reset while copying firmware:
-```bash
-# Write 0 to Reset Register (assert reset)
-devmem 0x07010100 32 0x00000000
+### Kernel Dmesg Output on RemoteProc Boot
+When the firmware boots, the kernel logs:
+```text
+[    1.820140] remoteproc remoteproc0: powering up sunxi-rproc
+[    1.821450] remoteproc remoteproc0: Booting fw image riscv-firmware.elf, size 48296 bytes
+[    1.824102] remoteproc remoteproc0: remote processor sunxi-rproc is now up
 ```
-
-#### Step C: Load the Binary into SRAM
-Copy `firmware.bin` directly into the mapped SRAM memory window of the co-processor over the system bus:
-* **ITCM Window:** Mapped from host physical address `0x07110000`.
-* **SRAM C Window:** Mapped from host physical address `0x07130000`.
-
-Using `dd` via `/dev/mem`:
-```bash
-# Seek offset 28944 corresponds to 0x07110000 host physical address (118554624 / 4096 = 28944)
-dd if=/lib/firmware/riscv-firmware.bin of=/dev/mem bs=4096 seek=28944 conv=notrunc
-```
-
-#### Step D: Release Core Reset (Boot!)
-De-assert the reset line to boot the core:
-```bash
-# Set Bit 17 of MCU reset register to 1 (de-assert reset)
-devmem 0x07010100 32 0x00020000
-```
-The XuanTie core will instantly wake up, execute vectors at `0x0000_0000` (ITCM), and boot into the firmware!
 
 ---
 
