@@ -50,219 +50,69 @@ index 000000000..207cf56e6
 +#include "ccu_gate.h"
 +#include "ccu_div.h"
 +#include "ccu_mux.h"
+@@ -16,27 +16,27 @@ static const struct clk_parent_data r_cpus_parents[] = {
+ 	{ .fw_name = "hosc" },
+ };
+ static SUNXI_CCU_M_DATA_WITH_MUX(r_cpus_clk, "r-cpus", r_cpus_parents,
+-				 0x000, 0, 5, 24, 2, 0);
++				 0x000, 0, 5, 24, 2, CLK_IS_CRITICAL);
+ 
+ static const struct clk_hw *r_cpus_hws[] = {
+ 	&r_cpus_clk.common.hw
+ };
+-static SUNXI_CCU_M_HWS(r_ahb_clk, "r-ahb", r_cpus_hws, 0x004, 0, 5, 0);
++static SUNXI_CCU_M_HWS(r_ahb_clk, "r-ahb", r_cpus_hws, 0x004, 0, 5, CLK_IS_CRITICAL);
+ 
+ static const struct clk_hw *r_ahb_hws[] = {
+ 	&r_ahb_clk.common.hw
+ };
+-static SUNXI_CCU_M_HWS(r_apb1_clk, "r-apb1", r_ahb_hws, 0x00c, 0, 5, 0);
++static SUNXI_CCU_M_HWS(r_apb1_clk, "r-apb1", r_ahb_hws, 0x00c, 0, 5, CLK_IS_CRITICAL);
+ 
+ static const struct clk_hw *r_apb1_hws[] = {
+ 	&r_apb1_clk.common.hw
+ };
+ 
+ static const struct clk_parent_data r_apb2_parents[] = {
+ 	{ .fw_name = "losc" },
+ 	{ .fw_name = "hosc" },
+ };
+ static SUNXI_CCU_M_DATA_WITH_MUX(r_apb2_clk, "r-apb2", r_apb2_parents,
+-				 0x010, 0, 5, 24, 2, 0);
++				 0x010, 0, 5, 24, 2, CLK_IS_CRITICAL);
+ 
+ static const struct clk_hw *r_apb2_hws[] = {
+ 	&r_apb2_clk.common.hw
+ };
+ 
+-static SUNXI_CCU_GATE_HWS(r_bus_uart0_clk, "r-bus-uart0", r_apb2_hws, 0x18c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(r_bus_uart0_clk, "r-bus-uart0", r_apb2_hws, 0x18c, BIT(0), CLK_IS_CRITICAL);
+ static SUNXI_CCU_GATE_HWS(r_bus_i2c0_clk,  "r-bus-i2c0",  r_apb2_hws, 0x19c, BIT(0), 0);
+ static SUNXI_CCU_GATE_HWS(r_bus_i2c1_clk,  "r-bus-i2c1",  r_apb2_hws, 0x19c, BIT(1), 0);
+ static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,    "r-bus-rtc",   r_apb1_hws, 0x20c, BIT(0), 0);
+@@ -82,7 +82,7 @@ static const struct sunxi_ccu_desc sun60i_a733_r_ccu_desc = {
+ 	.ccu_clks	= sun60i_a733_r_ccu_clks,
+ 	.num_ccu_clks	= ARRAY_SIZE(sun60i_a733_r_ccu_clks),
+-	.hw_clks	= &sun60i_a733_r_hw_clks,
++	.hw_clks	= (struct clk_hw_onecell_data *)&sun60i_a733_r_hw_clks,
+ 	.resets		= sun60i_a733_r_ccu_resets,
+ 	.num_resets	= ARRAY_SIZE(sun60i_a733_r_ccu_resets),
+ };
+@@ -111,4 +111,6 @@ static struct platform_driver sun60i_a733_r_ccu_driver = {
+ 	},
+ };
+ module_platform_driver(sun60i_a733_r_ccu_driver);
 +
-+static const struct clk_parent_data r_cpus_parents[] = {
-+	{ .fw_name = "losc" },
-+	{ .fw_name = "hosc" },
-+};
-+static SUNXI_CCU_M_DATA_WITH_MUX(r_cpus_clk, "r-cpus", r_cpus_parents,
-+				 0x000, 0, 5, 24, 2, 0);
-+
-+static const struct clk_hw *r_cpus_hws[] = {
-+	&r_cpus_clk.common.hw
-+};
-+static SUNXI_CCU_M_HWS(r_ahb_clk, "r-ahb", r_cpus_hws, 0x004, 0, 5, 0);
-+
-+static const struct clk_hw *r_ahb_hws[] = {
-+	&r_ahb_clk.common.hw
-+};
-+static SUNXI_CCU_M_HWS(r_apb1_clk, "r-apb1", r_ahb_hws, 0x00c, 0, 5, 0);
-+
-+static const struct clk_hw *r_apb1_hws[] = {
-+	&r_apb1_clk.common.hw
-+};
-+
-+static const struct clk_parent_data r_apb2_parents[] = {
-+	{ .fw_name = "losc" },
-+	{ .fw_name = "hosc" },
-+};
-+static SUNXI_CCU_M_DATA_WITH_MUX(r_apb2_clk, "r-apb2", r_apb2_parents,
-+				 0x010, 0, 5, 24, 2, 0);
-+
-+static const struct clk_hw *r_apb2_hws[] = {
-+	&r_apb2_clk.common.hw
-+};
-+
-+static SUNXI_CCU_GATE_HWS(r_bus_uart0_clk, "r-bus-uart0", r_apb2_hws, 0x18c, BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(r_bus_i2c0_clk,  "r-bus-i2c0",  r_apb2_hws, 0x19c, BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(r_bus_i2c1_clk,  "r-bus-i2c1",  r_apb2_hws, 0x19c, BIT(1), 0);
-+static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,    "r-bus-rtc",   r_apb1_hws, 0x20c, BIT(0), 0);
-+
-+static struct ccu_common *sun60i_a733_r_ccu_clks[] = {
-+	&r_cpus_clk.common,
-+	&r_ahb_clk.common,
-+	&r_apb1_clk.common,
-+	&r_apb2_clk.common,
-+	&r_bus_uart0_clk.common,
-+	&r_bus_i2c0_clk.common,
-+	&r_bus_i2c1_clk.common,
-+	&r_bus_rtc_clk.common,
-+};
-+
-+static struct clk_hw_onecell_data sun60i_a733_r_hw_clks = {
-+	.num = CLK_R_CPUCFG + 1,
-+	.hws = {
-+		[CLK_R_CPUS]		= &r_cpus_clk.common.hw,
-+		[CLK_R_AHB]		= &r_ahb_clk.common.hw,
-+		[CLK_R_APB1]		= &r_apb1_clk.common.hw,
-+		[CLK_R_APB2]		= &r_apb2_clk.common.hw,
-+		[CLK_R_BUS_UART0]	= &r_bus_uart0_clk.common.hw,
-+		[CLK_R_BUS_I2C0]	= &r_bus_i2c0_clk.common.hw,
-+		[CLK_R_BUS_I2C1]	= &r_bus_i2c1_clk.common.hw,
-+		[CLK_R_BUS_RTC]		= &r_bus_rtc_clk.common.hw,
-+		[CLK_R_CPUCFG]		= NULL,
-+	},
-+};
-+
-+static const struct ccu_reset_map sun60i_a733_r_ccu_resets[] = {
-+	[0] = { 0x18c, BIT(16) },
-+	[1] = { 0x19c, BIT(16) },
-+	[2] = { 0x19c, BIT(17) },
-+};
-+
-+static const struct sunxi_ccu_desc sun60i_a733_r_ccu_desc = {
-+	.ccu_clks	= sun60i_a733_r_ccu_clks,
-+	.num_ccu_clks	= ARRAY_SIZE(sun60i_a733_r_ccu_clks),
-+	.hw_clks	= &sun60i_a733_r_hw_clks,
-+	.resets		= sun60i_a733_r_ccu_resets,
-+	.num_resets	= ARRAY_SIZE(sun60i_a733_r_ccu_resets),
-+};
-+
-+static int sun60i_a733_r_ccu_probe(struct platform_device *pdev)
-+{
-+	void __iomem *reg = devm_platform_ioremap_resource(pdev, 0);
-+	if (IS_ERR(reg))
-+		return PTR_ERR(reg);
-+	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_r_ccu_desc);
-+}
-+
-+static const struct of_device_id sun60i_a733_r_ccu_ids[] = {
-+	{ .compatible = "allwinner,sun60i-a733-r-ccu" },
-+	{ }
-+};
-+MODULE_DEVICE_TABLE(of, sun60i_a733_r_ccu_ids);
-+
-+static struct platform_driver sun60i_a733_r_ccu_driver = {
-+	.probe	= sun60i_a733_r_ccu_probe,
-+	.driver	= {
-+		.name			= "sun60i-a733-r-ccu",
-+		.suppress_bind_attrs	= true,
-+		.of_match_table		= sun60i_a733_r_ccu_ids,
-+	},
-+};
-+module_platform_driver(sun60i_a733_r_ccu_driver);
-+MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("Allwinner A733 R-CCU driver");
+ MODULE_LICENSE("GPL");
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h
-new file mode 100644
-index 000000000..1cd6c214a
---- /dev/null
+index 1cd6c214a..1cd6c214a 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h
-@@ -0,0 +1,8 @@
-+/* SPDX-License-Identifier: GPL-2.0 */
-+#ifndef _CCU_SUN60I_A733_R_H_
-+#define _CCU_SUN60I_A733_R_H_
-+
-+#include "ccu_common.h"
-+#include "ccu_reset.h"
-+
-+#endif
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733.c b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-new file mode 100644
-index 000000000..c70f465f9
---- /dev/null
+index c70f465f9..f67b5e4c0 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,273 @@
-+// SPDX-License-Identifier: GPL-2.0
-+#include <linux/clk-provider.h>
-+#include <linux/io.h>
-+#include <linux/module.h>
-+#include <linux/platform_device.h>
-+
-+#include <dt-bindings/clock/sun60i-a733-ccu.h>
-+#include <dt-bindings/reset/sun60i-a733-ccu.h>
-+
-+#include "ccu_common.h"
-+#include "ccu_reset.h"
-+#include "ccu_div.h"
-+#include "ccu_gate.h"
-+#include "ccu_mp.h"
-+#include "ccu_mult.h"
-+#include "ccu_nk.h"
-+#include "ccu_nkm.h"
-+#include "ccu_nkmp.h"
-+#include "ccu_nm.h"
-+
-+static const struct clk_parent_data osc24M[] = {
-+	{ .fw_name = "hosc" }
-+};
-+
-+static struct ccu_nkmp pll_periph0_4x_clk = {
-+	.enable		= BIT(27),
-+	.lock		= BIT(28),
-+	.n		= _SUNXI_CCU_MULT_MIN(8, 8, 12),
-+	.m		= _SUNXI_CCU_DIV(1, 1),
-+	.p		= _SUNXI_CCU_DIV(0, 1),
-+	.common		= {
-+		.reg		= 0x020,
-+		.hw.init	= CLK_HW_INIT_PARENTS_DATA("pll-periph0-4x", osc24M,
-+							   &ccu_nkmp_ops,
-+							   CLK_SET_RATE_GATE | CLK_IS_CRITICAL),
-+	},
-+};
-+
-+static const struct clk_hw *pll_periph0_4x_hws[] = {
-+	&pll_periph0_4x_clk.common.hw
-+};
-+
-+static SUNXI_CCU_M_HWS(pll_periph0_2x_clk, "pll-periph0-2x",
-+		       pll_periph0_4x_hws, 0x020, 16, 3, CLK_IS_CRITICAL);
-+
-+static const struct clk_hw *pll_periph0_2x_hws[] = {
-+	&pll_periph0_2x_clk.common.hw
-+};
-+
-+static SUNXI_CCU_M_HWS(pll_periph0_1x_clk, "pll-periph0-1x",
-+		       pll_periph0_2x_hws, 0x020, 20, 3, CLK_IS_CRITICAL);
-+
-+static const struct clk_parent_data ahb_parents[] = {
-+	{ .fw_name = "hosc" },
-+	{ .hw = &pll_periph0_2x_clk.common.hw },
-+};
-+static SUNXI_CCU_M_DATA_WITH_MUX(psi_ahb1_ahb2_clk, "psi-ahb1-ahb2",
-+				 ahb_parents, 0x510, 0, 5, 24, 2, CLK_IS_CRITICAL);
-+
-+static const struct clk_hw *ahb_hws[] = {
-+	&psi_ahb1_ahb2_clk.common.hw
-+};
-+
-+static const struct clk_parent_data apb1_parents[] = {
-+	{ .fw_name = "hosc" },
-+	{ .hw = &pll_periph0_2x_clk.common.hw },
-+};
-+static SUNXI_CCU_M_DATA_WITH_MUX(apb1_clk, "apb1", apb1_parents,
-+				 0x520, 0, 5, 24, 2, CLK_IS_CRITICAL);
-+
-+static const struct clk_hw *apb1_hws[] = {
-+	&apb1_clk.common.hw
-+};
-+
-+static const struct clk_parent_data apb2_parents[] = {
-+	{ .fw_name = "hosc" },
-+	{ .hw = &pll_periph0_2x_clk.common.hw },
-+};
-+static SUNXI_CCU_M_DATA_WITH_MUX(apb2_clk, "apb2", apb2_parents,
-+				 0x524, 0, 5, 24, 2, CLK_IS_CRITICAL);
-+
-+static const struct clk_hw *apb2_hws[] = {
-+	&apb2_clk.common.hw
-+};
-+
-+static SUNXI_CCU_GATE_HWS(bus_uart0_clk, "bus-uart0", apb2_hws, 0x90c, BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart1_clk, "bus-uart1", apb2_hws, 0x90c, BIT(1), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart2_clk, "bus-uart2", apb2_hws, 0x90c, BIT(2), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart3_clk, "bus-uart3", apb2_hws, 0x90c, BIT(3), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart4_clk, "bus-uart4", apb2_hws, 0x90c, BIT(4), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart5_clk, "bus-uart5", apb2_hws, 0x90c, BIT(5), 0);
 +static SUNXI_CCU_GATE_HWS(bus_uart6_clk, "bus-uart6", apb2_hws, 0x90c, BIT(6), 0);
 +static SUNXI_CCU_GATE_HWS(bus_uart7_clk, "bus-uart7", apb2_hws, 0x90c, BIT(7), 0);
 +
