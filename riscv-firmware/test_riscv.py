@@ -57,9 +57,7 @@ def cmd_status():
 
     print("[1] Main SoC CCU (0x02001000):")
     clk_dsp = main_ccu.read32(0xc70)
-    rst_dsp = main_ccu.read32(0xc7c)
     print(f"    - CLK_DSP  (0x02001c70): 0x{clk_dsp:08X} ({'ENABLED' if (clk_dsp & (1<<31)) else 'DISABLED'})")
-    print(f"    - BUS_DSP  (0x02001c7c): 0x{rst_dsp:08X} (CLK={'ON' if (rst_dsp&1) else 'OFF'}, RST={'DE-ASSERTED' if (rst_dsp&0x10000) else 'ASSERTED'})")
 
     print("\n[2] System Config / SRAM Mux (0x03000000):")
     sram_ctrl1 = sys_cfg.read32(0x0004)
@@ -116,11 +114,54 @@ def cmd_status():
     print(f"    - Trap Counter  (0x00028020): {trap}")
     print("=" * 80)
 
+def cmd_scan():
+    print("=" * 80)
+    print("NON-ZERO HARDWARE REGISTER SCAN ACROSS ALL MCU REGIONS")
+    print("=" * 80)
+    main_ccu, sys_cfg, mcu_cfg, mcu_ccu, mask_rom, sram_c = get_mmio()
+
+    def scan_region(name, mmio, size):
+        print(f"\n--- Region: {name} (Physical 0x{mmio.base_addr:08X}, Size {size} bytes) ---")
+        count = 0
+        for off in range(0, size, 4):
+            val = mmio.read32(off)
+            if val != 0:
+                print(f"  [0x{mmio.base_addr + off:08X}] (offset +0x{off:04X}): 0x{val:08X}")
+                count += 1
+        if count == 0:
+            print("  (All registers read 0x00000000)")
+
+    scan_region("Main CCU", main_ccu, 0x1000)
+    scan_region("System Config", sys_cfg, 0x100)
+    scan_region("MCU Config (0x07100000)", mcu_cfg, 0x100)
+    scan_region("MCU CCU (0x07102000)", mcu_ccu, 0x200)
+    scan_region("Mask ROM (0x07110000)", mask_rom, 0x100)
+    scan_region("SRAM C Base (0x00020000)", sram_c, 0x80)
+    scan_region("SRAM C Telemetry (0x00028000)", sram_c, 0x40)
+    print("=" * 80)
+
+def cmd_test_remap():
+    print("=" * 80)
+    print("TESTING TCM / VECTOR / REMAP WRITABILITY (0x07100000..0x07100040)")
+    print("=" * 80)
+    mcu_cfg = MMIO(MCU_CFG_BASE, 0x1000)
+    
+    test_offsets = [0x0000, 0x0004, 0x0008, 0x0010, 0x0014, 0x0018, 0x001c, 0x0020, 0x0024]
+    for off in test_offsets:
+        orig = mcu_cfg.read32(off)
+        mcu_cfg.write32(off, 0x12345678)
+        wb1 = mcu_cfg.read32(off)
+        mcu_cfg.write32(off, 0x00000000)
+        wb2 = mcu_cfg.read32(off)
+        mcu_cfg.write32(off, orig) # restore
+        writable = "READ/WRITE (Writable!)" if (wb1 != orig or wb2 != orig) else "READ-ONLY / Fixed"
+        print(f"  Register [0x{MCU_CFG_BASE + off:08X}] (offset +0x{off:02X}): Orig=0x{orig:08X} -> Write(0x12345678)={wb1:08X} -> Write(0)={wb2:08X} [{writable}]")
+    print("=" * 80)
+
 def cmd_enable_clocks():
     print("[+] Enabling Main CCU Root DSP/MCU clocks...")
     main_ccu = MMIO(MAIN_CCU_BASE, 0x1000)
     main_ccu.write32(0xc70, 0x80000000)
-    main_ccu.write32(0xc7c, 0x00010001)
 
     print("[+] Enabling MCU CCU and TZMA peripheral buses...")
     mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
@@ -150,10 +191,10 @@ def cmd_test_sram():
     print("[+] SRAM C 100% Passed read/write integrity check!")
     return True
 
-def cmd_load(bin_path="/lib/firmware/riscv-firmware.bin"):
+def cmd_load(bin_path="/tmp/riscv-firmware.bin"):
     if not os.path.exists(bin_path):
-        if os.path.exists("/tmp/riscv-firmware.bin"):
-            bin_path = "/tmp/riscv-firmware.bin"
+        if os.path.exists("/lib/firmware/riscv-firmware.bin"):
+            bin_path = "/lib/firmware/riscv-firmware.bin"
         else:
             print(f"[-] ERROR: Binary not found: {bin_path}")
             return False
@@ -161,11 +202,10 @@ def cmd_load(bin_path="/lib/firmware/riscv-firmware.bin"):
     with open(bin_path, "rb") as f:
         data = bytearray(f.read())
 
-    # Pad to 4-byte boundary
     if len(data) % 4 != 0:
         data += b'\x00' * (4 - (len(data) % 4))
 
-    print(f"[+] Loading {len(data)} bytes from {bin_path} into SRAM C (0x00020000) via 32-bit aligned words...")
+    print(f"[+] Loading {len(data)} bytes from {bin_path} into SRAM C (0x00020000)...")
     sram_c = MMIO(SRAM_C_BASE, 0x20000)
     for i in range(0, len(data), 4):
         val = int.from_bytes(data[i:i+4], 'little')
@@ -181,7 +221,6 @@ def cmd_load(bin_path="/lib/firmware/riscv-firmware.bin"):
 def cmd_start():
     print("[+] Starting XuanTie RISC-V Co-Processor...")
     cmd_enable_clocks()
-    
     mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
     mcu_ccu.write32(0x124, 0x00030001) # Hold core in reset
     time.sleep(0.01)
@@ -194,7 +233,7 @@ def cmd_stop():
     mcu_ccu.write32(0x124, 0x00030001)
     print("[+] Core held in reset.")
 
-def cmd_monitor(duration=10):
+def cmd_monitor(duration=5):
     print("=" * 80)
     print(f"MONITORING XUANTIE RISC-V TELEMETRY (0x00028000) for {duration} seconds...")
     print("=" * 80)
@@ -219,21 +258,6 @@ def cmd_monitor(duration=10):
         time.sleep(0.5)
     print("\n")
 
-def cmd_probe():
-    print("=" * 80)
-    print("PHYSICAL HARDWARE CLOCK & BUS TICK PROBE")
-    print("=" * 80)
-    cmd_enable_clocks()
-    mcu_ccu = MMIO(MCU_CCU_BASE, 0x1000)
-    
-    print("[+] Checking if MCU peripheral bus and registers are accessible...")
-    val1 = mcu_ccu.read32(0x120)
-    print(f"[+] MCU CCU RISCV_CLK register readback: 0x{val1:08X}")
-    if val1 & 0x80000000:
-        print("[+] SUCCESS: MCU CCU Clock Gate is OPEN (Root Clock Active)!")
-    else:
-        print("[-] WARNING: MCU CCU Clock Gate read as CLOSED!")
-
 def cmd_run(bin_path="/tmp/riscv-firmware.bin"):
     print("=" * 80)
     print("RUNNING AUTOMATED XUANTIE RISC-V BRING-UP SEQUENCE")
@@ -248,13 +272,17 @@ def cmd_run(bin_path="/tmp/riscv-firmware.bin"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Allwinner XuanTie RISC-V Bring-up & Diagnostic Tool")
-    parser.add_argument("action", choices=["status", "enable-clocks", "test-sram", "load", "start", "stop", "monitor", "probe", "run"], default="status", nargs="?")
-    parser.add_argument("--fw", default="/lib/firmware/riscv-firmware.bin", help="Path to firmware binary")
-    parser.add_argument("--duration", type=int, default=10, help="Monitor duration in seconds")
+    parser.add_argument("action", choices=["status", "scan", "test-remap", "enable-clocks", "test-sram", "load", "start", "stop", "monitor", "run"], default="status", nargs="?")
+    parser.add_argument("--fw", default="/tmp/riscv-firmware.bin", help="Path to firmware binary")
+    parser.add_argument("--duration", type=int, default=5, help="Monitor duration in seconds")
     args = parser.parse_args()
 
     if args.action == "status":
         cmd_status()
+    elif args.action == "scan":
+        cmd_scan()
+    elif args.action == "test-remap":
+        cmd_test_remap()
     elif args.action == "enable-clocks":
         cmd_enable_clocks()
     elif args.action == "test-sram":
@@ -267,7 +295,5 @@ if __name__ == "__main__":
         cmd_stop()
     elif args.action == "monitor":
         cmd_monitor(args.duration)
-    elif args.action == "probe":
-        cmd_probe()
     elif args.action == "run":
         cmd_run(args.fw)
