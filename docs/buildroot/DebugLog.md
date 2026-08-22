@@ -317,5 +317,65 @@ Following our investigation into the root cause of the peripheral clock starvati
 1. **Hybrid Mainline Route**: Rather than waiting for a full 6-month kernel release cycle, we can integrate the `ccu-sun60i-a733` and `pinctrl-sun60i-a733` patch series into `project-cubie-a5e/patches/linux/` and combine it with the working `radxa_a733_bootloader.bin` LPDDR5 DRAM trainer.
 2. **Automated Tracking Tool (`tools/watch_a733_upstream.py`)**: Developed an automated tool that queries `lore.kernel.org` (linux-sunxi, linux-clk) and U-Boot Patchwork to monitor for new patch revisions (v3, v4, etc.) and git pull requests.
 
+---
+
+## Case Study 10: Radxa Cubie A7A Boot Handoff Failure: Vendor U-Boot 2018.07 vs Mainline Memory & Entry Point Friction
+**Date:** August 21, 2026  
+**Component:** `boot.cmd`, `uboot-env.txt`, `sun60i-a733-cubie-a7a.dts`, ARM Trusted Firmware (BL31), Vendor U-Boot 2018.07 (`radxa_a733_bootloader.bin`)
+
+### 🚨 Symptoms
+Upon booting the newly recompiled Linux 7.1 `PREEMPT_RT` kernel on the Radxa Cubie A7A, the system initialized through vendor U-Boot and ARISC SCP firmware, but halted silently at the ARM Trusted Firmware handoff:
+```text
+Found U-Boot script /boot.scr
+## Executing script at 4fc00000
+41583 bytes read in 10 ms (4 MiB/s)
+44395008 bytes read in 1888 ms (22.4 MiB/s)
+[15.468]libfdt fdt_path_offset() returned FDT_ERR_BADMAGIC
+[15.485]## error: update_fdt_dram_para_from_bootpara : FDT_ERR_NOTFOUND
+[15.528]Starting kernel ...
+NOTICE:  [SCP] :wait arisc ready....
+NOTICE:  [SCP] :arisc version: [d463b9da43dc50320f21ba51c6c51afe2db20d83]
+NOTICE:  [SCP] :arisc startup ready
+NOTICE:  [SCP] :sunxi-arisc driver is starting
+NOTICE:  BL3-1: Next image address = 0x40200000
+NOTICE:  BL3-1: Next image spsr = 0x3c5
+<hang - no earlycon output>
+```
+
+### 🔍 Root Cause Analysis: Why Basic Bring-Up Checks Failed
+The failure stemmed from an impedance mismatch between **modern mainline ARM64 defaults** (used by Cubie A5E) and **Allwinner's 2018 vendor bootloader blob** (required by Cubie A7A):
+
+1. **Kernel Entry Address Mismatch (`0x40080000` vs `0x40200000`)**:
+   - Modern upstream U-Boot and ARM64 kernels default to `kernel_addr_r = 0x40080000` (512 KB DRAM offset).
+   - Radxa's vendor BL31 binary blob (`radxa_a733_bootloader.bin`) was compiled with a hardcoded non-secure entrypoint of `0x40200000` (2 MB legacy DRAM offset).
+   - When BL31 jumped to `0x40200000`, it branched **1.5 MB into the middle of the kernel binary**, causing the core to immediately execute invalid instructions and fault before `earlycon` could print a single character.
+
+2. **Legacy U-Boot DRAM Node Query (`FDT_ERR_NOTFOUND`)**:
+   - Modern upstream U-Boot generates `/memory` nodes dynamically at runtime if they are missing from the DTS.
+   - Allwinner's vendor U-Boot 2018.07 relies on `fdt_path_offset(fdt, "/memory")` to locate an *existing* node and patch DRAM calibration timings from `bootpara`.
+   - Because `sun60i-a733-cubie-a7a.dts` followed modern mainline practice (omitting `/memory`), vendor U-Boot failed with `FDT_ERR_NOTFOUND` and skipped passing physical memory geometry to the kernel.
+
+3. **Why this was missed**:
+   - The A7A configuration was ported directly from the verified A5E mainline template. While the A5E uses upstream U-Boot 2026.01, the A7A relies on an 8-year-old closed-source vendor bootloader fork with legacy BSP requirements.
+
+### 🛠️ The Fixes
+1. **Realaligned Kernel Address**:
+   - Updated `kernel_addr_r` from `0x40080000` to `0x40200000` in both `board/radxa/cubie_a7a/boot.cmd` and `uboot-env.txt`.
+2. **Explicit Device Tree Base Memory & Chosen Nodes**:
+   - Injected the base 6 GiB memory node and earlycon into `sun60i-a733-cubie-a7a.dts` and `patches/linux/0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`:
+     ```dts
+     chosen {
+         bootargs = "earlycon=uart8250,mmio32,0x02500000 console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait panic=10 isolcpus=7 nohz_full=7 rcu_nocbs=7 loglevel=8";
+     };
+
+     memory@40000000 {
+         device_type = "memory";
+         reg = <0x00 0x40000000 0x01 0x80000000>; /* 6 GiB */
+     };
+     ```
+3. **Rebuilt Build Pipeline**:
+   - Executed `make linux-rebuild` and `make` in `bld.a7a`, generating updated `boot.scr`, `uboot.env`, `sun60i-a733-cubie-a7a.dtb`, and `sdcard.img`.
+
+
 
 

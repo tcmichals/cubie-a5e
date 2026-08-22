@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@yahoo.com>
+Date: Fri, 21 Aug 2026 21:00:00 -0500
+Subject: [PATCH] sunxi: fix boot device for MMC boot
+
+---
+ arch/arm/mach-sunxi/board.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/mach-sunxi/board.c b/arch/arm/mach-sunxi/board.c
+index 1111111..2222222 100644
+--- a/arch/arm/mach-sunxi/board.c
++++ b/arch/arm/mach-sunxi/board.c
+@@ -292,7 +292,7 @@ uint32_t sunxi_get_boot_device(void)
+ {
+ 	int boot_source = sunxi_get_boot_source();
+ 
+-	return BOOT_DEVICE_RAM;
++	return BOOT_DEVICE_MMC1;
+ 	/*
+ 	 * When booting from the SD card or NAND memory, the "eGON.BT0"
+ 	 * signature is expected to be found in memory at the address 0x0004
+-- 
+2.44.0

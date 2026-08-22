@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@yahoo.com>
+Date: Sat, 22 Aug 2026 08:30:00 -0500
+Subject: [PATCH] sunxi: fix A733 DRAM initialization to avoid overwriting TF-A/OP-TEE memory
+
+---
+ board/sunxi/board.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index 1111111..2222222 100644
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -274,9 +274,15 @@ int dram_init(void)
+ {
+ 	struct boot_file_head *spl = get_spl_header(SPL_DRAM_HEADER_VERSION);
+ 
+-	if (spl == INVALID_SPL_HEADER)
++	if (spl == INVALID_SPL_HEADER) {
++#if defined(CONFIG_MACH_SUN60I_A733)
++		/* boot0 has already trained and sized 6GB LPDDR5 DRAM; avoid clobbering BL31/OP-TEE */
++		gd->ram_size = 0x180000000ULL;
++#else
+ 		gd->ram_size = get_ram_size((long *)PHYS_SDRAM_0,
+ 					    PHYS_SDRAM_0_SIZE);
++#endif
++	}
+ 	else
+ 		gd->ram_size = (phys_addr_t)spl->dram_size << 20;
+ 
+-- 
+2.44.0

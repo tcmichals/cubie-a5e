@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@yahoo.com>
+Date: Sat, 22 Aug 2026 08:35:00 -0500
+Subject: [PATCH] board_r: add debug uart telemetry for post-relocation initcalls
+
+---
+ common/board_r.c | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/common/board_r.c b/common/board_r.c
+index 1111111..2222222 100644
+--- a/common/board_r.c
++++ b/common/board_r.c
+@@ -66,6 +66,7 @@
+ #include <wdt.h>
+ #include <asm-generic/gpio.h>
+ #include <relocate.h>
++#include <debug_uart.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -611,12 +612,24 @@ static void initcall_run_r(void)
+ 	 * Please do not add logic to this function (variables, if (), etc.).
+ 	 * For simplicity it should remain an ordered list of function calls.
+ 	 */
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] board_init_r: initcall_run_r starting...\n");
++#endif
+ 	INITCALL(initr_trace);
+ 	INITCALL(initr_reloc);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Relocation marked done\n");
++#endif
+ 	INITCALL(event_init);
+ 	/* TODO: could x86/PPC have this also perhaps? */
+ #if CONFIG_IS_ENABLED(ARM) || CONFIG_IS_ENABLED(RISCV)
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Enabling MMU & Caches (initr_caches)...\n");
++#endif
+ 	INITCALL(initr_caches);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] MMU & Caches enabled successfully!\n");
++#endif
+ 	/* Note: For Freescale LS2 SoCs, new MMU table is created in DDR.
+ 	 *	 A temporary mapping of IFC high region is since removed,
+ 	 *	 so environmental variables in NOR flash is not available
+@@ -629,7 +642,13 @@ static void initcall_run_r(void)
+ 	INITCALL(initr_unlock_ram_in_cache);
+ #endif
+ 	INITCALL(initr_barrier);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Initializing malloc heap (initr_malloc)...\n");
++#endif
+ 	INITCALL(initr_malloc);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Malloc heap ready\n");
++#endif
+ 	INITCALL(log_init);
+ 	INITCALL(initr_bootstage); /* Needs malloc() but has its own timer */
+ #if CONFIG_IS_ENABLED(CONSOLE_RECORD)
+@@ -640,13 +659,25 @@ static void initcall_run_r(void)
+ #endif
+ 	INITCALL(initr_of_live);
+ #if CONFIG_IS_ENABLED(DM)
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Initializing Driver Model (initr_dm)...\n");
++#endif
+ 	INITCALL(initr_dm);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Driver Model ready\n");
++#endif
+ #endif
+ #if CONFIG_IS_ENABLED(ADDR_MAP)
+ 	INITCALL(init_addr_map);
+ #endif
+ #if CONFIG_IS_ENABLED(BOARD_INIT)
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Calling board_init()...\n");
++#endif
+ 	INITCALL(board_init);	/* Setup chipselects */
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] board_init done\n");
++#endif
+ #endif
+ 	/*
+ 	 * TODO: printing of the clock inforamtion of the board is now
+@@ -669,7 +700,13 @@ static void initcall_run_r(void)
+ #endif
+ 	INITCALL(initr_dm_devices);
+ 	INITCALL(stdio_init_tables);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Probing Serial Driver (serial_initialize)...\n");
++#endif
+ 	INITCALL(serial_initialize);
++#if CONFIG_IS_ENABLED(DEBUG_UART)
++	printascii("[A7A] Serial driver ready\n");
++#endif
+ 	INITCALL(initr_announce);
+ 	INITCALL(dm_announce);
+ #if CONFIG_IS_ENABLED(WDT)
+-- 
+2.44.0

@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yixun Lan <dlan@gentoo.org>
+Date: Fri, 21 Aug 2026 12:00:00 +0000
+Subject: [PATCH] pinctrl: sunxi: a733: add initial support
+
+---
+diff --git a/drivers/pinctrl/sunxi/Kconfig b/drivers/pinctrl/sunxi/Kconfig
+index dc62eba..4fd6d9a 100644
+--- a/drivers/pinctrl/sunxi/Kconfig
++++ b/drivers/pinctrl/sunxi/Kconfig
+@@ -142,3 +142,17 @@ config PINCTRL_SUN55I_A523_R
+ 	select PINCTRL_SUNXI
+ 
+ endif
++
++config PINCTRL_SUN60I_A733
++	tristate "Support for the Allwinner A733 PIO"
++	default ARCH_SUNXI
++	depends on ARM64 || COMPILE_TEST
++	select PINCTRL_SUNXI
++	select PINCTRL_SUNXI_DT
++
++config PINCTRL_SUN60I_A733_R
++	tristate "Support for the Allwinner A733 R-PIO"
++	default ARCH_SUNXI
++	depends on ARM64 || COMPILE_TEST
++	select PINCTRL_SUNXI
++	select PINCTRL_SUNXI_DT
+diff --git a/drivers/pinctrl/sunxi/Makefile b/drivers/pinctrl/sunxi/Makefile
+index 951b3f1..3fb2b3b 100644
+--- a/drivers/pinctrl/sunxi/Makefile
++++ b/drivers/pinctrl/sunxi/Makefile
+@@ -31,3 +31,6 @@ obj-$(CONFIG_PINCTRL_SUN55I_A523)	+= pinctrl-sun55i-a523.o
+ obj-$(CONFIG_PINCTRL_SUN55I_A523_R)	+= pinctrl-sun55i-a523-r.o
+ obj-$(CONFIG_PINCTRL_SUN9I_A80)		+= pinctrl-sun9i-a80.o
+ obj-$(CONFIG_PINCTRL_SUN9I_A80_R)	+= pinctrl-sun9i-a80-r.o
++
++obj-$(CONFIG_PINCTRL_SUN60I_A733) += pinctrl-sun60i-a733.o
++obj-$(CONFIG_PINCTRL_SUN60I_A733_R) += pinctrl-sun60i-a733-r.o
+diff --git a/drivers/pinctrl/sunxi/pinctrl-sun60i-a733-r.c b/drivers/pinctrl/sunxi/pinctrl-sun60i-a733-r.c
+new file mode 100644
+index 0000000..e22afb6
+--- /dev/null
++++ b/drivers/pinctrl/sunxi/pinctrl-sun60i-a733-r.c
+@@ -0,0 +1,45 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/of.h>
++#include <linux/of_device.h>
++#include <linux/pinctrl/pinctrl.h>
++
++#include "pinctrl-sunxi.h"
++
++static const u8 a733_r_nr_bank_pins[SUNXI_PINCTRL_MAX_BANKS] = {
++	13,
++	10,
++};
++
++static const unsigned int a733_r_irq_bank_map[] = { 0, 1 };
++static const u8 a733_r_irq_bank_muxes[SUNXI_PINCTRL_MAX_BANKS] = { 14, 14 };
++
++static struct sunxi_pinctrl_desc a733_r_pinctrl_data = {
++	.irq_banks = ARRAY_SIZE(a733_r_irq_bank_map),
++	.irq_bank_map = a733_r_irq_bank_map,
++	.irq_read_needs_mux = true,
++	.pin_base = 'L',
++};
++
++static int a733_r_pinctrl_probe(struct platform_device *pdev)
++{
++	return sunxi_pinctrl_dt_table_init(pdev, a733_r_nr_bank_pins,
++					   a733_r_irq_bank_muxes,
++					   &a733_r_pinctrl_data, 0);
++}
++
++static const struct of_device_id a733_r_pinctrl_match[] = {
++	{ .compatible = "allwinner,sun60i-a733-r-pinctrl", },
++	{}
++};
++MODULE_DEVICE_TABLE(of, a733_r_pinctrl_match);
++
++static struct platform_driver a733_r_pinctrl_driver = {
++	.probe	= a733_r_pinctrl_probe,
++	.driver	= {
++		.name		= "sun60i-a733-r-pinctrl",
++		.of_match_table	= a733_r_pinctrl_match,
++	},
++};
++builtin_platform_driver(a733_r_pinctrl_driver);
+diff --git a/drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c b/drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c
+new file mode 100644
+index 0000000..973dc76
+--- /dev/null
++++ b/drivers/pinctrl/sunxi/pinctrl-sun60i-a733.c
+@@ -0,0 +1,47 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/of.h>
++#include <linux/of_device.h>
++#include <linux/pinctrl/pinctrl.h>
++
++#include "pinctrl-sunxi.h"
++
++static const u8 a733_nr_bank_pins[SUNXI_PINCTRL_MAX_BANKS] =
++	{  0, 15, 17, 24, 16,  7, 15, 20, 17, 28, 24 };
++
++static const unsigned int a733_irq_bank_map[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
++
++static const u8 a733_irq_bank_muxes[SUNXI_PINCTRL_MAX_BANKS] =
++	{  0, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14 };
++
++static struct sunxi_pinctrl_desc a733_pinctrl_data = {
++	.irq_banks = ARRAY_SIZE(a733_irq_bank_map),
++	.irq_bank_map = a733_irq_bank_map,
++	.irq_read_needs_mux = true,
++	.io_bias_cfg_variant = BIAS_VOLTAGE_PIO_POW_MODE_SEL,
++};
++
++static int a733_pinctrl_probe(struct platform_device *pdev)
++{
++	return sunxi_pinctrl_dt_table_init(pdev, a733_nr_bank_pins,
++					   a733_irq_bank_muxes,
++					   &a733_pinctrl_data,
++					   SUNXI_PINCTRL_NEW_REG_LAYOUT |
++					   SUNXI_PINCTRL_ELEVEN_BANKS);
++}
++
++static const struct of_device_id a733_pinctrl_match[] = {
++	{ .compatible = "allwinner,sun60i-a733-pinctrl", },
++	{}
++};
++MODULE_DEVICE_TABLE(of, a733_pinctrl_match);
++
++static struct platform_driver a733_pinctrl_driver = {
++	.probe	= a733_pinctrl_probe,
++	.driver	= {
++		.name		= "sun60i-a733-pinctrl",
++		.of_match_table	= a733_pinctrl_match,
++	},
++};
++builtin_platform_driver(a733_pinctrl_driver);

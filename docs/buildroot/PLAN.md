@@ -1,7 +1,8 @@
 # XuanTie E907 RISC-V Co-Processor Implementation & Tracking Plan
 
 **Current Milestone:** Phase 2 — Firmware Execution & Telemetry  
-**Target Hardware:** Radxa Cubie A5E (Allwinner T527 / A527)  
+**Primary Platform:** Radxa Cubie A5E (Allwinner T527 / A527)  
+**Secondary Platform:** Radxa Cubie A7A (Allwinner A733) — See [**`A7A Mainline Bring-Up Plan`**](../platforms/A7A_MAINLINE_PLAN.md)  
 **Co-Processor:** XuanTie E907 RISC-V (RV32IMAC @ 600 MHz)  
 **Build System:** Buildroot Out-of-Tree (`BR2_EXTERNAL=project-cubie-a5e`)
 

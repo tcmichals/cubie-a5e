@@ -1,0 +1,7 @@
+config BR2_PACKAGE_BOOT0_A733
+	bool "boot0-a733"
+	help
+	  Allwinner A733 LPDDR5 DRAM initialization Boot0 firmware
+	  for Radxa Cubie A7A.
+
+	  https://github.com/radxa/allwinner-device
