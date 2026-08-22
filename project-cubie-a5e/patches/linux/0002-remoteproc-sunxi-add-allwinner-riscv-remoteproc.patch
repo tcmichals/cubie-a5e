@@ -149,12 +149,26 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +	if (da >= CORE_DTCM_BASE && (da + len) <= (CORE_DTCM_BASE + DTCM_SIZE))
 +		return priv->dtcm_va + (da - CORE_DTCM_BASE);
 +
-+	/* SRAM / Shared Memory: physical 0x07130000 */
-+	if (priv->sram_va && da >= SRAM_PHYS_BASE && (da + len) <= (SRAM_PHYS_BASE + SRAM_SIZE))
-+		return priv->sram_va + (da - SRAM_PHYS_BASE);
++	/* SRAM / Shared Memory: physical 0x07130000 or core local 0x00020000 */
++	if (priv->sram_va) {
++		if (da >= SRAM_PHYS_BASE && (da + len) <= (SRAM_PHYS_BASE + SRAM_SIZE))
++			return priv->sram_va + (da - SRAM_PHYS_BASE);
++		if (da >= CORE_SRAM_BASE && (da + len) <= (CORE_SRAM_BASE + SRAM_SIZE))
++			return priv->sram_va + (da - CORE_SRAM_BASE);
++	}
 +
 +	dev_warn(priv->dev, "da_to_va: unmapped device address 0x%llx (len %zu)\n", da, len);
 +	return NULL;
++}
++
++static int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
++{
++	int ret = rproc_elf_load_rsc_table(rproc, fw);
++	if (ret == -EINVAL) {
++		dev_info(rproc->dev.parent, "No resource table found; running bare-metal ELF\n");
++		return 0;
++	}
++	return ret;
 +}
 +
 +static const struct rproc_ops sunxi_rproc_ops = {
@@ -163,7 +177,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +	.da_to_va	= sunxi_rproc_da_to_va,
 +	.get_boot_addr	= rproc_elf_get_boot_addr,
 +	.load		= rproc_elf_load_segments,
-+	.parse_fw	= rproc_elf_load_rsc_table,
++	.parse_fw	= sunxi_rproc_parse_fw,
 +	.sanity_check	= rproc_elf_sanity_check,
 +};
 +
