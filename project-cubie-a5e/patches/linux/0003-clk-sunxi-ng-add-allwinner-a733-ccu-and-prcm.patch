@@ -110,6 +110,7 @@ index 000000000..207cf56e6
 +		[CLK_R_BUS_I2C0]	= &r_bus_i2c0_clk.common.hw,
 +		[CLK_R_BUS_I2C1]	= &r_bus_i2c1_clk.common.hw,
 +		[CLK_R_BUS_RTC]		= &r_bus_rtc_clk.common.hw,
++		[CLK_R_CPUCFG]		= NULL,
 +	},
 +};
 +
@@ -381,6 +382,7 @@ index 000000000..c70f465f9
 +		[CLK_MMC2]		= &mmc2_clk.common.hw,
 +		[CLK_SPI0]		= &spi0_clk.common.hw,
 +		[CLK_SPI1]		= &spi1_clk.common.hw,
++		[CLK_USB_PHY1]		= NULL,
 +	},
 +};
 +
