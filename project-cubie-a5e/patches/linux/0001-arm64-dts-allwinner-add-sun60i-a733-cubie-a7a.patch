@@ -261,12 +261,12 @@ index 0000000..155066b
 +			clock-names = "ahb", "mmc";
 +			resets = <&ccu RST_BUS_MMC0>;
 +			reset-names = "ahb";
-+			interrupts = <GIC_SPI 47 IRQ_TYPE_LEVEL_HIGH>;
++			interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&mmc0_pins>;
 +			status = "okay";
 +			bus-width = <4>;
-+			cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* PF6 */
++			broken-cd;
 +			vmmc-supply = <&reg_vcc3v3>;
 +			max-frequency = <150000000>;
 +			cap-sd-highspeed;
