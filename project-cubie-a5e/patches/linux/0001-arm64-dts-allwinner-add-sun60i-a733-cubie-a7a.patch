@@ -221,11 +221,13 @@ index 0000000..155066b
 +			uart0_pins: uart0-pins {
 +				pins = "PB9", "PB10";
 +				function = "uart0";
++				allwinner,pinmux = <2>;
 +			};
 +
 +			mmc0_pins: mmc0-pins {
 +				pins = "PF0", "PF1", "PF2", "PF3", "PF4", "PF5";
 +				function = "mmc0";
++				allwinner,pinmux = <2>;
 +				drive-strength = <30>;
 +				bias-pull-up;
 +			};
@@ -284,6 +286,7 @@ index 0000000..155066b
 +			r_i2c0_pins: r-i2c0-pins {
 +				pins = "PL0", "PL1";
 +				function = "s_i2c0";
++				allwinner,pinmux = <2>;
 +			};
 +		};
 +

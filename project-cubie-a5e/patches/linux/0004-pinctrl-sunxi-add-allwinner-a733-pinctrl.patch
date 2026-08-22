@@ -64,7 +64,7 @@ index 0000000..e22afb6
 +	.irq_banks = ARRAY_SIZE(a733_r_irq_bank_map),
 +	.irq_bank_map = a733_r_irq_bank_map,
 +	.irq_read_needs_mux = true,
-+	.pin_base = 'L',
++	.pin_base = PL_BASE,
 +};
 +
 +static int a733_r_pinctrl_probe(struct platform_device *pdev)
