@@ -109,6 +109,7 @@ firmware.elf: $(OBJS) firmware.ld
 
 firmware.bin: firmware.elf
 	$(OBJCOPY) -O binary $< $@
+	python3 mksunxiriscv.py $@ $<
 
 clean:
 	rm -f *.o firmware.elf firmware.bin firmware.map
