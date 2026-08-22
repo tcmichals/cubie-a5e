@@ -267,10 +267,11 @@ index 0000000..155066b
 +			status = "okay";
 +			bus-width = <4>;
 +			non-removable;
++			no-sdio;
++			no-mmc;
 +			vmmc-supply = <&reg_vcc3v3>;
 +			max-frequency = <50000000>;
 +			cap-sd-highspeed;
-+			cap-mmc-highspeed;
 +		};
 +
 +		r_ccu: clock-controller@7010000 {
