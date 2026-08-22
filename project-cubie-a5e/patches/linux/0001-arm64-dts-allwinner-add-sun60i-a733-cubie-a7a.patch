@@ -58,6 +58,14 @@ index 0000000..155066b
 +		reg = <0x00 0x40000000 0x01 0x80000000>; /* 6 GiB */
 +	};
 +
++	reg_vcc3v3: vcc-3v3 {
++		compatible = "regulator-fixed";
++		regulator-name = "vcc-3v3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		regulator-always-on;
++	};
++
 +	cpus {
 +		#address-cells = <2>;
 +		#size-cells = <0>;
@@ -285,7 +293,7 @@ index 0000000..155066b
 +
 +			r_i2c0_pins: r-i2c0-pins {
 +				pins = "PL0", "PL1";
-+				function = "s_i2c0";
++				function = "r_i2c0";
 +				allwinner,pinmux = <2>;
 +			};
 +		};
@@ -299,24 +307,6 @@ index 0000000..155066b
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&r_i2c0_pins>;
 +			status = "okay";
-+
-+			axp717: pmic@35 {
-+				compatible = "x-powers,axp717";
-+				reg = <0x35>;
-+				interrupt-parent = <&r_pio>;
-+				interrupts = <0 3 IRQ_TYPE_LEVEL_LOW>; /* PL3 */
-+				#interrupt-cells = <1>;
-+				interrupt-controller;
-+
-+				regulators {
-+					reg_vcc3v3: dcdc1 {
-+						regulator-name = "vcc-3v3";
-+						regulator-min-microvolt = <3300000>;
-+						regulator-max-microvolt = <3300000>;
-+						regulator-always-on;
-+					};
-+				};
-+			};
 +		};
 +	};
 +};
