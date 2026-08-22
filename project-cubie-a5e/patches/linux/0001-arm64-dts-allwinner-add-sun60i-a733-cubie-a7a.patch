@@ -4,6 +4,10 @@ Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] arm64: dts: allwinner: add sun60i-a733-cubie-a7a device tree
 
 ---
+ arch/arm64/boot/dts/allwinner/Makefile             |   1 +
+ .../boot/dts/allwinner/sun60i-a733-cubie-a7a.dts   | 299 +++++++++++++++++++++
+ 2 files changed, 300 insertions(+)
+
 diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
 index d116864..6b59921 100644
 --- a/arch/arm64/boot/dts/allwinner/Makefile
@@ -18,7 +22,7 @@ new file mode 100644
 index 0000000..155066b
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,294 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -42,7 +46,6 @@ index 0000000..155066b
 +	aliases {
 +		serial0 = &uart0;
 +		mmc0 = &mmc0;
-+		ethernet0 = &gmac0;
 +	};
 +
 +	chosen {
@@ -117,14 +120,14 @@ index 0000000..155066b
 +		};
 +
 +		cpu6: cpu@600 {
-+			compatible = "arm,cortex-a76";
++			compatible = "arm,cortex-a78";
 +			device_type = "cpu";
 +			reg = <0x0 0x600>;
 +			enable-method = "psci";
 +		};
 +
 +		cpu7: cpu@700 {
-+			compatible = "arm,cortex-a76";
++			compatible = "arm,cortex-a78";
 +			device_type = "cpu";
 +			reg = <0x0 0x700>;
 +			enable-method = "psci";
@@ -177,14 +180,6 @@ index 0000000..155066b
 +		      <0x00 0x03460000 0x00 0x100000>;
 +		interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_HIGH)>;
 +		dma-noncoherent;
-+
-+		its: msi-controller@3440000 {
-+			compatible = "arm,gic-v3-its";
-+			reg = <0x00 0x03440000 0x00 0x20000>;
-+			msi-controller;
-+			#msi-cells = <1>;
-+			dma-noncoherent;
-+		};
 +	};
 +
 +	soc {
@@ -216,14 +211,14 @@ index 0000000..155066b
 +				     <GIC_SPI 77 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_APB1>, <&osc24M>, <&osc32k>;
++			clocks = <&ccu CLK_PSI_AHB1_AHB2>, <&osc24M>, <&osc32k>;
 +			clock-names = "apb", "hosc", "losc";
-+			gpio-controller;
 +			#gpio-cells = <3>;
-+			interrupt-controller;
++			gpio-controller;
 +			#interrupt-cells = <3>;
++			interrupt-controller;
 +
-+			uart0_pb_pins: uart0-pb-pins {
++			uart0_pins: uart0-pins {
 +				pins = "PB9", "PB10";
 +				function = "uart0";
 +			};
@@ -245,62 +240,24 @@ index 0000000..155066b
 +			clocks = <&ccu CLK_BUS_UART0>;
 +			resets = <&ccu RST_BUS_UART0>;
 +			pinctrl-names = "default";
-+			pinctrl-0 = <&uart0_pb_pins>;
++			pinctrl-0 = <&uart0_pins>;
 +			status = "okay";
 +		};
 +
 +		mmc0: mmc@4020000 {
-+			compatible = "allwinner,sun50i-a100-mmc";
++			compatible = "allwinner,sun50i-h616-mmc", "allwinner,sun50i-a100-mmc";
 +			reg = <0x04020000 0x1000>;
 +			clocks = <&ccu CLK_BUS_MMC0>, <&ccu CLK_MMC0>;
-+			clock-names = "ahb", "mmc";
++			clock-names = "bus", "mmc";
 +			resets = <&ccu RST_BUS_MMC0>;
 +			reset-names = "ahb";
-+			interrupts = <GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>;
++			interrupts = <GIC_SPI 47 IRQ_TYPE_LEVEL_HIGH>;
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&mmc0_pins>;
++			status = "okay";
 +			bus-width = <4>;
-+			cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-+			status = "okay";
-+		};
-+
-+		usb_ehci0: usb@4101000 {
-+			compatible = "allwinner,sun50i-a100-ehci", "generic-ehci";
-+			reg = <0x04101000 0x100>;
-+			interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
-+			resets = <&ccu RST_BUS_USB0>;
-+			status = "okay";
-+		};
-+
-+		usb_ohci0: usb@4101400 {
-+			compatible = "allwinner,sun50i-a100-ohci", "generic-ohci";
-+			reg = <0x04101400 0x100>;
-+			interrupts = <GIC_SPI 41 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
-+			resets = <&ccu RST_BUS_USB0>;
-+			status = "okay";
-+		};
-+
-+		usb_ehci1: usb@4200000 {
-+			compatible = "allwinner,sun50i-a100-ehci", "generic-ehci";
-+			reg = <0x04200000 0x100>;
-+			interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
-+			resets = <&ccu RST_BUS_USB1>;
-+			status = "okay";
-+		};
-+
-+		gmac0: ethernet@4500000 {
-+			compatible = "allwinner,sun50i-a100-emac";
-+			reg = <0x04500000 0x10000>;
-+			interrupts = <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
-+			interrupt-names = "macirq";
-+			clocks = <&ccu CLK_BUS_GMAC0>;
-+			clock-names = "stmmaceth";
-+			resets = <&ccu RST_BUS_GMAC0>;
-+			reset-names = "stmmaceth";
-+			status = "disabled";
++			cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>; /* PF6 */
++			vmmc-supply = <&reg_vcc3v3>;
 +		};
 +
 +		r_ccu: clock-controller@7010000 {
@@ -315,14 +272,50 @@ index 0000000..155066b
 +		r_pio: pinctrl@7022000 {
 +			compatible = "allwinner,sun60i-a733-r-pinctrl";
 +			reg = <0x07022000 0x400>;
-+			interrupts = <GIC_SPI 109 IRQ_TYPE_LEVEL_HIGH>,
-+				     <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&r_ccu CLK_R_APB1>, <&osc24M>, <&osc32k>;
++			interrupts = <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&r_ccu CLK_R_APB2>, <&osc24M>, <&osc32k>;
 +			clock-names = "apb", "hosc", "losc";
-+			gpio-controller;
 +			#gpio-cells = <3>;
-+			interrupt-controller;
++			gpio-controller;
 +			#interrupt-cells = <3>;
++			interrupt-controller;
++
++			r_i2c0_pins: r-i2c0-pins {
++				pins = "PL0", "PL1";
++				function = "s_i2c0";
++			};
++		};
++
++		r_i2c0: i2c@7081400 {
++			compatible = "allwinner,sun60i-a733-i2c", "allwinner,sun6i-a31-i2c";
++			reg = <0x07081400 0x400>;
++			interrupts = <GIC_SPI 115 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&r_ccu CLK_R_BUS_I2C0>;
++			resets = <&r_ccu 1>;
++			pinctrl-names = "default";
++			pinctrl-0 = <&r_i2c0_pins>;
++			status = "okay";
++
++			axp717: pmic@35 {
++				compatible = "x-powers,axp717";
++				reg = <0x35>;
++				interrupt-parent = <&r_pio>;
++				interrupts = <0 3 IRQ_TYPE_LEVEL_LOW>; /* PL3 */
++				#interrupt-cells = <1>;
++				interrupt-controller;
++
++				regulators {
++					reg_vcc3v3: dcdc1 {
++						regulator-name = "vcc-3v3";
++						regulator-min-microvolt = <3300000>;
++						regulator-max-microvolt = <3300000>;
++						regulator-always-on;
++					};
++				};
++			};
 +		};
 +	};
 +};
+-- 
+2.44.0

@@ -63,8 +63,9 @@ Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physica
 As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
 
 * **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
-  - **Mainline Linux 7.1 (`PREEMPT_RT`):** Fully operational on real silicon. The kernel mounts ext4 rootfs read-write, isolates CPU Core 7 (`isolcpus=7 nohz_full=7 rcu_nocbs=7`), and cleanly initializes the Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
-  - **Multi-Board Device Trees:** Native support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`) and upstream kernel patch for Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`).
+  - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, isolated CPU Core 7 (`isolcpus=7 nohz_full=7 rcu_nocbs=7`), Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
+  - **Radxa Cubie A7A (Allwinner A733):** Full multi-stage boot chain verified on real silicon: `BootROM` $\rightarrow$ `boot0` (6 GiB LPDDR5 auto-training) $\rightarrow$ `TOC1` $\rightarrow$ `TF-A BL31` $\rightarrow$ `OP-TEE` $\rightarrow$ `Mainline U-Boot 2026.01-rc1` (4KB page-aligned at `0x4a001000`) $\rightarrow$ `Mainline Linux 7.1.0 PREEMPT_RT` booted across all 8 SMP cores (6× Cortex-A55 + 2× Cortex-A78) with 6 GiB RAM.
+  - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`) and Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`).
 
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & DUAL-BUS READY):** 
   - **Unified Dual-Bus Architecture:** Mainline kernel driver (`aic8800-upstream`) unified with modular transport HAL backends:

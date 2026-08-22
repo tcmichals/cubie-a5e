@@ -1,48 +1,42 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Junhui Liu <junhui.liu@baylibre.com>
-Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH] clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM
-
----
 diff --git a/drivers/clk/sunxi-ng/Kconfig b/drivers/clk/sunxi-ng/Kconfig
-index 6af2d02..562ca37 100644
+index 6af2d020e..362e1628e 100644
 --- a/drivers/clk/sunxi-ng/Kconfig
 +++ b/drivers/clk/sunxi-ng/Kconfig
-@@ -134,3 +134,17 @@ config SUN8I_R_CCU
+@@ -133,4 +133,18 @@ config SUN8I_R_CCU
+ 	default ARCH_SUNXI
  	depends on MACH_SUN8I || ARM64 || COMPILE_TEST
  
- endif
-+
 +config SUN60I_A733_CCU
 +	tristate "Support for the Allwinner A733 CCU"
 +	default ARCH_SUNXI
 +	depends on ARM64 || COMPILE_TEST
-+	select SUNXI_CCU_DIV
-+	select SUNXI_CCU_MULT
-+	select SUNXI_CCU_MUX
 +	select SUNXI_CCU_GATE
++	select SUNXI_CCU_MP
++	select SUNXI_CCU_NKMP
 +
 +config SUN60I_A733_R_CCU
 +	tristate "Support for the Allwinner A733 PRCM CCU"
 +	default ARCH_SUNXI
 +	depends on ARM64 || COMPILE_TEST
++	select SUNXI_CCU_GATE
++
+ endif
 diff --git a/drivers/clk/sunxi-ng/Makefile b/drivers/clk/sunxi-ng/Makefile
-index a1c4087..9dbab0c 100644
+index a1c4087d7..d1be1848b 100644
 --- a/drivers/clk/sunxi-ng/Makefile
 +++ b/drivers/clk/sunxi-ng/Makefile
-@@ -79,3 +79,6 @@ sun8i-r-ccu-y			+= ccu-sun8i-r.o
+@@ -79,3 +79,5 @@ sun8i-r-ccu-y			+= ccu-sun8i-r.o
  sun9i-a80-ccu-y			+= ccu-sun9i-a80.o
  sun9i-a80-de-ccu-y		+= ccu-sun9i-a80-de.o
  sun9i-a80-usb-ccu-y		+= ccu-sun9i-a80-usb.o
-+
 +obj-$(CONFIG_SUN60I_A733_CCU) += ccu-sun60i-a733.o
 +obj-$(CONFIG_SUN60I_A733_R_CCU) += ccu-sun60i-a733-r.o
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
 new file mode 100644
-index 0000000..49b95cb
+index 000000000..207cf56e6
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,114 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -85,10 +79,14 @@ index 0000000..49b95cb
 +static SUNXI_CCU_M_DATA_WITH_MUX(r_apb2_clk, "r-apb2", r_apb2_parents,
 +				 0x010, 0, 5, 24, 2, 0);
 +
-+static SUNXI_CCU_GATE_DATA(r_bus_uart0_clk, "r-bus-uart0", r_apb2_parents, 0x18c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(r_bus_i2c0_clk,  "r-bus-i2c0",  r_apb2_parents, 0x19c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(r_bus_i2c1_clk,  "r-bus-i2c1",  r_apb2_parents, 0x19c, BIT(1), 0);
-+static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,    "r-bus-rtc",   r_apb1_hws,     0x20c, BIT(0), 0);
++static const struct clk_hw *r_apb2_hws[] = {
++	&r_apb2_clk.common.hw
++};
++
++static SUNXI_CCU_GATE_HWS(r_bus_uart0_clk, "r-bus-uart0", r_apb2_hws, 0x18c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(r_bus_i2c0_clk,  "r-bus-i2c0",  r_apb2_hws, 0x19c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(r_bus_i2c1_clk,  "r-bus-i2c1",  r_apb2_hws, 0x19c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,    "r-bus-rtc",   r_apb1_hws, 0x20c, BIT(0), 0);
 +
 +static struct ccu_common *sun60i_a733_r_ccu_clks[] = {
 +	&r_cpus_clk.common,
@@ -155,7 +153,7 @@ index 0000000..49b95cb
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h
 new file mode 100644
-index 0000000..1cd6c21
+index 000000000..1cd6c214a
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.h
 @@ -0,0 +1,8 @@
@@ -169,10 +167,10 @@ index 0000000..1cd6c21
 +#endif
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733.c b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
 new file mode 100644
-index 0000000..9137a33
+index 000000000..c70f465f9
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,273 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -232,12 +230,20 @@ index 0000000..9137a33
 +static SUNXI_CCU_M_DATA_WITH_MUX(psi_ahb1_ahb2_clk, "psi-ahb1-ahb2",
 +				 ahb_parents, 0x510, 0, 5, 24, 2, 0);
 +
++static const struct clk_hw *ahb_hws[] = {
++	&psi_ahb1_ahb2_clk.common.hw
++};
++
 +static const struct clk_parent_data apb1_parents[] = {
 +	{ .fw_name = "hosc" },
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
 +};
 +static SUNXI_CCU_M_DATA_WITH_MUX(apb1_clk, "apb1", apb1_parents,
 +				 0x520, 0, 5, 24, 2, 0);
++
++static const struct clk_hw *apb1_hws[] = {
++	&apb1_clk.common.hw
++};
 +
 +static const struct clk_parent_data apb2_parents[] = {
 +	{ .fw_name = "hosc" },
@@ -246,36 +252,40 @@ index 0000000..9137a33
 +static SUNXI_CCU_M_DATA_WITH_MUX(apb2_clk, "apb2", apb2_parents,
 +				 0x524, 0, 5, 24, 2, 0);
 +
-+static SUNXI_CCU_GATE_DATA(bus_uart0_clk, "bus-uart0", apb2_parents, 0x90c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart1_clk, "bus-uart1", apb2_parents, 0x90c, BIT(1), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart2_clk, "bus-uart2", apb2_parents, 0x90c, BIT(2), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart3_clk, "bus-uart3", apb2_parents, 0x90c, BIT(3), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart4_clk, "bus-uart4", apb2_parents, 0x90c, BIT(4), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart5_clk, "bus-uart5", apb2_parents, 0x90c, BIT(5), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart6_clk, "bus-uart6", apb2_parents, 0x90c, BIT(6), 0);
-+static SUNXI_CCU_GATE_DATA(bus_uart7_clk, "bus-uart7", apb2_parents, 0x90c, BIT(7), 0);
++static const struct clk_hw *apb2_hws[] = {
++	&apb2_clk.common.hw
++};
 +
-+static SUNXI_CCU_GATE_DATA(bus_i2c0_clk,  "bus-i2c0",  apb2_parents, 0x91c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_i2c1_clk,  "bus-i2c1",  apb2_parents, 0x91c, BIT(1), 0);
-+static SUNXI_CCU_GATE_DATA(bus_i2c2_clk,  "bus-i2c2",  apb2_parents, 0x91c, BIT(2), 0);
-+static SUNXI_CCU_GATE_DATA(bus_i2c3_clk,  "bus-i2c3",  apb2_parents, 0x91c, BIT(3), 0);
-+static SUNXI_CCU_GATE_DATA(bus_i2c4_clk,  "bus-i2c4",  apb2_parents, 0x91c, BIT(4), 0);
-+static SUNXI_CCU_GATE_DATA(bus_i2c5_clk,  "bus-i2c5",  apb2_parents, 0x91c, BIT(5), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart0_clk, "bus-uart0", apb2_hws, 0x90c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart1_clk, "bus-uart1", apb2_hws, 0x90c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart2_clk, "bus-uart2", apb2_hws, 0x90c, BIT(2), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart3_clk, "bus-uart3", apb2_hws, 0x90c, BIT(3), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart4_clk, "bus-uart4", apb2_hws, 0x90c, BIT(4), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart5_clk, "bus-uart5", apb2_hws, 0x90c, BIT(5), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart6_clk, "bus-uart6", apb2_hws, 0x90c, BIT(6), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart7_clk, "bus-uart7", apb2_hws, 0x90c, BIT(7), 0);
 +
-+static SUNXI_CCU_GATE_DATA(bus_spi0_clk,  "bus-spi0",  ahb_parents,  0x96c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_spi1_clk,  "bus-spi1",  ahb_parents,  0x96c, BIT(1), 0);
-+static SUNXI_CCU_GATE_DATA(bus_spi2_clk,  "bus-spi2",  ahb_parents,  0x96c, BIT(2), 0);
-+static SUNXI_CCU_GATE_DATA(bus_spi3_clk,  "bus-spi3",  ahb_parents,  0x96c, BIT(3), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c0_clk,  "bus-i2c0",  apb2_hws, 0x91c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c1_clk,  "bus-i2c1",  apb2_hws, 0x91c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c2_clk,  "bus-i2c2",  apb2_hws, 0x91c, BIT(2), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c3_clk,  "bus-i2c3",  apb2_hws, 0x91c, BIT(3), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c4_clk,  "bus-i2c4",  apb2_hws, 0x91c, BIT(4), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c5_clk,  "bus-i2c5",  apb2_hws, 0x91c, BIT(5), 0);
 +
-+static SUNXI_CCU_GATE_DATA(bus_mmc0_clk,  "bus-mmc0",  ahb_parents,  0x84c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_mmc1_clk,  "bus-mmc1",  ahb_parents,  0x84c, BIT(1), 0);
-+static SUNXI_CCU_GATE_DATA(bus_mmc2_clk,  "bus-mmc2",  ahb_parents,  0x84c, BIT(2), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi0_clk,  "bus-spi0",  ahb_hws,  0x96c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi1_clk,  "bus-spi1",  ahb_hws,  0x96c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi2_clk,  "bus-spi2",  ahb_hws,  0x96c, BIT(2), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi3_clk,  "bus-spi3",  ahb_hws,  0x96c, BIT(3), 0);
 +
-+static SUNXI_CCU_GATE_DATA(bus_gmac0_clk, "bus-gmac0", ahb_parents,  0x97c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_gmac1_clk, "bus-gmac1", ahb_parents,  0x97c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_mmc0_clk,  "bus-mmc0",  ahb_hws,  0x84c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_mmc1_clk,  "bus-mmc1",  ahb_hws,  0x84c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_mmc2_clk,  "bus-mmc2",  ahb_hws,  0x84c, BIT(2), 0);
 +
-+static SUNXI_CCU_GATE_DATA(bus_usb0_clk,  "bus-usb0",  ahb_parents,  0xa8c, BIT(0), 0);
-+static SUNXI_CCU_GATE_DATA(bus_usb1_clk,  "bus-usb1",  ahb_parents,  0xa8c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(bus_gmac0_clk, "bus-gmac0", ahb_hws,  0x97c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_gmac1_clk, "bus-gmac1", ahb_hws,  0x97c, BIT(1), 0);
++
++static SUNXI_CCU_GATE_HWS(bus_usb0_clk,  "bus-usb0",  ahb_hws,  0xa8c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb1_clk,  "bus-usb1",  ahb_hws,  0xa8c, BIT(1), 0);
 +
 +static const struct clk_parent_data mmc_parents[] = {
 +	{ .fw_name = "hosc" },
@@ -436,7 +446,7 @@ index 0000000..9137a33
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733.h b/drivers/clk/sunxi-ng/ccu-sun60i-a733.h
 new file mode 100644
-index 0000000..a57c3ac
+index 000000000..a57c3ac1b
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.h
 @@ -0,0 +1,8 @@
@@ -450,7 +460,7 @@ index 0000000..a57c3ac
 +#endif
 diff --git a/include/dt-bindings/clock/sun60i-a733-ccu.h b/include/dt-bindings/clock/sun60i-a733-ccu.h
 new file mode 100644
-index 0000000..53a460e
+index 000000000..53a460e20
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-ccu.h
 @@ -0,0 +1,89 @@
@@ -545,7 +555,7 @@ index 0000000..53a460e
 +#endif
 diff --git a/include/dt-bindings/clock/sun60i-a733-r-ccu.h b/include/dt-bindings/clock/sun60i-a733-r-ccu.h
 new file mode 100644
-index 0000000..31568af
+index 000000000..31568afca
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-r-ccu.h
 @@ -0,0 +1,19 @@
@@ -570,7 +580,7 @@ index 0000000..31568af
 +#endif
 diff --git a/include/dt-bindings/reset/sun60i-a733-ccu.h b/include/dt-bindings/reset/sun60i-a733-ccu.h
 new file mode 100644
-index 0000000..9a369ca
+index 000000000..9a369ca71
 --- /dev/null
 +++ b/include/dt-bindings/reset/sun60i-a733-ccu.h
 @@ -0,0 +1,48 @@
