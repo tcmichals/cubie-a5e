@@ -152,16 +152,24 @@ def cmd_test_sram():
 
 def cmd_load(bin_path="/lib/firmware/riscv-firmware.bin"):
     if not os.path.exists(bin_path):
-        print(f"[-] ERROR: Binary not found: {bin_path}")
-        return False
+        if os.path.exists("/tmp/riscv-firmware.bin"):
+            bin_path = "/tmp/riscv-firmware.bin"
+        else:
+            print(f"[-] ERROR: Binary not found: {bin_path}")
+            return False
 
     with open(bin_path, "rb") as f:
-        data = f.read()
+        data = bytearray(f.read())
 
-    print(f"[+] Loading {len(data)} bytes from {bin_path} into SRAM C (0x00020000)...")
+    # Pad to 4-byte boundary
+    if len(data) % 4 != 0:
+        data += b'\x00' * (4 - (len(data) % 4))
+
+    print(f"[+] Loading {len(data)} bytes from {bin_path} into SRAM C (0x00020000) via 32-bit aligned words...")
     sram_c = MMIO(SRAM_C_BASE, 0x20000)
-    sram_c.mem.seek(0)
-    sram_c.mem.write(data)
+    for i in range(0, len(data), 4):
+        val = int.from_bytes(data[i:i+4], 'little')
+        sram_c.write32(i, val)
 
     first_word = sram_c.read32(0x0)
     magic = sram_c.read32(0x4)
