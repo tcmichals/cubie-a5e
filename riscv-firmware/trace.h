@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+void trace_init(void);
 void trace_puts(const char *s);
 
 #ifdef __cplusplus

@@ -29,15 +29,20 @@ int main(void) {
     telem->status_magic = 0x414C4956; /* "ALIV" */
     telem->last_cmd = 0;
 
-    trace_puts("[E907] XuanTie RISC-V Co-Processor Booted Successfully!\n");
-    trace_puts("[E907] Executing from Dedicated SRAM (0x07280000 / Core 0x00000000)\n");
+    /* 2. Initialize and write ASCII trace buffer (0x00029000) */
+    trace_init();
+    trace_puts("================================================================\n");
+    trace_puts("  XuanTie E907 RISC-V Co-Processor Flight Controller Online!   \n");
+    trace_puts("  SoC: Allwinner A523/A527 | Execution: 256KB Dedicated SRAM   \n");
+    trace_puts("  Driver: Linux sunxi-rproc | Interface: Debugfs trace0        \n");
+    trace_puts("================================================================\n");
 
     uint32_t heartbeat = 1;
     uint32_t fast_loops = 1;
     volatile uint32_t delay_counter = 0;
 
     while (1) {
-        /* Update fast loop counters on every single iteration */
+        /* Fast inner loop counter */
         fast_loops++;
         telem->loop_counter = fast_loops;
 
