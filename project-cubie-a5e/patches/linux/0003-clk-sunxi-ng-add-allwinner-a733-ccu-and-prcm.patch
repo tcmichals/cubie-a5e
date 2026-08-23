@@ -113,15 +113,36 @@ diff --git a/drivers/clk/sunxi-ng/ccu-sun60i-a733.c b/drivers/clk/sunxi-ng/ccu-s
 index c70f465f9..f67b5e4c0 100644
 --- a/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-+static SUNXI_CCU_GATE_HWS(bus_uart6_clk, "bus-uart6", apb2_hws, 0x90c, BIT(6), 0);
-+static SUNXI_CCU_GATE_HWS(bus_uart7_clk, "bus-uart7", apb2_hws, 0x90c, BIT(7), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart0_clk, "bus-uart0", apb2_hws, 0x0e00, BIT(0), CLK_IS_CRITICAL);
++static SUNXI_CCU_GATE_HWS(bus_uart1_clk, "bus-uart1", apb2_hws, 0x0e04, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart2_clk, "bus-uart2", apb2_hws, 0x0e08, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart3_clk, "bus-uart3", apb2_hws, 0x0e0c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart4_clk, "bus-uart4", apb2_hws, 0x0e10, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart5_clk, "bus-uart5", apb2_hws, 0x0e14, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart6_clk, "bus-uart6", apb2_hws, 0x0e18, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_uart7_clk, "bus-uart7", apb2_hws, 0x0e1c, BIT(0), 0);
 +
-+static SUNXI_CCU_GATE_HWS(bus_i2c0_clk,  "bus-i2c0",  apb2_hws, 0x91c, BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(bus_i2c1_clk,  "bus-i2c1",  apb2_hws, 0x91c, BIT(1), 0);
-+static SUNXI_CCU_GATE_HWS(bus_i2c2_clk,  "bus-i2c2",  apb2_hws, 0x91c, BIT(2), 0);
-+static SUNXI_CCU_GATE_HWS(bus_i2c3_clk,  "bus-i2c3",  apb2_hws, 0x91c, BIT(3), 0);
-+static SUNXI_CCU_GATE_HWS(bus_i2c4_clk,  "bus-i2c4",  apb2_hws, 0x91c, BIT(4), 0);
-+static SUNXI_CCU_GATE_HWS(bus_i2c5_clk,  "bus-i2c5",  apb2_hws, 0x91c, BIT(5), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c0_clk,  "bus-i2c0",  apb2_hws, 0x0e80, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c1_clk,  "bus-i2c1",  apb2_hws, 0x0e84, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c2_clk,  "bus-i2c2",  apb2_hws, 0x0e88, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c3_clk,  "bus-i2c3",  apb2_hws, 0x0e8c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c4_clk,  "bus-i2c4",  apb2_hws, 0x0e90, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_i2c5_clk,  "bus-i2c5",  apb2_hws, 0x0e94, BIT(0), 0);
++
++static SUNXI_CCU_GATE_HWS(bus_spi0_clk,  "bus-spi0",  ahb_hws,  0x0f04, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi1_clk,  "bus-spi1",  ahb_hws,  0x0f0c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi2_clk,  "bus-spi2",  ahb_hws,  0x0f14, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_spi3_clk,  "bus-spi3",  ahb_hws,  0x0f1c, BIT(0), 0);
++
++static SUNXI_CCU_GATE_HWS(bus_mmc0_clk,  "bus-mmc0",  ahb_hws,  0x0d0c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_mmc1_clk,  "bus-mmc1",  ahb_hws,  0x0d1c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_mmc2_clk,  "bus-mmc2",  ahb_hws,  0x0d2c, BIT(0), 0);
++
++static SUNXI_CCU_GATE_HWS(bus_gmac0_clk, "bus-gmac0", ahb_hws,  0x141c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_gmac1_clk, "bus-gmac1", ahb_hws,  0x142c, BIT(0), 0);
++
++static SUNXI_CCU_GATE_HWS(bus_usb0_clk,  "bus-usb0",  ahb_hws,  0x1304, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb1_clk,  "bus-usb1",  ahb_hws,  0x130c, BIT(0), 0);
 +		[CLK_PLL_PERIPH0_2X]	= &pll_periph0_2x_clk.common.hw,
 +		[CLK_PLL_PERIPH0_1X]	= &pll_periph0_1x_clk.common.hw,
 +		[CLK_PSI_AHB1_AHB2]	= &psi_ahb1_ahb2_clk.common.hw,
@@ -162,31 +183,31 @@ index c70f465f9..f67b5e4c0 100644
 +};
 +
 +static const struct ccu_reset_map sun60i_a733_ccu_resets[] = {
-+	[RST_BUS_MMC0]	= { 0x84c, BIT(16) },
-+	[RST_BUS_MMC1]	= { 0x84c, BIT(17) },
-+	[RST_BUS_MMC2]	= { 0x84c, BIT(18) },
-+	[RST_BUS_UART0]	= { 0x90c, BIT(16) },
-+	[RST_BUS_UART1]	= { 0x90c, BIT(17) },
-+	[RST_BUS_UART2]	= { 0x90c, BIT(18) },
-+	[RST_BUS_UART3]	= { 0x90c, BIT(19) },
-+	[RST_BUS_UART4]	= { 0x90c, BIT(20) },
-+	[RST_BUS_UART5]	= { 0x90c, BIT(21) },
-+	[RST_BUS_UART6]	= { 0x90c, BIT(22) },
-+	[RST_BUS_UART7]	= { 0x90c, BIT(23) },
-+	[RST_BUS_I2C0]	= { 0x91c, BIT(16) },
-+	[RST_BUS_I2C1]	= { 0x91c, BIT(17) },
-+	[RST_BUS_I2C2]	= { 0x91c, BIT(18) },
-+	[RST_BUS_I2C3]	= { 0x91c, BIT(19) },
-+	[RST_BUS_I2C4]	= { 0x91c, BIT(20) },
-+	[RST_BUS_I2C5]	= { 0x91c, BIT(21) },
-+	[RST_BUS_SPI0]	= { 0x96c, BIT(16) },
-+	[RST_BUS_SPI1]	= { 0x96c, BIT(17) },
-+	[RST_BUS_SPI2]	= { 0x96c, BIT(18) },
-+	[RST_BUS_SPI3]	= { 0x96c, BIT(19) },
-+	[RST_BUS_GMAC0]	= { 0x97c, BIT(16) },
-+	[RST_BUS_GMAC1]	= { 0x97c, BIT(17) },
-+	[RST_BUS_USB0]	= { 0xa8c, BIT(16) },
-+	[RST_BUS_USB1]	= { 0xa8c, BIT(17) },
++	[RST_BUS_MMC0]	= { 0x0d0c, BIT(16) },
++	[RST_BUS_MMC1]	= { 0x0d1c, BIT(16) },
++	[RST_BUS_MMC2]	= { 0x0d2c, BIT(16) },
++	[RST_BUS_UART0]	= { 0x0e00, BIT(16) },
++	[RST_BUS_UART1]	= { 0x0e04, BIT(16) },
++	[RST_BUS_UART2]	= { 0x0e08, BIT(16) },
++	[RST_BUS_UART3]	= { 0x0e0c, BIT(16) },
++	[RST_BUS_UART4]	= { 0x0e10, BIT(16) },
++	[RST_BUS_UART5]	= { 0x0e14, BIT(16) },
++	[RST_BUS_UART6]	= { 0x0e18, BIT(16) },
++	[RST_BUS_UART7]	= { 0x0e1c, BIT(16) },
++	[RST_BUS_I2C0]	= { 0x0e80, BIT(16) },
++	[RST_BUS_I2C1]	= { 0x0e84, BIT(16) },
++	[RST_BUS_I2C2]	= { 0x0e88, BIT(16) },
++	[RST_BUS_I2C3]	= { 0x0e8c, BIT(16) },
++	[RST_BUS_I2C4]	= { 0x0e90, BIT(16) },
++	[RST_BUS_I2C5]	= { 0x0e94, BIT(16) },
++	[RST_BUS_SPI0]	= { 0x0f04, BIT(16) },
++	[RST_BUS_SPI1]	= { 0x0f0c, BIT(16) },
++	[RST_BUS_SPI2]	= { 0x0f14, BIT(16) },
++	[RST_BUS_SPI3]	= { 0x0f1c, BIT(16) },
++	[RST_BUS_GMAC0]	= { 0x141c, BIT(16) },
++	[RST_BUS_GMAC1]	= { 0x142c, BIT(16) },
++	[RST_BUS_USB0]	= { 0x1304, BIT(16) },
++	[RST_BUS_USB1]	= { 0x130c, BIT(16) },
 +};
 +
 +static const struct sunxi_ccu_desc sun60i_a733_ccu_desc = {
