@@ -15,38 +15,30 @@
 #define MCU_CCU_PHYS_BASE  0x07102000
 #define MCU_CCU_MAP_SIZE   0x1000
 
+#define ITCM_PHYS_BASE     0x07110000
+#define ITCM_MAP_SIZE      0x10000   /* 64 KB */
+
 #define SRAM_PHYS_BASE     0x00020000
 #define SRAM_MAP_SIZE      0x20000   /* 128 KB */
 #define TELEM_OFFSET       0x00008000 /* 0x00028000 */
 
-static const char *LOADER_VERSION = "2.0.0";
-
-static void usage(const char *prog) {
-    printf("Usage: %s {start|stop|status|monitor|restart|version} [path_to_firmware.bin]\n", prog);
-    printf("%s loader version %s (Built %s %s)\n", prog, LOADER_VERSION, __DATE__, __TIME__);
-}
-
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        usage(argv[0]);
-        return 1;
-    }
-
-    const char *action = argv[1];
-    const char *fw_path = (argc >= 3) ? argv[2] : "/lib/firmware/riscv-firmware.bin";
+    const char *action = (argc > 1) ? argv[1] : "status";
+    const char *fw_path = (argc > 2) ? argv[2] : "/tmp/riscv-firmware.bin";
 
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (fd < 0) {
-        perror("Failed to open /dev/mem (requires root privileges)");
+        perror("Failed to open /dev/mem (must run as root/sudo)");
         return 1;
     }
 
-    volatile uint8_t *main_ccu = (volatile uint8_t *)mmap(NULL, MAIN_CCU_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, MAIN_CCU_PHYS_BASE);
-    volatile uint8_t *sys_cfg  = (volatile uint8_t *)mmap(NULL, SYS_CFG_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, SYS_CFG_PHYS_BASE);
-    volatile uint8_t *mcu_ccu  = (volatile uint8_t *)mmap(NULL, MCU_CCU_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, MCU_CCU_PHYS_BASE);
-    volatile uint8_t *sram     = (volatile uint8_t *)mmap(NULL, SRAM_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, SRAM_PHYS_BASE);
+    uint8_t *main_ccu = mmap(NULL, MAIN_CCU_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, MAIN_CCU_PHYS_BASE);
+    uint8_t *sys_cfg  = mmap(NULL, SYS_CFG_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, SYS_CFG_PHYS_BASE);
+    uint8_t *mcu_ccu  = mmap(NULL, MCU_CCU_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, MCU_CCU_PHYS_BASE);
+    uint8_t *itcm     = mmap(NULL, ITCM_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, ITCM_PHYS_BASE);
+    uint8_t *sram     = mmap(NULL, SRAM_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, SRAM_PHYS_BASE);
 
-    if (main_ccu == MAP_FAILED || sys_cfg == MAP_FAILED || mcu_ccu == MAP_FAILED || sram == MAP_FAILED) {
+    if (main_ccu == MAP_FAILED || sys_cfg == MAP_FAILED || mcu_ccu == MAP_FAILED || itcm == MAP_FAILED || sram == MAP_FAILED) {
         perror("Failed to mmap MMIO regions");
         close(fd);
         return 1;
@@ -115,8 +107,14 @@ int main(int argc, char *argv[]) {
         /* 3. Hold RISC-V in reset */
         *(volatile uint32_t *)(mcu_ccu + 0x124) = 0x00030001;
 
-        /* 4. Ensure SRAM C is mapped to ARM CPU for writing */
-        *(volatile uint32_t *)(sys_cfg + 0x004) |= (1 << 24);
+        /* 4. Write Absolute Jump Trampoline to ITCM (Reset Vector 0x00000000) */
+        /* lui t0, 0x20 (0x000202B7) -> t0 = 0x00020000; jalr zero, 0(t0) (0x00000067) */
+        volatile uint32_t *itcm32 = (volatile uint32_t *)itcm;
+        for (int i = 0; i < 32; i += 2) {
+            itcm32[i]   = 0x000202B7; /* lui t0, 0x20 */
+            itcm32[i+1] = 0x00000067; /* jalr zero, 0(t0) */
+        }
+        printf("Installed Jump Trampoline to ITCM (0x07110000).\n");
 
         /* 5. Load Firmware into SRAM C */
         uint8_t fw_buf[SRAM_MAP_SIZE];
@@ -137,9 +135,8 @@ int main(int argc, char *argv[]) {
             sram32[i] = src32[i];
         }
 
-        uint32_t first = sram32[0];
-        uint32_t magic = sram32[1];
-        printf("Copied %zu bytes (First: 0x%08X, eGON: 0x%08X).\n", n, first, magic);
+        /* Clear telemetry block */
+        memset((void *)(sram + TELEM_OFFSET), 0, 64);
 
         /* 6. Release RISC-V Reset */
         printf("Releasing RISC-V core reset...\n");
@@ -148,8 +145,10 @@ int main(int argc, char *argv[]) {
         printf("Reset status (0x07102124): 0x%08X (Core active)\n", rst_read);
         printf("XuanTie RISC-V co-processor is running.\n");
         return 0;
+    } else {
+        fprintf(stderr, "Usage: %s [start <fw.bin> | stop | status | monitor]\n", argv[0]);
+        return 1;
     }
 
-    usage(argv[0]);
-    return 1;
+    return 0;
 }

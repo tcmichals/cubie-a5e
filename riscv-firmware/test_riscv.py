@@ -3,9 +3,9 @@
 XuanTie E907 RISC-V All-in-One Automated Hardware Bring-Up & Telemetry Tool
 Target SoC: Allwinner A523/A527 (Radxa Cubie A5E) & A733 (Radxa Cubie A7A)
 
-Loads firmware into ITCM (0x07110000) & SRAM C (0x00020000), enables Main CCU
-CLK_DSP (0x02001c70) and MCU CCU bridges (0x07102108..0x07102128), cycles core
-reset, and continuously samples live telemetry at 0x00028000.
+Loads absolute trampoline jump (lui t0, 0x20; jr t0) into ITCM (0x07110000)
+and full firmware image into SRAM C (0x00020000), enables Main CCU CLK_DSP
+(0x02001c70) and MCU CCU bridges, cycles core reset, and samples live telemetry.
 """
 
 import sys
@@ -72,8 +72,17 @@ def main():
     itcm_mm, itcm_off = map_phys(dev_mem, 0x07110000, 0x10000)
     sram_mm, sram_off = map_phys(dev_mem, 0x00020000, 0x20000)
 
-    # 3. Load Firmware
-    print(f"\n[Step 3] Loading Firmware from {args.fw}...")
+    # 3. Write Absolute Jump Trampoline to ITCM (Reset Vector at 0x00000000)
+    print("\n[Step 3] Installing Absolute Jump Trampoline to ITCM (0x07110000)...")
+    # lui t0, 0x20 (0x000202B7) -> t0 = 0x00020000
+    # jalr zero, 0(t0) (0x00000067) -> jump to SRAM C
+    trampoline = struct.pack("<II", 0x000202B7, 0x00000067)
+    itcm_mm.seek(itcm_off)
+    itcm_mm.write(trampoline * 32)
+    print("  -> ITCM Reset Vector loaded: lui t0, 0x20; jalr zero, 0(t0)")
+
+    # 4. Load Firmware into SRAM C (0x00020000)
+    print(f"\n[Step 4] Loading Firmware into SRAM C (0x00020000) from {args.fw}...")
     if not os.path.exists(args.fw):
         print(f"[!] Warning: {args.fw} not found. Searching in common paths...")
         for p in ["/lib/firmware/riscv-firmware.bin", "/tmp/firmware.bin", "firmware.bin"]:
@@ -86,16 +95,9 @@ def main():
         with open(args.fw, "rb") as f:
             fw = f.read()
         print(f"  -> Read {len(fw)} bytes.")
-        
-        # Load into ITCM (Reset Vector 0x00000000)
-        itcm_mm.seek(itcm_off)
-        itcm_mm.write(fw)
-        print("  -> Loaded into ITCM (0x07110000 / Core 0x00000000)")
-
-        # Load into SRAM C (Shared Memory 0x00020000)
         sram_mm.seek(sram_off)
         sram_mm.write(fw)
-        print("  -> Loaded into SRAM C (0x00020000 / Core 0x00020000)")
+        print("  -> Loaded into SRAM C (0x00020000)")
     else:
         print("[!] ERROR: Firmware binary not found! Please build or copy firmware.bin")
         sys.exit(1)
@@ -104,8 +106,8 @@ def main():
     sram_mm.seek(sram_off + 0x8000)
     sram_mm.write(b"\x00" * 64)
 
-    # 4. Release Reset
-    print("\n[Step 4] Releasing XuanTie E907 Core Reset (0x00070001)...")
+    # 5. Release Reset
+    print("\n[Step 5] Releasing XuanTie E907 Core Reset (0x00070001)...")
     mcu_ccu_mm.seek(mcu_ccu_off + 0x124)
     mcu_ccu_mm.write(struct.pack("<I", 0x00070001))
     time.sleep(0.01)
@@ -114,8 +116,8 @@ def main():
     rst_val = struct.unpack("<I", mcu_ccu_mm.read(4))[0]
     print(f"  -> Reset register status: 0x{rst_val:08X}")
 
-    # 5. Monitor Telemetry
-    print(f"\n[Step 5] Monitoring Telemetry (0x00028000) for {args.time} seconds...")
+    # 6. Monitor Telemetry
+    print(f"\n[Step 6] Monitoring Telemetry (0x00028000) for {args.time} seconds...")
     print("-" * 80)
     print(f"{'Time':^8} | {'Magic':^10} | {'Boot':^6} | {'Heartbeat':^12} | {'Loops':^12} | {'State':^16}")
     print("-" * 80)
