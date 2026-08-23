@@ -1,7 +1,0 @@
-# Network interface configuration for Radxa Cubie A7A
-auto lo
-iface lo inet loopback
-
-# Hotplug Ethernet (does not block boot if unplugged)
-allow-hotplug eth0
-iface eth0 inet dhcp
