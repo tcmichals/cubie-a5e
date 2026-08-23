@@ -17,6 +17,14 @@ SECTIONS
         KEEP(*(.text.startup))
     } > SRAM
 
+    /* RemoteProc Resource Table (Trace Buffer & RPMsg Vrings) */
+    .resource_table :
+    {
+        . = ALIGN(4);
+        KEEP(*(.resource_table))
+        . = ALIGN(4);
+    } > SRAM
+
     /* 2. Program code */
     .text :
     {

@@ -457,3 +457,48 @@ The driver provides:
 * **Dual SPI Configuration:** The Allwinner SPI controller natively supports Dual SPI. The driver configures the Transfer Control Register (`SPI_TCR`) to enable Dual-IO mode. In this mode, the standard MOSI and MISO pins become bidirectional IO0 and IO1 data lanes, effectively doubling the bandwidth payload between the SoC and the FPGA.
 * **Software Reset & Configurations:** Handling hardware reset handshakes and configuring SPI master clock frequencies.
 * **FIFO Polling Loops:** Actively checking buffer availability to rapidly stream dual-lane telemetry packets from the FPGA and writing them to TCM memory registers without latency spikes.
+
+---
+
+## 12. Linux RemoteProc Framework & Live Debugfs Message Tracing
+
+The Linux kernel interacts with the XuanTie E907 co-processor via the standard upstream **RemoteProc** subsystem (`drivers/remoteproc/sunxi_rproc.c`).
+
+### A. Lifecycle Management (`/sys/class/remoteproc/remoteproc0/`)
+You can control the co-processor's power and execution state directly from the Linux shell:
+
+```bash
+# 1. Stop the core
+echo stop > /sys/class/remoteproc/remoteproc0/state
+
+# 2. Select firmware binary (must reside in /lib/firmware/)
+echo riscv-firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
+
+# 3. Boot the core
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# 4. Check status (running / offline)
+cat /sys/class/remoteproc/remoteproc0/state
+```
+
+### B. Live Debugfs Message Tracing (`trace0`)
+When the firmware exports an **ELF Resource Table** (`resource_table.c`) containing a `RSC_TRACE` entry, the Linux RemoteProc subsystem automatically binds to the trace buffer in shared memory and creates a character stream at `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+
+To view continuous `printf` and telemetry output from the RISC-V co-processor in real-time:
+
+```bash
+# Mount debugfs if not already mounted
+mount -t debugfs none /sys/kernel/debug
+
+# Stream live firmware trace log directly to console
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+```
+
+### C. Hardware Boot Sequence & Mask ROM Architecture
+1. **On-Chip Silicon BootROM (`0x07110000`)**:
+   * Physical address `0x07110000` is the on-chip Mask ROM (read-only).
+   * When the core's hardware reset is released, the E907 begins execution in this internal ROM.
+2. **Boot Protocol in Reserved DDR**:
+   * The silicon BootROM executes the Allwinner DSP boot protocol, awaiting an OpenAMP / Mailbox startup handshake in reserved DDR memory (`0x48000000`).
+   * The kernel `sunxi_rproc` driver initializes Main CCU root DSP clocks (`0x02001c70`), powers the MCU CCU bus bridges, delivers the firmware ELF, and initiates the core lifecycle.
+
