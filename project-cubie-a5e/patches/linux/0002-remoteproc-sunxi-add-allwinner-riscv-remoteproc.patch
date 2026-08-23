@@ -1,18 +1,19 @@
 From: tcmichals <tcmichals@yahoo.com>
-Date: Sat, 22 Aug 2026 20:45:00 -0500
+Date: Sat, 22 Aug 2026 21:11:00 -0500
 Subject: [PATCH 2/2] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
 Adds Linux remoteproc driver for the XuanTie E907/E906 co-processor on
-Allwinner A523/A527/T527 and A733 SoCs. Manages Main CCU CLK_DSP (0x02001c70),
-MCU CCU clock gates/resets, and loads firmware to dedicated RISC-V SRAM
-(0x07280000, 256 KB) and System Shared SRAM C (0x00020000, 128 KB).
+Allwinner A523/A527/T527 and A733 SoCs.
+Implements .prepare() to power up Main CCU CLK_DSP (0x02001c70) and MCU
+CCU bus bridges before rproc_load_segments() copies the ELF image into
+Dedicated RISC-V SRAM (0x07280000) and Shared System SRAM C (0x00020000).
 
 Signed-off-by: tcmichals <tcmichals@yahoo.com>
 ---
- drivers/remoteproc/Kconfig       |  10 +++
+ drivers/remoteproc/Kconfig       |  10 ++
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 175 +++++++++++++++++++++++++++++++
- 3 files changed, 186 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 205 +++++++++++++++++++++++++++++++
+ 3 files changed, 216 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
@@ -25,7 +26,7 @@ index 8e45f9a..2a3b4c5 100644
  
 +config SUNXI_REMOTEPROC
 +	tristate "Allwinner XuanTie RISC-V remoteproc support"
-+	depends objections (ARCH_SUNXI || COMPILE_TEST)
++	depends on (ARCH_SUNXI || COMPILE_TEST)
 +	default y
 +	help
 +	  Say y or m here to support the Allwinner XuanTie E907/E906 RISC-V
