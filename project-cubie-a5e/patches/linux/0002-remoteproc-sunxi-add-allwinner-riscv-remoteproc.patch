@@ -1,18 +1,18 @@
 From: tcmichals <tcmichals@yahoo.com>
-Date: Sat, 22 Aug 2026 21:22:00 -0500
+Date: Sat, 22 Aug 2026 21:30:00 -0500
 Subject: [PATCH 2/2] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
 Adds Linux remoteproc driver for the XuanTie E907/E906 co-processor on
 Allwinner A523/A527/T527 and A733 SoCs.
-Uses devm_ioremap_wc() for SRAM regions so ARM64 CPU string and trace
-subsystems can read character streams directly without alignment faults.
+Fixes da_to_va address routing priorities so 0x00020000..0x00040000 (SRAM C)
+is translated to sram_va rather than being misrouted to r_sram_va.
 
 Signed-off-by: tcmichals <tcmichals@yahoo.com>
 ---
  drivers/remoteproc/Kconfig       |  10 ++
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 205 +++++++++++++++++++++++++++++++
- 3 files changed, 216 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 203 +++++++++++++++++++++++++++++++
+ 3 files changed, 214 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
