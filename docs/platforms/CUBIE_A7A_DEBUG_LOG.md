@@ -104,6 +104,18 @@
 - **USB & Wi-Fi**: Added `usbphy: phy@4100400` (`sun20i-d1-usb-phy`) with `CONFIG_PHY_SUN4I_USB=y` to drive the analog transceivers for `ehci1`, the FE1.1S 4-port hub, and the onboard **AIC8800 Wi-Fi 6 chip** (`0xA69C:0x8800`).
 - **RISC-V Firmware**: Packaged compiled XuanTie E907 binary into `/lib/firmware/riscv-firmware.elf`.
 
+### Milestone 8: Peripheral Timing & Reset Collision Resolutions (Aug 23, 2026)
+
+#### 1. Phylink RGMII Internal Delay Timing (`-EINVAL`)
+- **Symptom**: `dwmac-sun8i 4500000.ethernet eth0: validation of rgmii with support ... failed: -EINVAL` / `cannot attach to PHY`.
+- **Root Cause**: The Motorcomm `MAE0621A-Q3C` Gigabit PHY handles the required 2.0ns clock phase delay internally. In Linux 7.1 `phylink`, specifying `phy-mode = "rgmii"` requires the MAC controller to provide external delay configuration via `syscon`. Since no SoC MAC delay registers were defined, `phylink_validate_phy()` rejected the uncompensated clock mode with `-EINVAL`.
+- **Resolution**: Updated Device Tree to `phy-mode = "rgmii-id"`. This instructs `phylink` to delegate the 2ns RX/TX delay generation to the Motorcomm PHY hardware, enabling `eth0` to attach cleanly with MAC address assignment and IRQ 155.
+
+#### 2. USB Reset Line Exclusive Lock Collision (`-EBUSY` / Error 16)
+- **Symptom**: `ehci-platform 4101000.usb: probe with driver ehci-platform failed with error -16`.
+- **Root Cause**: On modern Allwinner silicon (A733 / A523), the CCU does not provide separate `RST_USB_PHY` registers; the entire USB subsystem (PHY transceiver + Host DMA engine) is gated by the master bus reset `RST_BUS_USB0` / `RST_BUS_USB1`. In Linux, `phy-sun4i-usb.c` requests exclusive reset locks via `devm_reset_control_get()`. When `usbphy` claimed `RST_BUS_USB0`, subsequent probe by `ehci-platform` was blocked by the reset framework with `-EBUSY` (Error 16).
+- **Resolution**: Removed the duplicate reset requests from `usbphy` in the DTS. The primary Host Controller (`ehci0`/`ehci1`) retains exclusive ownership of `RST_BUS_USB0`/`RST_BUS_USB1`, deasserting bus and transceiver reset simultaneously during controller initialization without driver contention.
+
 ---
 
 ## 5. Silicon Boot Log (Mainline U-Boot 2026.01 $\rightarrow$ Linux 7.1.0 PREEMPT_RT)
