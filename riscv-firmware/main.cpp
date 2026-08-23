@@ -1,16 +1,11 @@
-/* main.cpp - XuanTie RISC-V E907 Hello World & Ingestion Firmware */
+/* main.cpp - XuanTie RISC-V E907 Flight Firmware & Live Trace Logging */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include "uart0.h"
 #include "trace.h"
-#include "mailbox.hpp"
-#include "ringbuffer.h"
-#include "spi.h"
 
-using namespace hardware;
-
-/* Fixed Telemetry Address in Shared SRAM for Linux Host devmem inspection */
+/* Fixed Telemetry Address in Shared SRAM C for Linux Host devmem inspection */
 #define TELEMETRY_BASE      0x00028000   /* Host Physical: 0x00028000 */
 
 /* Telemetry Block Structure (24 bytes) */
@@ -34,6 +29,9 @@ int main(void) {
     telem->status_magic = 0x414C4956; /* "ALIV" */
     telem->last_cmd = 0;
 
+    trace_puts("[E907] XuanTie RISC-V Co-Processor Booted Successfully!\n");
+    trace_puts("[E907] Executing from Dedicated SRAM (0x07280000 / Core 0x00000000)\n");
+
     uint32_t heartbeat = 1;
     uint32_t fast_loops = 1;
     volatile uint32_t delay_counter = 0;
@@ -43,7 +41,7 @@ int main(void) {
         fast_loops++;
         telem->loop_counter = fast_loops;
 
-        /* Periodic heartbeat pulse */
+        /* Periodic heartbeat pulse (~10 Hz) */
         delay_counter++;
         if (delay_counter >= 50000) {
             delay_counter = 0;
@@ -54,4 +52,3 @@ int main(void) {
 
     return 0;
 }
-
