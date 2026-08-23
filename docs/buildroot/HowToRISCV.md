@@ -496,16 +496,90 @@ cat /sys/class/remoteproc/remoteproc0/state
 ```
 
 ### B. Live Debugfs Message Tracing (`trace0`)
-When the firmware exports an **ELF Resource Table** (`resource_table.c`) containing a `RSC_TRACE` entry, the Linux RemoteProc subsystem automatically binds to the trace buffer in shared memory and creates a character stream at `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+When the firmware exports an **ELF Resource Table** (`resource_table.c`) containing a `RSC_TRACE` entry, the Linux RemoteProc subsystem automatically binds to the designated shared memory region and creates a character device stream at `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
 
-To view continuous `printf` and telemetry output from the RISC-V co-processor in real-time:
+#### 1. How to Write to Trace Buffer from RISC-V Firmware (C / C++)
+In your RISC-V application, include `"trace.h"` and call `trace_puts()` to write formatted ASCII strings directly into the trace buffer (mapped at Device Address `0x00029000` in SRAM C):
 
+```cpp
+#include "trace.h"
+
+int main(void) {
+    // Initialize trace buffer on startup
+    trace_init();
+    trace_puts("================================================================\n");
+    trace_puts("  XuanTie E907 RISC-V Co-Processor Flight Controller Online!   \n");
+    trace_puts("  SoC: Allwinner A523/A527 | Execution: 256KB Dedicated SRAM   \n");
+    trace_puts("================================================================\n");
+
+    while (1) {
+        // Example: Log sensor calibration, loop rates, or flight state changes
+        trace_puts("[IMU] Calibrated gyro bias: X=-0.02 Y=+0.01 Z=+0.00\n");
+        trace_puts("[STATE] System Armed. Motors engaged.\n");
+        
+        // ... high frequency flight control loop ...
+    }
+}
+```
+
+The underlying implementation in `resource_table.c` defines the trace entry in the `.resource_table` ELF section:
+```c
+#define TRACE_BUF_DA    0x00029000
+#define TRACE_BUF_LEN   4096
+
+struct custom_resource_table {
+    struct resource_table base;
+    uint32_t offset[1];
+    struct fw_rsc_trace trace;
+} __attribute__((packed));
+
+__attribute__((used, section(".resource_table"), aligned(4)))
+struct custom_resource_table rsc_tbl = {
+    .base = { .ver = 1, .num = 1, .reserved = {0, 0} },
+    .offset = { offsetof(struct custom_resource_table, trace) },
+    .trace = {
+        .type     = RSC_TRACE,
+        .da       = TRACE_BUF_DA,
+        .len      = TRACE_BUF_LEN,
+        .reserved = 0,
+        .name     = "trace0",
+    },
+};
+```
+
+#### 2. How to Dump and Stream the Trace on Linux ARM Host
+
+You can inspect, monitor, or ingest the co-processor's live logs using multiple convenient methods:
+
+##### Method 1: Instant Console Dump (Zero Extra Tools)
 ```bash
 # Mount debugfs if not already mounted
 mount -t debugfs none /sys/kernel/debug
 
-# Stream live firmware trace log directly to console
+# Dump current trace log
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+```
+
+##### Method 2: Real-Time Continuous Monitoring
+To watch the RISC-V firmware logs update live in your terminal:
+```bash
+watch -n 0.2 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+```
+
+##### Method 3: In a Companion Daemon (C/C++ or Python)
+A Linux companion daemon (e.g. MAVLink bridge, ROS2 node, or telemetry logger) can read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` like a standard file:
+
+```python
+# python telemetry logger
+with open('/sys/kernel/debug/remoteproc/remoteproc0/trace0', 'r') as f:
+    logs = f.read()
+    print("Received RISC-V Logs:\n", logs)
+```
+
+##### Method 4: Host GDB Terminal Inspection
+From an OpenOCD / GDB remote debugging session connected to the target:
+```gdb
+(gdb) printf "%s\n", (char *)0x00029000
 ```
 
 ### C. Hardware Boot Sequence & Mask ROM Architecture
@@ -515,4 +589,5 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 2. **Boot Protocol in Reserved DDR**:
    * The silicon BootROM executes the Allwinner DSP boot protocol, awaiting an OpenAMP / Mailbox startup handshake in reserved DDR memory (`0x48000000`).
    * The kernel `sunxi_rproc` driver initializes Main CCU root DSP clocks (`0x02001c70`), powers the MCU CCU bus bridges, delivers the firmware ELF, and initiates the core lifecycle.
+
 
