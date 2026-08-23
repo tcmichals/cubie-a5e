@@ -1,12 +1,11 @@
 From: tcmichals <tcmichals@yahoo.com>
-Date: Sat, 22 Aug 2026 21:11:00 -0500
+Date: Sat, 22 Aug 2026 21:22:00 -0500
 Subject: [PATCH 2/2] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
 Adds Linux remoteproc driver for the XuanTie E907/E906 co-processor on
 Allwinner A523/A527/T527 and A733 SoCs.
-Implements .prepare() to power up Main CCU CLK_DSP (0x02001c70) and MCU
-CCU bus bridges before rproc_load_segments() copies the ELF image into
-Dedicated RISC-V SRAM (0x07280000) and Shared System SRAM C (0x00020000).
+Uses devm_ioremap_wc() for SRAM regions so ARM64 CPU string and trace
+subsystems can read character streams directly without alignment faults.
 
 Signed-off-by: tcmichals <tcmichals@yahoo.com>
 ---
