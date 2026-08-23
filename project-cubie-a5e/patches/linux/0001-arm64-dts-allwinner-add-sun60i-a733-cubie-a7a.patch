@@ -266,7 +266,8 @@ index 0000000..155066b
 +			pinctrl-0 = <&mmc0_pins>;
 +			status = "okay";
 +			bus-width = <4>;
-+			non-removable;
++			cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
++			cd-inverted;
 +			no-sdio;
 +			no-mmc;
 +			vmmc-supply = <&reg_vcc3v3>;
