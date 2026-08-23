@@ -66,24 +66,37 @@ def cmd_auto_sram_test(fw_path="/tmp/riscv-firmware.bin"):
     
     enable_all_clocks()
     
-    # 1. Test SRAM A1 (0x00000000)
-    print("\n[Step 1] Testing SRAM A1 (0x00000000..0x00004000)...")
+    # 0. Test Unlocking SRAM Remap via SYS_CFG (0x03000000)
+    print("\n[Step 0] Probing SYS_CFG (0x03000000) SRAM Remap Modes...")
+    sys_cfg = MMIO(SYS_CFG_BASE, 0x1000)
+    ctrl0 = sys_cfg.read32(0x0000)
+    ctrl1 = sys_cfg.read32(0x0004)
+    print(f"  -> Initial SYS_CFG: CTRL0(0x00)=0x{ctrl0:08X}, CTRL1(0x04)=0x{ctrl1:08X}")
+    
+    # Try different remap configurations to map SRAM A1 to 0x00000000
+    remap_modes = [0x00000001, 0x00000002, 0x00000003, 0x00000007, 0x00000010, 0x00000100]
     sram_a1_ok = False
-    try:
-        sram_a1 = MMIO(SRAM_A1_BASE, 0x4000)
-        orig_a1 = sram_a1.read32(0x0)
-        sram_a1.write32(0x0, 0x55AAAA55)
-        wb1 = sram_a1.read32(0x0)
-        sram_a1.write32(0x0, 0x12345678)
-        wb2 = sram_a1.read32(0x0)
-        sram_a1.write32(0x0, orig_a1)
-        if wb1 == 0x55AAAA55 and wb2 == 0x12345678:
-            print("  -> SRAM A1 (0x00000000): READ/WRITE VERIFIED OK!")
-            sram_a1_ok = True
-        else:
-            print(f"  -> SRAM A1 (0x00000000): READ-ONLY or Protected (wb1=0x{wb1:08X}, wb2=0x{wb2:08X})")
-    except Exception as e:
-        print(f"  -> SRAM A1 Access Error: {e}")
+    
+    for mode in remap_modes:
+        sys_cfg.write32(0x0000, mode)
+        try:
+            sram_a1 = MMIO(SRAM_A1_BASE, 0x1000)
+            sram_a1.write32(0x0, 0x55AAAA55)
+            if sram_a1.read32(0x0) == 0x55AAAA55:
+                sram_a1.write32(0x0, 0x12345678)
+                if sram_a1.read32(0x0) == 0x12345678:
+                    print(f"  -> SUCCESS! SYS_CFG CTRL0 = 0x{mode:08X} unlocked writable SRAM A1 at 0x00000000!")
+                    sram_a1_ok = True
+                    break
+        except Exception:
+            pass
+
+    # 1. Test SRAM A1 (0x00000000)
+    print("\n[Step 1] SRAM A1 Status:")
+    if sram_a1_ok:
+        print("  -> SRAM A1 (0x00000000): READ/WRITE VERIFIED OK!")
+    else:
+        print("  -> SRAM A1 (0x00000000): Mapped to BROM (Read-Only).")
 
     # 2. Test SRAM C (0x00020000)
     print("\n[Step 2] Testing SRAM C (0x00020000..0x00040000)...")
