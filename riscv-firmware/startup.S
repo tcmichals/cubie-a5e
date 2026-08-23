@@ -1,4 +1,4 @@
-/* startup.S - XuanTie E906/E907 bootstrap assembly */
+/* startup.S - XuanTie E906/E907 bootstrap assembly for Option A */
 
 .section .vectors, "ax"
 .global _enter
@@ -19,7 +19,7 @@ _enter:
     .align 2
     .rept 24
     j _trap_handler
-    .endr   /* Trap/interrupt vectors */
+    .endr
 
 .section .text.startup, "ax"
 .global _reset_handler
@@ -27,11 +27,11 @@ _reset_handler:
     /* 1. Disable interrupts */
     csrci mstatus, 8
 
-    /* 2. Set MTvec base */
+    /* 2. Set MTvec base to vectors at 0x00000000 */
     la t0, _vectors
     csrw mtvec, t0
 
-    /* 3. Initialize Stack Pointer (sp) */
+    /* 3. Initialize Stack Pointer (sp) in SRAM C */
     la sp, _stack_top
 
     /* 4. Initialize Global Pointer (gp) */
@@ -40,23 +40,36 @@ _reset_handler:
     la gp, __global_pointer$
     .option pop
 
-    /* 5. Clear BSS segment */
+    /* 5. Copy initialized .data from R_SRAM to SRAM C */
+    la a0, _sram_data_start
+    la a1, _data_start
+    la a2, _data_end
+_data_copy_loop:
+    bgeu a1, a2, _data_copy_done
+    lw t0, 0(a0)
+    sw t0, 0(a1)
+    addi a0, a0, 4
+    addi a1, a1, 4
+    j _data_copy_loop
+_data_copy_done:
+
+    /* 6. Clear BSS segment in SRAM C */
     la a0, _bss_start
     la a1, _bss_end
     li t0, 0
 _bss_loop:
-    beq a0, a1, _skip_bss
+    bgeu a0, a1, _skip_bss
     sw t0, 0(a0)
     addi a0, a0, 4
     j _bss_loop
 
 _skip_bss:
-    /* 6. Jump directly to main */
+    /* 7. Jump directly to main */
     tail main
 
 .global _trap_handler
 _trap_handler:
-    /* Store trap counter in fixed SRAM offset 0x00028020 */
+    /* Store trap counter in fixed SRAM C offset 0x00028020 */
     li t0, 0x00028020
     lw t1, 0(t0)
     addi t1, t1, 1

@@ -153,6 +153,19 @@
     };
 };
 
+&{/} {
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        riscvsram0_reserved: riscvsram0@7280000 {
+            reg = <0x0 0x07280000 0x0 0x40000>;
+            no-map;
+        };
+    };
+};
+
 &{/soc} {
     msgbox: mailbox@3003000 {
         compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun6i-a31-msgbox";
@@ -165,13 +178,16 @@
     };
 
     rproc: remoteproc@7102000 {
-        compatible = "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
+        compatible = "allwinner,sun55i-a527-rproc", "allwinner,e906-rproc", "allwinner,sunxi-rproc";
         reg = <0x07102000 0x1000>,
+              <0x07280000 0x40000>,
               <0x00020000 0x20000>;
-        reg-names = "ccu", "sram";
+        reg-names = "ccu", "r_sram", "sram";
+        memory-region = <&riscvsram0_reserved>;
         mboxes = <&msgbox 0>, <&msgbox 1>;
         mbox-names = "rx", "tx";
         status = "okay";
     };
 };
+
 

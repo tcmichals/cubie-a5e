@@ -17,46 +17,60 @@ The Allwinner T527 SoC integrates a **XuanTie E907** as its real-time co-process
 
 ---
 
-## 2. Memory Interfaces, Caches, & DDR Mapping
+## 2. Memory Architecture & Physical Address Mapping (Option A)
 
-The XuanTie E906/E907 core features a Harvard architecture with dedicated **32 KB Instruction Cache (I-Cache)** and **32 KB Data Cache (D-Cache)**. 
+The XuanTie E906/E907 co-processor is a **pure SRAM-booted direct execution core** with no silicon BootROM. When the core's hardware reset is released, it fetches its very first instruction directly from its **Dedicated Local SRAM**:
 
-While the RISC-V core *can* access the main system DDR RAM (mapped from `0x4000_0000`), executing code or polling data from DDR is **strongly discouraged**. Accessing DDR forces the RISC-V core to compete with the ARM A55 cores and NPU via the main interconnect arbitration, and introduces unpredictable latency spikes due to cache misses and DRAM refresh cycles. 
-
-To guarantee zero-latency execution and prevent bus contention, the flight controller firmware runs entirely from dedicated internal zero-wait-state memory blocks:
-
-* **Instruction TCM (ITCM):** 64 KB space mapped at local core address `0x0000_0000`. Used exclusively for the vector table, bootstrap code, and high-priority SPI ISR functions.
-* **Data TCM (DTCM):** 64 KB space mapped at local core address `0x0008_0000`. Used for stacks, heaps, BSS segments, and local variables.
-* **System SRAM C:** A 320 KB block mapped at local address `0x0002_8000`. Used for the main program logic body and static data storage.
-* **Shared SRAM Window:** A 32 KB window at the top of SRAM C (`0x0007_8000` to `0x0007_FFFF`) mapped between the ARM host and the RISC-V core to execute pointer-exchange circular buffer transactions.
+| Memory Region | Size | RISC-V Local View | ARM64 Physical Host View | Usage & Characteristics |
+|---|---|---|---|---|
+| **Dedicated RISC-V SRAM** | **256 KB** | `0x0000_0000`..`0x0003_FFFF` | **`0x0728_0000`** | **Reset Vector & Execution**: Zero-wait-state SRAM containing the vector table, bootstrap, program code (`.text`), and constants (`.rodata`). |
+| **System Shared SRAM C** | **128 KB** | `0x0002_0000`..`0x0003_FFFF` | **`0x0002_0000`** | **Shared Host IPC & Data**: Holds initialized `.data`, `.bss`, stack, heap, Linux RemoteProc `resource_table`, and telemetry at `0x00028000`. |
+| **MCU Subsystem CCU** | 4 KB | `0x0710_2000` | `0x0710_2000` | Clock gating, reset control, and TZMA bus bridge configuration. |
+| **Hardware Mailbox** | 4 KB | `0x0710_3000` | `0x0710_3000` / `0x0300_3000` | Inter-processor interrupt doorbells and message passing. |
 
 ---
 
-## 3. Firmware Structure, TCM Placement, & The Linux ELF Loader
+## 3. Firmware Structure, Linker Layout (`firmware.ld`), & ELF Loading
 
-The co-processor runs bare-metal without an operating system. The software payload resides in [riscv-firmware/](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/):
+The software payload resides in [riscv-firmware/](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/):
 
-### How the Linux ELF Loader Works
-The Linux `remoteproc` framework acts as our bootloader. When Linux boots, the `sunxi_t527_rproc.c` kernel driver reads our compiled `firmware.elf` file from the host filesystem. 
-Because it is a standard ELF executable, it contains **Program Headers (Phdrs)** which dictate exactly where each block of memory should be loaded. The ARM host driver reads these physical load addresses (`paddr`), directly copies the executable sections into the physical SRAM/TCM blocks using DMA/memcpy, and then releases the RISC-V reset line to boot it.
+### Option A Linker Layout (`firmware.ld`)
+The GNU linker script maps execution code to **Dedicated RISC-V SRAM (`0x00000000` / `0x07280000`)** and shared variables/telemetry to **System SRAM C (`0x00020000`)**:
 
-### Placing Code & Data via the Linker Script (`firmware.ld`)
-Because the Linux ELF loader strictly respects the physical load addresses, we use the GCC Linker Script ([firmware.ld](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/firmware.ld)) to surgically map our code and data:
+```ld
+MEMORY
+{
+    /* 256 KB Dedicated Zero-Wait-State RISC-V SRAM */
+    R_SRAM (rx)  : ORIGIN = 0x00000000, LENGTH = 256K
 
-1. **Defining the Memory Map (`firmware.ld`):** The linker script declares the exact hardware boundaries for the ELF loader:
-   ```ld
-   MEMORY {
-       ITCM (rx)   : ORIGIN = 0x00000000, LENGTH = 64K
-       SRAM (rx)   : ORIGIN = 0x00028000, LENGTH = 320K
-       DTCM (rwx)  : ORIGIN = 0x00080000, LENGTH = 64K
-   }
-   ```
-2. **Placing Code in ITCM:** To guarantee our critical interrupt service routines (ISRs) execute with zero latency, we tag them in our C code using GCC attributes: `__attribute__((section(".text.fastcode")))`. The linker script catches this section block and routes it strictly into the `ITCM` memory address space.
-3. **Placing Data in DTCM:** Standard uninitialized variables (`.bss`) and the call stack naturally go into `DTCM` because they don't have initial values. However, for initialized variables (`.data`), the ARM host loads their initial values into `SRAM` via the ELF loader. Our `startup.S` assembly script then manually copies them from SRAM into the `DTCM` block before jumping to `main()`.
-4. **Linker Bounds Safety (`ASSERT`):** To prevent silent memory corruption, the linker script contains strict boundary assertions. If the compiled code or data sections exceed the 64KB limits of ITCM or DTCM, `make` will immediately throw a syntax error and fail the build.
-5. **`startup.S`:** Assembly bootstrap. It clears the BSS segment, copies initialized `.data` variables from SRAM to DTCM, sets the stack pointer (`sp = 0x00090000`), sets the global pointer (`gp`), and jumps to `main()`.
-6. **`ringbuffer.c`:** Lock-free, allocation-free, pointer-exchange circular queue mapped in System SRAM C.
-7. **`spi.c` & `main.cpp`:** Hardware drivers and fast polling loops capturing sensor frames from the FPGA.
+    /* 128 KB Shared System SRAM C */
+    SRAM_C (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
+}
+
+SECTIONS
+{
+    /* Vector table and bootstrap at reset address 0x00000000 */
+    .vectors : { KEEP(*(.vectors)) KEEP(*(.text.startup)) } > R_SRAM
+    .text    : { *(.text*) } > R_SRAM
+    .rodata  : { *(.rodata*) } > R_SRAM
+
+    /* RemoteProc Resource Table (in SRAM C for Linux host visibility) */
+    .resource_table : { KEEP(*(.resource_table)) } > SRAM_C
+
+    /* Data and BSS segments in SRAM C */
+    .data : { *(.data*) } > SRAM_C AT > R_SRAM
+    .bss  : { *(.bss*) }  > SRAM_C
+}
+```
+
+### Bootstrap Sequence (`startup.S`)
+1. **Disable Interrupts**: `csrci mstatus, 8`
+2. **Set Machine Trap Vector**: `mtvec = _vectors (0x00000000)`
+3. **Initialize Stack Pointer**: `sp = _stack_top (in SRAM C)`
+4. **Copy Data Segment**: Copies initialized `.data` from `R_SRAM` to `SRAM_C`
+5. **Clear BSS Segment**: Zeros `.bss` variables in `SRAM_C`
+6. **Enter Flight Loop**: Calls `main()`
+
 
 ---
 

@@ -1,3 +1,9 @@
+/*
+ * riscv-load.c - Allwinner XuanTie E907 Co-Processor Hardware Control Tool
+ * Option A: Direct execution from 256 KB Dedicated RISC-V Local SRAM (0x07280000)
+ * with Shared System SRAM C (0x00020000) for telemetry and host communication.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -6,21 +12,18 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#define MAIN_CCU_PHYS_BASE 0x02001000
-#define MAIN_CCU_MAP_SIZE  0x1000
+#define MAIN_CCU_PHYS_BASE   0x02001000
+#define MAIN_CCU_MAP_SIZE    0x1000
 
-#define SYS_CFG_PHYS_BASE  0x03000000
-#define SYS_CFG_MAP_SIZE   0x1000
+#define MCU_CCU_PHYS_BASE    0x07102000
+#define MCU_CCU_MAP_SIZE     0x1000
 
-#define MCU_CCU_PHYS_BASE  0x07102000
-#define MCU_CCU_MAP_SIZE   0x1000
+#define RISCV_SRAM_PHYS_BASE 0x07280000
+#define RISCV_SRAM_MAP_SIZE  0x40000   /* 256 KB */
 
-#define ITCM_PHYS_BASE     0x07110000
-#define ITCM_MAP_SIZE      0x10000   /* 64 KB */
-
-#define SRAM_PHYS_BASE     0x00020000
-#define SRAM_MAP_SIZE      0x20000   /* 128 KB */
-#define TELEM_OFFSET       0x00008000 /* 0x00028000 */
+#define SRAM_PHYS_BASE       0x00020000
+#define SRAM_MAP_SIZE        0x20000   /* 128 KB */
+#define TELEM_OFFSET         0x00008000 /* 0x00028000 */
 
 int main(int argc, char *argv[]) {
     const char *action = (argc > 1) ? argv[1] : "status";
@@ -32,29 +35,24 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    uint8_t *main_ccu = mmap(NULL, MAIN_CCU_MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, MAIN_CCU_PHYS_BASE);
-    uint8_t *sys_cfg  = mmap(NULL, SYS_CFG_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, SYS_CFG_PHYS_BASE);
-    uint8_t *mcu_ccu  = mmap(NULL, MCU_CCU_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, MCU_CCU_PHYS_BASE);
-    uint8_t *itcm     = mmap(NULL, ITCM_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, ITCM_PHYS_BASE);
-    uint8_t *sram     = mmap(NULL, SRAM_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, SRAM_PHYS_BASE);
+    uint8_t *main_ccu = mmap(NULL, MAIN_CCU_MAP_SIZE,    PROT_READ | PROT_WRITE, MAP_SHARED, fd, MAIN_CCU_PHYS_BASE);
+    uint8_t *mcu_ccu  = mmap(NULL, MCU_CCU_MAP_SIZE,     PROT_READ | PROT_WRITE, MAP_SHARED, fd, MCU_CCU_PHYS_BASE);
+    uint8_t *r_sram   = mmap(NULL, RISCV_SRAM_MAP_SIZE,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, RISCV_SRAM_PHYS_BASE);
+    uint8_t *sram     = mmap(NULL, SRAM_MAP_SIZE,        PROT_READ | PROT_WRITE, MAP_SHARED, fd, SRAM_PHYS_BASE);
 
-    if (main_ccu == MAP_FAILED || sys_cfg == MAP_FAILED || mcu_ccu == MAP_FAILED || itcm == MAP_FAILED || sram == MAP_FAILED) {
+    if (main_ccu == MAP_FAILED || mcu_ccu == MAP_FAILED || r_sram == MAP_FAILED || sram == MAP_FAILED) {
         perror("Failed to mmap MMIO regions");
         close(fd);
         return 1;
     }
 
     if (strcmp(action, "status") == 0) {
-        uint32_t clk_dsp = *(volatile uint32_t *)(main_ccu + 0xc70);
-        uint32_t rst_dsp = *(volatile uint32_t *)(main_ccu + 0xc7c);
-        uint32_t sram_mux = *(volatile uint32_t *)(sys_cfg + 0x004);
+        uint32_t clk_dsp  = *(volatile uint32_t *)(main_ccu + 0xc70);
         uint32_t riscv_clk = *(volatile uint32_t *)(mcu_ccu + 0x120);
         uint32_t riscv_rst = *(volatile uint32_t *)(mcu_ccu + 0x124);
 
-        printf("=== XuanTie RISC-V Hardware Status ===\n");
+        printf("=== XuanTie RISC-V Hardware Status (Option A) ===\n");
         printf("Main CCU DSP Clk (0x02001c70): 0x%08X (%s)\n", clk_dsp, (clk_dsp & (1<<31)) ? "ON" : "OFF");
-        printf("Main CCU DSP Bus (0x02001c7c): 0x%08X (%s)\n", rst_dsp, (rst_dsp & 1) ? "ON" : "OFF");
-        printf("SYS_CFG SRAM MUX (0x03000004): 0x%08X (Mapped to %s)\n", sram_mux, (sram_mux & (1<<24)) ? "ARM Host" : "RISC-V Subsystem");
         printf("MCU CCU Core Clk (0x07102120): 0x%08X (%s)\n", riscv_clk, (riscv_clk & (1<<31)) ? "RUNNING" : "STOPPED");
         printf("MCU CCU Core Rst (0x07102124): 0x%08X (Core %s)\n", riscv_rst, (riscv_rst & (1<<18)) ? "ACTIVE" : "IN RESET");
 
@@ -90,11 +88,10 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        printf("=== Loading XuanTie RISC-V Firmware ===\n");
+        printf("=== Loading XuanTie RISC-V Firmware (Option A) ===\n");
 
-        /* 1. Enable Main CCU DSP Root Clock and Bus */
+        /* 1. Enable Main CCU DSP Root Clock */
         *(volatile uint32_t *)(main_ccu + 0xc70) = 0x80000000;
-        *(volatile uint32_t *)(main_ccu + 0xc7c) = 0x00010001;
 
         /* 2. Enable MCU CCU and Peripheral Buses */
         *(volatile uint32_t *)(mcu_ccu + 0x108) = 0x00010001; /* TZMA0 */
@@ -107,17 +104,8 @@ int main(int argc, char *argv[]) {
         /* 3. Hold RISC-V in reset */
         *(volatile uint32_t *)(mcu_ccu + 0x124) = 0x00030001;
 
-        /* 4. Write Absolute Jump Trampoline to ITCM (Reset Vector 0x00000000) */
-        /* lui t0, 0x20 (0x000202B7) -> t0 = 0x00020000; jalr zero, 0(t0) (0x00000067) */
-        volatile uint32_t *itcm32 = (volatile uint32_t *)itcm;
-        for (int i = 0; i < 32; i += 2) {
-            itcm32[i]   = 0x000202B7; /* lui t0, 0x20 */
-            itcm32[i+1] = 0x00000067; /* jalr zero, 0(t0) */
-        }
-        printf("Installed Jump Trampoline to ITCM (0x07110000).\n");
-
-        /* 5. Load Firmware into SRAM C */
-        uint8_t fw_buf[SRAM_MAP_SIZE];
+        /* 4. Load Firmware into Dedicated RISC-V SRAM (0x07280000) */
+        uint8_t fw_buf[RISCV_SRAM_MAP_SIZE];
         memset(fw_buf, 0, sizeof(fw_buf));
         size_t n = fread(fw_buf, 1, sizeof(fw_buf), fw);
         fclose(fw);
@@ -127,23 +115,23 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        printf("Writing %zu bytes into SRAM C (0x00020000)...\n", n);
-        volatile uint32_t *sram32 = (volatile uint32_t *)sram;
+        printf("Writing %zu bytes into Dedicated RISC-V SRAM (0x07280000)...\n", n);
+        volatile uint32_t *r_sram32 = (volatile uint32_t *)r_sram;
         uint32_t *src32 = (uint32_t *)fw_buf;
         size_t words = (n + 3) / 4;
         for (size_t i = 0; i < words; i++) {
-            sram32[i] = src32[i];
+            r_sram32[i] = src32[i];
         }
 
-        /* Clear telemetry block */
+        /* Clear telemetry block in SRAM C (0x00028000) */
         memset((void *)(sram + TELEM_OFFSET), 0, 64);
 
-        /* 6. Release RISC-V Reset */
+        /* 5. Release RISC-V Reset */
         printf("Releasing RISC-V core reset...\n");
         *(volatile uint32_t *)(mcu_ccu + 0x124) = 0x00070001;
         uint32_t rst_read = *(volatile uint32_t *)(mcu_ccu + 0x124);
         printf("Reset status (0x07102124): 0x%08X (Core active)\n", rst_read);
-        printf("XuanTie RISC-V co-processor is running.\n");
+        printf("XuanTie RISC-V co-processor is running from 0x07280000!\n");
         return 0;
     } else {
         fprintf(stderr, "Usage: %s [start <fw.bin> | stop | status | monitor]\n", argv[0]);

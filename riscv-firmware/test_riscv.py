@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-XuanTie E907 RISC-V All-in-One Automated Hardware Bring-Up & Telemetry Tool
+XuanTie E907 RISC-V Hardware Bring-Up, Loader & Live Telemetry Tool (Option A)
 Target SoC: Allwinner A523/A527 (Radxa Cubie A5E) & A733 (Radxa Cubie A7A)
 
-Loads absolute trampoline jump (lui t0, 0x20; jr t0) into ITCM (0x07110000)
-and full firmware image into SRAM C (0x00020000), enables Main CCU CLK_DSP
-(0x02001c70) and MCU CCU bridges, cycles core reset, and samples live telemetry.
+Direct execution from 256 KB Dedicated RISC-V Local SRAM (0x07280000)
+with System Shared SRAM C (0x00020000) for telemetry and host communication.
 """
 
 import sys
@@ -25,13 +24,13 @@ def map_phys(fd, addr, size):
     return mm, offset
 
 def main():
-    parser = argparse.ArgumentParser(description="XuanTie E907 Hardware Bring-Up & Telemetry Tool")
+    parser = argparse.ArgumentParser(description="XuanTie E907 Hardware Bring-Up & Telemetry Tool (Option A)")
     parser.add_argument("--fw", default="/tmp/riscv-firmware.bin", help="Path to firmware binary (default: /tmp/riscv-firmware.bin)")
     parser.add_argument("--time", type=int, default=10, help="Monitoring duration in seconds (default: 10)")
     args = parser.parse_args()
 
     print("=" * 80)
-    print("XUANTIE E907 RISC-V HARDWARE BRING-UP & TELEMETRY SUITE")
+    print("XUANTIE E907 RISC-V HARDWARE BRING-UP & TELEMETRY SUITE (OPTION A)")
     print("=" * 80)
 
     try:
@@ -50,11 +49,9 @@ def main():
     print("  -> Main CCU CLK_DSP enabled: 0x80000000")
 
     print("\n[Step 2] Holding XuanTie E907 in Reset & Initializing MCU CCU Bus Bridges...")
-    # Hold reset
     mcu_ccu_mm.seek(mcu_ccu_off + 0x124)
     mcu_ccu_mm.write(struct.pack("<I", 0x00030001))
 
-    # Enable TZMA, PubSRAM, MBUS, RISCV_CLK, MSGBOX
     regs = [
         (0x108, 0x00010001, "TZMA0 (SRAM Adapter)"),
         (0x10c, 0x00010001, "TZMA1 (Periph Adapter)"),
@@ -68,56 +65,45 @@ def main():
         mcu_ccu_mm.write(struct.pack("<I", val))
         print(f"  -> {desc} (0x{0x07102000+reg:08X}) = 0x{val:08X}")
 
-    # 2. Map ITCM (0x07110000) & SRAM C (0x00020000)
-    itcm_mm, itcm_off = map_phys(dev_mem, 0x07110000, 0x10000)
-    sram_mm, sram_off = map_phys(dev_mem, 0x00020000, 0x20000)
+    # 2. Map Dedicated RISC-V SRAM (0x07280000, 256 KB) & Shared SRAM C (0x00020000, 128 KB)
+    r_sram_mm, r_sram_off = map_phys(dev_mem, 0x07280000, 0x40000)
+    sram_c_mm, sram_c_off = map_phys(dev_mem, 0x00020000, 0x20000)
 
-    # 3. Write Absolute Jump Trampoline to ITCM (Reset Vector at 0x00000000)
-    print("\n[Step 3] Installing Absolute Jump Trampoline to ITCM (0x07110000)...")
-    # lui t0, 0x20 (0x000202B7) -> t0 = 0x00020000
-    # jalr zero, 0(t0) (0x00000067) -> jump to SRAM C
-    trampoline = struct.pack("<II", 0x000202B7, 0x00000067)
-    itcm_mm.seek(itcm_off)
-    itcm_mm.write(trampoline * 32)
-    print("  -> ITCM Reset Vector loaded: lui t0, 0x20; jalr zero, 0(t0)")
-
-    # 4. Load Firmware into SRAM C (0x00020000)
-    print(f"\n[Step 4] Loading Firmware into SRAM C (0x00020000) from {args.fw}...")
+    # 3. Load Firmware into Dedicated RISC-V SRAM (0x07280000)
+    print(f"\n[Step 3] Loading Firmware into Dedicated RISC-V SRAM (0x07280000)...")
     if not os.path.exists(args.fw):
-        print(f"[!] Warning: {args.fw} not found. Searching in common paths...")
         for p in ["/lib/firmware/riscv-firmware.bin", "/tmp/firmware.bin", "firmware.bin"]:
             if os.path.exists(p):
                 args.fw = p
-                print(f"[+] Found firmware at: {args.fw}")
                 break
 
     if os.path.exists(args.fw):
         with open(args.fw, "rb") as f:
             fw = f.read()
-        print(f"  -> Read {len(fw)} bytes.")
-        sram_mm.seek(sram_off)
-        sram_mm.write(fw)
-        print("  -> Loaded into SRAM C (0x00020000)")
+        print(f"  -> Read {len(fw)} bytes from {args.fw}.")
+        r_sram_mm.seek(r_sram_off)
+        r_sram_mm.write(fw)
+        print("  -> Written to 0x07280000 (Core 0x00000000 Entry Point).")
     else:
         print("[!] ERROR: Firmware binary not found! Please build or copy firmware.bin")
         sys.exit(1)
 
-    # Clear Telemetry Block in SRAM C (0x00028000)
-    sram_mm.seek(sram_off + 0x8000)
-    sram_mm.write(b"\x00" * 64)
+    # Clear Shared Telemetry Block in SRAM C (0x00028000)
+    sram_c_mm.seek(sram_c_off + 0x8000)
+    sram_c_mm.write(b"\x00" * 64)
 
-    # 5. Release Reset
-    print("\n[Step 5] Releasing XuanTie E907 Core Reset (0x00070001)...")
+    # 4. Release Reset
+    print("\n[Step 4] Releasing XuanTie E907 Core Reset (0x00070001)...")
     mcu_ccu_mm.seek(mcu_ccu_off + 0x124)
     mcu_ccu_mm.write(struct.pack("<I", 0x00070001))
     time.sleep(0.01)
     
     mcu_ccu_mm.seek(mcu_ccu_off + 0x124)
     rst_val = struct.unpack("<I", mcu_ccu_mm.read(4))[0]
-    print(f"  -> Reset register status: 0x{rst_val:08X}")
+    print(f"  -> Reset register status: 0x{rst_val:08X} (Core Running)")
 
-    # 6. Monitor Telemetry
-    print(f"\n[Step 6] Monitoring Telemetry (0x00028000) for {args.time} seconds...")
+    # 5. Monitor Live Telemetry
+    print(f"\n[Step 5] Monitoring Live Telemetry at Shared SRAM C (0x00028000) for {args.time}s...")
     print("-" * 80)
     print(f"{'Time':^8} | {'Magic':^10} | {'Boot':^6} | {'Heartbeat':^12} | {'Loops':^12} | {'State':^16}")
     print("-" * 80)
@@ -128,16 +114,14 @@ def main():
 
     while time.time() - start_time < args.time:
         elapsed = time.time() - start_time
-        sram_mm.seek(sram_off + 0x8000)
-        data = sram_mm.read(32)
+        sram_c_mm.seek(sram_c_off + 0x8000)
+        data = sram_c_mm.read(32)
         magic, boot, hb, loops, alive = struct.unpack("<IIIII", data[:20])
 
-        if alive == 0x414C4956: # "ALIV"
+        if alive == 0x414C4956:
             state = "RUNNING (ALIV)"
-        elif boot == 1:
-            state = "BOOTED"
-        elif magic == 0x52495343: # "RISC"
-            state = "STARTUP"
+        elif boot == 1 or magic == 0x52495343:
+            state = "ACTIVE (RISC)"
         else:
             state = "WAITING"
 
@@ -150,7 +134,7 @@ def main():
 
     print("=" * 80)
     if ticking:
-        print("[🎉 SUCCESS] XuanTie E907 IS RUNNING AND ACTIVELY REPORTING TELEMETRY!")
+        print(f"[🎉 SUCCESS] XuanTie E907 IS RUNNING DIRECTLY FROM 0x07280000! Final Heartbeat: {last_hb}")
     else:
         print(f"[i] Completed. Final Heartbeat: {last_hb}")
     print("=" * 80)
