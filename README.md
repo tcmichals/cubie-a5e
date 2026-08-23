@@ -79,12 +79,15 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
   - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
 
-* **✅ RISC-V Co-Processor Lifecycle & JTAG-less Debugging (100% OPERATIONAL & VERIFIED):**
-  - **Linux RemoteProc Standard:** Co-processor lifecycle managed via the mainline Linux 7.1 `sunxi_rproc.c` driver with surgical multi-segment ELF placement (ITCM, DTCM, SRAM C) and live debugfs trace streaming (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
-  - **Toolchain & Firmware:** Bare-metal C++20 firmware compiled with xPack RISC-V GCC `v15.2.0-1` and Buildroot GDB `17.1`.
-  - **JTAG-Less On-Chip Debugging (DMEM):** Real-time `rbb_server` bridge and OpenOCD access the XuanTie E907 Debug Module directly over the SoC bus (`0x07090000`) without physical hardware dongles.
-  - **Automated DMI Verification:** Built-in Python test harness ([`tools/dmi_test.py`](tools/dmi_test.py)) validates the 3-step hardware proof (`dmstatus`, `dmactive`, and halt/resume transitions).
+* **✅ RISC-V Co-Processor Lifecycle & Live Trace (100% OPERATIONAL & VERIFIED ON HARDWARE):**
+  - **Option A Direct SRAM Execution Proven:** Proven that the XuanTie E907 co-processor has **no silicon BootROM** and executes directly from **256 KB Dedicated Zero-Wait-State RISC-V Local SRAM at `0x0728_0000`** (Core address `0x0000_0000`) with zero wait states.
+  - **Linux RemoteProc Standard (`sunxi_rproc.c`):** Full kernel lifecycle management (`echo start/stop > /sys/class/remoteproc/remoteproc0/state`). Driver implements `.prepare()` to clock `CLK_DSP` and `TZMA` bus bridges before ELF loading, and `devm_ioremap_wc()` (Normal Non-Cacheable RAM) matching upstream TI/Xilinx/NXP standards.
+  - **Standard Debugfs Live Trace Stream:** Co-processor streams real-time ASCII flight diagnostics directly to Linux userspace via `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+  - **Live SRAM C Telemetry:** Verified real-time telemetry block at `0x00028000` with active heartbeat ticking at **~130 Hz** (`Magic = 0x52495343` "RISC").
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
+
+* **🔄 Next Step — Local OpenOCD & GDB Remote Debugging (In Progress):**
+  - **JTAG-Less On-Chip Debugging (MMIO):** Connect `riscv-none-elf-gdb` and OpenOCD directly to the XuanTie E907 Debug Module registers (`0x07090000`) over the SoC internal bus for hardware breakpoints, register inspection (`x0`–`x31`), and single-stepping without physical JTAG hardware dongles.
 
 * **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
 
