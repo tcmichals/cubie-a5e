@@ -11,8 +11,8 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   6 ++
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 173 +++++++++++++++++++++++++++++++
- 3 files changed, 180 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 225 +++++++++++++++++++++++++++++++
+ 3 files changed, 232 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/b/drivers/remoteproc/Kconfig	2026-08-19 17:59:11.722373088 -0500
@@ -40,7 +40,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- a/b/drivers/remoteproc/sunxi_rproc.c	2026-08-19 17:39:04.722474691 -0500
 +++ b/drivers/remoteproc/sunxi_rproc.c	2026-08-19 17:59:24.265761927 -0500
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,225 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -49,10 +49,11 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 + * Copyright (C) 2026 tcmichals <tcmichals@gmail.com>
 + *
 + * Supports Allwinner A523, A527, T527, and A733 SoCs.
-+ * Manages core lifecycle (clock gate, reset de-assertion) and ELF segment
-+ * memory mapping to ITCM (0x07110000) and DTCM (0x07120000/0x07130000).
++ * Manages core lifecycle (Main CCU CLK_DSP, MCU CCU TZMA/PubSRAM/RISCV_CLK/RST)
++ * and ELF segment memory mapping to ITCM (0x07110000) and SRAM C (0x00020000).
 + */
 +
++#include <linux/delay.h>
 +#include <linux/err.h>
 +#include <linux/io.h>
 +#include <linux/module.h>
@@ -64,14 +65,26 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
++/* Main SoC CCU Registers (Base 0x02001000) */
++#define MAIN_CCU_PHYS_BASE    0x02001000
++#define MAIN_CCU_SIZE         0x00001000
++#define MAIN_CCU_CLK_DSP_REG  0x0c70
++#define MAIN_CCU_CLK_DSP_EN   0x80000000
++
 +/* MCU CCU Registers (Base 0x07102000) */
++#define MCU_CCU_TZMA0_REG     0x0108
++#define MCU_CCU_TZMA1_REG     0x010c
 +#define MCU_CCU_PUBSRAM_REG   0x0114
++#define MCU_CCU_MBUS_REG      0x011c
 +#define MCU_CCU_RISCV_CLK_REG 0x0120
 +#define MCU_CCU_RISCV_RST_REG 0x0124
 +#define MCU_CCU_MSGBOX_REG    0x0128
 +
 +/* Clock & Reset Values */
++#define MCU_TZMA0_ENABLE      0x00010001
++#define MCU_TZMA1_ENABLE      0x00010001
 +#define MCU_PUBSRAM_ENABLE    0x00010001
++#define MCU_MBUS_ENABLE       0x00000003
 +#define MCU_RISCV_CLK_ENABLE  0x80000000
 +#define MCU_RISCV_CORE_BOOT   0x00070001
 +#define MCU_RISCV_CORE_HOLD   0x00030001
@@ -93,6 +106,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +struct sunxi_rproc {
 +	struct rproc *rproc;
 +	struct device *dev;
++	void __iomem *main_ccu_va;
 +	void __iomem *ccu_va;
 +	void __iomem *itcm_va;
 +	void __iomem *dtcm_va;
@@ -106,12 +120,21 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +	dev_info(priv->dev, "Starting XuanTie RISC-V co-processor...\n");
 +
-+	/* 1. Enable PubSRAM, RISC-V Clock, and Mailbox in MCU CCU */
++	/* 1. Enable Main SoC CCU Root Parent Clock (CLK_DSP at 0x02001c70) */
++	if (priv->main_ccu_va)
++		writel(MAIN_CCU_CLK_DSP_EN, priv->main_ccu_va + MAIN_CCU_CLK_DSP_REG);
++
++	/* 2. Enable MCU CCU TZMA Bridges, PubSRAM, MBUS, RISC-V Clock, and Mailbox */
++	writel(MCU_TZMA0_ENABLE, priv->ccu_va + MCU_CCU_TZMA0_REG);
++	writel(MCU_TZMA1_ENABLE, priv->ccu_va + MCU_CCU_TZMA1_REG);
 +	writel(MCU_PUBSRAM_ENABLE, priv->ccu_va + MCU_CCU_PUBSRAM_REG);
++	writel(MCU_MBUS_ENABLE, priv->ccu_va + MCU_CCU_MBUS_REG);
 +	writel(MCU_RISCV_CLK_ENABLE, priv->ccu_va + MCU_CCU_RISCV_CLK_REG);
 +	writel(MCU_MSGBOX_ENABLE, priv->ccu_va + MCU_CCU_MSGBOX_REG);
 +
-+	/* 2. Release Core Reset (de-assert core reset bit 18, debug bit 17, cfg bit 16, clk bit 0) */
++	/* 3. Cycle Core Reset (Hold in reset, delay 20us, then release) */
++	writel(MCU_RISCV_CORE_HOLD, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
++	udelay(20);
 +	writel(MCU_RISCV_CORE_BOOT, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
 +
 +	val = readl(priv->ccu_va + MCU_CCU_RISCV_RST_REG);
@@ -204,7 +227,10 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +	priv->rproc = rproc;
 +	priv->dev = dev;
 +
-+	/* 1. Map CCU Control Registers (Shared with R-CCU clock controller) */
++	/* 1. Map Main SoC CCU for root parent DSP clock */
++	priv->main_ccu_va = devm_ioremap(dev, MAIN_CCU_PHYS_BASE, MAIN_CCU_SIZE);
++
++	/* 2. Map MCU CCU Control Registers */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ccu");
 +	if (!res)
 +		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -219,7 +245,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +		return -EINVAL;
 +	}
 +
-+	/* 2. Map ITCM Instruction Memory */
++	/* 3. Map ITCM Instruction Memory */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "itcm");
 +	if (!res)
 +		res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
@@ -233,7 +259,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +		priv->itcm_va = devm_ioremap(dev, ITCM_PHYS_BASE, ITCM_SIZE);
 +	}
 +
-+	/* 3. Map DTCM / SRAM */
++	/* 4. Map DTCM / SRAM */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
 +	if (res) {
 +		priv->sram_va = devm_ioremap(dev, res->start, resource_size(res));
