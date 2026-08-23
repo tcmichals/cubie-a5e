@@ -51,6 +51,7 @@ SECTIONS
     {
         . = ALIGN(4);
         KEEP(*(.resource_table))
+        KEEP(*(.resource_table*))
         . = ALIGN(4);
     } > SRAM_C
 

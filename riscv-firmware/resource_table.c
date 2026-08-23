@@ -80,8 +80,8 @@ struct cubie_resource_table {
     struct fw_rsc_vdev  vdev;
 } __attribute__((packed));
 
-/* Place the table in the .resource_table ELF section. */
-__attribute__((section(".resource_table")))
+/* Place the table in the .resource_table ELF section with used attribute to prevent LTO stripping */
+__attribute__((used, section(".resource_table"), aligned(4)))
 const struct cubie_resource_table resource_table = {
     .ver        = 1,
     .num        = 2,
