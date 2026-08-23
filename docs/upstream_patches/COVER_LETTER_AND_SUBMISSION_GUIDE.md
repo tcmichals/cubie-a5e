@@ -48,7 +48,7 @@ With these fixes applied and `CONFIG_AIC8800_FDRV_NO_REG_SDIO=y` enabled:
   - Interface `wlan0` registers, acquires DHCP (`192.168.1.15`), and passes ping
     traffic (0% packet loss).
 
-Tested-by: Tim Michals <tcmichals@yahoo.com>
+Tested-by: Tim Michals <tcmichals@gmail.com>
 
 Best regards,
 Tim Michals

@@ -1,4 +1,4 @@
-From: tcmichals <tcmichals@yahoo.com>
+From: tcmichals <tcmichals@gmail.com>
 Date: Sat, 22 Aug 2026 21:30:00 -0500
 Subject: [PATCH 2/2] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
@@ -7,7 +7,7 @@ Allwinner A523/A527/T527 and A733 SoCs.
 Fixes da_to_va address routing priorities so 0x00020000..0x00040000 (SRAM C)
 is translated to sram_va rather than being misrouted to r_sram_va.
 
-Signed-off-by: tcmichals <tcmichals@yahoo.com>
+Signed-off-by: tcmichals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |  10 ++
  drivers/remoteproc/Makefile      |   1 +

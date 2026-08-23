@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@yahoo.com>
+From: Tim Michals <tcmichals@gmail.com>
 Date: Sun, 16 Aug 2026 11:13:00 -0500
 Subject: [PATCH 3/3] wifi: aic: fix SDIO phase timing and chip wakeup sequence
 
@@ -17,7 +17,7 @@ transfers to time out.
 3. Fallback gracefully to standard AIC8800D80 U02 revision if the pre-boot
    0x40500000 IPC read does not respond in cold BootROM state.
 
-Signed-off-by: Tim Michals <tcmichals@yahoo.com>
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  .../aic8800_bsp/aic_chip_8800d80.c            | 17 ++++++++--
  aic8800_bsp/aicsdio.c                         | 31 +++++++++---------

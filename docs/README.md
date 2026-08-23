@@ -11,14 +11,25 @@ docs/
 ├── README.md                                  <-- You are here (Master Index & Sitemap)
 │
 ├── common/                                    <-- Shared Subsystem Architectures
-│   ├── WIFI_AIC8800_GUIDE.md                  <-- AIC8800 Wi-Fi 6 / BT (Dual SDIO / USB Architecture)
+│   ├── NPU_ACCELERATION_GUIDE.md              <-- 3 TOPs NPU Architecture, Mesa Teflon & TinyML Inference
+│   ├── VIDEO_ENCODING_VPU_GUIDE.md            <-- Hardware VPU Video Encoding (H.264/H.265 4K@30fps / Cedrus)
 │   ├── CAMERA_V4L2_GUIDE.md                   <-- Camera Subsystem, Media Controller & V4L2 Pipelines
+│   ├── WIFI_AIC8800_GUIDE.md                  <-- AIC8800 Wi-Fi 6 / BT (Dual SDIO / USB Architecture)
 │   ├── RISCV_REMOTEPROC_GUIDE.md              <-- XuanTie E907 Co-Processor & Linux remoteproc Framework
-│   └── REALTIME_FLIGHT_ARCHITECTURE.md        <-- Real-Time Linux OS Isolation (isolcpus=7, UIO Mailbox, Ringbuffers)
+│   └── REALTIME_FLIGHT_ARCHITECTURE.md        <-- Real-Time Linux OS Isolation (UIO Mailbox, Ringbuffers)
 │
 ├── platforms/                                 <-- Dedicated Hardware & Bootloader Specifications
 │   ├── CUBIE_A5E_PLATFORM_GUIDE.md            <-- Radxa Cubie A5E (Allwinner A527/T527, Mainline U-Boot, SDIO)
-│   └── CUBIE_A7A_PLATFORM_GUIDE.md            <-- Radxa Cubie A7A (Allwinner A733, LPDDR5 boot0, GICv3, USB)
+│   ├── CUBIE_A7A_PLATFORM_GUIDE.md            <-- Radxa Cubie A7A (Allwinner A733, LPDDR5 boot0, GICv3, Dual GMAC)
+│   ├── CUBIE_A7Z_PLATFORM_GUIDE.md            <-- Radxa Cubie A7Z (Allwinner A733 Zero Form Factor, Micro-HDMI)
+│   └── CUBIE_A7A_DEBUG_LOG.md                 <-- Radxa Cubie A7A Forensic Bring-Up Log & Silicon Realignment
+│
+├── vendor-a733-reference/                     <-- Allwinner A733 Official Hardware Reference Library
+│   ├── A733_Datasheet_V0.93.pdf               <-- Official Allwinner A733 Datasheet V0.93 PDF
+│   ├── dtbs/                                  <-- Decompiled Official Vendor DTS (A7A, A7S, A7Z, U-Boot)
+│   ├── firmware/                              <-- Complete AIC8800 Wi-Fi/BT Production Firmware Binaries
+│   ├── boot_configs/                          <-- Vendor Kernel 5.15 Config & Symbol Map
+│   └── README.md                              <-- Silicon Pinmux and Register Map Documentation
 │
 ├── buildroot/                                 <-- Buildroot Build System & Historical Case Studies
 │   ├── BuildRootHowTo.md                      <-- Buildroot Package Management & Build Flow

@@ -3,6 +3,13 @@ From: Yixun Lan <dlan@gentoo.org>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] pinctrl: sunxi: a733: add initial support
 
+Adds main PIO and PRCM R-PIO pinctrl support for the Allwinner A733 SoC.
+Includes base register adjustments and interrupt mapping fixes.
+
+Co-developed-by: Tim Michals <tcmichals@gmail.com>
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+Signed-off-by: Yixun Lan <dlan@gentoo.org>
+
 ---
 diff --git a/drivers/pinctrl/sunxi/Kconfig b/drivers/pinctrl/sunxi/Kconfig
 index dc62eba..4fd6d9a 100644

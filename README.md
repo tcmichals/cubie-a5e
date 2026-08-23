@@ -21,21 +21,23 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 
 ## Supported Boards & Hardware Comparison
 
-| Hardware Feature | Radxa Cubie A5E | Radxa Cubie A7A |
-| :--- | :--- | :--- |
-| **System on Chip (SoC)** | Allwinner **A527 / T527** (`sun55i-a527`) | Allwinner **A733** (`sun60i-a733`) |
-| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 @ 2.0 GHz + 6× Cortex-A55 @ 1.8 GHz |
-| **Real-Time Co-Processor** | XuanTie E907 RISC-V @ 600 MHz (0-cycle TCM) | XuanTie E907 RISC-V @ 600 MHz (0-cycle TCM) |
-| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
-| **GPU Core** | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 |
-| **System RAM** | LPDDR4 / LPDDR4X | LPDDR5 |
-| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO** Bus) | AicSemi AIC8800 (**USB** Bus) |
-| **Storage Interfaces** | MicroSD / eMMC Module / SPI NOR | MicroSD / eMMC Module / UFS Module / SPI NOR |
-| **Flight Bus Header** | Standard 40-pin GPIO (3× SPI, 2× I2C, 2× UART) | Standard 40-pin GPIO (3× SPI, 2× I2C, 2× UART) |
-| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
-| **Buildroot Defconfig** | `cubie_a5e_defconfig` | `cubie_a7a_defconfig` |
-| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` |
-| **Flight Stack Overlay** | `cubie-a5e-flight-stack.dtbo` | `cubie-a7a-flight-stack.dtbo` |
+| Hardware Feature | Radxa Cubie A5E | Radxa Cubie A7A | Radxa Cubie A7Z |
+| :--- | :--- | :--- | :--- |
+| **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | **Ultra-Compact Zero (65×30 mm)** |
+| **System on Chip (SoC)** | Allwinner **A527 / T527** (`sun55i-a527`) | Allwinner **A733** (`sun60i-a733`) | Allwinner **A733** (`sun60i-a733`) |
+| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 + 6× Cortex-A55 | 2× Arm Cortex-A76 + 6× Cortex-A55 |
+| **Real-Time Co-Processor** | XuanTie E907 RISC-V @ 600 MHz | XuanTie E907 RISC-V @ 600 MHz | XuanTie E907 RISC-V @ 600 MHz |
+| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
+| **Video Engine (VPU)** | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) |
+| **GPU Core** | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 | Imagination BXM-4-64 MC1 |
+| **System RAM** | LPDDR4 / LPDDR4X | LPDDR5 (Auto-Trained) | LPDDR5 (Auto-Trained) |
+| **Ethernet** | Gigabit RJ45 | Dual Gigabit RJ45 (`GMAC0`/`GMAC1`) | *None (Wi-Fi 6 / USB Ethernet)* |
+| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO** Bus) | AicSemi AIC8800 (**USB / SDIO**) | AicSemi AIC8800 (**SDIO** Bus) |
+| **Video Out** | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Micro-HDMI + MIPI DSI |
+| **Camera Port** | 2-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 (15-pin FPC) |
+| **Storage Interfaces** | MicroSD / eMMC Module / SPI NOR | MicroSD / eMMC Module / UFS / SPI NOR | MicroSD / eMMC Module / SPI NOR |
+| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
+| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
 
 ---
 
@@ -46,14 +48,14 @@ Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physica
 - **SPI2 (Pins 7, 15, 16, 18):** General Purpose expansion SPI bus.
 - **I2C1 (Pins 3, 5) & I2C3 (Pins 27, 28):** Dual I2C buses for external compass, barometer, and flight telemetry.
 - **UART0 (Pins 8, 10):** Mainline Linux serial debug console.
-- **Isolated Core 7:** Core 7 is isolated on both chips (`isolcpus=7 nohz_full=7 rcu_nocbs=7`) for jitter-free real-time flight loops.
+- **Isolated Core 7:** Core 7 is isolated for jitter-free real-time flight loops (dynamic userspace `cpuset` isolation after clean SMP boot).
 
 ---
 
 ## Project Mantra & Core Philosophies
 
 1. **Mainline First:** We reject ancient, bloated vendor BSP kernels. We target the absolute latest mainline Linux kernel releases and push for pure FOSS (Free and Open-Source Software) drivers (e.g., Etnaviv for the NPU, V4L2 for camera pipelines). 
-2. **ArduPilot-Grade Determinism:** Flight loops must not jitter. We achieve microsecond-level hard real-time execution by aggressively isolating the OS (`PREEMPT_RT`, `isolcpus`, `mlockall`, `SCHED_FIFO`) and offloading zero-tolerance timing to the bare-metal RISC-V and FPGA co-processors.
+2. **ArduPilot-Grade Determinism:** Flight loops must not jitter. We achieve microsecond-level hard real-time execution by isolating the real-time flight loop (`PREEMPT_RT`, `taskset -c 7`, `mlockall`, `SCHED_FIFO`) and offloading zero-tolerance timing to the bare-metal RISC-V and FPGA co-processors.
 3. **Zero-Cost Abstractions:** Embedded code doesn't have to be unsafe C macros. We embrace modern C++ (C++20) for strict type safety and `std::atomic` lock-free IPC, compiling with `-fno-exceptions` to generate perfectly optimized, bloat-free assembly.
 4. **Transparent Engineering:** We document the "why," not just the "how." Every register map, architectural decision, and debugging nightmare is extensively logged so future aerospace engineers can learn from the hardware up.
 
@@ -63,9 +65,9 @@ Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physica
 As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
 
 * **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
-  - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, isolated CPU Core 7 (`isolcpus=7 nohz_full=7 rcu_nocbs=7`), Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
+  - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, real-time CPU Core 7 flight isolation, Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
   - **Radxa Cubie A7A (Allwinner A733):** Full multi-stage boot chain verified on real silicon: `BootROM` $\rightarrow$ `boot0` (6 GiB LPDDR5 auto-training) $\rightarrow$ `TOC1` $\rightarrow$ `TF-A BL31` $\rightarrow$ `OP-TEE` $\rightarrow$ `Mainline U-Boot 2026.01-rc1` (4KB page-aligned at `0x4a001000`) $\rightarrow$ `Mainline Linux 7.1.0 PREEMPT_RT` booted across all 8 SMP cores (6× Cortex-A55 + 2× Cortex-A78) with 6 GiB RAM.
-  - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`) and Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`).
+  - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`), Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`), and Radxa Cubie A7Z (`sun60i-a733-cubie-a7z.dtb`).
 
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & DUAL-BUS READY):** 
   - **Unified Dual-Bus Architecture:** Mainline kernel driver (`aic8800-upstream`) unified with modular transport HAL backends:

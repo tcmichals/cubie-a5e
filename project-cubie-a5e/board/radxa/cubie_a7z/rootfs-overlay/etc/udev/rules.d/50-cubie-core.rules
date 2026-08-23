@@ -1,0 +1,4 @@
+SUBSYSTEM=="video4linux", GROUP="video", MODE="0660"
+SUBSYSTEM=="media", GROUP="video", MODE="0660"
+KERNEL=="galcore", MODE="0666"
+SUBSYSTEM=="net", KERNEL=="wlan*", ACTION=="add", NAME="wlan0", RUN+="/sbin/ip link set dev wlan0 up"

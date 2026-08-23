@@ -1,3 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yang Yang <yang.yang@allwinnertech.com>
+Date: Fri, 21 Aug 2026 12:00:00 +0000
+Subject: [PATCH] clk: sunxi-ng: a733: add CCU and PRCM clock support
+
+Adds Clock Control Unit (CCU) and PRCM Clock Controller support for the
+Allwinner A733 SoC. Includes base address alignment against A733 Datasheet
+V0.93 and critical clock definitions.
+
+Co-developed-by: Yixun Lan <dlan@gentoo.org>
+Signed-off-by: Yixun Lan <dlan@gentoo.org>
+Co-developed-by: Tim Michals <tcmichals@gmail.com>
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+Signed-off-by: Yang Yang <yang.yang@allwinnertech.com>
+---
 diff --git a/drivers/clk/sunxi-ng/Kconfig b/drivers/clk/sunxi-ng/Kconfig
 index 6af2d020e..362e1628e 100644
 --- a/drivers/clk/sunxi-ng/Kconfig

@@ -76,6 +76,34 @@
   3. Padded `header-info.bin` to 4096 bytes (4 KB).
   4. Both link-time base and runtime relocated base now share identical `+0x000` page offsets with **zero displacement**.
 
+### Milestone 3: Kernel Boot CPU Hang Resolution (Aug 23, 2026)
+- **Issue**: Kernel boot hung at `[ 8.324s ]` when bringing up CPU 7 with `isolcpus=7` in `bootargs`.
+- **Root Cause**: Early kernel RCU grace period synchronization threads stalled waiting for response on isolated core 7 before userspace task isolation was established.
+- **Resolution**: Removed hardcoded `isolcpus=7` from kernel command line; implemented dynamic userspace task isolation via `cpuset` and `taskset -c 7` in user space.
+
+### Milestone 4: TrustZone Secure SRAM Conflict Resolution
+- **Issue**: Kernel crashed at `[ 0.595s ]` during `sunxi_sram.c` driver probe.
+- **Root Cause**: `syscon@3000000` contained child nodes mapping Secure SRAM (`sram_a` / `sram_c`). In ARM TrustZone (TF-A BL31), non-secure EL1 read/write accesses to secure memory regions trigger synchronous hardware aborts.
+- **Resolution**: Configured `syscon@3000000` purely as a system control regmap provider for GMAC EMAC clock delays without exposing TrustZone-reserved SRAM children to Linux.
+
+### Milestone 5: Subsys Initcall Unclocked Bus Stalls
+- **Issue**: Boot froze at `[ 0.624s ]` directly after `NET: Registered PF_NETLINK/PF_ROUTE`.
+- **Root Cause**: `snps,designware-i2c` in `drivers/i2c/busses/i2c-designware-platdrv.c` executed `i2c_dw_configure()` at line 175, reading hardware identification registers at MMIO `0x07083000` *before* the PRCM bus clock was prepared/enabled at line 186. Accessing unclocked peripheral bus registers stalled the SoC memory fabric.
+- **Resolution**: Restored `allwinner,sun60i-a733-i2c`, `allwinner,sun6i-a31-i2c` binding which guarantees proper clock and reset sequencing prior to register access.
+
+### Milestone 6: 8-Core Heterogeneous SMP & Real-Time RT Verification
+- **Achievement**: Booted **Mainline Linux 7.1.0 `PREEMPT_RT`** into ext4 rootfs in **3.9 seconds**.
+- **Silicon Verification**:
+  * 6x Cortex-A55 efficiency cores (Part `0xd05`) + 2x Cortex-A78 performance cores (Part `0xd0b`) all online.
+  * GICv3 PPI 27 architectural timer generating independent 1,000 Hz RT interrupts across all 8 cores.
+  * XuanTie E907 RISC-V co-processor registered in Linux sysfs (`/sys/class/remoteproc/remoteproc0`).
+  * Hardware power regulators verified via `gpioinfo` (`PL2` USB0 VBUS, `PM0` Wi-Fi Power, `PM5` USB Hub Power).
+
+### Milestone 7: Gigabit Ethernet & USB PHY / Wi-Fi 6 Subsystem Integration
+- **Ethernet**: Added `gmac0: ethernet@4500000` with `syscon@3000000` regmap and Motorcomm `MAE0621A` PHY reset on `PH16`; compiled `CONFIG_DWMAC_SUN8I=y` and `CONFIG_MOTORCOMM_PHY=y` built-in.
+- **USB & Wi-Fi**: Added `usbphy: phy@4100400` (`sun20i-d1-usb-phy`) with `CONFIG_PHY_SUN4I_USB=y` to drive the analog transceivers for `ehci1`, the FE1.1S 4-port hub, and the onboard **AIC8800 Wi-Fi 6 chip** (`0xA69C:0x8800`).
+- **RISC-V Firmware**: Packaged compiled XuanTie E907 binary into `/lib/firmware/riscv-firmware.elf`.
+
 ---
 
 ## 5. Silicon Boot Log (Mainline U-Boot 2026.01 $\rightarrow$ Linux 7.1.0 PREEMPT_RT)
@@ -185,10 +213,37 @@ Starting kernel ...
 
 ---
 
-## 6. Next Steps (Linux Kernel CCU Clock Fix)
+## 6. Forensic Discoveries & Silicon Register Realignment (Datasheet V0.93)
 
-1. **CCU & R-CCU Clock Gate Parent Fix**:
-   - `bus_mmc0_clk`, `bus_uart0_clk`, `r_bus_uart0_clk` in `0003-clk-sunxi-ng-add-allwinner-a733-ccu-and-prcm.patch` must reference single bus clock parents (`psi_ahb1_ahb2_clk`, `apb1`, `apb2`, `r_apb0`) rather than multi-parent arrays (`ahb_parents`).
-2. **Rebuild Kernel & Verify**:
-   - Verify `sun60i-a733-ccu` and `sun60i-a733-r-ccu` probe successfully with code `0`.
-   - Verify `pinctrl`, `ttyS0` console, and `mmcblk0p2` mount rootfs to reach login prompt.
+During kernel initialization on hardware, the system experienced intermittent stalls at `clk: Disabling unused clocks` and `Waiting for root device /dev/mmcblk0p2`. Forensic comparison between the decompiled vendor tree ([`vendor-a733-reference/`](file:///home/tcmichals/projects/cubie/vendor-a733-reference/)) and the **Allwinner A733 Datasheet V0.93** revealed crucial base address and interrupt mismatches in early mainline patches:
+
+### Key Hardware Realignment Findings:
+1. **Main CCU Base Shift**:
+   - Upstream patch assumed base `0x02001000`.
+   - Real silicon base is **`0x02002000`** (`0x2000` bytes).
+   - *Impact*: Clock disable operations were writing to unmapped registers or shifting offsets by 4 KB, causing bus lockups.
+2. **PRCM R-PIO Base Shift**:
+   - Upstream patch assumed base `0x07022000` (from older H616).
+   - Real silicon base is **`0x07025000`** (`0x410` bytes).
+   - *Impact*: GPIO requests for PMIC and power enables (e.g. `wifi_power_en`, `usb0-vbus`) were failing.
+3. **Interrupt Vector Alignment (GIC-600)**:
+   - Main PIO bank IRQs: **`GIC_SPI 69` to `87`** (previously offset by 6).
+   - R-PIO IRQs: **`GIC_SPI 198` (PL) and `200` (PM)** (previously 122/124).
+   - PMIC I2C (`r_i2c0`): **`GIC_SPI 203`** (previously 115).
+   - Mailbox (`msgbox`): **`GIC_SPI 211`** (previously unmapped).
+   - GMAC0/1: **`GIC_SPI 141` / `142`**.
+   - USB 2.0 Host 0/1: **`GIC_SPI 157`–`160`**.
+   - MMC0/2: **`GIC_SPI 161` / `163`**.
+4. **Boot Stalling on CPU Isolation**:
+   - `isolcpus=7 nohz_full=7 rcu_nocbs=7` in default `bootargs` caused RCU grace period stalls on non-isolated cores during PREEMPT_RT kernel boot.
+   - *Resolution*: Removed `isolcpus` from default boot arguments.
+
+---
+
+## 7. Status & Master Verification
+
+- [x] **Silicon Address Verification**: All CCU, PIO, R-PIO, R-I2C, Mailbox, GMAC, and USB base registers matched to A733 Datasheet V0.93.
+- [x] **Pinmux Functions**: Updated RGMII0 to mux 5, SDC2 to mux 3, SDC0 to mux 2, UART0 to mux 2, and PMIC I2C to mux 2.
+- [x] **Mainline Patch Synced**: Updated `cubie-a5e/project-cubie-a5e/patches/linux/0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`.
+- [x] **Boot Script Cleaned**: Removed `isolcpus` stalls from `boot.cmd` and `uboot-env.txt`.
+- [x] **Target Image Rebuilt**: `bld.a7a/images/sdcard.img` verified and audited.
