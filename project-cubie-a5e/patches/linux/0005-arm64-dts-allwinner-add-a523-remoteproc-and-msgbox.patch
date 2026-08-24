@@ -2,19 +2,13 @@ From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 
-Adds the MSGBOX hardware mailbox and XuanTie E907 RISC-V remoteproc node
-to the sun55i-a523 SoC base device tree with status = "disabled".
-
-Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 23 +++++++++++++++++++++++
- 1 file changed, 23 insertions(+)
-
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1088,3 +1088,26 @@ npu: npu@7122000 {
+@@ -1086,5 +1086,28 @@
+ 			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
+ 			power-domains = <&ppu PD_NPU>;
  		};
-+
 +		msgbox: mailbox@3003000 {
 +			compatible = "allwinner,sun55i-a523-msgbox",
 +				     "allwinner,sun8i-a83t-msgbox";
@@ -40,5 +34,3 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		};
  	};
  };
--- 
-2.43.0
