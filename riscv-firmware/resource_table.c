@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define TRACE_BUF_DA            0x00029000  /* Dedicated trace buffer in Shared SRAM C */
+#define TRACE_BUF_DA            0x00038000  /* Dedicated trace buffer in RISC-V SRAM */
 #define TRACE_BUF_LEN           0x1000      /* 4 KB trace log window */
 
 /* Resource Types */

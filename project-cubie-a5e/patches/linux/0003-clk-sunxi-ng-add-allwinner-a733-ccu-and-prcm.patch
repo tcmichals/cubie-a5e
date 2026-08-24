@@ -158,6 +158,7 @@ index c70f465f9..f67b5e4c0 100644
 +
 +static SUNXI_CCU_GATE_HWS(bus_usb0_clk,  "bus-usb0",  ahb_hws,  0x1304, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(bus_usb1_clk,  "bus-usb1",  ahb_hws,  0x130c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb2_clk,  "bus-usb2",  ahb_hws,  0x135c, BIT(0), 0);
 +		[CLK_PLL_PERIPH0_2X]	= &pll_periph0_2x_clk.common.hw,
 +		[CLK_PLL_PERIPH0_1X]	= &pll_periph0_1x_clk.common.hw,
 +		[CLK_PSI_AHB1_AHB2]	= &psi_ahb1_ahb2_clk.common.hw,
@@ -188,6 +189,7 @@ index c70f465f9..f67b5e4c0 100644
 +		[CLK_BUS_GMAC1]		= &bus_gmac1_clk.common.hw,
 +		[CLK_BUS_USB0]		= &bus_usb0_clk.common.hw,
 +		[CLK_BUS_USB1]		= &bus_usb1_clk.common.hw,
++		[CLK_BUS_USB2]		= &bus_usb2_clk.common.hw,
 +		[CLK_MMC0]		= &mmc0_clk.common.hw,
 +		[CLK_MMC1]		= &mmc1_clk.common.hw,
 +		[CLK_MMC2]		= &mmc2_clk.common.hw,
@@ -223,6 +225,7 @@ index c70f465f9..f67b5e4c0 100644
 +	[RST_BUS_GMAC1]	= { 0x142c, BIT(16) },
 +	[RST_BUS_USB0]	= { 0x1304, BIT(16) },
 +	[RST_BUS_USB1]	= { 0x130c, BIT(16) },
++	[RST_BUS_USB2]	= { 0x135c, BIT(16) },
 +};
 +
 +static const struct sunxi_ccu_desc sun60i_a733_ccu_desc = {

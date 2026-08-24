@@ -75,14 +75,14 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | :--- | :--- | :--- | :--- | :--- |
 | **UART0 Console** | `GIC_SPI` | **2** | `<GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>` | Serial console byte RX/TX interrupt |
 | **Main PIO Bank 0–9** | `GIC_SPI` | **69 – 87** (odd) | `<GIC_SPI 69 ... 87>` | GPIO external interrupt lines (PB–PK) |
-| **GMAC0 Ethernet** | `GIC_SPI` | **141** | `<GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>` | MAC DMA transmit/receive interrupt |
-| **GMAC1 Ethernet** | `GIC_SPI` | **142** | `<GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>` | MAC DMA transmit/receive interrupt |
-| **USB 2.0 Host 0 (EHCI)** | `GIC_SPI` | **157** | `<GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>` | USB2 EHCI 0 interrupt |
-| **USB 2.0 Host 0 (OHCI)** | `GIC_SPI` | **158** | `<GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>` | USB1.1 OHCI 0 interrupt |
-| **USB 2.0 Host 1 (EHCI)** | `GIC_SPI` | **159** | `<GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>` | USB2 EHCI 1 interrupt |
-| **USB 2.0 Host 1 (OHCI)** | `GIC_SPI` | **160** | `<GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>` | USB1.1 OHCI 1 interrupt |
-| **MMC0 (MicroSD)** | `GIC_SPI` | **161** | `<GIC_SPI 161 IRQ_TYPE_LEVEL_HIGH>` | SD card command/data transfer done |
-| **MMC2 (Wi-Fi SDIO)** | `GIC_SPI` | **163** | `<GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>` | Wi-Fi SDIO bus transfer done |
+| **GMAC0 Ethernet** | `GIC_SPI` | **172** (`0xac`) | `<GIC_SPI 172 IRQ_TYPE_LEVEL_HIGH>` | MAC DMA transmit/receive interrupt (`macirq`) |
+| **GMAC1 Ethernet** | `GIC_SPI` | **173** (`0xad`) | `<GIC_SPI 173 IRQ_TYPE_LEVEL_HIGH>` | MAC DMA transmit/receive interrupt (`macirq`) |
+| **USB 2.0 Host 0 (EHCI)** | `GIC_SPI` | **157** (`0x9d`) | `<GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>` | USB2 EHCI 0 interrupt |
+| **USB 2.0 Host 0 (OHCI)** | `GIC_SPI` | **158** (`0x9e`) | `<GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>` | USB1.1 OHCI 0 interrupt |
+| **USB 2.0 Host 1 (EHCI)** | `GIC_SPI` | **159** (`0x9f`) | `<GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>` | USB2 EHCI 1 interrupt |
+| **USB 2.0 Host 1 (OHCI)** | `GIC_SPI` | **160** (`0xa0`) | `<GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>` | USB1.1 OHCI 1 interrupt |
+| **MMC0 (MicroSD)** | `GIC_SPI` | **161** (`0xa1`) | `<GIC_SPI 161 IRQ_TYPE_LEVEL_HIGH>` | SD card command/data transfer done |
+| **MMC2 (Wi-Fi SDIO)** | `GIC_SPI` | **163** (`0xa3`) | `<GIC_SPI 163 IRQ_TYPE_LEVEL_HIGH>` | Wi-Fi SDIO bus transfer done |
 | **USB 3.1 DWC3** | `GIC_SPI` | **155** (`0x9b`) | `<GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>` | DWC3 XHCI controller core interrupt |
 | **PRCM R-PIO Bank 0 (PL)**| `GIC_SPI` | **198** (`0xc6`) | `<GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>` | Port L external GPIO interrupts |
 | **PRCM R-PIO Bank 1 (PM)**| `GIC_SPI` | **200** (`0xc8`) | `<GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>` | Port M external GPIO interrupts |

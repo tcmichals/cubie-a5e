@@ -5,9 +5,9 @@ Subject: [PATCH] arm64: dts: allwinner: add sun60i-a733-cubie-a7a and cubie-a7z 
 
 ---
  arch/arm64/boot/dts/allwinner/Makefile                 |   2 +
- arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 429 ++++++++++++++++++++
+ arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 491 ++++++++++++++++++++
  arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts | 405 ++++++++++++++++++++
- 3 files changed, 836 insertions(+)
+ 3 files changed, 898 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
 index d116864..6b59921 100644
@@ -24,7 +24,7 @@ new file mode 100644
 index 0000000..155066b
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,429 @@
+@@ -0,0 +1,491 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -96,6 +96,15 @@ index 0000000..155066b
 +		regulator-max-microvolt = <3300000>;
 +		gpio = <&r_pio 1 0 GPIO_ACTIVE_HIGH>; /* PM0 (USB_WIFI_PWR) */
 +		enable-active-high;
++		regulator-always-on;
++		regulator-boot-on;
++	};
++
++	reg_phy3v3: phy-3v3 {
++		compatible = "regulator-fixed";
++		regulator-name = "phy-3v3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
 +		regulator-always-on;
 +		regulator-boot-on;
 +	};
@@ -265,7 +274,7 @@ index 0000000..155066b
 +			gmac0_pins: gmac0-pins {
 +				pins = "PH0", "PH1", "PH2", "PH3",
 +				       "PH4", "PH5", "PH6", "PH7",
-+				       "PH8", "PH9", "PH10", "PH11",
++				       "PH8", "PH9", "PH11",
 +				       "PH12", "PH13", "PH14", "PH15";
 +				function = "gmac0";
 +				allwinner,pinmux = <5>;
@@ -346,13 +355,19 @@ index 0000000..155066b
 +				 <&osc24M>;
 +			clock-names = "usb0_phy",
 +				      "usb1_phy";
++			resets = <&ccu RST_BUS_USB0>,
++				 <&ccu RST_BUS_USB1>;
++			reset-names = "usb0_reset",
++				      "usb1_reset";
++			usb0_vbus-supply = <&reg_usb0_vbus>;
++			usb1_vbus-supply = <&reg_usb1_vbus>;
 +			#phy-cells = <1>;
 +			status = "okay";
 +		};
 +
 +		ehci0: usb@4101000 {
 +			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
-+			reg = <0x04101000 0x1000>;
++			reg = <0x04101000 0x100>;
 +			interrupts = <GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&ccu CLK_BUS_USB0>;
 +			resets = <&ccu RST_BUS_USB0>;
@@ -361,9 +376,20 @@ index 0000000..155066b
 +			status = "okay";
 +		};
 +
++		ohci0: usb@4101400 {
++			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
++			reg = <0x04101400 0x100>;
++			interrupts = <GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
++			resets = <&ccu RST_BUS_USB0>;
++			phys = <&usbphy 0>;
++			phy-names = "usb";
++			status = "okay";
++		};
++
 +		ehci1: usb@4200000 {
 +			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
-+			reg = <0x04200000 0x1000>;
++			reg = <0x04200000 0x100>;
 +			interrupts = <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&ccu CLK_BUS_USB1>;
 +			resets = <&ccu RST_BUS_USB1>;
@@ -372,10 +398,41 @@ index 0000000..155066b
 +			status = "okay";
 +		};
 +
++		ohci1: usb@4200400 {
++			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
++			reg = <0x04200400 0x100>;
++			interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
++			resets = <&ccu RST_BUS_USB1>;
++			phys = <&usbphy 1>;
++			phy-names = "usb";
++			status = "okay";
++		};
++
++		dwc3: usb@6a00000 {
++			compatible = "snps,dwc3";
++			reg = <0x06a00000 0x10000>;
++			interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_USB2>,
++				 <&ccu CLK_BUS_USB2>,
++				 <&osc24M>;
++			clock-names = "ref", "bus_early", "suspend";
++			resets = <&ccu RST_BUS_USB2>;
++			dr_mode = "host";
++			maximum-speed = "super-speed";
++			phy_type = "utmi";
++			snps,dis_enblslpm_quirk;
++			snps,dis-u1-entry-quirk;
++			snps,dis-u2-entry-quirk;
++			snps,dis_u3_susphy_quirk;
++			snps,dis_u2_susphy_quirk;
++			status = "okay";
++		};
++
 +		gmac0: ethernet@4500000 {
-+			compatible = "allwinner,sun55i-a523-gmac0", "allwinner,sun50i-a64-emac";
++			compatible = "allwinner,sun55i-a523-gmac200", "snps,dwmac-4.20a";
 +			reg = <0x04500000 0x10000>;
-+			interrupts = <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>;
++			interrupts = <GIC_SPI 172 IRQ_TYPE_LEVEL_HIGH>;
 +			interrupt-names = "macirq";
 +			clocks = <&ccu CLK_BUS_GMAC0>;
 +			clock-names = "stmmaceth";
@@ -386,6 +443,11 @@ index 0000000..155066b
 +			syscon = <&syscon>;
 +			phy-mode = "rgmii-id";
 +			phy-handle = <&ext_rgmii_phy>;
++			phy-supply = <&reg_phy3v3>;
++			snps,fixed-burst;
++			snps,axi-config = <&gmac0_stmmac_axi_setup>;
++			snps,mtl-rx-config = <&gmac0_mtl_rx_setup>;
++			snps,mtl-tx-config = <&gmac0_mtl_tx_setup>;
 +			status = "okay";
 +
 +			mdio0: mdio {
@@ -394,13 +456,32 @@ index 0000000..155066b
 +				#size-cells = <0>;
 +
 +				ext_rgmii_phy: ethernet-phy@1 {
++					compatible = "ethernet-phy-id7b74.4412", "ethernet-phy-ieee802.3-c22";
 +					reg = <1>;
-+					max-speed = <1000>;
-+					reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>; /* PH16 */
++					phy-supply = <&reg_phy3v3>;
++					reset-gpios = <&pio 7 10 GPIO_ACTIVE_LOW>; /* PH10 (GMAC1_RSTn_L) */
 +					reset-assert-us = <10000>;
 +					reset-deassert-us = <150000>;
 +				};
 +			};
++		};
++
++		gmac0_mtl_rx_setup: rx-queues-config {
++			snps,rx-queues-to-use = <1>;
++
++			queue0 {};
++		};
++
++		gmac0_stmmac_axi_setup: stmmac-axi-config {
++			snps,wr_osr_lmt = <0xf>;
++			snps,rd_osr_lmt = <0xf>;
++			snps,blen = <256 128 64 32 16 8 4>;
++		};
++
++		gmac0_mtl_tx_setup: tx-queues-config {
++			snps,tx-queues-to-use = <1>;
++
++			queue0 {};
 +		};
 +
 +		r_ccu: clock-controller@7010000 {
@@ -444,12 +525,9 @@ index 0000000..155066b
 +
 +		rproc: remoteproc@7110000 {
 +			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
-+			reg = <0x07110000 0x10000>,
-+			      <0x07130000 0x50000>,
-+			      <0x07010000 0x0200>;
-+			reg-names = "itcm", "sram", "ccu";
-+			mboxes = <&msgbox 0>, <&msgbox 1>;
-+			mbox-names = "rx", "tx";
++			reg = <0x07102000 0x1000>,
++			      <0x07110000 0x40000>;
++			reg-names = "ccu", "r_sram";
 +			status = "okay";
 +		};
 +	};

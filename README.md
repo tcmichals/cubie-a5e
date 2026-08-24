@@ -67,12 +67,13 @@ As of the current bring-up phase, here is the functional status of the flight st
 * **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
   - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, real-time CPU Core 7 flight isolation, Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
   - **Radxa Cubie A7A (Allwinner A733):** Full multi-stage boot chain verified on real silicon: `BootROM` $\rightarrow$ `boot0` (6 GiB LPDDR5 auto-training) $\rightarrow$ `TOC1` $\rightarrow$ `TF-A BL31` $\rightarrow$ `OP-TEE` $\rightarrow$ `Mainline U-Boot 2026.01-rc1` (4KB page-aligned at `0x4a001000`) $\rightarrow$ `Mainline Linux 7.1.0 PREEMPT_RT` booted across all 8 SMP cores (6× Cortex-A55 + 2× Cortex-A78) with 6 GiB RAM.
+   - **Bring-up status (A7A):** The A7A is booting on real hardware; work remains on USB, Ethernet, and the RISC-V co-processor bring-up. Wi‑Fi on the A7A (USB transport) is still a work-in-progress and not yet provided in released images — SDIO Wi‑Fi on the A5E remains the primary supported path for now.
   - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`), Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`), and Radxa Cubie A7Z (`sun60i-a733-cubie-a7z.dtb`).
 
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & DUAL-BUS READY):** 
   - **Unified Dual-Bus Architecture:** Mainline kernel driver (`aic8800-upstream`) unified with modular transport HAL backends:
     - **SDIO Transport (Radxa Cubie A5E):** Multi-module `aic8800_bsp.ko` + `aic8800_fdrv.ko` verified on real silicon with sub-300ms firmware upload and full Wi-Fi 6 association.
-    - **USB Transport (Radxa Cubie A7A):** Standalone `aic8800_fdrv.ko` registering directly with Linux `usbcore` (`0xA69C:0x8800` / `0x8801`) without BSP dependency.
+   - **USB Transport (Radxa Cubie A7A):** Work-in-progress. The USB transport and firmware upload path for the A7A are under active development and not yet available in production images. SDIO transport on the A5E remains verified.
   - **Bus Timing & Probe Wakeup Stabilized:** Guarded internal IOPAD delay registers (`0xF0`/`0xF8`/`0xF1`) to prevent MMC data errors at 25 MHz, added explicit chip wakeup during probe, and implemented safe BootROM fallback.
   - **Linux 7.1 PREEMPT_RT Verified:** Clean 0-warning, 0-error compilation across both `bld.a5e` and `bld.a7a` target buildroots.
   - **RFC v3 Mainline Preparation:** Clean 4-patch series codified under [`docs/upstream_patches/`](docs/upstream_patches/) and tracked in the [Action Plan](docs/buildroot/AIC8800_Porting_Action_Plan.md).
@@ -86,6 +87,14 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Linux RemoteProc Standard (`sunxi_rproc.c`):** Full kernel lifecycle management (`echo start/stop > /sys/class/remoteproc/remoteproc0/state`). Driver implements `.prepare()` to clock `CLK_DSP` and `TZMA` bus bridges before ELF loading, and `devm_ioremap_wc()` (Normal Non-Cacheable RAM) matching upstream TI/Xilinx/NXP standards.
   - **Standard Debugfs Live Trace Stream:** Co-processor streams real-time ASCII flight diagnostics directly to Linux userspace via `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
   - **Live SRAM C Telemetry:** Verified real-time telemetry block at `0x00028000` with active heartbeat ticking at **~130 Hz** (`Magic = 0x52495343` "RISC").
+  
+* **⚠️ RISC-V SRAM / OP-TEE note:**
+   - The Allwinner A733 silicon exposes two physically separate on-chip SRAM blocks:
+      - `0x00020000 - 0x0003FFFF` (128 KB) — System SRAM A1 reserved by OP-TEE / Secure World (TrustZone-protected). Non-secure Linux cannot access this region.
+      - `0x07110000 - 0x0714FFFF` (256 KB) — Dedicated RISC-V co-processor SRAM, seen by the RISC-V core as `0x00000000 - 0x0003FFFF` (100% non-secure, shared with Linux host).
+   - Root cause: older linker scripts used `SRAM_C = 0x00020000` and placed trace data at `0x00029000`, which on A733 is inside OP-TEE's secure SRAM and causes TrustZone aborts when Linux reads it.
+   - Fix applied: keep OP-TEE at `0x00020000`; map the RISC-V firmware and trace region into the dedicated 256 KB SRAM at `0x07110000`. We place `trace0` at `0x00038000` (top 32 KB of the RISC-V SRAM in core address space) so Linux can safely read it from on-chip SRAM without aborts.
+   - Consequence: yes — 128 KB of the legacy shared SRAM address range is reserved by OP-TEE on A733 (so that space is not available to non-secure firmware). The RISC-V still has the full 256 KB dedicated SRAM available at `0x07110000`.
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 
 * **🔄 Next Step — Local OpenOCD & GDB Remote Debugging (In Progress):**

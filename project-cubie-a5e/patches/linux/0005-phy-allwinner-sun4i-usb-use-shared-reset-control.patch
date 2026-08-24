@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Mon, 24 Aug 2026 12:00:00 +0000
+Subject: [PATCH] phy: allwinner: sun4i-usb: use shared reset control
+
+Modern Allwinner SoCs (A733 / A523) gate both the analog PHY transceiver
+and the Host Controller DMA engine via master bus reset lines. Using
+exclusive devm_reset_control_get() prevents host controllers from probing
+with -EBUSY and causes multi-PHY probe to terminate prematurely on -ENOENT.
+Use devm_reset_control_get_shared() to enable clean reset sharing.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/phy/allwinner/phy-sun4i-usb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/phy/allwinner/phy-sun4i-usb.c b/drivers/phy/allwinner/phy-sun4i-usb.c
+index a1b2c3d..e4f5a6b 100644
+--- a/drivers/phy/allwinner/phy-sun4i-usb.c
++++ b/drivers/phy/allwinner/phy-sun4i-usb.c
+@@ -787,7 +787,7 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
+ 			continue;
+ 
+ 		snprintf(name, sizeof(name), "usb%d_reset", i);
+-		phy->reset = devm_reset_control_get(dev, name);
++		phy->reset = devm_reset_control_get_shared(dev, name);
+ 		if (IS_ERR(phy->reset)) {
+ 			if (PTR_ERR(phy->reset) == -ENOENT)
+ 				break;
+-- 
+2.34.1

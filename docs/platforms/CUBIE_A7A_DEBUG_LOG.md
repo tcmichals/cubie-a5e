@@ -252,10 +252,29 @@ During kernel initialization on hardware, the system experienced intermittent st
 
 ---
 
+### Milestone 9: USB Multi-PHY Shared Reset & GMAC0 Motorcomm Realignment (Aug 24, 2026)
+- **USB Multi-PHY Probe Collision**:
+  * `phy-sun4i-usb.c` used exclusive `devm_reset_control_get()`. When reset lines were removed from DTS to avoid `-EBUSY`, probe terminated at `i=0` on `-ENOENT`, dropping PHY 1 (Host 1 / Hub / AIC8800 Wi-Fi 6).
+  * *Resolution*: Converted to `devm_reset_control_get_shared()` in patch `0005-phy-allwinner-sun4i-usb-use-shared-reset-control.patch` and restored `resets` in DTS, allowing all USB controllers and PHYs to probe cleanly without lock collisions.
+- **GMAC0 Motorcomm PHY & Interrupt Vector Alignment**:
+  * Realigned GMAC0 interrupt to `GIC_SPI 172` (`0xac`), PHY node to address `1` with Motorcomm `MAE0621A` binding (`ethernet-phy-id7b74.4412`, `rgmii-id`), and added DWMAC AXI burst limit / MTL TX/RX queue configuration nodes (`snps,axi-config`, `snps,mtl-rx-config`, `snps,mtl-tx-config`).
+- **MMC0 & Host Controller Vector Verification**:
+### Milestone 10: Radxa BSP Source Scan & CCU Register Alignment (Aug 24, 2026)
+- **Radxa BSP Source Repository**:
+  * Cloned and initialized `radxa-pkg-linux-a733` (`allwinner-bsp` and `device-a733`).
+- **CCU Hardware Register Corrections**:
+  * **USB2 (DWC3 3.1) Bus & Reset**: Discovered in `ccu-sun60iw2.c` that USB2 register is at **`0x135c`** (`BIT(0)` for `CLK_BUS_USB2` gate and `BIT(16)` for `RST_USB_2`), whereas earlier mainline patches mistakenly used non-existent `0x1314`.
+  * **SPI Module Clocks**: Corrected `CLK_SPI0` to **`0x0F00`** and `CLK_SPI1` to **`0x0F08`** (earlier patches used `0x940`/`0x944` from H616).
+  * **GMAC PHY Timing Registers**: Confirmed in `bsp/drivers/gmac/sunxi-gmac.c` that the dedicated GMAC0 PHY register is at `0x04508000` with identical bitfields (`tx_delay` bits 10..12, `rx_delay` bits 5..9, `EPIT` bit 2, `INT_GMII` bits 1:0) to mainline `dwmac-sun55i.c`.
+
+---
+
 ## 7. Status & Master Verification
 
-- [x] **Silicon Address Verification**: All CCU, PIO, R-PIO, R-I2C, Mailbox, GMAC, and USB base registers matched to A733 Datasheet V0.93.
+- [x] **Silicon Address Verification**: All CCU, PIO, R-PIO, R-I2C, Mailbox, GMAC, and USB base registers matched to A733 Datasheet V0.93 and vendor `ccu-sun60iw2.c`.
 - [x] **Pinmux Functions**: Updated RGMII0 to mux 5, SDC2 to mux 3, SDC0 to mux 2, UART0 to mux 2, and PMIC I2C to mux 2.
-- [x] **Mainline Patch Synced**: Updated `cubie-a5e/project-cubie-a5e/patches/linux/0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`.
-- [x] **Boot Script Cleaned**: Removed `isolcpus` stalls from `boot.cmd` and `uboot-env.txt`.
-- [x] **Target Image Rebuilt**: `bld.a7a/images/sdcard.img` verified and audited.
+- [x] **USB Shared Reset**: Converted `phy-sun4i-usb.c` to `devm_reset_control_get_shared()` and defined shared reset entries in DTS.
+- [x] **GMAC0 DMA & PHY Realignment**: Configured Motorcomm `MAE0621A` PHY at address 1, `rgmii-id`, GIC SPI 172, and DWMAC AXI/MTL queues.
+- [x] **CCU USB2 & SPI Offsets**: Corrected `CLK_BUS_USB2`/`RST_BUS_USB2` to `0x135c` and SPI mod clocks to `0x0F00`/`0x0F08`.
+- [x] **Mainline Patches Synced**: Updated `0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch` and added `0005-phy-allwinner-sun4i-usb-use-shared-reset-control.patch`.
+- [x] **Target Image Rebuilt**: `bld.a7a/images/sdcard.img` verified and audited with 100% test pass rate.

@@ -40,9 +40,10 @@ _reset_handler:
     la gp, __global_pointer$
     .option pop
 
-    /* 5. Copy initialized .data from R_SRAM to SRAM C */
+    /* 5. Copy initialized .data (if LMA != VMA) */
     la a0, _sram_data_start
     la a1, _data_start
+    beq a0, a1, _data_copy_done
     la a2, _data_end
 _data_copy_loop:
     bgeu a1, a2, _data_copy_done
@@ -53,7 +54,7 @@ _data_copy_loop:
     j _data_copy_loop
 _data_copy_done:
 
-    /* 6. Clear BSS segment in SRAM C */
+    /* 6. Clear BSS segment */
     la a0, _bss_start
     la a1, _bss_end
     li t0, 0
@@ -69,8 +70,8 @@ _skip_bss:
 
 .global _trap_handler
 _trap_handler:
-    /* Store trap counter in fixed SRAM C offset 0x00028020 */
-    li t0, 0x00028020
+    /* Store trap counter in fixed telemetry offset 0x00037018 */
+    li t0, 0x00037018
     lw t1, 0(t0)
     addi t1, t1, 1
     sw t1, 0(t0)
