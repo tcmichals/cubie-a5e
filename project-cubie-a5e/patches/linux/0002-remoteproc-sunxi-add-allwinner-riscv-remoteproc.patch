@@ -9,8 +9,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |  9 +++++++++
  drivers/remoteproc/Makefile      |  1 +
- drivers/remoteproc/sunxi_rproc.c | 235 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 245 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 273 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 283 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -39,7 +39,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,273 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
