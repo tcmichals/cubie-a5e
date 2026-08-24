@@ -2,16 +2,11 @@ From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
-Adds Linux remoteproc driver for the XuanTie E907/E902 co-processor on
-Allwinner A523/A527/T527 and A733 SoCs with dynamic Device Tree resource
-discovery and firmware name override support.
-
-Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   9 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 250 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 260 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 270 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 280 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -40,7 +35,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,270 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
