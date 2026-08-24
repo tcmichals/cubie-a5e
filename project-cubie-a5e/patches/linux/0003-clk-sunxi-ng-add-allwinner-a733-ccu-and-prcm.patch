@@ -36,7 +36,7 @@ new file mode 100644
 index 000000000..207cf56e6
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,96 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -50,36 +50,22 @@ index 000000000..207cf56e6
 +#include "ccu_gate.h"
 +#include "ccu_div.h"
 +#include "ccu_mux.h"
-@@ -16,27 +16,27 @@ static const struct clk_parent_data r_cpus_parents[] = {
- 	{ .fw_name = "hosc" },
- };
- static SUNXI_CCU_M_DATA_WITH_MUX(r_cpus_clk, "r-cpus", r_cpus_parents,
--				 0x000, 0, 5, 24, 2, 0);
++
++static const struct clk_parent_data r_cpus_parents[] = {
++	{ .fw_name = "hosc" },
++};
++static SUNXI_CCU_M_DATA_WITH_MUX(r_cpus_clk, "r-cpus", r_cpus_parents,
 +				 0x000, 0, 5, 24, 2, CLK_IS_CRITICAL);
- 
- static const struct clk_hw *r_cpus_hws[] = {
- 	&r_cpus_clk.common.hw
- };
--static SUNXI_CCU_M_HWS(r_ahb_clk, "r-ahb", r_cpus_hws, 0x004, 0, 5, 0);
++
++static const struct clk_hw *r_cpus_hws[] = {
++	&r_cpus_clk.common.hw
++};
 +static SUNXI_CCU_M_HWS(r_ahb_clk, "r-ahb", r_cpus_hws, 0x004, 0, 5, CLK_IS_CRITICAL);
- 
- static const struct clk_hw *r_ahb_hws[] = {
- 	&r_ahb_clk.common.hw
- };
--static SUNXI_CCU_M_HWS(r_apb1_clk, "r-apb1", r_ahb_hws, 0x00c, 0, 5, 0);
++
++static const struct clk_hw *r_ahb_hws[] = {
++	&r_ahb_clk.common.hw
++};
 +static SUNXI_CCU_M_HWS(r_apb1_clk, "r-apb1", r_ahb_hws, 0x00c, 0, 5, CLK_IS_CRITICAL);
- 
- static const struct clk_hw *r_apb1_hws[] = {
- 	&r_apb1_clk.common.hw
- };
- 
- static const struct clk_parent_data r_apb2_parents[] = {
- 	{ .fw_name = "losc" },
- 	{ .fw_name = "hosc" },
- };
- static SUNXI_CCU_M_DATA_WITH_MUX(r_apb2_clk, "r-apb2", r_apb2_parents,
--				 0x010, 0, 5, 24, 2, 0);
-+				 0x010, 0, 5, 24, 2, CLK_IS_CRITICAL);
  
  static const struct clk_hw *r_apb2_hws[] = {
  	&r_apb2_clk.common.hw
