@@ -166,28 +166,13 @@
     };
 };
 
-&{/soc} {
-    msgbox: mailbox@3003000 {
-        compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun6i-a31-msgbox";
-        reg = <0x03003000 0x1000>;
-        interrupts = <0 147 4>;
-        clocks = <&ccu 59>;
-        resets = <&ccu 11>;
-        #mbox-cells = <1>;
-        status = "okay";
-    };
+&msgbox {
+    status = "okay";
+};
 
-    rproc: remoteproc@7102000 {
-        compatible = "allwinner,sun55i-a527-rproc", "allwinner,e906-rproc", "allwinner,sunxi-rproc";
-        reg = <0x07102000 0x1000>,
-              <0x07280000 0x40000>,
-              <0x00020000 0x20000>;
-        reg-names = "ccu", "r_sram", "sram";
-        memory-region = <&riscvsram0_reserved>;
-        mboxes = <&msgbox 0>, <&msgbox 1>;
-        mbox-names = "rx", "tx";
-        status = "okay";
-    };
+&rproc {
+    firmware-name = "riscv-firmware.elf";
+    status = "okay";
 };
 
 

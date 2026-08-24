@@ -1,0 +1,45 @@
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 21 Aug 2026 12:00:00 +0000
+Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+
+Adds the MSGBOX hardware mailbox and XuanTie E907 RISC-V remoteproc node
+to the sun55i-a523 SoC base device tree with status = "disabled".
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+--- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+@@ -1087,4 +1087,27 @@ npu: npu@7122000 {
+ 			power-domains = <&ppu PD_NPU>;
+ 		};
++
++		msgbox: mailbox@3003000 {
++			compatible = "allwinner,sun55i-a523-msgbox",
++				     "allwinner,sun8i-a83t-msgbox";
++			reg = <0x03003000 0x1000>;
++			clocks = <&ccu CLK_BUS_MSGBOX>;
++			resets = <&ccu RST_BUS_MSGBOX>;
++			interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
++			#mbox-cells = <1>;
++		};
++
++		rproc: remoteproc@7102000 {
++			compatible = "allwinner,sun55i-a523-rproc",
++				     "allwinner,sun55i-a527-rproc",
++				     "allwinner,sunxi-rproc";
++			reg = <0x02001000 0x1000>,
++			      <0x07102000 0x1000>,
++			      <0x07280000 0x40000>,
++			      <0x00020000 0x20000>;
++			reg-names = "main_ccu", "ccu", "r_sram", "sram";
++			mboxes = <&msgbox 0>, <&msgbox 1>;
++			mbox-names = "rx", "tx";
++			status = "disabled";
++		};
+ 	};
+ };
+-- 
+2.43.0

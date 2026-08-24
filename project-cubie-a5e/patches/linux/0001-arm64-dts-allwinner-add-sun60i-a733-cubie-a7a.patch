@@ -325,13 +325,14 @@ index 0000000..155066b
 +
 +		rproc: remoteproc@7010000 {
 +			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
-+			reg = <0x07010000 0x0200>,
-+			      <0x07110000 0x10000>,
-+			      <0x07130000 0x50000>;
-+			reg-names = "ccu", "itcm", "sram";
++			reg = <0x02001000 0x1000>,
++			      <0x07010000 0x1000>,
++			      <0x07280000 0x40000>,
++			      <0x00020000 0x20000>;
++			reg-names = "main_ccu", "ccu", "r_sram", "sram";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
-+			status = "okay";
++			status = "disabled";
 +		};
 +	};
 +};
