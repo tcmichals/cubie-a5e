@@ -146,7 +146,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	return 0;
 +}
 +
- static int sunxi_rproc_stop(struct rproc *rproc)
++static int sunxi_rproc_stop(struct rproc *rproc)
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
 +
