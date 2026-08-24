@@ -1,56 +1,68 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: tcmichals <tcmichals@gmail.com>
-Date: Tue, 18 Aug 2026 22:35:00 -0500
-Subject: [PATCH] remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 21 Aug 2026 12:00:00 +0000
+Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
-Add support for the embedded XuanTie E907/E902 RISC-V co-processor on
-Allwinner A523, A527, T527, and A733 SoCs via the Linux Remote Processor
-framework.
+Adds Linux remoteproc driver for the XuanTie E907/E902 co-processor on
+Allwinner A523/A527/T527 and A733 SoCs.
+Manages core lifecycle, clocking, resets, and ELF segment loading
+using Device Tree resources and properties.
 
-Signed-off-by: tcmichals <tcmichals@gmail.com>
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/remoteproc/Kconfig       |   6 ++
+ drivers/remoteproc/Kconfig       |  10 +++
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 173 +++++++++++++++++++++++++++++++
- 3 files changed, 180 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 240 +++++++++++++++++++++++++++++++
+ 3 files changed, 251 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
---- a/b/drivers/remoteproc/Kconfig	2026-08-19 17:59:11.722373088 -0500
-+++ b/drivers/remoteproc/Kconfig	2026-08-19 17:59:14.011745194 -0500
-@@ -380,6 +380,13 @@
+diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+index ee54436..7e901e2 100644
+--- a/drivers/remoteproc/Kconfig
++++ b/drivers/remoteproc/Kconfig
+@@ -380,6 +380,16 @@ config XLNX_R5_REMOTEPROC
  
  	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
-+	tristate "Allwinner XuanTie RISC-V Remote Processor support"
-+	depends on OF && (ARM64 || COMPILE_TEST)
++	tristate "Allwinner XuanTie RISC-V remoteproc support"
++	depends on (ARCH_SUNXI || COMPILE_TEST)
++	default y
 +	help
-+	  Say y or m here to support the embedded XuanTie E907/E902 RISC-V
-+	  co-processor on Allwinner A523, A527, T527, and A733 SoCs.
++	  Say y or m here to support the Allwinner XuanTie E907/E902 RISC-V
++	  co-processor on Allwinner A523, A527, T527, and A733 SoCs via the
++	  remote processor framework.
 +
  endif # REMOTEPROC
  
  endmenu
---- a/b/drivers/remoteproc/Makefile	2026-08-19 17:59:11.723953047 -0500
-+++ b/drivers/remoteproc/Makefile	2026-08-19 17:59:17.636751109 -0500
-@@ -40,3 +40,4 @@
- obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
+diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
+index 1c7598b..d3fc6a5 100644
+--- a/drivers/remoteproc/Makefile
++++ b/drivers/remoteproc/Makefile
+@@ -40,3 +40,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
---- a/drivers/remoteproc/sunxi_rproc.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/remoteproc/sunxi_rproc.c	2026-08-19 17:59:24.265761927 -0500
-@@ -0,0 +1,236 @@
+diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/drivers/remoteproc/sunxi_rproc.c
+@@ -0,0 +1,235 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
 + *
 + * Copyright (C) 2024-2026 Allwinner Technology Co., Ltd.
-+ * Copyright (C) 2026 tcmichals <tcmichals@gmail.com>
++ * Copyright (C) 2026 Tim Michals <tcmichals@gmail.com>
 + *
 + * Supports Allwinner A523, A527, T527, and A733 SoCs.
-+ * Manages core lifecycle (clock gate, reset de-assertion) and ELF segment
-+ * memory mapping to ITCM (0x07110000) and DTCM (0x07120000/0x07130000).
++ * Manages core lifecycle:
++ *   - .prepare(): Powers up Main CCU CLK_DSP, MCU CCU TZMA/PubSRAM/MBUS/RISCV_CLK
++ *                 BEFORE rproc_load_segments() copies the ELF image into SRAM.
++ *   - .start()  : Releases the XuanTie core reset line (0x00070001).
++ *   - .stop()   : Holds the XuanTie core in reset (0x00030001).
++ *   - .da_to_va(): Translates 0x07280000 (Dedicated SRAM) and 0x00020000 (SRAM C).
 + */
 +
 +#include <linux/err.h>
@@ -64,59 +76,88 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
-+/* MCU CCU Registers (Base 0x07102000) */
++/* Fallback Hardware Memory Map (matches Device Tree overlay) */
++#define MAIN_CCU_PHYS_BASE    0x02001000
++#define MAIN_CCU_SIZE         0x00001000
++#define MAIN_CCU_CLK_DSP_REG  0x0c70
++#define MAIN_CCU_CLK_DSP_EN   0x80000000
++
++#define MCU_CCU_PHYS_BASE     0x07102000
++#define MCU_CCU_SIZE          0x00001000
++#define MCU_CCU_TZMA0_REG     0x0108
++#define MCU_CCU_TZMA1_REG     0x010c
 +#define MCU_CCU_PUBSRAM_REG   0x0114
++#define MCU_CCU_MBUS_REG      0x011c
 +#define MCU_CCU_RISCV_CLK_REG 0x0120
 +#define MCU_CCU_RISCV_RST_REG 0x0124
 +#define MCU_CCU_MSGBOX_REG    0x0128
 +
-+/* Clock & Reset Values */
++/* Clock & Reset Register Values */
++#define MCU_TZMA0_ENABLE      0x00010001
++#define MCU_TZMA1_ENABLE      0x00010001
 +#define MCU_PUBSRAM_ENABLE    0x00010001
++#define MCU_MBUS_ENABLE       0x00000003
 +#define MCU_RISCV_CLK_ENABLE  0x80000000
 +#define MCU_RISCV_CORE_BOOT   0x00070001
 +#define MCU_RISCV_CORE_HOLD   0x00030001
 +#define MCU_MSGBOX_ENABLE     0x00010001
 +
-+/* Memory Regions */
-+#define ITCM_PHYS_BASE      0x07110000
-+#define ITCM_SIZE           0x00010000  /* 64 KB */
-+#define DTCM_PHYS_BASE      0x07120000
-+#define DTCM_SIZE           0x00010000  /* 64 KB */
-+#define SRAM_PHYS_BASE      0x07130000
-+#define SRAM_SIZE           0x00050000  /* 320 KB */
++#define R_SRAM_PHYS_BASE      0x07280000
++#define R_SRAM_SIZE           0x00040000  /* 256 KB Dedicated RISC-V Local SRAM */
 +
-+/* Core Local Virtual Aliases */
-+#define CORE_ITCM_BASE      0x00000000
-+#define CORE_DTCM_BASE      0x00080000
-+#define CORE_SRAM_BASE      0x00020000
++#define SRAM_PHYS_BASE        0x00020000
++#define SRAM_SIZE             0x00020000  /* 128 KB Shared System SRAM C */
 +
 +struct sunxi_rproc {
 +	struct rproc *rproc;
 +	struct device *dev;
++	void __iomem *main_ccu_va;
 +	void __iomem *ccu_va;
-+	void __iomem *itcm_va;
-+	void __iomem *dtcm_va;
++	void __iomem *r_sram_va;
 +	void __iomem *sram_va;
++	phys_addr_t r_sram_phys;
++	size_t r_sram_size;
++	phys_addr_t sram_phys;
++	size_t sram_size;
 +};
++
++static int sunxi_rproc_prepare(struct rproc *rproc)
++{
++	struct sunxi_rproc *priv = rproc->priv;
++
++	dev_info(priv->dev, "Preparing clocks and bus bridges for firmware loading...\n");
++
++	/* 1. Enable Main SoC CCU Root Parent Clock (CLK_DSP at offset 0x0c70) */
++	if (priv->main_ccu_va)
++		writel(MAIN_CCU_CLK_DSP_EN, priv->main_ccu_va + MAIN_CCU_CLK_DSP_REG);
++
++	/* 2. Enable MCU CCU TZMA Bridges, PubSRAM, MBUS, RISC-V Clock, and Mailbox */
++	if (priv->ccu_va) {
++		writel(MCU_TZMA0_ENABLE, priv->ccu_va + MCU_CCU_TZMA0_REG);
++		writel(MCU_TZMA1_ENABLE, priv->ccu_va + MCU_CCU_TZMA1_REG);
++		writel(MCU_PUBSRAM_ENABLE, priv->ccu_va + MCU_CCU_PUBSRAM_REG);
++		writel(MCU_MBUS_ENABLE, priv->ccu_va + MCU_CCU_MBUS_REG);
++		writel(MCU_RISCV_CLK_ENABLE, priv->ccu_va + MCU_CCU_RISCV_CLK_REG);
++		writel(MCU_MSGBOX_ENABLE, priv->ccu_va + MCU_CCU_MSGBOX_REG);
++
++		/* 3. Hold core in reset while ELF segments are loaded */
++		writel(MCU_RISCV_CORE_HOLD, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
++	}
++
++	return 0;
++}
 +
 +static int sunxi_rproc_start(struct rproc *rproc)
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
-+	u32 val;
 +
 +	dev_info(priv->dev, "Starting XuanTie RISC-V co-processor...\n");
 +
-+	/* 1. Enable PubSRAM, RISC-V Clock, and Mailbox in MCU CCU */
-+	writel(MCU_PUBSRAM_ENABLE, priv->ccu_va + MCU_CCU_PUBSRAM_REG);
-+	writel(MCU_RISCV_CLK_ENABLE, priv->ccu_va + MCU_CCU_RISCV_CLK_REG);
-+	writel(MCU_MSGBOX_ENABLE, priv->ccu_va + MCU_CCU_MSGBOX_REG);
++	/* Release Core Reset (0x00070001: deassert CORE, CFG, DEBUG resets) */
++	if (priv->ccu_va)
++		writel(MCU_RISCV_CORE_BOOT, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
 +
-+	/* 2. Release Core Reset (de-assert core reset bit 18, debug bit 17, cfg bit 16, clk bit 0) */
-+	writel(MCU_RISCV_CORE_BOOT, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
-+
-+	val = readl(priv->ccu_va + MCU_CCU_RISCV_RST_REG);
-+	dev_info(priv->dev, "RISC-V core started (MCU RST REG: 0x%08x)\n", val);
-+
++	dev_info(priv->dev, "RISC-V core released from reset successfully\n");
 +	return 0;
 +}
 +
@@ -126,11 +167,11 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +
 +	dev_info(priv->dev, "Halting XuanTie RISC-V co-processor...\n");
 +
-+	/* Hold core in reset (clear bit 18) */
-+	writel(MCU_RISCV_CORE_HOLD, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
++	/* Hold core in reset (0x00030001) */
++	if (priv->ccu_va)
++		writel(MCU_RISCV_CORE_HOLD, priv->ccu_va + MCU_CCU_RISCV_RST_REG);
 +
 +	dev_info(priv->dev, "RISC-V core is held in reset\n");
-+
 +	return 0;
 +}
 +
@@ -141,24 +182,18 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +	if (is_iomem)
 +		*is_iomem = true;
 +
-+	/* ITCM: physical 0x07110000 or core local 0x00000000 */
-+	if (da >= ITCM_PHYS_BASE && (da + len) <= (ITCM_PHYS_BASE + ITCM_SIZE))
-+		return priv->itcm_va + (da - ITCM_PHYS_BASE);
-+	if (da >= CORE_ITCM_BASE && (da + len) <= (CORE_ITCM_BASE + ITCM_SIZE))
-+		return priv->itcm_va + (da - CORE_ITCM_BASE);
-+
-+	/* DTCM: physical 0x07120000 or core local 0x00080000 */
-+	if (da >= DTCM_PHYS_BASE && (da + len) <= (DTCM_PHYS_BASE + DTCM_SIZE))
-+		return priv->dtcm_va + (da - DTCM_PHYS_BASE);
-+	if (da >= CORE_DTCM_BASE && (da + len) <= (CORE_DTCM_BASE + DTCM_SIZE))
-+		return priv->dtcm_va + (da - CORE_DTCM_BASE);
-+
-+	/* SRAM / Shared Memory: physical 0x07130000 or core local 0x00020000 */
++	/* 1. Shared System SRAM C (0x00020000 - 0x00040000) for telemetry and trace0 */
 +	if (priv->sram_va) {
-+		if (da >= SRAM_PHYS_BASE && (da + len) <= (SRAM_PHYS_BASE + SRAM_SIZE))
-+			return priv->sram_va + (da - SRAM_PHYS_BASE);
-+		if (da >= CORE_SRAM_BASE && (da + len) <= (CORE_SRAM_BASE + SRAM_SIZE))
-+			return priv->sram_va + (da - CORE_SRAM_BASE);
++		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size))
++			return priv->sram_va + (da - priv->sram_phys);
++	}
++
++	/* 2. Dedicated RISC-V Local SRAM (0x07280000 or Core address 0x00000000) */
++	if (priv->r_sram_va) {
++		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size))
++			return priv->r_sram_va + (da - priv->r_sram_phys);
++		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size)
++			return priv->r_sram_va + da;
 +	}
 +
 +	dev_warn(priv->dev, "da_to_va: unmapped device address 0x%llx (len %zu)\n", da, len);
@@ -176,6 +211,7 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +}
 +
 +static const struct rproc_ops sunxi_rproc_ops = {
++	.prepare	= sunxi_rproc_prepare,
 +	.start		= sunxi_rproc_start,
 +	.stop		= sunxi_rproc_stop,
 +	.da_to_va	= sunxi_rproc_da_to_va,
@@ -188,13 +224,16 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +static int sunxi_rproc_probe(struct platform_device *pdev)
 +{
 +	struct device *dev = &pdev->dev;
++	const char *fw_name = "riscv-firmware.elf";
 +	struct sunxi_rproc *priv;
 +	struct rproc *rproc;
 +	struct resource *res;
 +	int ret;
 +
++	of_property_read_string(dev->of_node, "firmware-name", &fw_name);
++
 +	rproc = devm_rproc_alloc(dev, dev_name(dev), &sunxi_rproc_ops,
-+				 "riscv-firmware.elf", sizeof(*priv));
++				 fw_name, sizeof(*priv));
 +	if (!rproc) {
 +		dev_err(dev, "failed to allocate rproc\n");
 +		return -ENOMEM;
@@ -204,44 +243,49 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +	priv->rproc = rproc;
 +	priv->dev = dev;
 +
-+	/* 1. Map CCU Control Registers (Shared with R-CCU clock controller) */
++	/* 1. Map Main CCU (0x02001000 for CLK_DSP parent clock) */
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "main_ccu");
++	if (res)
++		priv->main_ccu_va = devm_ioremap(dev, res->start, resource_size(res));
++	else
++		priv->main_ccu_va = devm_ioremap(dev, MAIN_CCU_PHYS_BASE, MAIN_CCU_SIZE);
++
++	/* 2. Map MCU CCU (0x07102000) */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ccu");
 +	if (!res)
 +		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-+	if (res) {
++	if (res)
 +		priv->ccu_va = devm_ioremap(dev, res->start, resource_size(res));
-+		if (!priv->ccu_va) {
-+			dev_err(dev, "failed to map CCU registers at 0x%pa\n", &res->start);
-+			return -ENOMEM;
-+		}
-+	} else {
-+		dev_err(dev, "missing CCU memory resource\n");
-+		return -EINVAL;
-+	}
++	else
++		priv->ccu_va = devm_ioremap(dev, MCU_CCU_PHYS_BASE, MCU_CCU_SIZE);
 +
-+	/* 2. Map ITCM Instruction Memory */
-+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "itcm");
++	/* 3. Map Dedicated RISC-V Local SRAM (0x07280000, 256 KB) */
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram");
 +	if (!res)
 +		res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 +	if (res) {
-+		priv->itcm_va = devm_ioremap(dev, res->start, resource_size(res));
-+		if (!priv->itcm_va) {
-+			dev_err(dev, "failed to map ITCM memory at 0x%pa\n", &res->start);
-+			return -ENOMEM;
-+		}
++		priv->r_sram_phys = res->start;
++		priv->r_sram_size = resource_size(res);
++		priv->r_sram_va = devm_ioremap(dev, res->start, resource_size(res));
 +	} else {
-+		priv->itcm_va = devm_ioremap(dev, ITCM_PHYS_BASE, ITCM_SIZE);
++		priv->r_sram_phys = R_SRAM_PHYS_BASE;
++		priv->r_sram_size = R_SRAM_SIZE;
++		priv->r_sram_va = devm_ioremap(dev, R_SRAM_PHYS_BASE, R_SRAM_SIZE);
 +	}
 +
-+	/* 3. Map DTCM / SRAM */
++	/* 4. Map Shared System SRAM C (0x00020000, 128 KB) */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
++	if (!res)
++		res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
 +	if (res) {
++		priv->sram_phys = res->start;
++		priv->sram_size = resource_size(res);
 +		priv->sram_va = devm_ioremap(dev, res->start, resource_size(res));
 +	} else {
++		priv->sram_phys = SRAM_PHYS_BASE;
++		priv->sram_size = SRAM_SIZE;
 +		priv->sram_va = devm_ioremap(dev, SRAM_PHYS_BASE, SRAM_SIZE);
 +	}
-+
-+	priv->dtcm_va = devm_ioremap(dev, DTCM_PHYS_BASE, DTCM_SIZE);
 +
 +	platform_set_drvdata(pdev, rproc);
 +
@@ -274,8 +318,8 @@ Signed-off-by: tcmichals <tcmichals@gmail.com>
 +module_platform_driver(sunxi_rproc_driver);
 +
 +MODULE_AUTHOR("Allwinner Technology Co., Ltd.");
-+MODULE_AUTHOR("tcmichals <tcmichals@yahoo.com>");
++MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Allwinner XuanTie E907/E902 RISC-V Remoteproc Driver");
 +MODULE_LICENSE("GPL");
 -- 
-2.44.0
+2.43.0
