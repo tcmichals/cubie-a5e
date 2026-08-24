@@ -4,23 +4,18 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
 Adds Linux remoteproc driver for the XuanTie E907/E902 co-processor on
 Allwinner A523/A527/T527 and A733 SoCs.
-Manages core lifecycle, clocking, resets, and ELF segment loading
-using Device Tree resources and properties.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/remoteproc/Kconfig       |  10 +++
- drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 240 +++++++++++++++++++++++++++++++
- 3 files changed, 251 insertions(+)
+ drivers/remoteproc/Kconfig       |  9 +++++++++
+ drivers/remoteproc/Makefile      |  1 +
+ drivers/remoteproc/sunxi_rproc.c | 235 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 245 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
-diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
-index ee54436..7e901e2 100644
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
-@@ -380,6 +380,16 @@ config XLNX_R5_REMOTEPROC
- 
+@@ -381,5 +381,14 @@ config XLNX_R5_REMOTEPROC
  	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
@@ -35,17 +30,13 @@ index ee54436..7e901e2 100644
  endif # REMOTEPROC
  
  endmenu
-diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
-index 1c7598b..d3fc6a5 100644
 --- a/drivers/remoteproc/Makefile
 +++ b/drivers/remoteproc/Makefile
-@@ -40,3 +40,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
+@@ -40,3 +40,4 @@
+ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
-diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
-new file mode 100644
-index 0000000..1234567
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
 @@ -0,0 +1,235 @@
@@ -254,10 +245,11 @@ index 0000000..1234567
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ccu");
 +	if (!res)
 +		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-+	if (res)
++	if (res) {
 +		priv->ccu_va = devm_ioremap(dev, res->start, resource_size(res));
-+	else
++	} else {
 +		priv->ccu_va = devm_ioremap(dev, MCU_CCU_PHYS_BASE, MCU_CCU_SIZE);
++	}
 +
 +	/* 3. Map Dedicated RISC-V Local SRAM (0x07280000, 256 KB) */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram");
