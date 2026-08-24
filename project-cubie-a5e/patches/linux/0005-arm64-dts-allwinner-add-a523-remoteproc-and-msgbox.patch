@@ -12,8 +12,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1087,4 +1087,27 @@ npu: npu@7122000 {
- 			power-domains = <&ppu PD_NPU>;
+@@ -1088,3 +1088,26 @@ npu: npu@7122000 {
  		};
 +
 +		msgbox: mailbox@3003000 {
