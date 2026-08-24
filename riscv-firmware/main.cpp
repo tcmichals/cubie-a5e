@@ -5,8 +5,8 @@
 #include "uart0.h"
 #include "trace.h"
 
-/* Fixed Telemetry Address in Dedicated RISC-V SRAM for Linux Host devmem inspection */
-#define TELEMETRY_BASE      0x00037000   /* Core: 0x00037000 / Host Physical: 0x07147000 */
+/* Fixed Telemetry Address in Shared SRAM C for Linux Host devmem inspection */
+#define TELEMETRY_BASE      0x00028000   /* Host Physical: 0x00028000 */
 
 /* Telemetry Block Structure (24 bytes) */
 struct TelemetryBlock {
