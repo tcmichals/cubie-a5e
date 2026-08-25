@@ -30,8 +30,8 @@ inline SleepUsAwaiter sleep_us(uint32_t us) {
     return SleepUsAwaiter(us);
 }
 
-inline SleepUsAwaiter sleep_ms(uint32_t ms) {
-    return SleepUsAwaiter(ms * 1000);
+inline hal::Timer::AsyncSleepAwaiter sleep_ms(uint32_t ms) {
+    return hal::Timer::async_sleep_ms(ms);
 }
 
 // Non-blocking UART frame awaiter (Interrupt & RTO Driven)

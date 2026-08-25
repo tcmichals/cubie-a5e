@@ -36,7 +36,8 @@ void plic_dispatch_interrupt(void) {
 }
 
 void timer_dispatch_interrupt(void) {
-    // Timer tick dispatcher
+    // 1 kHz Hardware Timer Tick -> Advances ETL Timer Service
+    fc::hal::Timer::handle_tick_irq(1);
 }
 
 int main(void) {
@@ -46,7 +47,8 @@ int main(void) {
     // 2. Initialize PIO Pinmux (Port B & Port C)
     fc::hal::Pio::init();
 
-    // 3. Initialize Peripherals
+    // 3. Initialize Peripherals & ETL Timer Framework
+    fc::hal::Timer::init();
     fc::hal::Spi0::init(25000000); // 25 MHz Dual/Single SPI
     fc::hal::Uart2::init(115200);  // 115200 Baud UART2
     fc::hal::MsgBox::init();
