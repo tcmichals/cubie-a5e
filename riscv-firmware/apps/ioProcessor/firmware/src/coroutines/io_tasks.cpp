@@ -13,7 +13,7 @@
 namespace fc::coroutines {
 
 // PCIe TLP Bridge Coroutine Task (Dual-SPI0 <-> FPGA CS0)
-abstractx::AsyncTask fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscRingBuffer *tx_ring) {
+abstractx::Task<void> fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscRingBuffer *tx_ring) {
     etl::array<uint8_t, 128> spi_tx_buf;
     etl::array<uint8_t, 128> spi_rx_buf;
     ipc::IpcPacket in_tlp;
@@ -71,7 +71,7 @@ abstractx::AsyncTask fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscR
 }
 
 // Raw IMU Sensor Acquisition Task (Single-SPI0 CS1)
-abstractx::AsyncTask imu_sensor_task(ipc::SpscRingBuffer *tx_ring) {
+abstractx::Task<void> imu_sensor_task(ipc::SpscRingBuffer *tx_ring) {
     etl::array<uint8_t, 32> tx_cmd;
     etl::array<uint8_t, 32> rx_data;
     uint16_t seq = 0;
@@ -108,7 +108,7 @@ abstractx::AsyncTask imu_sensor_task(ipc::SpscRingBuffer *tx_ring) {
 }
 
 // Raw UART2 Serial Stream Ingestion Task (Pins 11 & 13)
-abstractx::AsyncTask uart_stream_task(ipc::SpscRingBuffer *tx_ring) {
+abstractx::Task<void> uart_stream_task(ipc::SpscRingBuffer *tx_ring) {
     etl::array<uint8_t, 108> rx_buf;
     uint16_t seq = 0;
 

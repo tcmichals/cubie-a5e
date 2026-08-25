@@ -1,27 +1,21 @@
-#include <abstractx/scheduler.hpp>
-#include <abstractx/task.hpp>
+#include <abstractx/coro.hpp>
+#include "isr_dispatcher.hpp"
 #include <coroutine>
 #include "CppUTest/TestHarness.h"
 
 static int g_task1_steps = 0;
 static int g_task2_steps = 0;
 
-struct MockYieldAwaiter {
-    bool await_ready() const noexcept { return false; }
-    void await_suspend(std::coroutine_handle<>) const noexcept {}
-    void await_resume() const noexcept {}
-};
-
-static abstractx::AsyncTask mock_task1() {
+static abstractx::Task<void> mock_task1() {
     g_task1_steps++;
-    co_await MockYieldAwaiter{};
+    co_await abstractx::yield();
     g_task1_steps++;
     co_return;
 }
 
-static abstractx::AsyncTask mock_task2() {
+static abstractx::Task<void> mock_task2() {
     g_task2_steps++;
-    co_await MockYieldAwaiter{};
+    co_await abstractx::yield();
     g_task2_steps++;
     co_return;
 }
@@ -30,40 +24,44 @@ TEST_GROUP(AbstractXSchedulerTest) {
     void setup() {
         g_task1_steps = 0;
         g_task2_steps = 0;
-        abstractx::StaticCoroutinePool<16384>::reset();
-        abstractx::Scheduler::instance().clear();
     }
-    void teardown() {
-        abstractx::StaticCoroutinePool<16384>::reset();
-        abstractx::Scheduler::instance().clear();
-    }
+    void teardown() {}
 };
 
-TEST(AbstractXSchedulerTest, TaskSpawningAndRunOnce) {
-    auto& scheduler = abstractx::Scheduler::instance();
-    
-    // Register tasks
-    CHECK_TRUE(scheduler.register_task(mock_task1()));
-    CHECK_TRUE(scheduler.register_task(mock_task2()));
-    LONGS_EQUAL(2, scheduler.size());
+TEST(AbstractXSchedulerTest, TaskSpawningAndStep) {
+    auto t1 = mock_task1();
+    auto t2 = mock_task2();
 
-    // Coroutines eager start reached first suspension
+    // In AbstractX Task, initial_suspend is suspend_always
+    LONGS_EQUAL(0, g_task1_steps);
+    LONGS_EQUAL(0, g_task2_steps);
+
+    // Resume first step up to yield
+    CHECK_TRUE(t1.resume());
+    CHECK_TRUE(t2.resume());
     LONGS_EQUAL(1, g_task1_steps);
     LONGS_EQUAL(1, g_task2_steps);
 
-    // Step scheduler to resume tasks
-    scheduler.run_once();
-
+    // Resume second step to completion
+    t1.resume();
+    t2.resume();
     LONGS_EQUAL(2, g_task1_steps);
     LONGS_EQUAL(2, g_task2_steps);
+    CHECK_TRUE(t1.done());
+    CHECK_TRUE(t2.done());
 }
 
-TEST(AbstractXSchedulerTest, TaskCapacityLimits) {
-    auto& scheduler = abstractx::Scheduler::instance();
-    for (size_t i = 0; i < abstractx::MAX_TASKS; ++i) {
-        CHECK_TRUE(scheduler.register_task(mock_task1()));
-    }
-    LONGS_EQUAL(abstractx::MAX_TASKS, scheduler.size());
-    // 17th task must fail without allocating heap
-    CHECK_FALSE(scheduler.register_task(mock_task1()));
+TEST(AbstractXSchedulerTest, IsrDispatcherSafePostingAndResume) {
+    auto t1 = mock_task1();
+    t1.resume(); // Advance to yield
+    LONGS_EQUAL(1, g_task1_steps);
+
+    // ISR posts handle to SPSC queue (does NOT execute coroutine in ISR context)
+    fc::hal::IsrDispatcher::isr_post_resume(t1.handle());
+    LONGS_EQUAL(1, g_task1_steps);
+
+    // Main thread dispatcher drains SPSC queue and safely resumes coroutine
+    fc::hal::IsrDispatcher::process_ready_coroutines();
+    LONGS_EQUAL(2, g_task1_steps);
+    CHECK_TRUE(t1.done());
 }

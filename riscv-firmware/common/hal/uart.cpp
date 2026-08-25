@@ -1,5 +1,6 @@
 #include "uart.hpp"
 #include "timer.hpp"
+#include "isr_dispatcher.hpp"
 #include "memory_map.h"
 #include <etl/circular_buffer.h>
 
@@ -81,8 +82,8 @@ bool Uart2::has_data() {
 
 uint8_t Uart2::read_byte() {
     if (!g_uart_rx_ring.empty()) {
-        uint8_t byte = 0;
-        g_uart_rx_ring.pop(byte);
+        uint8_t byte = g_uart_rx_ring.front();
+        g_uart_rx_ring.pop();
         return byte;
     }
     while (!(UART2_LSR & (1 << 0)));
@@ -107,7 +108,7 @@ void Uart2::handle_irq() {
             if (g_uart_rx_coroutine) {
                 auto handle = g_uart_rx_coroutine;
                 g_uart_rx_coroutine = nullptr;
-                handle.resume();
+                IsrDispatcher::isr_post_resume(handle);
             }
         }
     }
@@ -129,10 +130,9 @@ void Uart2::AsyncRxPacketAwaiter::await_suspend(std::coroutine_handle<> handle) 
 size_t Uart2::AsyncRxPacketAwaiter::await_resume() noexcept {
     bytes_received = 0;
     while (!g_uart_rx_ring.empty() && bytes_received < max_len) {
-        uint8_t byte = 0;
-        if (g_uart_rx_ring.pop(byte)) {
-            dest_buf[bytes_received++] = byte;
-        }
+        uint8_t byte = g_uart_rx_ring.front();
+        g_uart_rx_ring.pop();
+        dest_buf[bytes_received++] = byte;
     }
     g_uart_packet_ready = false;
     return bytes_received;

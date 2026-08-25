@@ -1,5 +1,6 @@
 #include "spi.hpp"
 #include "pio.hpp"
+#include "isr_dispatcher.hpp"
 #include "memory_map.h"
 
 namespace fc::hal {
@@ -115,11 +116,11 @@ void Spi0::handle_irq() {
 
         g_spi_transfer_done = true;
 
-        // Resume suspended coroutine handle
+        // Post coroutine to thread-safe SPSC ready queue for main thread resumption
         if (g_spi_coroutine) {
             auto handle = g_spi_coroutine;
             g_spi_coroutine = nullptr;
-            handle.resume();
+            IsrDispatcher::isr_post_resume(handle);
         }
     }
 }

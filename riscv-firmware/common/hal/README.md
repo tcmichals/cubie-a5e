@@ -28,11 +28,19 @@ When a transfer is initiated, the driver arms the hardware and **immediately sus
                                        │ SPI Controller asserts PLIC IRQ 15 (TC)
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. Interrupt Handler (PLIC ISR):                                            │
+│ 3. Interrupt Handler (PLIC ISR - Top Half):                                 │
 │    - Drains RX FIFO / verifies DMA completion                               │
-│    - Deasserts Chip Select (PC3)                                            │
-│    - Clears SPI_ISR.TC                                                      │
-│    - Resumes coroutine handle instantly in ~25 ns!                          │
+│    - Deasserts Chip Select (PC3) & clears SPI_ISR.TC                        │
+│    - Posts coroutine handle to thread-safe SPSC Ready Queue:                │
+│        IsrDispatcher::isr_post_resume(handle);                              │
+│    - Triggers Machine Software Interrupt (MSIP) to wake CPU                 │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ Top-half exits immediately (< 100 ns)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4. Main Thread Scheduler (Bottom Half in main.cpp):                         │
+│    - Drains SPSC Ready Queue in thread context on main stack                │
+│    - Resumes coroutine safely without interrupt stack overflow risks!       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
