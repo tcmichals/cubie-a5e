@@ -19,10 +19,52 @@ namespace fc::hal {
 #define UART2_LSR       (*(volatile uint32_t *)(UART2_BASE + 0x14))
 #define UART2_USR       (*(volatile uint32_t *)(UART2_BASE + 0x7C))
 
-/* Interrupt Queues and Asynchronous Coroutine Context */
-static etl::circular_buffer<uint8_t, 512> g_uart_rx_ring;
-static std::coroutine_handle<> g_uart_rx_coroutine = nullptr;
-static volatile bool g_uart_packet_ready = false;
+/* Lock-Free Atomic SPSC Byte Ring Buffer for ISR -> Thread UART stream */
+template <size_t Capacity = 512>
+class AtomicByteQueue {
+public:
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
+
+    void clear() {
+        head_.store(0, std::memory_order_relaxed);
+        tail_.store(0, std::memory_order_relaxed);
+    }
+
+    bool push(uint8_t ch) {
+        uint32_t head = head_.load(std::memory_order_relaxed);
+        uint32_t tail = tail_.load(std::memory_order_acquire);
+        if ((head - tail) >= Capacity) {
+            return false; // Full
+        }
+        buffer_[head & (Capacity - 1)] = ch;
+        head_.store(head + 1, std::memory_order_release);
+        return true;
+    }
+
+    bool pop(uint8_t &ch) {
+        uint32_t tail = tail_.load(std::memory_order_relaxed);
+        uint32_t head = head_.load(std::memory_order_acquire);
+        if (tail == head) {
+            return false; // Empty
+        }
+        ch = buffer_[tail & (Capacity - 1)];
+        tail_.store(tail + 1, std::memory_order_release);
+        return true;
+    }
+
+    bool empty() const {
+        return head_.load(std::memory_order_relaxed) == tail_.load(std::memory_order_relaxed);
+    }
+
+private:
+    uint8_t buffer_[Capacity];
+    std::atomic<uint32_t> head_{0};
+    std::atomic<uint32_t> tail_{0};
+};
+
+static AtomicByteQueue<512> g_uart_rx_ring;
+static std::atomic<std::coroutine_handle<>> g_uart_rx_coroutine{nullptr};
+static std::atomic<bool> g_uart_packet_ready{false};
 
 void Uart2::init(uint32_t baud_rate, uint32_t apb_clock_hz) {
     // 1. Disable all interrupts during init
@@ -81,9 +123,8 @@ bool Uart2::has_data() {
 }
 
 uint8_t Uart2::read_byte() {
-    if (!g_uart_rx_ring.empty()) {
-        uint8_t byte = g_uart_rx_ring.front();
-        g_uart_rx_ring.pop();
+    uint8_t byte = 0;
+    if (g_uart_rx_ring.pop(byte)) {
         return byte;
     }
     while (!(UART2_LSR & (1 << 0)));
@@ -96,7 +137,7 @@ void Uart2::handle_irq() {
     // 0x04: Received Data Available (RDA) - FIFO reached threshold
     // 0x0C: Character Timeout Indication (RTO) - Line idle for 4 character times
     if (iir == 0x04 || iir == 0x0C) {
-        // Drain all available bytes from hardware FIFO into ETL ring buffer
+        // Drain all available bytes from hardware FIFO into atomic SPSC ring buffer
         while (UART2_LSR & (1 << 0)) {
             uint8_t ch = (uint8_t)(UART2_RBR & 0xFF);
             g_uart_rx_ring.push(ch);
@@ -105,8 +146,9 @@ void Uart2::handle_irq() {
         // On Character Timeout (RTO), mark packet completed and wake coroutine
         if (iir == 0x0C) {
             g_uart_packet_ready = true;
-            if (g_uart_rx_coroutine) {
-                IsrDispatcher::isr_post_resume(g_uart_rx_coroutine);
+            auto handle = g_uart_rx_coroutine.load(std::memory_order_relaxed);
+            if (handle) {
+                IsrDispatcher::isr_post_resume(handle);
             }
         }
     }
@@ -121,15 +163,14 @@ bool Uart2::AsyncRxPacketAwaiter::await_ready() const noexcept {
 }
 
 void Uart2::AsyncRxPacketAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
-    g_uart_rx_coroutine = handle;
+    g_uart_rx_coroutine.store(handle, std::memory_order_release);
     g_uart_packet_ready = false;
 }
 
 size_t Uart2::AsyncRxPacketAwaiter::await_resume() noexcept {
     bytes_received = 0;
-    while (!g_uart_rx_ring.empty() && bytes_received < max_len) {
-        uint8_t byte = g_uart_rx_ring.front();
-        g_uart_rx_ring.pop();
+    uint8_t byte = 0;
+    while (bytes_received < max_len && g_uart_rx_ring.pop(byte)) {
         dest_buf[bytes_received++] = byte;
     }
     g_uart_packet_ready = false;
