@@ -1,11 +1,11 @@
 #include "io_tasks.hpp"
 #include "hardware_awaiters.hpp"
-#include "../hal/spi.hpp"
-#include "../hal/uart.hpp"
-#include "../hal/timer.hpp"
-#include "../hal/pio.hpp"
-#include "../logging/pw_log_backend.hpp"
-#include "../logging/trace_manager.hpp"
+#include "spi.hpp"
+#include "uart.hpp"
+#include "timer.hpp"
+#include "pio.hpp"
+#include "pw_log_backend.hpp"
+#include "trace_manager.hpp"
 #include <etl/array.h>
 #include <etl/vector.h>
 #include <string.h>
@@ -24,14 +24,15 @@ abstractx::AsyncTask fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscR
     while (true) {
         bool work_done = false;
 
-        // 1. Process Downlink TLPs from Host Linux -> Transmit over Dual-SPI0 to FPGA
+        // 1. Process Downlink TLPs from Host Linux -> Asynchronously Transmit over Dual-SPI0 to FPGA
         if (rx_ring && rx_ring->pop(in_tlp)) {
             if (in_tlp.header.type == static_cast<uint16_t>(ipc::PacketType::PcieTlpToFpga)) {
                 size_t tlp_len = sizeof(ipc::PcieTlpPayload);
                 memcpy(spi_tx_buf.data(), &in_tlp.payload.tlp, tlp_len);
 
                 uint64_t t0 = hal::Timer::get_time_ns();
-                hal::Spi0::transceive_fpga_dual(spi_tx_buf.data(), spi_rx_buf.data(), tlp_len);
+                // Non-blocking coroutine awaiter: yields CPU while hardware shifts bits
+                co_await hal::Spi0::async_transceive_fpga_dual(spi_tx_buf.data(), spi_rx_buf.data(), tlp_len);
                 uint64_t duration_ns = hal::Timer::get_time_ns() - t0;
 
                 logging::TraceManager::trace_spi(0 /* CS0 */, (uint32_t)tlp_len, (uint32_t)duration_ns);
@@ -45,7 +46,7 @@ abstractx::AsyncTask fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscR
             size_t tlp_len = sizeof(ipc::PcieTlpPayload);
 
             uint64_t t0 = hal::Timer::get_time_ns();
-            hal::Spi0::transceive_fpga_dual(spi_tx_buf.data(), spi_rx_buf.data(), tlp_len);
+            co_await hal::Spi0::async_transceive_fpga_dual(spi_tx_buf.data(), spi_rx_buf.data(), tlp_len);
             uint64_t duration_ns = hal::Timer::get_time_ns() - t0;
 
             logging::TraceManager::trace_spi(0 /* CS0 */, (uint32_t)tlp_len, (uint32_t)duration_ns);
@@ -64,7 +65,7 @@ abstractx::AsyncTask fpga_pcie_tlp_task(ipc::SpscRingBuffer *rx_ring, ipc::SpscR
         }
 
         if (!work_done) {
-            co_await sleep_us(100); // Poll rate / await next TLP event
+            co_await sleep_us(50); // Yield to other tasks or low-power wfi
         }
     }
 }
@@ -84,7 +85,7 @@ abstractx::AsyncTask imu_sensor_task(ipc::SpscRingBuffer *tx_ring) {
         co_await sleep_us(1000); // 1 kHz Rate Loop
 
         uint64_t t0 = hal::Timer::get_time_ns();
-        hal::Spi0::transceive_imu_single(tx_cmd.data(), rx_data.data(), 16);
+        co_await hal::Spi0::async_transceive_imu_single(tx_cmd.data(), rx_data.data(), 16);
         uint64_t duration_ns = hal::Timer::get_time_ns() - t0;
 
         logging::TraceManager::trace_spi(1 /* CS1 */, 16, (uint32_t)duration_ns);
@@ -114,7 +115,8 @@ abstractx::AsyncTask uart_stream_task(ipc::SpscRingBuffer *tx_ring) {
     PW_LOG_INFO("UART2 Serial Stream Ingestion Task Initialized");
 
     while (true) {
-        size_t bytes = co_await read_uart2_frame(rx_buf.data(), rx_buf.size(), 500);
+        // Asynchronous non-blocking await: woken on line idle / RTO timeout
+        size_t bytes = co_await read_uart2_frame(rx_buf.data(), rx_buf.size());
         if (bytes > 0) {
             logging::TraceManager::trace_uart((uint32_t)bytes, 500);
 

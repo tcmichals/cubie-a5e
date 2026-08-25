@@ -1,6 +1,7 @@
 #include "uart.hpp"
 #include "timer.hpp"
-#include "../../include/memory_map.h"
+#include "memory_map.h"
+#include <etl/circular_buffer.h>
 
 namespace fc::hal {
 
@@ -17,18 +18,30 @@ namespace fc::hal {
 #define UART2_LSR       (*(volatile uint32_t *)(UART2_BASE + 0x14))
 #define UART2_USR       (*(volatile uint32_t *)(UART2_BASE + 0x7C))
 
+/* Interrupt Queues and Asynchronous Coroutine Context */
+static etl::circular_buffer<uint8_t, 512> g_uart_rx_ring;
+static std::coroutine_handle<> g_uart_rx_coroutine = nullptr;
+static volatile bool g_uart_packet_ready = false;
+
 void Uart2::init(uint32_t baud_rate, uint32_t apb_clock_hz) {
-    // 1. Disable all interrupts
+    // 1. Disable all interrupts during init
     UART2_IER = 0x00;
 
-    // 2. Enable and reset FIFOs (64-byte depth)
-    UART2_FCR = 0x07; // FIFO Enable, Reset RX FIFO, Reset TX FIFO
+    // 2. Enable and reset FIFOs (64-byte depth, RX trigger at 1/2 full = 32 bytes)
+    // FCR: Bit 0=FIFO Enable, Bit 1=Reset RX, Bit 2=Reset TX, Bits 7:6=0b10 (32-byte trigger)
+    UART2_FCR = 0x87;
 
     // 3. Set Baud Rate
     set_baud(baud_rate, apb_clock_hz);
 
     // 4. Set Modem Control (RTS/DTR High)
     UART2_MCR = 0x03;
+
+    // 5. Clear queues
+    g_uart_rx_ring.clear();
+
+    // 6. Enable Receiver Data Available (ERBFI bit 0) & Receiver Timeout (RTO) Interrupt
+    UART2_IER = 0x01;
 }
 
 void Uart2::set_baud(uint32_t baud_rate, uint32_t apb_clock_hz) {
@@ -45,7 +58,6 @@ void Uart2::set_baud(uint32_t baud_rate, uint32_t apb_clock_hz) {
 }
 
 void Uart2::write_byte(uint8_t ch) {
-    // Poll Line Status Register until Transmitter Holding Register Empty (THRE bit 5)
     while (!(UART2_LSR & (1 << 5)));
     UART2_THR = ch;
 }
@@ -64,38 +76,66 @@ void Uart2::write_str(const char *str) {
 }
 
 bool Uart2::has_data() {
-    // Bit 0 of LSR is Data Ready (DR)
-    return (UART2_LSR & (1 << 0)) != 0;
+    return (UART2_LSR & (1 << 0)) != 0 || !g_uart_rx_ring.empty();
 }
 
 uint8_t Uart2::read_byte() {
-    while (!has_data());
+    if (!g_uart_rx_ring.empty()) {
+        uint8_t byte = 0;
+        g_uart_rx_ring.pop(byte);
+        return byte;
+    }
+    while (!(UART2_LSR & (1 << 0)));
     return (uint8_t)(UART2_RBR & 0xFF);
 }
 
-size_t Uart2::read_frame_timeout(uint8_t *buf, size_t max_len, uint32_t char_timeout_us) {
-    size_t count = 0;
-    if (max_len == 0 || buf == nullptr) return 0;
+void Uart2::handle_irq() {
+    uint32_t iir = UART2_IIR & 0x0F;
 
-    // Wait for the very first character (or return 0 if no initial data)
-    if (!has_data()) return 0;
+    // 0x04: Received Data Available (RDA) - FIFO reached threshold
+    // 0x0C: Character Timeout Indication (RTO) - Line idle for 4 character times
+    if (iir == 0x04 || iir == 0x0C) {
+        // Drain all available bytes from hardware FIFO into ETL ring buffer
+        while (UART2_LSR & (1 << 0)) {
+            uint8_t ch = (uint8_t)(UART2_RBR & 0xFF);
+            g_uart_rx_ring.push(ch);
+        }
 
-    buf[count++] = (uint8_t)(UART2_RBR & 0xFF);
-    uint64_t last_char_time = Timer::get_time_us();
-
-    while (count < max_len) {
-        if (has_data()) {
-            buf[count++] = (uint8_t)(UART2_RBR & 0xFF);
-            last_char_time = Timer::get_time_us();
-        } else {
-            // Check character idle timeout
-            if (Timer::get_time_us() - last_char_time >= char_timeout_us) {
-                break; // Line has gone quiet -> full packet received
+        // On Character Timeout (RTO), mark packet completed and wake coroutine
+        if (iir == 0x0C) {
+            g_uart_packet_ready = true;
+            if (g_uart_rx_coroutine) {
+                auto handle = g_uart_rx_coroutine;
+                g_uart_rx_coroutine = nullptr;
+                handle.resume();
             }
         }
     }
+}
 
-    return count;
+/* AsyncRxPacketAwaiter Implementation */
+Uart2::AsyncRxPacketAwaiter::AsyncRxPacketAwaiter(uint8_t *buf, size_t len)
+    : dest_buf(buf), max_len(len), bytes_received(0) {}
+
+bool Uart2::AsyncRxPacketAwaiter::await_ready() const noexcept {
+    return g_uart_packet_ready && !g_uart_rx_ring.empty();
+}
+
+void Uart2::AsyncRxPacketAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
+    g_uart_rx_coroutine = handle;
+    g_uart_packet_ready = false;
+}
+
+size_t Uart2::AsyncRxPacketAwaiter::await_resume() noexcept {
+    bytes_received = 0;
+    while (!g_uart_rx_ring.empty() && bytes_received < max_len) {
+        uint8_t byte = 0;
+        if (g_uart_rx_ring.pop(byte)) {
+            dest_buf[bytes_received++] = byte;
+        }
+    }
+    g_uart_packet_ready = false;
+    return bytes_received;
 }
 
 } // namespace fc::hal

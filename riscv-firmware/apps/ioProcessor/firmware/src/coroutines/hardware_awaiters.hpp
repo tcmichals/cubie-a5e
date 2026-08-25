@@ -34,30 +34,9 @@ inline SleepUsAwaiter sleep_ms(uint32_t ms) {
     return SleepUsAwaiter(ms * 1000);
 }
 
-// Non-blocking UART frame awaiter
-struct UartRxAwaiter {
-    UartRxAwaiter(uint8_t *buf, size_t max_len, uint32_t char_timeout_us)
-        : buf_(buf), max_len_(max_len), timeout_us_(char_timeout_us), bytes_read_(0) {}
-
-    bool await_ready() const noexcept {
-        return hal::Uart2::has_data();
-    }
-
-    void await_suspend(std::coroutine_handle<>) const noexcept {}
-
-    size_t await_resume() noexcept {
-        return hal::Uart2::read_frame_timeout(buf_, max_len_, timeout_us_);
-    }
-
-private:
-    uint8_t *buf_;
-    size_t   max_len_;
-    uint32_t timeout_us_;
-    size_t   bytes_read_;
-};
-
-inline UartRxAwaiter read_uart2_frame(uint8_t *buf, size_t max_len, uint32_t timeout_us = 500) {
-    return UartRxAwaiter(buf, max_len, timeout_us);
+// Non-blocking UART frame awaiter (Interrupt & RTO Driven)
+inline hal::Uart2::AsyncRxPacketAwaiter read_uart2_frame(uint8_t *buf, size_t max_len) {
+    return hal::Uart2::async_read_packet(buf, max_len);
 }
 
 // Non-blocking IPC packet awaiter

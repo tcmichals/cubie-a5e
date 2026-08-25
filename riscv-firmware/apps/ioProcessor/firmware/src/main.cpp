@@ -24,7 +24,10 @@ void msip_dispatch_events(void) {
 }
 
 void plic_dispatch_interrupt(void) {
-    // External interrupt handler (PIO edge / MSGBOX)
+    // External interrupt handler
+    fc::hal::Spi0::handle_irq();
+    fc::hal::Uart2::handle_irq();
+
     if (fc::hal::MsgBox::has_host_notification()) {
         abstractx::Scheduler::instance().run_once();
     }
