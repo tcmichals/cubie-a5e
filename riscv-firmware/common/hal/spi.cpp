@@ -118,9 +118,7 @@ void Spi0::handle_irq() {
 
         // Post coroutine to thread-safe SPSC ready queue for main thread resumption
         if (g_spi_coroutine) {
-            auto handle = g_spi_coroutine;
-            g_spi_coroutine = nullptr;
-            IsrDispatcher::isr_post_resume(handle);
+            IsrDispatcher::isr_post_resume(g_spi_coroutine);
         }
     }
 }

@@ -106,9 +106,7 @@ void Uart2::handle_irq() {
         if (iir == 0x0C) {
             g_uart_packet_ready = true;
             if (g_uart_rx_coroutine) {
-                auto handle = g_uart_rx_coroutine;
-                g_uart_rx_coroutine = nullptr;
-                IsrDispatcher::isr_post_resume(handle);
+                IsrDispatcher::isr_post_resume(g_uart_rx_coroutine);
             }
         }
     }
