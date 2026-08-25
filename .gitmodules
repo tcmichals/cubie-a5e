@@ -1,0 +1,3 @@
+[submodule "riscv-firmware/common/third_party/etl"]
+	path = riscv-firmware/common/third_party/etl
+	url = https://github.com/ETLCPP/etl.git

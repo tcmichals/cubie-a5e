@@ -16,7 +16,9 @@ public:
     }
 
     bool register_task(AsyncTask task) {
-        return tasks_.push_back(task);
+        if (tasks_.full()) return false;
+        tasks_.push_back(task);
+        return true;
     }
 
     void clear() {
