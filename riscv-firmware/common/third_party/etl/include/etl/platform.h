@@ -5,8 +5,9 @@
 #include <stddef.h>
 
 #define ETL_NO_STL
-#define ETL_NO_EXCEPTIONS
+#ifndef ETL_CPP20_SUPPORTED
 #define ETL_CPP20_SUPPORTED 1
+#endif
 
 namespace etl {
     using size_t = ::size_t;

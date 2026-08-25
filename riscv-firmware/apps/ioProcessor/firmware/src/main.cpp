@@ -1,13 +1,13 @@
-#include "hal/ccu.hpp"
-#include "hal/pio.hpp"
-#include "hal/spi.hpp"
-#include "hal/uart.hpp"
-#include "hal/timer.hpp"
-#include "hal/msgbox.hpp"
-#include "ipc/ringbuffer.hpp"
-#include "logging/pw_log_backend.hpp"
-#include "logging/trace_manager.hpp"
-#include "coroutines/io_tasks.hpp"
+#include "ccu.hpp"
+#include "pio.hpp"
+#include "spi.hpp"
+#include "uart.hpp"
+#include "timer.hpp"
+#include "msgbox.hpp"
+#include "ringbuffer.hpp"
+#include "pw_log_backend.hpp"
+#include "trace_manager.hpp"
+#include "io_tasks.hpp"
 #include <abstractx/scheduler.hpp>
 
 // Shared Ring Buffers in SRAM C

@@ -1,11 +1,10 @@
 #include "pio.hpp"
-#include "../../include/memory_map.h"
+#include "memory_map.h"
 
 namespace fc::hal {
 
 /* Main PIO Registers */
 #define PB_CFG0         (*(volatile uint32_t *)(PIO_BASE + 0x0030))
-#define PB_DATA         (*(volatile uint32_t *)(PIO_BASE + 0x0040))
 #define PB_PULL0        (*(volatile uint32_t *)(PIO_BASE + 0x0054))
 
 #define PC_CFG0         (*(volatile uint32_t *)(PIO_BASE + 0x0060))
@@ -13,7 +12,6 @@ namespace fc::hal {
 #define PC_DATA         (*(volatile uint32_t *)(PIO_BASE + 0x0070))
 #define PC_DRV0         (*(volatile uint32_t *)(PIO_BASE + 0x0074))
 #define PC_DRV1         (*(volatile uint32_t *)(PIO_BASE + 0x0078))
-#define PC_PULL0        (*(volatile uint32_t *)(PIO_BASE + 0x0084))
 
 void Pio::init() {
     /*
@@ -46,30 +44,6 @@ void Pio::init() {
 
     // Deassert CS lines (Active Low -> default High)
     PC_DATA |= (1 << 3) | (1 << 7);
-}
-
-void Pio::set_cs0(bool active) {
-    if (active)
-        PC_DATA &= ~(1 << 3); // Pull LOW (Active)
-    else
-        PC_DATA |=  (1 << 3); // Pull HIGH (Inactive)
-}
-
-void Pio::set_cs1(bool active) {
-    if (active)
-        PC_DATA &= ~(1 << 7); // Pull LOW (Active)
-    else
-        PC_DATA |=  (1 << 7); // Pull HIGH (Inactive)
-}
-
-bool Pio::get_fpga_frame_ready() {
-    // Pin 22 status
-    return (PC_DATA & (1 << 6)) != 0;
-}
-
-bool Pio::get_imu_drdy() {
-    // Pin 29 status
-    return (PC_DATA & (1 << 8)) != 0;
 }
 
 } // namespace fc::hal
