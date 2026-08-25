@@ -1,7 +1,7 @@
 #include "spi.hpp"
 #include "pio.hpp"
-#include "isr_dispatcher.hpp"
 #include "memory_map.h"
+#include <abstractx/coro.hpp>
 
 namespace fc::hal {
 
@@ -118,7 +118,7 @@ void Spi0::handle_irq() {
 
         // Post coroutine to thread-safe SPSC ready queue for main thread resumption
         if (g_spi_coroutine) {
-            IsrDispatcher::isr_post_resume(g_spi_coroutine);
+            abstractx::IsrDispatcher::post(g_spi_coroutine);
         }
     }
 }

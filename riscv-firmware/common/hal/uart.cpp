@@ -1,7 +1,7 @@
 #include "uart.hpp"
 #include "timer.hpp"
-#include "isr_dispatcher.hpp"
 #include "memory_map.h"
+#include <abstractx/coro.hpp>
 #include <etl/circular_buffer.h>
 
 namespace fc::hal {
@@ -148,7 +148,7 @@ void Uart2::handle_irq() {
             g_uart_packet_ready = true;
             auto handle = g_uart_rx_coroutine.load(std::memory_order_relaxed);
             if (handle) {
-                IsrDispatcher::isr_post_resume(handle);
+                abstractx::IsrDispatcher::post(handle);
             }
         }
     }

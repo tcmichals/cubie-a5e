@@ -4,7 +4,6 @@
 #include "uart.hpp"
 #include "timer.hpp"
 #include "msgbox.hpp"
-#include "isr_dispatcher.hpp"
 #include "ringbuffer.hpp"
 #include "pw_log_backend.hpp"
 #include "trace_manager.hpp"
@@ -21,7 +20,7 @@ void msip_dispatch_events(void) {
     // Clear Machine Software Interrupt pending bit
     __asm__ volatile("csrc mip, %0" :: "r"(1 << 3));
     // Safely resume any coroutines posted by ISRs in thread context
-    fc::hal::IsrDispatcher::process_ready_coroutines();
+    abstractx::IsrDispatcher::process();
 }
 
 void plic_dispatch_interrupt(void) {
@@ -77,7 +76,7 @@ int main(void) {
 
     // 7. Run Cooperative Event Loop (Woken by hardware interrupts and MSIP)
     while (true) {
-        fc::hal::IsrDispatcher::process_ready_coroutines();
+        abstractx::IsrDispatcher::process();
 #if defined(__riscv)
         __asm__ volatile("wfi");
 #endif
