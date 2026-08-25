@@ -98,7 +98,8 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | **`PB9`, `PB10`** | `allwinner,pinmux = <2>` | `uart0` | UART0 Serial Debug Console |
 | **`PF0` – `PF5`** | `allwinner,pinmux = <2>` | `mmc0` | MicroSD Slot (`SDC0`) |
 | **`PC6`, `PC8`–`PC11`, `PC13`–`PC16`** | `allwinner,pinmux = <3>` | `sdc2` | AIC8800 Wi-Fi 6 SDIO Bus (`SDC2`) |
-| **`PH0` – `PH15`** | `allwinner,pinmux = <5>` | `rgmii0` | Gigabit Ethernet 0 RGMII Bus |
+| **`PH0` – `PH15`** | `allwinner,pinmux = <5>` | `rgmii0` | Gigabit Ethernet 0 RGMII Bus (`PH10` = `RGMII0-RXD3`) |
+| **`PH16`** | `GPIO` (Bank 7, Pin 16) | `GPIO_ACTIVE_LOW` | Motorcomm Gigabit Ethernet PHY Reset (`GMAC1_RSTn_L` via `R185` 0Ω) |
 | **`PL0`, `PL1`** | `allwinner,pinmux = <2>` | `r_i2c0` (`s_twi0`) | AXP318 / AXP8191 PMIC Power Bus |
 | **`PL2`** | `GPIO` (Bank 0, Pin 2) | `GPIO_ACTIVE_HIGH` | USB 2.0 VBUS 0 Enable (`usb0-vbus`) |
 | **`PM0`** | `GPIO` (Bank 1, Pin 0) | `GPIO_ACTIVE_HIGH` | Wi-Fi Module 3.3V Power Enable (`wifi_power_en`) |
@@ -111,12 +112,12 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 
 | Component | Build Source | Repo URL | Branch / Version | Config / Output Target | Critical Technical Detail |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Vendor DRAM `boot0`** | Binary Blob | [radxa/allwinner-device](https://github.com/radxa/allwinner-device) | `device-a733-v1.4.6` | `bin/boot0_sdcard_sun60iw2p1_lpddr5.bin` | Written directly to **Sector 256 (128 KB)**; trains LPDDR5 PHY across 4 clock tiers (400–1800 MHz) in SRAM. |
+| **Vendor DRAM `boot0`** | Binary Blob | [radxa/allwinner-device](https://github.com/radxa/allwinner-device) | `device-a733-v1.4.6` | `bin/boot0_sdcard_sun60iw2p1_lpddr5.bin` | Written directly to **Sector 256 (128 KB)**; trains LPDDR5 PHY across 4 clock tiers (400–2400 MHz) in SRAM. |
 | **TF-A (BL31)** | Source Build | [dlan17/trusted-firmware-a](https://github.com/dlan17/trusted-firmware-a) | `A733` | `PLAT=sun60i_a733` (`bl31.bin`) | Secure EL3 handler; configures GICv3 system registers (`ICC_SRE_EL3=0x7`, `ICC_SRE_EL2=0x7`) and handles PSCI 1.1. |
-| **U-Boot Mainline** | Source Build | [dlan17/u-boot](https://github.com/dlan17/u-boot) | `allwinner/A733/boot-2026.01` | `configs/radxa-cubie-a7a_defconfig` | Contains SPL relocated to DDR (`0x480006a0`), DRAM size retrieval from `boot0` header, and FIT loading from `0x48200000`. |
-| **TOC1 Tool** | Host Binary | Local board tools | `v1.4.6` | `dragonsecboot` | Packages `u-boot-sunxi-with-spl.bin` (with 1600-byte header) + FIT image into `boot_package.fex`. |
-| **Linux Kernel** | Mainline + Patches | [git.kernel.org / sunxi](https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux.git) | `sunxi-clk-for-7.3` / `7.1` | `sun60i-a733-cubie-a7a.dts` + CCU/RTC/PMIC | Pure `PREEMPT_RT` baseline with native GICv3 and `sunxi_rproc.c`. |
-| **Wi-Fi Driver** | Out-of-tree Driver | Local `aic8800-upstream` | Unified v3.0 | `BR2_PACKAGE_AIC8800_DRIVER_USB=y` | High-throughput USB 2.0 / SDIO Wi-Fi 6 interface. |
+| **U-Boot Mainline** | Source Build | [dlan17/u-boot](https://github.com/dlan17/u-boot) | `allwinner/A733/boot-2026.01` | `configs/radxa-cubie-a7a_defconfig` | Linked at `0x4a001000` (4KB page aligned) with `b +0x1000` (`0x14000400`) header branch. |
+| **TOC1 Tool** | Host Binary | Local board tools | `v1.4.6` | `dragonsecboot` | Packages 4KB page-aligned U-Boot + BL31 + OP-TEE + ARISC + DTB into `boot_package.fex`. |
+| **Linux Kernel** | Mainline + Patches | [git.kernel.org / sunxi](https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux.git) | `sunxi-clk-for-7.3` / `7.1` | `sun60i-a733-cubie-a7a.dts` + CCU/RTC/PRCM | Pure `PREEMPT_RT` baseline with native GICv3 and `sunxi_rproc.c`. |
+| **Wi-Fi Driver** | Out-of-tree Driver | Local `aic8800-upstream` | Unified v3.0 | `BR2_PACKAGE_AIC8800_DRIVER_USB=y` | High-throughput USB 2.0 (`0xA69C:0x8800`) Wi-Fi 6 interface. |
 | **RISC-V Driver** | In-tree Driver | `patches/linux/0002` | Linux 7.1 | `CONFIG_SUNXI_REMOTEPROC=y` | RemoteProc driver for XuanTie E907 avionics co-processor. |
 
 ---

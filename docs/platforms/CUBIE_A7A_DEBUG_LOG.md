@@ -267,14 +267,66 @@ During kernel initialization on hardware, the system experienced intermittent st
   * **SPI Module Clocks**: Corrected `CLK_SPI0` to **`0x0F00`** and `CLK_SPI1` to **`0x0F08`** (earlier patches used `0x940`/`0x944` from H616).
   * **GMAC PHY Timing Registers**: Confirmed in `bsp/drivers/gmac/sunxi-gmac.c` that the dedicated GMAC0 PHY register is at `0x04508000` with identical bitfields (`tx_delay` bits 10..12, `rx_delay` bits 5..9, `EPIT` bit 2, `INT_GMII` bits 1:0) to mainline `dwmac-sun55i.c`.
 
+### Milestone 11: Forensic Realignment Against Datasheet V0.93, Schematic V1.10 & BSP (Aug 24, 2026)
+- **Ethernet (GMAC0) PHY Reset GPIO & RX Pinmux Conflict**:
+  * **Datasheet V0.93 Table 4-37 & Schematic Sheet 7 / Sheet 21**:
+    - `PH10` is ball `1AC2` -> Function 5 is `RGMII0-RXD3` (part of the 4-bit RX data bus).
+    - `PH16` is ball `AU2` -> Schematic shows `GMAC1_RSTn_L` connects to `PH16` through resistor `R185` (0Ω).
+  * **Defect**: Mainline DTS misconfigured `reset-gpios = <&pio 7 10 GPIO_ACTIVE_LOW>` (driving data line RXD3 low) and excluded `PH10` from `gmac0_pins`, while leaving the Motorcomm PHY reset line (`PH16`) floating.
+  * **Resolution**: Added `"PH10"` back into `gmac0_pins` (all 16 pins `PH0`–`PH15`) and updated `reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>;` (`PH16`).
+- **Fatal Mailbox (MSGBOX0) CCU Null Pointer & CPU PLL Corruption**:
+  * **Vendor Silicon (`ccu-sun60iw2.c`)**:
+    - Mailbox 0 Gate: `0x0744, BIT(0)` (`CLK_MSGBOX0`)
+    - Mailbox 0 Reset: `0x0744, BIT(16)` (`RST_BUS_MSGBOX0`)
+  * **Defect**: `CLK_MSGBOX0` and `RST_BUS_MSGBOX0` were omitted from `ccu-sun60i-a733.c`. Probing `mailbox@3004000` caused `devm_reset_control_get()` to write uninitialized `{0x0000, 0}` to CCU offset `0x0000` (`CLK_PLL_CPUX`), corrupting core CPU clock frequency and hanging the SoC.
+  * **Resolution**: Registered `bus_msgbox0_clk` at `0x0744 BIT(0)` and `[RST_BUS_MSGBOX0] = { 0x0744, BIT(16) }`.
+- **USB 0 / USB 1 EHCI Host Gate & Reset Activation**:
+  * **Vendor Silicon (`ccu-sun60iw2.c`)**:
+    - USB0: Gate `0x1304 BIT(4)|BIT(0)` (EHCI/OHCI), Reset `0x1304 BIT(20)|BIT(16)`, PHY Reset `0x1300 BIT(30)`.
+    - USB1: Gate `0x130c BIT(4)|BIT(0)` (EHCI/OHCI), Reset `0x130c BIT(20)|BIT(16)`, PHY Reset `0x1308 BIT(30)`.
+  * **Defect**: Earlier mainline CCU driver only enabled OHCI (`BIT 0` / `BIT 16`), leaving EHCI host DMA engines unclocked and in reset.
+  * **Resolution**: Updated `bus_usb0_clk`/`bus_usb1_clk` to `BIT(4)|BIT(0)` and `RST_BUS_USB0`/`RST_BUS_USB1` to `BIT(20)|BIT(16)`.
+- **GMAC0 AXI DMA Reset Deassertion**:
+  * Added `BIT(17)` (`RST_BUS_GMAC0_AXI`) to `RST_BUS_GMAC0` and `RST_BUS_GMAC1` at `0x141c`/`0x142c` (`BIT(17)|BIT(16)`).
+- **PRCM R-CCU `CLK_R_AHB` Register Realignment**:
+  * **Silicon Register (`ccu-sun60iw2-r.c`)**: `r-ahb` is at offset **`0x0000`** (`0x004` is non-existent).
+  * **Resolution**: Realigned `r_ahb_clk` in `ccu-sun60i-a733-r.c` to offset `0x000`.
+- **RemoteProc Robust Fallback & Write-Combining Mapping**:
+  * Synced `sunxi_rproc.c` with safe fallback resource resolution for `main_ccu` and `sram`, preventing probe aborts with `-EINVAL`.
+
+### Milestone 12: PRCM R-CCU Flexible Array Fix & A733 Clock Hierarchy Realignment (Aug 24, 2026)
+- **Kernel Panic at `sunxi_ccu_probe+0xb0` (`hw->init->name`)**:
+  * **Symptom**: `Internal error: Oops: 0000000096000004 [#1] SMP` during `sun60i_a733_r_ccu_probe`.
+  * **Root Cause**: `struct clk_hw_onecell_data` contains a C99 flexible array member `struct clk_hw *hws[]`. Declaring `static struct clk_hw_onecell_data sun60i_a733_r_hw_clks` allocated memory only for the designated entries, leaving the array undersized for `.num = 13`. Iterating to `i = 8` read beyond the struct into `sun60i_a733_r_ccu_resets[]`, dereferencing an invalid pointer at `ldr x27, [x0]` (`hw->init->name`).
+  * **Resolution**: Wrapped `sun60i_a733_r_hw_clks` in a fixed-size struct `struct { unsigned int num; struct clk_hw *hws[CLK_R_NUMBER]; }` matching standard `sunxi-ng` patterns.
+- **A733 PRCM Clock Hierarchy & Reset Realignment**:
+  * Real A733 silicon (`ccu-sun60iw2-r.c`) has `r-ahb` (`0x0000`), `r-apbs0` (`0x000c`), `r-apbs1` (`0x0010`).
+  * Mapped `r-bus-twi0/1/2` and `r-bus-uart0/1` to parent `r-apbs1`, `r-bus-rtc` and `r-bus-cpucfg` to `r-apbs0`.
+  * Added `include/dt-bindings/reset/sun60i-a733-r-ccu.h` with `RST_BUS_R_TWI0` (8), `RST_BUS_R_UART0` (5), `RST_BUS_RTC` (10) and bound `r_i2c0` in `sun60i-a733-cubie-a7a.dts`.
+
 ---
 
-## 7. Status & Master Verification
+## 8. Vendor BSP vs. Mainline Linux 7.1 Cross-Verification Matrix
 
-- [x] **Silicon Address Verification**: All CCU, PIO, R-PIO, R-I2C, Mailbox, GMAC, and USB base registers matched to A733 Datasheet V0.93 and vendor `ccu-sun60iw2.c`.
-- [x] **Pinmux Functions**: Updated RGMII0 to mux 5, SDC2 to mux 3, SDC0 to mux 2, UART0 to mux 2, and PMIC I2C to mux 2.
-- [x] **USB Shared Reset**: Converted `phy-sun4i-usb.c` to `devm_reset_control_get_shared()` and defined shared reset entries in DTS.
-- [x] **GMAC0 DMA & PHY Realignment**: Configured Motorcomm `MAE0621A` PHY at address 1, `rgmii-id`, GIC SPI 172, and DWMAC AXI/MTL queues.
-- [x] **CCU USB2 & SPI Offsets**: Corrected `CLK_BUS_USB2`/`RST_BUS_USB2` to `0x135c` and SPI mod clocks to `0x0F00`/`0x0F08`.
-- [x] **Mainline Patches Synced**: Updated `0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch` and added `0005-phy-allwinner-sun4i-usb-use-shared-reset-control.patch`.
-- [x] **Target Image Rebuilt**: `bld.a7a/images/sdcard.img` verified and audited with 100% test pass rate.
+The table below documents the full line-by-line cross-reference comparing the vendor BSP (`radxa-pkg-linux-a733` / `device-a733` / `bsp`) against our mainline Linux 7.1 port:
+
+| Subsystem / Node | Radxa Vendor BSP (`device-a733`/`bsp`) | Mainline Linux 7.1 Port (`sun60i-a733-cubie-a7a.dts`) | Verification Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ethernet PHY Reset** | `reset-gpios = <&pio PH 16 GPIO_ACTIVE_LOW>` | `reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>` | **100% MATCH** | `PH16` is `GMAC1_RSTn_L` driving Motorcomm PHY reset line. |
+| **Ethernet Pinmux** | `PH0`..`PH15` (`gmac0_pins_default`) | `PH0`..`PH15` mux function 5 (`gmac0_pins`) | **100% MATCH** | `PH10` preserved as `RGMII0-RXD3` data bus line. |
+| **USB 2.0 Host 0 VBUS**| `gpio = <&r_pio PL 2 GPIO_ACTIVE_HIGH>` | `gpio = <&r_pio 0 2 GPIO_ACTIVE_HIGH>` | **100% MATCH** | `PL2` USB VBUS power switch. |
+| **USB 2.0 Host 1 VBUS**| `gpio = <&r_pio PM 5 GPIO_ACTIVE_HIGH>` | `gpio = <&r_pio 1 5 GPIO_ACTIVE_HIGH>` | **100% MATCH** | `PM5` USB host power switch. |
+| **Wi-Fi Power Enable** | `gpio = <&r_pio PM 0 GPIO_ACTIVE_HIGH>` | `gpio = <&r_pio 1 0 GPIO_ACTIVE_HIGH>` | **100% MATCH** | `PM0` (USB_WIFI_PWR). |
+| **Wi-Fi Chip Enable**  | `gpio = <&r_pio PM 1 GPIO_ACTIVE_HIGH>` | `gpio = <&r_pio 1 1 GPIO_ACTIVE_HIGH>` | **100% MATCH** | `PM1` (WIFI_REG_ON). |
+| **Main CCU Base**      | `0x02002000` (8 KB) | `0x02002000` (8 KB) | **100% MATCH** | Sized array wrapper prevents buffer overrun. |
+| **PRCM R-CCU Base**    | `0x07010000` (1 KB) | `0x07010000` (1 KB) | **100% MATCH** | Hierarchy: `r-ahb` (0x0) -> `r-apbs0` (0xc) / `r-apbs1` (0x10). |
+| **Main PIO Base**      | `0x02000000` (11 banks: `PB`..`PK`) | `0x02000000` (`SUNXI_PINCTRL_ELEVEN_BANKS`) | **100% MATCH** | Bank counts `{0, 15, 17, 24, 16, 7, 15, 20, 17, 28, 24}`. |
+| **R-PIO Base**         | `0x07025000` (2 banks: `PL`, `PM`) | `0x07025000` (`PL_BASE`, 13 & 10 pins) | **100% MATCH** | Bank 0 = PL (13 pins), Bank 1 = PM (10 pins). |
+| **GIC-600 Interrupts** | Dist: `0x03400000`, Redist: `0x03460000` | Native `arm,gic-v3` | **100% MATCH** | 256 SPIs, 8 PPIs. |
+| **UART0 Console**      | `0x02500000`, GIC SPI 2 | `0x02500000`, GIC SPI 2 | **100% MATCH** | `reg-shift = <2>`, `reg-io-width = <4>`. |
+| **PMIC I2C (R_I2C0)**  | `0x07083000`, GIC SPI 203, `s_twi0` | `0x07083000`, GIC SPI 203, `CLK_R_TWI0` | **100% MATCH** | Clock 18, Reset 8. |
+| **Mailbox 0**          | `0x03004000`, GIC SPI 211 | `0x03004000`, GIC SPI 211 | **100% MATCH** | CCU Gate `0x0744 BIT(0)`, Reset `BIT(16)`. |
+| **RISC-V Coprocessor** | CCU `0x07102000`, SRAM `0x07110000` | `remoteproc@7102000` | **100% MATCH** | E907 core with Write-Combining SRAM mapping. |
+
+
+

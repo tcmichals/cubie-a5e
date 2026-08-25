@@ -17,7 +17,7 @@ This plan tracks the end-to-end integration and verification of **100% Mainline 
 | **TF-A (BL31)** | [radxa/allwinner-device](https://github.com/radxa/allwinner-device) | `device-a733-v1.4.6` | `bl31.bin` (78.8 KB) | Secure EL3; sets `ICC_SRE_EL3=0x7` & `ICC_SRE_EL2=0x7` to enable GICv3 system registers. |
 | **OP-TEE OS** | [radxa/allwinner-device](https://github.com/radxa/allwinner-device) | `device-a733-v1.4.6` | `optee_sun60iw2p1.bin` (406.9 KB) | Secure World OS payload at `0x48600000`. |
 | **ARISC (`scp`)** | [radxa/allwinner-device](https://github.com/radxa/allwinner-device) | `device-a733-v1.4.6` | `scp.bin` (117.5 KB) | Power co-processor firmware for AXP PMIC rails and clock management. |
-| **U-Boot Mainline** | [dlan17/u-boot](https://github.com/dlan17/u-boot) | `allwinner/A733/boot-2026.01` | `CONFIG_TEXT_BASE=0x4a000640` | Mainline U-Boot Proper (Non-Secure EL2) prepended with 1600-byte AArch64 header. |
+| **U-Boot Mainline** | [dlan17/u-boot](https://github.com/dlan17/u-boot) | `allwinner/A733/boot-2026.01` | `CONFIG_TEXT_BASE=0x4a001000` | Mainline U-Boot Proper (Non-Secure EL2) linked with 4KB page alignment (`b +0x1000`). |
 | **Device Tree (`dtb`)** | Project Cubie tree | `sun60i-a733-cubie-a7a.dtb` | `sun60i-a733-cubie-a7a.dts` | Hardware descriptions passed to BL31, OP-TEE, U-Boot, and Linux. |
 | **Linux 7.1 Kernel** | Mainline / sunxi | `7.1` `PREEMPT_RT` | `sun60i-a733-cubie-a7a.dtb` | Deterministic flight controller kernel with native GICv3 and `sunxi_rproc`. |
 
@@ -38,8 +38,8 @@ This plan tracks the end-to-end integration and verification of **100% Mainline 
 - `0x44000000`: Kernel Decompression / Initrd Scratch Space (`kernel_comp_addr_r`).
 - `0x48000000`: TF-A BL31 Load Address (`monitor_base`).
 - `0x48600000`: OP-TEE OS Load Address (`optee_base`).
-- `0x4A000000`: U-Boot Container Base (1600-byte AArch64 Header).
-- `0x4A000640`: Mainline U-Boot Execution Entry Point (`CONFIG_TEXT_BASE`).
+- `0x4A000000`: U-Boot Container Base (4KB Header Info with `b +0x1000`).
+- `0x4A001000`: Mainline U-Boot Execution Entry Point (`CONFIG_TEXT_BASE`).
 - `0x4FA00000`: Device Tree Load Address (`fdt_addr_r`).
 - `0x4FC00000`: U-Boot Script Load Address (`scriptaddr`).
 
@@ -64,19 +64,22 @@ python3 project-cubie-a5e/board/radxa/cubie_a7a/tools/verify_sdcard_image.py bld
 
 ### Phase 2: Buildroot Package & Firmware Integration
 - [x] Integrate full 240 KB factory `boot0` with verified `eGON` checksum (`0xd6c0cbdf`).
-- [x] Integrate `dragonsecboot` host tool and 1600-byte AArch64 `header-info.bin` (`0x14000190`).
-- [x] Configure Buildroot for Mainline U-Boot (`allwinner/A733/boot-2026.01`) with `CONFIG_TEXT_BASE=0x4a000640`.
+- [x] Integrate `dragonsecboot` host tool and 4KB AArch64 `header-info.bin` (`0x14000400` = `b +0x1000`).
+- [x] Configure Buildroot for Mainline U-Boot (`allwinner/A733/boot-2026.01`) with `CONFIG_TEXT_BASE=0x4a001000`.
 - [x] Implement automated 5-item TOC1 packaging in `post-image.sh` (`u-boot`, `monitor`, `optee`, `scp`, `dtb`).
 - [x] Integrate automated verification audit gate directly into `post-image.sh`.
 
-### Phase 3: Hardware Verification
+### Phase 3: Hardware Verification & Forensic Realignment
 - [x] Verify `boot0` dynamic LPDDR5 4-state training banner on hardware UART0 (400, 800, 1200, 2400 MHz).
 - [x] Verify physical DRAM sizing: `Actual DRAM SIZE = 6144 M` (6 GB).
 - [x] Verify TOC1 package loading from Sector 24576 (12.0 MB).
 - [x] Verify TF-A BL31 execution at Secure EL3.
 - [x] Verify OP-TEE OS execution in Secure DRAM.
-- [ ] Verify Mainline U-Boot 2026.01 prompt at `0x4A000640`.
-- [ ] Verify Linux 7.1 `PREEMPT_RT` earlycon output on UART0 (`0x02500000`).
-- [ ] Verify GICv3 interrupt controller probing across all 8 CPU cores.
-- [ ] Verify XuanTie E907 RISC-V co-processor lifecycle via `remoteproc`.
-- [ ] Verify BusyBox login shell prompt.
+- [x] Verify Mainline U-Boot 2026.01 prompt at `0x4A001000`.
+- [x] Verify Linux 7.1 `PREEMPT_RT` earlycon output on UART0 (`0x02500000`).
+- [x] Verify GICv3 interrupt controller probing across all 8 CPU cores (2x A78 + 6x A55).
+- [x] Realign GMAC0 PHY reset to `PH16` and restore `PH10` (`RGMII0-RXD3`) in pinmux.
+- [x] Realign Mailbox CCU gate/reset in `ccu-sun60i-a733.c` to prevent PLL register corruption.
+- [x] Realign USB0/1 EHCI gates (`BIT 4`) and resets (`BIT 20`) in CCU.
+- [x] Realign PRCM R-CCU `r-ahb` to offset `0x000`.
+- [x] Sync RemoteProc with safe fallback lookups for `main_ccu` and `sram`.

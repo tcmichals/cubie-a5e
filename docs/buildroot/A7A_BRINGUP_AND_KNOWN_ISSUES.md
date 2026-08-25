@@ -115,6 +115,34 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ---
 
+### Issue 7: Ethernet (GMAC0) PHY Reset GPIO & RX Pinmux Conflict
+- **Symptom**: Ethernet link down or receive packet framing errors; Gigabit PHY reset unresponsive.
+- **Root Cause**: Datasheet V0.93 Table 4-37 & Schematic Sheet 7 prove `PH10` is ball `1AC2` (`RGMII0-RXD3`), whereas the Motorcomm PHY reset is routed to **`PH16`** (`GMAC1_RSTn_L` via `R185` 0Ω). The early mainline DTS drove `PH10` as a GPIO reset output (forcing RX bit 3 to 0) and omitted `PH10` from `gmac0_pins`.
+- **Fix**: Added `"PH10"` back into `gmac0_pins` (all 16 pins `PH0`–`PH15`) and updated `reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>;` (`PH16`).
+
+---
+
+### Issue 8: Fatal Mailbox (MSGBOX0) CCU Null Pointer & CPU PLL Corruption
+- **Symptom**: Hard SoC freeze / kernel hang during early device driver probing.
+- **Root Cause**: `mailbox@3004000` requested `resets = <&ccu RST_BUS_MSGBOX0>`, but `CLK_MSGBOX0` and `RST_BUS_MSGBOX0` were omitted from `ccu-sun60i-a733.c`. Reset index 7 remained uninitialized `{0x0000, 0}`. Calling `reset_control_deassert()` performed a 32-bit write to CCU offset `0x0000` (`CLK_PLL_CPUX`), corrupting CPU core frequencies.
+- **Fix**: Registered `bus_msgbox0_clk` at `0x0744 BIT(0)` in `sun60i_a733_hw_clks[CLK_MSGBOX0]` and `[RST_BUS_MSGBOX0] = { 0x0744, BIT(16) }` in `sun60i_a733_ccu_resets[]`.
+
+---
+
+### Issue 9: USB 0 / USB 1 EHCI Host DMA Engines Gated in Silicon
+- **Symptom**: Onboard FE1.1S USB 2.0 4-port hub and AIC8800 Wi-Fi 6 module failed to appear in `lsusb`.
+- **Root Cause**: In `ccu-sun60i-a733.c`, `bus_usb0_clk` only enabled `BIT(0)` (OHCI) and `BIT(16)` (OHCI reset). In vendor silicon (`ccu-sun60iw2.c`), EHCI gate is `BIT(4)` and EHCI reset is `BIT(20)`.
+- **Fix**: Updated `bus_usb0_clk`/`bus_usb1_clk` to `BIT(4)|BIT(0)` and `RST_BUS_USB0`/`RST_BUS_USB1` to `BIT(20)|BIT(16)` at `0x1304`/`0x130c`.
+
+---
+
+### Issue 10: PRCM R-CCU `CLK_R_AHB` Register Offset Shift
+- **Symptom**: PRCM bus hangs when probing `r_pio: pinctrl@7025000` and PMIC communication.
+- **Root Cause**: `ccu-sun60i-a733-r.c` defined `r_ahb_clk` at register offset `0x004` (non-existent). Real silicon (`ccu-sun60iw2-r.c`) has `r-ahb` at offset `0x0000`.
+- **Fix**: Realigned `r_ahb_clk` to register offset `0x000` in `ccu-sun60i-a733-r.c`.
+
+---
+
 ## 3. Upstream Patch Tracking & Mainline Integration Roadmap
 
 The fundamental blockers to running vanilla mainline on the A733 are currently being reviewed in the Linux kernel and U-Boot communities:
