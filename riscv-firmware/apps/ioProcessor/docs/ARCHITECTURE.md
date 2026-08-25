@@ -40,6 +40,17 @@ This project implements a dedicated, high-speed **Hardware I/O Co-Processor** ru
 
 ---
 
+## High-Speed HAL & DMA Architecture Reference
+
+For detailed hardware timing diagrams, register offsets, and step-by-step guides on asynchronous zero-polling drivers:
+* 🚀 **[Comprehensive HAL, DMA & Asynchronous Driver Guide](../../../common/hal/README.md)**:
+  * Zero-polling AbstractX coroutine awaiters (`co_await`).
+  * Asynchronous Dual-SPI0 Transfer Complete (`TC_INT`) interrupt driver.
+  * **Zero-Copy UART RX DMA + Receiver Timeout (RTO)** for variable-length serial packets.
+  * Hardware MSGBOX doorbell memory barriers.
+
+---
+
 ## Embedded C++ Standards: ETL (Embedded Template Library)
 
 * **Repository:** [ETLCPP/etl](https://github.com/ETLCPP/etl) (`third_party/etl`)

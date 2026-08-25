@@ -4,16 +4,25 @@ This repository contains bare-metal firmware, runtime drivers, and Linux host co
 
 ---
 
-## 1. Directory Overview
+## 1. Directory Overview & Architecture Guides
 
 ```text
 riscv-firmware/
 ├── common/             # Shared HAL drivers, startup.S, memory map, ETL, AbstractX, Pigweed, Barectf
+│   └── hal/README.md   # [CRITICAL] High-Speed HAL, DMA & Non-Blocking Coroutine Architecture
 ├── apps/
 │   ├── ioProcessor/    # PCIe TLP & Hardware I/O Co-Processor (Firmware + Linux io-bridge)
+│   │   └── docs/       # Full architecture, IPC maps, trace and logging guides
 │   └── legacy_demo/    # Standalone baseline demo (Makefile)
 └── tools/              # Linux host ELF loader (riscv-load), remoteproc scripts, test utilities
 ```
+
+### Core Architecture & Driver Documentation
+* 🚀 **[High-Speed HAL, DMA & Asynchronous Coroutine Architecture](common/hal/README.md)**: Zero-polling philosophy, SPI0 Transfer-Complete interrupts, and **Zero-Copy UART RX DMA + Receiver Timeout (RTO)** for variable-length packet ingestion.
+* 📦 **[ioProcessor PCIe TLP Architecture](apps/ioProcessor/docs/ARCHITECTURE.md)**: Hardware pinout (40-pin header), 3.3V Port C setup, and AbstractX coroutine engine.
+* ⚡ **[128-Byte IPC Shared Memory Map](apps/ioProcessor/docs/IPC_MEMORY_MAP.md)**: SPSC ring buffers and packet formats in shared SRAM C (`0x07130000`).
+* 📊 **[Barectf CTF Nanosecond Execution Tracing](apps/ioProcessor/docs/BARECTF_TRACE_GUIDE.md)**: Profiling with Babeltrace 2 & Trace Compass.
+* 🪵 **[Google Pigweed Tokenized Logging](apps/ioProcessor/docs/PIGWEED_LOGGING.md)**: 4-byte compile-time tokenized logging.
 
 ---
 
