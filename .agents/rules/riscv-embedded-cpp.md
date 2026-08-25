@@ -17,19 +17,11 @@ This rule strictly governs all C++ development targeting the **XuanTie E907 RISC
 
 ---
 
-## 2. Mandatory Use of Embedded Template Library (ETL)
-
-* **Repository:** `https://github.com/ETLCPP/etl.git` (`third_party/etl`)
-* **Submodule:** `git submodule add https://github.com/ETLCPP/etl.git third_party/etl`
-* Whenever container data structures, circular queues, fixed-capacity vectors, string formatters, or embedded algorithms are needed, **ETL (`etl::*`) MUST BE USED**.
-* **Allowed ETL Structures:**
-  * `etl::vector<T, N>` (Fixed-capacity vector with zero heap allocation)
-  * `etl::queue<T, N>` / `etl::circular_buffer<T, N>`
-  * `etl::string<N>` / `etl::string_view`
-  * `etl::array<T, N>`
-  * `etl::span<T>`
-  * `etl::flat_map<Key, Value, N>` / `etl::flat_set<T, N>`
-  * `etl::pool<T, N>` / `etl::memory_pool<T, N>`
+## 2. Embedded Template Library (ETL) Standard
+* **ETL is Strictly 100% Upstream / Immutable:** ETL (`third_party/etl`) is an official Git submodule pointing to `https://github.com/ETLCPP/etl.git`. **NEVER edit ETL internal headers or create custom forks.** Always write client code adhering to official ETL container APIs.
+* **AbstractX Submodule:** AbstractX (`third_party/AbstractX`) is our open-source C++20 coroutine repository (`https://github.com/tcmichals/AbstractX.git`). Changes, enhancements, and bug fixes to coroutine primitives are allowed in AbstractX and should be committed/pushed back to upstream `tcmichals/AbstractX`.
+* **Prohibit Dynamic Heap Allocation:** All dynamic memory allocation (`malloc`, `free`, global `new`, global `delete`) is strictly prohibited.
+* **Mandatory ETL Containers:** Use `etl::vector<T, N>`, `etl::circular_buffer<T, N>`, `etl::array<T, N>`, `etl::span<T>`, `etl::string<N>`, `etl::flat_map<Key, Value, N>` in place of standard heap-allocating STL.
 
 ---
 
