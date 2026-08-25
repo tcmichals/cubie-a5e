@@ -1,3 +1,6 @@
 [submodule "riscv-firmware/common/third_party/etl"]
 	path = riscv-firmware/common/third_party/etl
 	url = https://github.com/ETLCPP/etl.git
+[submodule "riscv-firmware/common/third_party/AbstractX"]
+	path = riscv-firmware/common/third_party/AbstractX
+	url = https://github.com/tcmichals/AbstractX.git
