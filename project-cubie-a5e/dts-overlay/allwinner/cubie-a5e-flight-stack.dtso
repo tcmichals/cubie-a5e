@@ -5,44 +5,56 @@
  * ============================================================================
  *                    RADXA CUBIE A5E — FLIGHT STACK OVERLAY
  * ============================================================================
- * This overlay configures the 40-pin GPIO header multiplexing for:
- *  - Dual SPI links: SPI0 (Link A / IMU) and SPI1 (Link B / FPGA)
- *  - Third independent SPI bus: SPI2 (General Purpose SPI expansion)
- *  - Dual I2C buses: I2C1 (General I2C) and I2C3 (Flight Sensors)
- *  - Dual UART ports: UART0 (Serial Console Terminal) and UART2 (GPS Receiver)
+ * Hardware Resource Partitioning:
+ *  - RISC-V Co-Processor (XuanTie E907 Dedicated):
+ *      * UART2 (Serial Console / CRSF / Telemetry) on Pins 11 & 13 (PB0/PB1)
+ *      * SPI0 (Dual-SPI for FPGA @ CS0, Single-SPI for IMU @ CS1) on Pins 19, 21, 23, 24, 26 (Port C)
+ *      * FPGA Frame Ready ISR (GPIO Input) on Pin 22
+ *      * IMU Data Ready (DRDY) ISR (GPIO Input) on Pin 29
+ *  - Linux Host (ARM Cortex-A55):
+ *      * UART0 (Debug Console Terminal) on Pins 8 & 10 (PB9/PB10)
+ *      * SPI1 (General Purpose Expansion SPI) on Pins 35, 38, 40, 12
+ *      * SPI2 (General Purpose Expansion SPI) on Pins 7, 15, 16, 18
+ *      * I2C1 (Expansion I2C) on Pins 3 & 5
+ *      * I2C3 (Compass / Barometer) on Pins 27 & 28
  *
  * Physical 40-Pin Header Layout Mapping:
  * 
  *                  3.3V Power [ 1] [ 2] 5V Power (Input/Output)
  *            I2C1-SDA (TWI1)  [ 3] [ 4] 5V Power (Input/Output)
  *            I2C1-SCL (TWI1)  [ 5] [ 6] GND
- *            SPI2-CLK         [ 7] [ 8] UART0-TX (Debug Console Terminal)
- *                         GND [ 9] [10] UART0-RX (Debug Console Terminal)
- *            UART2-TX (GPS)   [11] [12] SPI1-CS0 (FPGA Dual-SPI Link B)
- *            UART2-RX (GPS)   [13] [14] GND
+ *            SPI2-CLK         [ 7] [ 8] UART0-TX (Linux Serial Console)
+ *                         GND [ 9] [10] UART0-RX (Linux Serial Console)
+ *   [RISC-V] UART2-TX (PB0)   [11] [12] SPI1-CS0 (Linux Expansion)
+ *   [RISC-V] UART2-RX (PB1)   [13] [14] GND
  *            SPI2-CS0         [15] [16] SPI2-MOSI
  *                  3.3V Power [17] [18] SPI2-MISO
- *            SPI0-MOSI (IMU)  [19] [20] GND
- *            SPI0-MISO (IMU)  [21] [22] GPIO
- *            SPI0-CLK  (IMU)  [23] [24] SPI0-CS0 (IMU Dual-SPI Link A)
- *                         GND [25] [26] GPIO
+ *   [RISC-V] SPI0-MOSI / IO0  [19] [20] GND
+ *   [RISC-V] SPI0-MISO / IO1  [21] [22] FPGA Frame Ready ISR (GPIO)   [RISC-V]
+ *   [RISC-V] SPI0-CLK         [23] [24] SPI0-CS0 (FPGA Dual-SPI)      [RISC-V]
+ *                         GND [25] [26] SPI0-CS1 (IMU Single-SPI)     [RISC-V]
  *            I2C3-SDA (TWI3)  [27] [28] I2C3-SCL (TWI3) (Sensors/Compass)
- *                        GPIO [29] [30] GND
+ *   [RISC-V] IMU DRDY ISR     [29] [30] GND
  *                        GPIO [31] [32] GPIO/PWM
  *                        GPIO [33] [34] GND
- *            SPI1-MISO (FPGA) [35] [36] GPIO
- *                        GPIO [37] [38] SPI1-MOSI (FPGA)
- *                         GND [39] [40] SPI1-CLK  (FPGA)
+ *            SPI1-MISO (Exp)  [35] [36] GPIO
+ *                        GPIO [37] [38] SPI1-MOSI (Exp)
+ *                         GND [39] [40] SPI1-CLK  (Exp)
  * ============================================================================
  */
 
-/* UART0: Debug Console Terminal (Enabled on physical pins 8 and 10) */
+/* UART0: Debug Console Terminal for Linux Host (Pins 8 and 10) */
 &uart0 {
     status = "okay";
 };
 
-/* UART2: GPS Receiver Interface (Temporarily disabled to prevent ttyS0 hijacking) */
+/* UART2: Dedicated RISC-V Serial Port (Pins 11 and 13 - Disabled in Linux) */
 &uart2 {
+    status = "disabled";
+};
+
+/* SPI0: Dedicated RISC-V High-Speed Dual/Single Bus (Pins 19, 21, 23, 24, 26 - Disabled in Linux) */
+&spi0 {
     status = "disabled";
 };
 
@@ -54,7 +66,7 @@
 };
 
 &{/} {
-    cubie-flight-stack-version = "1.2";
+    cubie-flight-stack-version = "1.3";
 
     reg_wifi_en: wifi-en {
         compatible = "regulator-fixed";
@@ -66,6 +78,12 @@
         enable-active-high;
         startup-delay-us = <1000000>; /* 1000ms delay to let the chip boot */
     };
+};
+
+/* Configure Port C (VCC-PC) and Port K (VCC-PK) IO rail to 3.3V for 40-pin header peripherals */
+&reg_cldo1 {
+    regulator-min-microvolt = <3300000>;
+    regulator-max-microvolt = <3300000>;
 };
 
 &reg_bldo1 {
@@ -84,22 +102,7 @@
     pinctrl-names = "default";
 };
 
-/* SPI0: Dual SPI Link A / IMU Connection (Enabled on physical pins 19, 21, 23, 24) */
-&spi0 {
-    status = "okay";
-    pinctrl-names = "default";
-    num-cs = <1>;
-    
-    /* User-space SPIDEV node (/dev/spidev0.0) */
-    spidev0@0 {
-        compatible = "rohm,dh2228fv";
-        reg = <0>;
-        spi-max-frequency = <10000000>;
-        status = "okay";
-    };
-};
-
-/* SPI1: Dual SPI Link B / FPGA Connection (Enabled on physical pins 35, 38, 40, 12) */
+/* SPI1: Linux General Purpose SPI Link (Enabled on physical pins 35, 38, 40, 12) */
 &spi1 {
     status = "okay";
     pinctrl-names = "default";
@@ -144,11 +147,6 @@
     wifi: wifi@1 {
         reg = <1>;
         compatible = "aic,aic8800";
-        interrupt-parent = <&pio>;
-        interrupts = <1 0 8>; /* PB0 / PIO 1 0, Active Low (IRQ_TYPE_LEVEL_LOW = 8) */
-        interrupt-names = "host-wake";
-        host-wake-gpios = <&pio 1 0 8>;
-        wlan_host_wake = <&pio 1 0 8>;
         status = "okay";
     };
 };
@@ -174,5 +172,6 @@
     firmware-name = "riscv-firmware.elf";
     status = "okay";
 };
+
 
 

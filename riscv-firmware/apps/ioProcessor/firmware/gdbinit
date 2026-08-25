@@ -1,0 +1,18 @@
+# GDB Initialization Script for XuanTie E907 Flight Controller Debugging
+# Connects to OpenOCD listening on localhost:3333
+
+target extended-remote localhost:3333
+
+# Load symbol file with DWARF debug info
+file ioprocessor_firmware.elf
+
+# Set architecture
+set arch riscv:rv32
+
+# Set breakpoints at CRT0 entry and main
+break _start
+break main
+
+# Display processor state
+echo \n=== Connected to XuanTie E907 via OpenOCD ===\n
+echo Use 'c' to continue, 's' to step, 'n' to step over.\n

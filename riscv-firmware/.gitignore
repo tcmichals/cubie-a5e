@@ -9,3 +9,6 @@
 *.map
 *.hex
 riscv-load
+io-bridge
+build/
+*.ctf
