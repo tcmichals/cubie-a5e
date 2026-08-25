@@ -19,6 +19,14 @@ public:
         return tasks_.push_back(task);
     }
 
+    void clear() {
+        tasks_.clear();
+    }
+
+    size_t size() const {
+        return tasks_.size();
+    }
+
     void run_once() {
         for (auto& task : tasks_) {
             if (!task.done()) {

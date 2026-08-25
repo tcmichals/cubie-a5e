@@ -23,6 +23,7 @@ riscv-firmware/
 * ⚡ **[128-Byte IPC Shared Memory Map](apps/ioProcessor/docs/IPC_MEMORY_MAP.md)**: SPSC ring buffers and packet formats in shared SRAM C (`0x07130000`).
 * 📊 **[Barectf CTF Nanosecond Execution Tracing](apps/ioProcessor/docs/BARECTF_TRACE_GUIDE.md)**: Profiling with Babeltrace 2 & Trace Compass.
 * 🪵 **[Google Pigweed Tokenized Logging](apps/ioProcessor/docs/PIGWEED_LOGGING.md)**: 4-byte compile-time tokenized logging.
+* 🧪 **[CppUTest & QEMU Unit Testing Guide](apps/ioProcessor/docs/TESTING_AND_EMULATION_GUIDE.md)**: Automated CppUTest suite and QEMU test bench.
 
 ---
 

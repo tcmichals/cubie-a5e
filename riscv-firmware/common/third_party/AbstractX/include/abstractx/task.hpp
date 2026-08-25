@@ -7,7 +7,7 @@
 
 namespace abstractx {
 
-template <size_t PoolSize = 4096>
+template <size_t PoolSize = 16384>
 class StaticCoroutinePool {
 public:
     static void* allocate(size_t size) {
@@ -20,8 +20,8 @@ public:
         return ptr;
     }
 
-    static void deallocate(void*, size_t) {
-        // Static arena: individual frames retained in pool
+    static void deallocate(void*, size_t) noexcept {
+        // Static arena pool
     }
 
     static void reset() {
@@ -29,7 +29,11 @@ public:
     }
 
 private:
-    static inline uint8_t pool_[PoolSize] __attribute__((section(".dtcm")));
+#if defined(__riscv)
+    static inline uint8_t pool_[PoolSize] __attribute__((section(".dtcm"), aligned(8)));
+#else
+    alignas(8) static inline uint8_t pool_[PoolSize];
+#endif
     static inline size_t offset_ = 0;
 };
 
@@ -45,25 +49,26 @@ struct AsyncTask {
         void unhandled_exception() noexcept {}
 
         void* operator new(size_t size) {
-            return StaticCoroutinePool<4096>::allocate(size);
+            return StaticCoroutinePool<16384>::allocate(size);
         }
         void operator delete(void* ptr, size_t size) noexcept {
-            StaticCoroutinePool<4096>::deallocate(ptr, size);
+            StaticCoroutinePool<16384>::deallocate(ptr, size);
         }
     };
 
-    std::coroutine_handle<promise_type> handle;
+    std::coroutine_handle<promise_type> handle{nullptr};
 
     bool resume() {
-        if (handle && !handle.done()) {
+        if (handle && handle.address() != nullptr && !handle.done()) {
             handle.resume();
-            return !handle.done();
+            return (handle && handle.address() != nullptr && !handle.done());
         }
         return false;
     }
 
     bool done() const {
-        return !handle || handle.done();
+        if (!handle || handle.address() == nullptr) return true;
+        return handle.done();
     }
 };
 

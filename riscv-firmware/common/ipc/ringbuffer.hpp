@@ -2,6 +2,7 @@
 #define IOPROCESSOR_IPC_RINGBUFFER_HPP
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include "ipc_protocol.hpp"
 #include "../hal/msgbox.hpp"
@@ -57,7 +58,13 @@ public:
         }
 
         // Memory fence before updating head pointer
+#if defined(__riscv)
         __asm__ volatile("fence rw, rw" ::: "memory");
+#elif defined(__aarch64__)
+        __asm__ volatile("dmb ish" ::: "memory");
+#else
+        __asm__ volatile("" ::: "memory");
+#endif
         ring_->head = next_head;
 
         if (notify_doorbell) {
@@ -80,7 +87,13 @@ public:
         }
 
         // Memory fence before updating tail pointer
+#if defined(__riscv)
         __asm__ volatile("fence rw, rw" ::: "memory");
+#elif defined(__aarch64__)
+        __asm__ volatile("dmb ish" ::: "memory");
+#else
+        __asm__ volatile("" ::: "memory");
+#endif
         ring_->tail = (tail + 1) % RING_CAPACITY;
         return true;
     }

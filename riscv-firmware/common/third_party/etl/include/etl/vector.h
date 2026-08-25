@@ -32,21 +32,21 @@ public:
 
     void clear() {
         for (size_type i = 0; i < size_; ++i) {
-            reinterpret_cast<pointer>(&storage_[i])->~T();
+            get_ptr(i)->~T();
         }
         size_ = 0;
     }
 
     bool push_back(const T& value) {
         if (full()) return false;
-        new (&storage_[size_]) T(value);
+        new (get_ptr(size_)) T(value);
         size_++;
         return true;
     }
 
     bool push_back(T&& value) {
         if (full()) return false;
-        new (&storage_[size_]) T(static_cast<T&&>(value));
+        new (get_ptr(size_)) T(static_cast<T&&>(value));
         size_++;
         return true;
     }
@@ -54,16 +54,16 @@ public:
     void pop_back() {
         if (size_ > 0) {
             size_--;
-            reinterpret_cast<pointer>(&storage_[size_])->~T();
+            get_ptr(size_)->~T();
         }
     }
 
     reference operator[](size_type index) {
-        return *reinterpret_cast<pointer>(&storage_[index]);
+        return *get_ptr(index);
     }
 
     const_reference operator[](size_type index) const {
-        return *reinterpret_cast<const_pointer>(&storage_[index]);
+        return *get_ptr(index);
     }
 
     reference front() { return (*this)[0]; }
@@ -71,8 +71,8 @@ public:
     reference back() { return (*this)[size_ - 1]; }
     const_reference back() const { return (*this)[size_ - 1]; }
 
-    pointer data() { return reinterpret_cast<pointer>(&storage_[0]); }
-    const_pointer data() const { return reinterpret_cast<const_pointer>(&storage_[0]); }
+    pointer data() { return get_ptr(0); }
+    const_pointer data() const { return get_ptr(0); }
 
     iterator begin() { return data(); }
     const_iterator begin() const { return data(); }
@@ -80,6 +80,14 @@ public:
     const_iterator end() const { return data() + size_; }
 
 private:
+    pointer get_ptr(size_type index) {
+        return reinterpret_cast<pointer>(&storage_[index * sizeof(T)]);
+    }
+
+    const_pointer get_ptr(size_type index) const {
+        return reinterpret_cast<const_pointer>(&storage_[index * sizeof(T)]);
+    }
+
     alignas(alignof(T)) uint8_t storage_[MAX_SIZE_ * sizeof(T)];
     size_type size_;
 };
