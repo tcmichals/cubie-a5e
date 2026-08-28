@@ -134,7 +134,6 @@ V0.93 and critical clock definitions.
 +		[CLK_R_CPUCFG]		= &r_bus_cpucfg_clk.common.hw,
 +	},
 +};
-+
 +static const struct ccu_reset_map sun60i_a733_r_ccu_resets[] = {
 +	[RST_BUS_R_UART0]	= { 0x018c, BIT(16) },
 +	[RST_BUS_R_UART1]	= { 0x018c, BIT(17) },
@@ -427,6 +426,8 @@ V0.93 and critical clock definitions.
 +		[CLK_BUS_USB0]		= &bus_usb0_clk.common.hw,
 +		[CLK_BUS_USB1]		= &bus_usb1_clk.common.hw,
 +		[CLK_BUS_USB2]		= &bus_usb2_clk.common.hw,
++		[CLK_USB_OHCI0]		= &bus_usb0_clk.common.hw,
++		[CLK_USB_OHCI1]		= &bus_usb1_clk.common.hw,
 +		[CLK_MMC0]		= &mmc0_clk.common.hw,
 +		[CLK_MMC1]		= &mmc1_clk.common.hw,
 +		[CLK_MMC2]		= &mmc2_clk.common.hw,

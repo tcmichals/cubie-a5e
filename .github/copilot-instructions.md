@@ -146,3 +146,18 @@ sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progre
 - Mark new stubs explicitly in docs as `(currently stub)`
 - Keep `boot.cmd` and `u-boot-fragment.config` in sync
 - When adding overlays: update `genimage.cfg` + `boot.cmd` + `defconfig` + `DeviceTreeHowTo.md`
+
+## Linux patch generation and validation
+
+- Treat `bld.a5e/` and `bld.a7a/` as generated Buildroot output; never use a
+  patched output tree as the patch source of truth.
+- Do not hand-edit unified-diff payloads. Generate new-file hunks from the
+  canonical source with `tools/refresh_remoteproc_patch.py` or `git diff`.
+- After changing any Linux patch, run `make linux-dirclean && make linux` from
+  the affected output directory (`bld.a5e` or `bld.a7a`) so every patch is
+  reapplied from a clean tree.
+- Verify `.applied_patches_list`, the relevant generated source/DTB, and
+  `git diff --check` before considering the patch valid.
+- For `sunxi_rproc.c`, compare the patch payload with
+  `bld.a5e/build/linux-7.1/drivers/remoteproc/sunxi_rproc.c` byte-for-byte
+  apart from an optional final newline.
