@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,529 @@
+@@ -0,0 +1,531 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -464,6 +464,8 @@ index 0000000..1234567
 +			phy-mode = "rgmii";
 +			phy-handle = <&ext_rgmii_phy>;
 +			phy-supply = <&reg_phy3v3>;
++			tx-internal-delay-ps = <1200>;
++			rx-internal-delay-ps = <1000>;
 +			snps,fixed-burst;
 +			snps,axi-config = <&gmac0_stmmac_axi_setup>;
 +			snps,mtl-rx-config = <&gmac0_mtl_rx_setup>;

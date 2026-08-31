@@ -41,7 +41,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  obj-$(CONFIG_NCN26000_PHY)	+= ncn26000.o
 --- /dev/null
 +++ b/drivers/net/phy/maxio.c
-@@ -0,0 +1,418 @@
+@@ -0,0 +1,420 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/* drivers/net/phy/maxio.c
 + *
@@ -389,6 +389,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	ret |= maxio_write_paged(phydev, 0x0, 0x0, 0x9140);
 +
 +	ret |= PHY_WRITE(phydev, MAXIO_PAGE_SELECT, 0);
++
++	msleep(50);
 +
 +	return 0;
 +}
