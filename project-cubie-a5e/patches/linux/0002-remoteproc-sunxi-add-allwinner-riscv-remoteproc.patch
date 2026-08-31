@@ -387,7 +387,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->r_sram_phys = res->start;
 +		priv->r_sram_size = resource_size(res);
-+		priv->r_sram_va = devm_ioremap(dev, res->start, resource_size(res));
++		priv->r_sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->r_sram_va)
 +			return -ENOMEM;
 +	}
@@ -397,7 +397,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->itcm_phys = res->start;
 +		priv->itcm_size = resource_size(res);
-+		priv->itcm_va = devm_ioremap(dev, res->start, resource_size(res));
++		priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->itcm_va)
 +			dev_warn(dev, "failed to map 'itcm' resource\n");
 +	}
@@ -407,7 +407,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->dtcm_phys = res->start;
 +		priv->dtcm_size = resource_size(res);
-+		priv->dtcm_va = devm_ioremap(dev, res->start, resource_size(res));
++		priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->dtcm_va)
 +			dev_warn(dev, "failed to map 'dtcm' resource\n");
 +	}
@@ -417,7 +417,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->sram_phys = res->start;
 +		priv->sram_size = resource_size(res);
-+		priv->sram_va = devm_ioremap(dev, res->start, resource_size(res));
++		priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->sram_va)
 +			dev_warn(dev, "failed to map 'sram' resource; trace0 will be unavailable\n");
 +	}
