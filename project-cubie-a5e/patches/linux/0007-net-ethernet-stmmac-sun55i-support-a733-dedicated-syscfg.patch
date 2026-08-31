@@ -11,12 +11,28 @@ MMIO resource and program the RGMII interface mode, delay chain, and internal cl
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 100 ++++++++++++++++++----
- 1 file changed, 83 insertions(+), 17 deletions(-)
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 108 ++++++++++++++++++----
+ 1 file changed, 91 insertions(+), 17 deletions(-)
 
 --- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
-@@ -37,17 +37,68 @@
+@@ -11,6 +11,7 @@
+ 
+ #include <linux/bitfield.h>
+ #include <linux/bits.h>
++#include <linux/iopoll.h>
+ #include <linux/mfd/syscon.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -22,6 +23,7 @@
+ 
+ #include "stmmac.h"
+ #include "stmmac_platform.h"
++#include "dwmac4_dma.h"
+ 
+ #define SYSCON_REG		0x34
+ 
+@@ -37,17 +39,68 @@
  #define SYSCON_ETCS_EXT_GMII	0x1
  #define SYSCON_ETCS_INT_GMII	0x2
  
@@ -92,7 +108,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  	if (!of_property_read_u32(node, "tx-internal-delay-ps", &val)) {
  		if (val % 100)
-@@ -95,17 +146,25 @@
+@@ -95,17 +148,34 @@
  				     phy_modes(plat->phy_interface));
  	}
  
@@ -107,11 +123,20 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +static int sun55i_gmac_fix_soc_reset(struct stmmac_priv *priv)
 +{
 +	struct sun55i_gmac_priv *gmac = priv->plat->bsp_priv;
++	void __iomem *ioaddr = priv->ioaddr;
++	u32 value;
 +
 +	sun55i_gmac_init(priv->device, gmac);
 +	usleep_range(1000, 2000);
 +
-+	return dwmac4_dma_reset(priv->ioaddr);
++	/* DMA SW reset */
++	value = readl(ioaddr + DMA_BUS_MODE);
++	value |= DMA_BUS_MODE_SFT_RESET;
++	writel(value, ioaddr + DMA_BUS_MODE);
++
++	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
++				 !(value & DMA_BUS_MODE_SFT_RESET),
++				 10000, 1000000);
  }
  
  static int sun55i_gmac200_probe(struct platform_device *pdev)
@@ -122,7 +147,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	struct device *dev = &pdev->dev;
  	struct clk *clk;
  	int ret;
-@@ -118,11 +177,24 @@
+@@ -118,11 +188,24 @@
  	if (IS_ERR(plat_dat))
  		return PTR_ERR(plat_dat);
  
@@ -148,7 +173,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	if (ret)
  		return ret;
  
-@@ -140,6 +212,8 @@
+@@ -140,6 +223,8 @@
  
  static const struct of_device_id sun55i_gmac200_match[] = {
  	{ .compatible = "allwinner,sun55i-a523-gmac200" },
