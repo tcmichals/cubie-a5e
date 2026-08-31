@@ -41,7 +41,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  obj-$(CONFIG_NCN26000_PHY)	+= ncn26000.o
 --- /dev/null
 +++ b/drivers/net/phy/maxio.c
-@@ -0,0 +1,401 @@
+@@ -0,0 +1,436 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/* drivers/net/phy/maxio.c
 + *
@@ -257,7 +257,42 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +static int maxio_mae0621a_status(struct phy_device *phydev)
 +{
-+	return genphy_read_status(phydev);
++	int physr = maxio_read_paged(phydev, 0xa43, MAXIO_PHYSR_P_A43);
++	int old_link = phydev->link;
++
++	if (physr < 0)
++		return physr;
++
++	if (physr & MAXIO_PHY_LINK) {
++		phydev->link = 1;
++
++		if ((physr & MAXIO_PHY_SPEED) == MAXIO_PHY_1000M)
++			phydev->speed = SPEED_1000;
++		else if ((physr & MAXIO_PHY_SPEED) == MAXIO_PHY_100M)
++			phydev->speed = SPEED_100;
++		else
++			phydev->speed = SPEED_10;
++
++		if (physr & MAXIO_PHY_DUPLEX)
++			phydev->duplex = DUPLEX_FULL;
++		else
++			phydev->duplex = DUPLEX_HALF;
++
++		phydev->pause = 0;
++		phydev->asym_pause = 0;
++	} else {
++		phydev->link = 0;
++		phydev->speed = SPEED_UNKNOWN;
++		phydev->duplex = DUPLEX_UNKNOWN;
++		phydev->pause = 0;
++		phydev->asym_pause = 0;
++	}
++
++	if (old_link != phydev->link) {
++		phy_print_status(phydev);
++	}
++
++	return 0;
 +}
 +
 +static void maxio_mae0621a_remove(struct phy_device *phydev)
