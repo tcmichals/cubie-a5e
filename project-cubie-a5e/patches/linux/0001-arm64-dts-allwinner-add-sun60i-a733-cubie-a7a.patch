@@ -1,34 +1,37 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH] arm64: dts: allwinner: add sun60i-a733-cubie-a7a and cubie-a7z device trees
+Date: Fri, 27 Feb 2026 12:00:00 +0000
+Subject: [PATCH 1/4] arm64: dts: allwinner: add sun60i-a733-cubie-a7a and cubie-a7z board DTS
 
-Adds Device Tree Source files for the Radxa Cubie A7A and Cubie A7Z
-single-board computers based on the Allwinner A733 octa-core SoC.
+Add initial Device Tree for Radxa Cubie A7A and Cubie A7Z boards based on the
+Allwinner A733 (sun60i) SoC. Includes CPU topology, GICv3 interrupt controller,
+CCU, R-CCU, UART0 serial console, eMMC, SD card, AIC8800 Wi-Fi 6, USB PHY,
+Ethernet GMAC, and RISC-V XuanTie E907 remoteproc coprocessor node.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  arch/arm64/boot/dts/allwinner/Makefile                 |   2 +
- arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 508 ++++++++++++++++++++
- arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts | 434 ++++++++++++++++++++
- 3 files changed, 944 insertions(+)
+ arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts | 542 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts | 434 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 978 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts
 
 diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
-index d116864..6b59921 100644
+index 1234567..89abcdef 100644
 --- a/arch/arm64/boot/dts/allwinner/Makefile
 +++ b/arch/arm64/boot/dts/allwinner/Makefile
-@@ -60,3 +60,5 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-a527-cubie-a5e.dtb
- dtb-$(CONFIG_ARCH_SUNXI) += sun55i-h728-x96qpro+.dtb
- dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-avaota-a1.dtb
- dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-orangepi-4a.dtb
+@@ -40,2 +40,4 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-transpeed-8k618-t.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h728-x96q-pro-plus.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-a523-cubie-a5e.dtb
 +dtb-$(CONFIG_ARCH_SUNXI) += sun60i-a733-cubie-a7a.dtb
 +dtb-$(CONFIG_ARCH_SUNXI) += sun60i-a733-cubie-a7z.dtb
 diff --git a/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
 new file mode 100644
-index 0000000..155066b
+index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,508 @@
+@@ -0,0 +1,542 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -100,6 +103,17 @@ index 0000000..155066b
 +		regulator-min-microvolt = <3300000>;
 +		regulator-max-microvolt = <3300000>;
 +		gpio = <&r_pio 1 0 GPIO_ACTIVE_HIGH>; /* PM0 (USB_WIFI_PWR) */
++		enable-active-high;
++		regulator-always-on;
++		regulator-boot-on;
++	};
++
++	reg_wifi_chip_en: wifi-chip-en {
++		compatible = "regulator-fixed";
++		regulator-name = "wifi_chip_en";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		gpio = <&r_pio 1 1 GPIO_ACTIVE_HIGH>; /* PM1 (WIFI_REG_ON) */
 +		enable-active-high;
 +		regulator-always-on;
 +		regulator-boot-on;
@@ -349,7 +363,8 @@ index 0000000..155066b
 +		};
 +
 +		usbphy: phy@4100400 {
-+			compatible = "allwinner,sun20i-d1-usb-phy";
++			compatible = "allwinner,sun55i-a523-usb-phy",
++				     "allwinner,sun20i-d1-usb-phy";
 +			reg = <0x04100400 0x100>,
 +			      <0x04101800 0x100>,
 +			      <0x04200800 0x100>;
@@ -360,8 +375,8 @@ index 0000000..155066b
 +				 <&osc24M>;
 +			clock-names = "usb0_phy",
 +				      "usb1_phy";
-+			resets = <&ccu RST_BUS_USB0>,
-+				 <&ccu RST_BUS_USB1>;
++			resets = <&ccu RST_USB_PHY0>,
++				 <&ccu RST_USB_PHY1>;
 +			reset-names = "usb0_reset",
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
@@ -371,10 +386,13 @@ index 0000000..155066b
 +		};
 +
 +		ehci0: usb@4101000 {
-+			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
++			compatible = "allwinner,sun55i-a523-ehci",
++				     "allwinner,sun50i-h616-ehci",
++				     "generic-ehci";
 +			reg = <0x04101000 0x100>;
 +			interrupts = <GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB0>;
++			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
++			clock-names = "bus_hci", "bus", "ohci";
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
@@ -382,10 +400,13 @@ index 0000000..155066b
 +		};
 +
 +		ohci0: usb@4101400 {
-+			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
++			compatible = "allwinner,sun55i-a523-ohci",
++				     "allwinner,sun50i-h616-ohci",
++				     "generic-ohci";
 +			reg = <0x04101400 0x100>;
 +			interrupts = <GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
++			clock-names = "bus_hci", "ohci";
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
@@ -393,10 +414,13 @@ index 0000000..155066b
 +		};
 +
 +		ehci1: usb@4200000 {
-+			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
++			compatible = "allwinner,sun55i-a523-ehci",
++				     "allwinner,sun50i-h616-ehci",
++				     "generic-ehci";
 +			reg = <0x04200000 0x100>;
 +			interrupts = <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB1>;
++			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
++			clock-names = "bus_hci", "bus", "ohci";
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
@@ -404,10 +428,13 @@ index 0000000..155066b
 +		};
 +
 +		ohci1: usb@4200400 {
-+			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
++			compatible = "allwinner,sun55i-a523-ohci",
++				     "allwinner,sun50i-h616-ohci",
++				     "generic-ohci";
 +			reg = <0x04200400 0x100>;
 +			interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
++			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_BUS_USB1>;
++			clock-names = "bus_hci", "ohci";
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
@@ -453,7 +480,7 @@ index 0000000..155066b
 +			snps,axi-config = <&gmac0_stmmac_axi_setup>;
 +			snps,mtl-rx-config = <&gmac0_mtl_rx_setup>;
 +			snps,mtl-tx-config = <&gmac0_mtl_tx_setup>;
-+			status = "okay";
++			status = "disabled";
 +
 +			mdio0: mdio {
 +				compatible = "snps,dwmac-mdio";
@@ -503,7 +530,7 @@ index 0000000..155066b
 +			reg = <0x07025000 0x410>;
 +			interrupts = <GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&r_ccu CLK_R_AHB>, <&osc24M>, <&osc32k>;
++			clocks = <&r_ccu CLK_R_APBS0>, <&osc24M>, <&osc32k>;
 +			clock-names = "apb", "hosc", "losc";
 +			#gpio-cells = <3>;
 +			gpio-controller;
@@ -528,18 +555,28 @@ index 0000000..155066b
 +			status = "okay";
 +		};
 +
-+		rproc: remoteproc@7102000 {
-+			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
-+			reg = <0x07102000 0x1000>,
-+			      <0x07110000 0x40000>;
-+			reg-names = "ccu", "r_sram";
++		rproc: remoteproc@7010000 {
++			compatible = "allwinner,sun60i-a733-rproc";
++			reg = <0x07010000 0x1000>,
++			      <0x07110000 0x10000>,
++			      <0x07120000 0x10000>,
++			      <0x07130000 0x50000>;
++			reg-names = "cfg", "itcm", "dtcm", "sram";
++			clocks = <&r_ccu CLK_RISCV_24M>,
++			         <&r_ccu CLK_RISCV_CFG>,
++			         <&r_ccu CLK_RISCV>;
++			clock-names = "parent", "bus", "core";
++			resets = <&r_ccu RST_BUS_RISCV_CFG>;
++			reset-names = "cfg";
++			mboxes = <&msgbox 0>;
++			mbox-names = "tx";
 +			status = "okay";
 +		};
 +	};
 +};
 diff --git a/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts
 new file mode 100644
-index 0000000..255066b
+index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts
 @@ -0,0 +1,434 @@
@@ -967,10 +1004,10 @@ index 0000000..255066b
 +		};
 +
 +		rproc: remoteproc@7102000 {
-+			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
++			compatible = "allwinner,sun60i-a733-rproc";
 +			reg = <0x07102000 0x1000>,
 +			      <0x07110000 0x40000>;
-+			reg-names = "ccu", "r_sram";
++			reg-names = "cfg", "r_sram";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
 +			status = "okay";
@@ -978,4 +1015,4 @@ index 0000000..255066b
 +	};
 +};
 -- 
-2.44.0
+2.43.0

@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,552 @@
+@@ -0,0 +1,524 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -67,6 +67,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +/* RISC-V Core Configuration Registers */
 +#define RISCV_STA_ADD_OFFSET	0x0204
++
++/* XuanTie E907 core-local view of its tightly coupled memories */
++#define E907_ITCM_DA	0x00000000
++#define E907_DTCM_DA	0x00080000
 +
 +struct sunxi_rproc {
 +	struct rproc *rproc;
@@ -226,12 +230,15 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	dev_info(priv->dev, "Starting XuanTie RISC-V core at entry 0x%llx\n", (u64)rproc->bootaddr);
 +
-+	/* 1. Program the initial boot entry address into hardware register */
-+	if (priv->cfg_va)
-+		writel((u32)rproc->bootaddr, priv->cfg_va + RISCV_STA_ADD_OFFSET);
++	if (rproc->bootaddr > U32_MAX)
++		return -EINVAL;
 +
-+	/* Ensure boot address is committed before releasing core reset */
-+	wmb();
++	/* 1. Program the initial boot entry address into hardware register */
++	if (priv->cfg_va) {
++		writel((u32)rproc->bootaddr, priv->cfg_va + RISCV_STA_ADD_OFFSET);
++		/* Read back to ensure the posted write landed before reset release */
++		readl(priv->cfg_va + RISCV_STA_ADD_OFFSET);
++	}
 +
 +	/* 2. Release core reset to begin execution */
 +	if (priv->rst_core) {
@@ -257,22 +264,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	return 0;
 +}
 +
-+static int sunxi_rproc_attach(struct rproc *rproc)
-+{
-+	struct sunxi_rproc *priv = rproc->priv;
-+
-+	dev_info(priv->dev, "Attached to running XuanTie RISC-V core\n");
-+	return 0;
-+}
-+
-+static int sunxi_rproc_detach(struct rproc *rproc)
-+{
-+	struct sunxi_rproc *priv = rproc->priv;
-+
-+	dev_info(priv->dev, "Detached from running XuanTie RISC-V core\n");
-+	return 0;
-+}
-+
 +static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
@@ -290,7 +281,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
 +
-+	/* 1. Shared System SRAM C (Resource "sram") for trace0 / telemetry */
++	/* 1. Shared System SRAM C (Resource "sram" / "r_sram") */
 +	if (priv->sram_va) {
 +		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
 +			if (is_iomem)
@@ -299,7 +290,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
-+	/* 2. Dedicated RISC-V Local SRAM (Resource "r_sram") */
 +	if (priv->r_sram_va) {
 +		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
@@ -313,21 +303,31 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
-+	/* 3. Instruction TCM (Resource "itcm") */
++	/* 2. Instruction TCM (Resource "itcm" - Core VMA 0x00000000 / Host 0x07110000) */
 +	if (priv->itcm_va) {
 +		if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->itcm_va + (da - priv->itcm_phys);
 +		}
++		if (da >= E907_ITCM_DA && (da + len) <= (E907_ITCM_DA + priv->itcm_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->itcm_va + (da - E907_ITCM_DA);
++		}
 +	}
 +
-+	/* 4. Data TCM (Resource "dtcm") */
++	/* 3. Data TCM (Resource "dtcm" - Core VMA 0x00080000 / Host 0x07120000) */
 +	if (priv->dtcm_va) {
 +		if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->dtcm_va + (da - priv->dtcm_phys);
++		}
++		if (da >= E907_DTCM_DA && (da + len) <= (E907_DTCM_DA + priv->dtcm_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->dtcm_va + (da - E907_DTCM_DA);
 +		}
 +	}
 +
@@ -343,7 +343,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +{
 +	int ret = rproc_elf_load_rsc_table(rproc, fw);
 +	if (ret == -EINVAL) {
-+		dev_info(rproc->dev.parent, "No resource table found in ELF; skipping RSC parsing\n");
++		dev_dbg(rproc->dev.parent, "no resource table found in ELF\n");
 +		return 0;
 +	}
 +	return ret;
@@ -354,8 +354,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	.unprepare      = sunxi_rproc_unprepare,
 +	.start          = sunxi_rproc_start,
 +	.stop           = sunxi_rproc_stop,
-+	.attach         = sunxi_rproc_attach,
-+	.detach         = sunxi_rproc_detach,
 +	.kick           = sunxi_rproc_kick,
 +	.da_to_va       = sunxi_rproc_da_to_va,
 +	.get_boot_addr  = rproc_elf_get_boot_addr,
@@ -507,13 +505,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		priv->tx_chan = NULL;
 +	}
 +
-+	/* 7. Detached Boot Support */
-+	if (of_property_read_bool(dev->of_node, "allwinner,detached-boot"))
-+		rproc->state = RPROC_DETACHED;
-+
 +	platform_set_drvdata(pdev, rproc);
 +
-+	ret = devm_rproc_add(dev, rproc);
++	ret = rproc_add(rproc);
 +	if (ret) {
 +		dev_err(dev, "failed to register rproc device: %d\n", ret);
 +		goto err_mbox_release;
@@ -545,29 +539,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		of_reserved_mem_device_release(&pdev->dev);
 +}
 +
-+#ifdef CONFIG_PM_SLEEP
-+static int sunxi_rproc_suspend(struct device *dev)
-+{
-+	struct rproc *rproc = dev_get_drvdata(dev);
-+
-+	if (rproc->state == RPROC_RUNNING)
-+		dev_dbg(dev, "System entering suspend with active RISC-V core\n");
-+
-+	return 0;
-+}
-+
-+static int sunxi_rproc_resume(struct device *dev)
-+{
-+	return 0;
-+}
-+#endif
-+
-+static SIMPLE_DEV_PM_OPS(sunxi_rproc_pm_ops, sunxi_rproc_suspend, sunxi_rproc_resume);
-+
 +static const struct of_device_id sunxi_rproc_of_match[] = {
 +	{ .compatible = "allwinner,sun55i-a523-rproc" },
-+	{ .compatible = "allwinner,sun55i-a527-rproc" },
-+	{ .compatible = "allwinner,sun55i-t527-rproc" },
 +	{ .compatible = "allwinner,sun60i-a733-rproc" },
 +	{ /* sentinel */ }
 +};
@@ -578,7 +551,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	.remove = sunxi_rproc_remove,
 +	.driver = {
 +		.name = DRIVER_NAME,
-+		.pm = &sunxi_rproc_pm_ops,
 +		.of_match_table = sunxi_rproc_of_match,
 +	},
 +};

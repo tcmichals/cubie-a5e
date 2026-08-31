@@ -58,7 +58,7 @@ V0.93 and critical clock definitions.
 +obj-$(CONFIG_SUN60I_A733_R_CCU) += ccu-sun60i-a733-r.o
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,143 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -102,6 +102,17 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,   "r-bus-rtc",   r_apbs0_hws, 0x020c, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(r_bus_cpucfg_clk,"r-bus-cpucfg",r_apbs0_hws, 0x022c, BIT(0), CLK_IS_CRITICAL);
 +
++/* XuanTie E907 RISC-V co-processor clocks */
++static const struct clk_parent_data riscv_24m_parents[] = {
++	{ .fw_name = "hosc" },
++	{ .fw_name = "losc" },
++};
++static SUNXI_CCU_MUX_DATA_WITH_GATE(riscv_24m_clk, "riscv-24m",
++				    riscv_24m_parents, 0x0210,
++				    24, 2, BIT(31), 0);
++static SUNXI_CCU_GATE_HWS(riscv_cfg_clk, "riscv-cfg", r_ahb_hws, 0x021c, BIT(1), 0);
++static SUNXI_CCU_GATE_HWS(riscv_clk,     "riscv",     r_ahb_hws, 0x021c, BIT(0), 0);
++
 +static struct ccu_common *sun60i_a733_r_ccu_clks[] = {
 +	&r_ahb_clk.common,
 +	&r_apbs0_clk.common,
@@ -113,6 +124,9 @@ V0.93 and critical clock definitions.
 +	&r_bus_twi2_clk.common,
 +	&r_bus_rtc_clk.common,
 +	&r_bus_cpucfg_clk.common,
++	&riscv_24m_clk.common,
++	&riscv_cfg_clk.common,
++	&riscv_clk.common,
 +};
 +
 +#define CLK_R_NUMBER (CLK_R_CPUCFG + 1)
@@ -132,16 +146,26 @@ V0.93 and critical clock definitions.
 +		[CLK_R_TWI2]		= &r_bus_twi2_clk.common.hw,
 +		[CLK_RTC]		= &r_bus_rtc_clk.common.hw,
 +		[CLK_R_CPUCFG]		= &r_bus_cpucfg_clk.common.hw,
++		[CLK_RISCV_24M]		= &riscv_24m_clk.common.hw,
++		[CLK_RISCV_CFG]		= &riscv_cfg_clk.common.hw,
++		[CLK_RISCV]		= &riscv_clk.common.hw,
 +	},
 +};
 +static const struct ccu_reset_map sun60i_a733_r_ccu_resets[] = {
++	[RST_BUS_R_TIMER]	= { 0x011c, BIT(16) },
++	[RST_BUS_R_PWM]		= { 0x013c, BIT(16) },
++	[RST_BUS_R_SPI]		= { 0x015c, BIT(16) },
++	[RST_BUS_R_MBOX]	= { 0x017c, BIT(16) },
 +	[RST_BUS_R_UART0]	= { 0x018c, BIT(16) },
 +	[RST_BUS_R_UART1]	= { 0x018c, BIT(17) },
 +	[RST_BUS_R_TWI0]	= { 0x019c, BIT(16) },
 +	[RST_BUS_R_TWI1]	= { 0x019c, BIT(17) },
 +	[RST_BUS_R_TWI2]	= { 0x019c, BIT(18) },
++	[RST_BUS_R_IRRX]	= { 0x01cc, BIT(16) },
 +	[RST_BUS_RTC]		= { 0x020c, BIT(16) },
++	[RST_BUS_RISCV_CFG]	= { 0x021c, BIT(16) },
 +	[RST_BUS_R_CPUCFG]	= { 0x022c, BIT(16) },
++	[RST_BUS_MODULE]	= { 0x0260, BIT(0) },
 +};
 +
 +static const struct sunxi_ccu_desc sun60i_a733_r_ccu_desc = {
@@ -191,7 +215,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,349 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -313,6 +337,18 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(usb_ohci1_clk, "usb-ohci1", ahb_hws, 0x130c, BIT(4), 0);
 +static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), 0);
 +
++/*
++ * The MSI-Lite2 interconnect slice carries all CPU MMIO traffic to the
++ * USB subsystem. Accessing any USB controller or PHY register while
++ * this gate is closed stalls the bus, so it must stay enabled.
++ */
++static SUNXI_CCU_GATE_HWS(bus_msi_lite2_clk, "bus-msi-lite2", ahb_hws,
++			  0x05a4, BIT(0), CLK_IS_CRITICAL);
++
++/* 24 MHz reference for the USB PHY resistance calibration (DCAP). */
++static SUNXI_CCU_GATE_DATA(res_dcap_24m_clk, "res-dcap-24m", osc24M,
++			   0x1a00, BIT(3), CLK_IS_CRITICAL);
++
 +static const struct clk_parent_data mmc_parents[] = {
 +	{ .fw_name = "hosc" },
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
@@ -383,6 +419,8 @@ V0.93 and critical clock definitions.
 +	&bus_usb1_clk.common,
 +	&usb_ohci1_clk.common,
 +	&bus_usb2_clk.common,
++	&bus_msi_lite2_clk.common,
++	&res_dcap_24m_clk.common,
 +	&mmc0_clk.common,
 +	&mmc1_clk.common,
 +	&mmc2_clk.common,
@@ -390,7 +428,7 @@ V0.93 and critical clock definitions.
 +	&spi1_clk.common,
 +};
 +
-+#define CLK_NUMBER (CLK_USB_PHY1 + 1)
++#define CLK_NUMBER (CLK_RES_DCAP_24M + 1)
 +static struct {
 +	unsigned int num;
 +	struct clk_hw *hws[CLK_NUMBER];
@@ -438,6 +476,8 @@ V0.93 and critical clock definitions.
 +		[CLK_SPI0]		= &spi0_clk.common.hw,
 +		[CLK_SPI1]		= &spi1_clk.common.hw,
 +		[CLK_USB_PHY1]		= NULL,
++		[CLK_BUS_MSI_LITE2]	= &bus_msi_lite2_clk.common.hw,
++		[CLK_RES_DCAP_24M]	= &res_dcap_24m_clk.common.hw,
 +	},
 +};
 +
@@ -469,6 +509,8 @@ V0.93 and critical clock definitions.
 +	[RST_BUS_USB0]	= { 0x1304, BIT(20) | BIT(16) },
 +	[RST_BUS_USB1]	= { 0x130c, BIT(20) | BIT(16) },
 +	[RST_BUS_USB2]	= { 0x135c, BIT(16) },
++	[RST_USB_PHY0]	= { 0x1300, BIT(30) },
++	[RST_USB_PHY1]	= { 0x1308, BIT(30) },
 +};
 +
 +static const struct sunxi_ccu_desc sun60i_a733_ccu_desc = {
@@ -484,6 +526,26 @@ V0.93 and critical clock definitions.
 +	void __iomem *reg = devm_platform_ioremap_resource(pdev, 0);
 +	if (IS_ERR(reg))
 +		return PTR_ERR(reg);
++
++	/*
++	 * Open the key-protected interconnect master gates. These are
++	 * security/fabric gates, not rate clocks, and the BSP kernel keeps
++	 * every one of them enabled (CLK_IS_CRITICAL or CLK_IGNORE_UNUSED
++	 * in ccu-sun60iw2.c). Accessing a peripheral behind a closed gate
++	 * stalls the bus with no fault, so mirror the BSP state once at
++	 * probe time, preserving whatever the boot chain already set:
++	 * - 0x05c0 AHB_GATE_EN     (key 0x10000ff):  cpus/store/msilite0/
++	 *   usb/serdes/gpu/npu/de/video/ve, bits 28,24,16,9..0
++	 * - 0x05e0 MBUS_MAT_GATING (key 0x41055800): msilite2/store/
++	 *   msilite0/serdes/vid-in/npu/gpu/ve/de/iommu, bits 31..28,24,18,
++	 *   16,14,12,11,1,0
++	 * - 0x05e4 MBUS_GATE_EN    (key 0x40302):    ve/gmac/isp/csi/nand/
++	 *   dma/ce, bits 18,12,11,9,8,5,3..0
++	 */
++	writel(readl(reg + 0x05C0) | 0x110103FF, reg + 0x05C0);
++	writel(readl(reg + 0x05E0) | 0xF1055803, reg + 0x05E0);
++	writel(readl(reg + 0x05E4) | 0x00041B2F, reg + 0x05E4);
++
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);
 +}
 +
@@ -516,7 +578,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-ccu.h
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,91 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
@@ -604,6 +666,8 @@ V0.93 and critical clock definitions.
 +#define CLK_USB_OHCI1		80
 +#define CLK_USB_PHY0		81
 +#define CLK_USB_PHY1		82
++#define CLK_BUS_MSI_LITE2	83
++#define CLK_RES_DCAP_24M	84
 +
 +#endif
 --- /dev/null
@@ -693,6 +757,8 @@ V0.93 and critical clock definitions.
 +#define RST_BUS_USB0		39
 +#define RST_BUS_USB1		40
 +#define RST_BUS_USB2		41
++#define RST_USB_PHY0		42
++#define RST_USB_PHY1		43
 +
 +#endif
 --- /dev/null
