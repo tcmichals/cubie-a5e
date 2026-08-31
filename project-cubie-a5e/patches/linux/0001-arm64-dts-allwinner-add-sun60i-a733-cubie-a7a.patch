@@ -380,7 +380,7 @@ index 0000000..1234567
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
 +			#phy-cells = <1>;
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ehci0: usb@4101000 {
@@ -391,7 +391,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ohci0: usb@4101400 {
@@ -402,7 +402,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ehci1: usb@4200000 {
@@ -413,7 +413,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ohci1: usb@4200400 {
@@ -424,7 +424,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		dwc3: usb@6a00000 {
@@ -547,7 +547,7 @@ index 0000000..1234567
 +		rproc: remoteproc@7010000 {
 +			compatible = "allwinner,sun60i-a733-rproc";
 +			reg = <0x07010000 0x1000>,
-+			      <0x07110000 0x40000>;
++			      <0x07280000 0x40000>;
 +			reg-names = "cfg", "itcm";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
