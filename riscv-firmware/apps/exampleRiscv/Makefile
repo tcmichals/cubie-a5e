@@ -1,8 +1,11 @@
 # Makefile for XuanTie E907 RISC-V exampleRiscv Application
 
-CROSS_COMPILE ?= /home/tcmichals/.tools/xpack-riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-
+CROSS_COMPILE ?= /home/tcmichals/tools/Xilinx/2025.2/gnu/riscv/lin/bin/riscv64-unknown-elf-
+ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
+CROSS_COMPILE := /home/tcmichals/.tools/xpack-riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-
 ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
 CROSS_COMPILE := riscv-none-elf-
+endif
 endif
 
 CC      = $(CROSS_COMPILE)gcc
@@ -11,16 +14,16 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 
-ARCH_FLAGS = -march=rv32imac_zicsr -mabi=ilp32 -mcmodel=medany
+ARCH_FLAGS = -march=rv32imafdc -mabi=ilp32d -mcmodel=medany
 OPT_FLAGS  = -O2 -g
 
 INCLUDES = -I. -I../../common
 
-COMMON_FLAGS = $(ARCH_FLAGS) $(OPT_FLAGS) $(INCLUDES) -Wall -ffreestanding -ffunction-sections -fdata-sections -flto --specs=nano.specs
+COMMON_FLAGS = $(ARCH_FLAGS) $(OPT_FLAGS) $(INCLUDES) -Wall -ffreestanding -ffunction-sections -fdata-sections -flto
 CFLAGS       = $(COMMON_FLAGS)
 CXXFLAGS     = $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics
 
-LDFLAGS      = -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections -flto --specs=nano.specs -nostartfiles
+LDFLAGS      = -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles
 
 SRCS_S   = startup.S
 SRCS_C   = resource_table.c

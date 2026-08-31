@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define TRACE_BUF_DA            0x00038000  /* 256 KB RISC-V SRAM */
+#define TRACE_BUF_DA            0x0008F000  /* Top of XuanTie E907 DTCM (0x00080000 - 0x0008FFFF) */
 #define TRACE_BUF_LEN           0x1000      /* 4 KB Trace Buffer */
 
 /* Resource Types */

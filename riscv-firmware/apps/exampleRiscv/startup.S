@@ -43,7 +43,20 @@ _start:
     li t0, (3 << 13)
     csrs mstatus, t0
 
-    /* 5. Clear BSS */
+    /* 5. Copy initialized data from ITCM load image to DTCM runtime address */
+    la a0, _sram_data_start
+    la a1, _data_start
+    la a2, _data_end
+.Lcopy_data:
+    bgeu a1, a2, .Lcopy_data_done
+    lw t0, 0(a0)
+    sw t0, 0(a1)
+    addi a0, a0, 4
+    addi a1, a1, 4
+    j .Lcopy_data
+.Lcopy_data_done:
+
+    /* 6. Clear BSS in DTCM */
     la a0, _bss_start
     la a1, _bss_end
 .Lclear_bss:
@@ -53,7 +66,7 @@ _start:
     j .Lclear_bss
 .Lclear_bss_done:
 
-    /* 6. Call main() */
+    /* 7. Call main() */
     call main
 
     /* 7. Hang loop if main returns */
