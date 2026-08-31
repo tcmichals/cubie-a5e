@@ -379,7 +379,7 @@ index 0000000..1234567
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
 +			#phy-cells = <1>;
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ehci0: usb@4101000 {
@@ -390,7 +390,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ohci0: usb@4101400 {
@@ -401,7 +401,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ehci1: usb@4200000 {
@@ -412,7 +412,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ohci1: usb@4200400 {
@@ -423,7 +423,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		dwc3: usb@6a00000 {
