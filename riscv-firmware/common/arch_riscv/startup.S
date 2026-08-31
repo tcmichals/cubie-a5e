@@ -1,120 +1,197 @@
 /*
- * Startup & CRT0 Bootstrap for XuanTie E907 RISC-V Co-Processor
- * Features:
- *   - Vector table at ITCM base (0x00000000)
- *   - Fastcode copying from SRAM to ITCM
- *   - Data copying from SRAM to DTCM
- *   - BSS zeroing in DTCM
- *   - Hardware Machine Software Interrupt (MSIP) dispatcher
- *   - Crash Dump register snapshot on fatal trap
+ * XuanTie E907 / RISC-V Unified Startup & Trap Frame
+ * - .text.sram_trampoline : 8-byte reset entry in SRAM (jumps directly to DRAM)
+ * - .text.dram_init       : Executes _start, relocations, and C++ init from DRAM
+ * - .vectors              : Copied to 0x00000000 (ITCM) for 0-wait trap handling
  */
 
-    .section .vectors, "ax"
-    .align 6
-    .globl _vectors
-    .globl _start
+    /* ============================================================= */
+    /* SRAM Trampoline: Reset entry point at SRAM Base (0x07140000)  */
+    /* ============================================================= */
+    .section .text.sram_trampoline, "ax", @progbits
+    .global _sram_entry
+    .type _sram_entry, @function
 
-_vectors:
-    j _start                /* Reset Handler */
-    .align 2
-    j _trap_entry           /* Trap / Exception Handler */
-    .align 2
-    j _trap_entry
-    .align 2
-    j _software_irq_entry   /* Machine Software Interrupt (MSIP) */
-    .align 2
-    j _trap_entry
-    .align 2
-    j _trap_entry
-    .align 2
-    j _trap_entry
-    .align 2
-    j _timer_irq_entry      /* Machine Timer Interrupt */
-    .align 2
-    j _trap_entry
-    .align 2
-    j _trap_entry
-    .align 2
-    j _trap_entry
-    .align 2
-    j _external_irq_entry   /* Machine External Interrupt (PLIC) */
+_sram_entry:
+    /* Absolute jump from SRAM to DRAM init entry point */
+    la t0, _start
+    jr t0
 
-    .section .text.startup, "ax"
-    .align 2
+    .size _sram_entry, . - _sram_entry
+
+
+    /* ============================================================= */
+    /* DRAM Init: Runs CRT0, copy loops, and C++ init from DRAM      */
+    /* ============================================================= */
+    .section .text.dram_init, "ax", @progbits
+    .global _start
+    .type _start, @function
+
 _start:
-    /* Disable interrupts during bootstrap */
+    /* 1. Disable all interrupts during early initialization */
     csrw mie, zero
     csrw mip, zero
 
-    /* Set global pointer and stack pointer in DTCM */
+    /* 2. Setup Hardware Stack Pointer in DTCM (0x00080000) */
+    la sp, _estack
+
+    /* 3. Setup Global Pointer anchored to SRAM .data + 0x800 */
 .option push
 .option norelax
     la gp, __global_pointer$
 .option pop
-    la sp, _estack
 
-    /* Set trap vector base address */
-    la t0, _trap_entry
-    csrw mtvec, t0
+    /* 4. Enable FPU (FS = 0b11) if hardware floating point present */
+    li t0, (3 << 13)
+    csrs mstatus, t0
 
-    /* Copy .fastcode section from SRAM C to ITCM */
+    /* ============================================================= */
+    /* Relocation: Copy from DRAM (LMA) into ITCM / SRAM (VMA)       */
+    /* ============================================================= */
+
+    /* Copy .vectors -> ITCM (0x00000000) */
+    la a0, _vectors_start
+    la a1, _vectors_end
+    la a2, _vectors_load
+.Lcopy_vectors:
+    bgeu a0, a1, .Lcopy_vectors_done
+    lw t0, 0(a2)
+    sw t0, 0(a0)
+    addi a0, a0, 4
+    addi a2, a2, 4
+    j .Lcopy_vectors
+.Lcopy_vectors_done:
+
+    /* Copy .fastcode -> ITCM */
     la a0, _fastcode_start
     la a1, _fastcode_end
     la a2, _fastcode_load
-1:
-    bgeu a0, a1, 2f
+.Lcopy_fastcode:
+    bgeu a0, a1, .Lcopy_fastcode_done
     lw t0, 0(a2)
     sw t0, 0(a0)
     addi a0, a0, 4
     addi a2, a2, 4
-    j 1b
-2:
+    j .Lcopy_fastcode
+.Lcopy_fastcode_done:
 
-    /* Copy .data section from SRAM C to DTCM */
+    /* Copy .text -> SRAM C */
+    la a0, _stext
+    la a1, _etext
+    la a2, _text_load
+.Lcopy_text:
+    bgeu a0, a1, .Lcopy_text_done
+    lw t0, 0(a2)
+    sw t0, 0(a0)
+    addi a0, a0, 4
+    addi a2, a2, 4
+    j .Lcopy_text
+.Lcopy_text_done:
+
+    /* Copy .rodata -> SRAM C */
+    la a0, _srodata
+    la a1, _erodata
+    la a2, _rodata_load
+.Lcopy_rodata:
+    bgeu a0, a1, .Lcopy_rodata_done
+    lw t0, 0(a2)
+    sw t0, 0(a0)
+    addi a0, a0, 4
+    addi a2, a2, 4
+    j .Lcopy_rodata
+.Lcopy_rodata_done:
+
+    /* Copy .data -> SRAM C */
     la a0, _sdata
     la a1, _edata
     la a2, _sidata
-3:
-    bgeu a0, a1, 4f
+.Lcopy_data:
+    bgeu a0, a1, .Lcopy_data_done
     lw t0, 0(a2)
     sw t0, 0(a0)
     addi a0, a0, 4
     addi a2, a2, 4
-    j 3b
-4:
+    j .Lcopy_data
+.Lcopy_data_done:
 
-    /* Zero-out .bss section in DTCM */
+    /* ============================================================= */
+    /* Zero Initialization: .bss, .dtcm, and .dram_bss               */
+    /* ============================================================= */
+
+    /* Zero .bss in SRAM C */
     la a0, _sbss
     la a1, _ebss
-5:
-    bgeu a0, a1, 6f
+.Lzero_bss:
+    bgeu a0, a1, .Lzero_bss_done
     sw zero, 0(a0)
     addi a0, a0, 4
-    j 5b
-6:
+    j .Lzero_bss
+.Lzero_bss_done:
 
-    /* Enable Machine Software Interrupts (MSIE) and External Interrupts (MEIE) */
-    li t0, (1 << 3) | (1 << 11)  /* MSIE | MEIE */
-    csrs mie, t0
+    /* Zero .dtcm scratchpad in DTCM */
+    la a0, _sdtcm
+    la a1, _edtcm
+.Lzero_dtcm:
+    bgeu a0, a1, .Lzero_dtcm_done
+    sw zero, 0(a0)
+    addi a0, a0, 4
+    j .Lzero_dtcm
+.Lzero_dtcm_done:
 
-    /* Enable global interrupts (MIE) in mstatus */
-    li t0, (1 << 3)
-    csrs mstatus, t0
+    /* Zero .dram_bss in DRAM */
+    la a0, _sdram_bss
+    la a1, _edram_bss
+.Lzero_dram:
+    bgeu a0, a1, .Lzero_dram_done
+    sw zero, 0(a0)
+    addi a0, a0, 4
+    j .Lzero_dram
+.Lzero_dram_done:
 
-    /* Jump to C++ main */
-    call main
+    /* ============================================================= */
+    /* Core Trap & Interrupt Configuration                          */
+    /* ============================================================= */
 
-    /* If main returns, loop safely in low-power WFI */
-_halt_loop:
+    /* Point mtvec CSR to vector entry in ITCM (0x00000000) */
+    la t0, default_trap_entry
+    csrw mtvec, t0
+
+    /* Instruction pipeline barrier */
+    fence.i
+
+    /* ============================================================= */
+    /* C++ Runtime Construction & Execution                          */
+    /* ============================================================= */
+
+    /* Execute global static C++ constructors (tables live in DRAM) */
+    la t0, __libc_init_array
+    jalr ra, t0, 0
+
+    /* Jump to C++ Application Entry in SRAM */
+    la t0, main
+    jalr ra, t0, 0
+
+    /* Call destructors if main returns */
+    la t0, __libc_fini_array
+    jalr ra, t0, 0
+
+.Lhang:
     wfi
-    j _halt_loop
+    j .Lhang
 
-/*
- * Machine Software Interrupt (MSIP) Entry
- */
-    .section .text.fastcode, "ax"
-    .align 2
-_software_irq_entry:
+    .size _start, . - _start
+
+
+/* ================================================================= */
+/* Hardware Trap Vector Entry & Context Preservation Frame (ITCM)    */
+/* ================================================================= */
+    .section .vectors, "ax", @progbits
+    .align 6
+    .global default_trap_entry
+    .type default_trap_entry, @function
+
+default_trap_entry:
+    /* Allocate 64 bytes on DTCM stack and save caller-saved registers */
     addi sp, sp, -64
     sw ra,  0(sp)
     sw t0,  4(sp)
@@ -133,9 +210,12 @@ _software_irq_entry:
     sw t5, 56(sp)
     sw t6, 60(sp)
 
-    /* Call C++ MSIP handler to dispatch AbstractX wakeup queue */
-    call msip_dispatch_events
+    /* Pass mcause (a0) and mepc (a1) to C++ dispatcher */
+    csrr a0, mcause
+    csrr a1, mepc
+    call riscv_trap_dispatcher
 
+    /* Restore caller-saved registers */
     lw ra,  0(sp)
     lw t0,  4(sp)
     lw t1,  8(sp)
@@ -153,137 +233,8 @@ _software_irq_entry:
     lw t5, 56(sp)
     lw t6, 60(sp)
     addi sp, sp, 64
+
+    /* Return from Machine Trap / Interrupt */
     mret
-
-/*
- * External Interrupt (PLIC) Entry
- */
-    .section .text.fastcode, "ax"
-    .align 2
-_external_irq_entry:
-    addi sp, sp, -64
-    sw ra,  0(sp)
-    sw t0,  4(sp)
-    sw t1,  8(sp)
-    sw t2, 12(sp)
-    sw a0, 16(sp)
-    sw a1, 20(sp)
-    sw a2, 24(sp)
-    sw a3, 28(sp)
-    sw a4, 32(sp)
-    sw a5, 36(sp)
-    sw a6, 40(sp)
-    sw a7, 44(sp)
-    sw t3, 48(sp)
-    sw t4, 52(sp)
-    sw t5, 56(sp)
-    sw t6, 60(sp)
-
-    call plic_dispatch_interrupt
-
-    lw ra,  0(sp)
-    lw t0,  4(sp)
-    lw t1,  8(sp)
-    lw t2, 12(sp)
-    lw a0, 16(sp)
-    lw a1, 20(sp)
-    lw a2, 24(sp)
-    lw a3, 28(sp)
-    lw a4, 32(sp)
-    lw a5, 36(sp)
-    lw a6, 40(sp)
-    lw a7, 44(sp)
-    lw t3, 48(sp)
-    lw t4, 52(sp)
-    lw t5, 56(sp)
-    lw t6, 60(sp)
-    addi sp, sp, 64
-    mret
-
-/*
- * Timer Interrupt Entry
- */
-    .section .text.fastcode, "ax"
-    .align 2
-_timer_irq_entry:
-    addi sp, sp, -64
-    sw ra,  0(sp)
-    sw t0,  4(sp)
-    sw t1,  8(sp)
-    sw t2, 12(sp)
-    sw a0, 16(sp)
-    sw a1, 20(sp)
-    sw a2, 24(sp)
-    sw a3, 28(sp)
-    sw a4, 32(sp)
-    sw a5, 36(sp)
-    sw a6, 40(sp)
-    sw a7, 44(sp)
-    sw t3, 48(sp)
-    sw t4, 52(sp)
-    sw t5, 56(sp)
-    sw t6, 60(sp)
-
-    call timer_dispatch_interrupt
-
-    lw ra,  0(sp)
-    lw t0,  4(sp)
-    lw t1,  8(sp)
-    lw t2, 12(sp)
-    lw a0, 16(sp)
-    lw a1, 20(sp)
-    lw a2, 24(sp)
-    lw a3, 28(sp)
-    lw a4, 32(sp)
-    lw a5, 36(sp)
-    lw a6, 40(sp)
-    lw a7, 44(sp)
-    lw t3, 48(sp)
-    lw t4, 52(sp)
-    lw t5, 56(sp)
-    lw t6, 60(sp)
-    addi sp, sp, 64
-    mret
-
-/*
- * Fatal Trap / Hard Fault Entry
- * Saves all registers into Crash Dump Area at 0x07130000 in SRAM C
- */
-    .section .text.fastcode, "ax"
-    .align 2
-_trap_entry:
-    /* Check if it is an interrupt (bit 31 of mcause == 1) */
-    csrr t0, mcause
-    bgez t0, _fatal_exception
-
-    /* If software interrupt handled in direct mtvec mode */
-    li t1, 0x80000003
-    beq t0, t1, _software_irq_entry
-
-    /* If external interrupt */
-    li t1, 0x8000000B
-    beq t0, t1, _external_irq_entry
-
-    mret
-
-_fatal_exception:
-    /* Write Magic 'CRSH' and Register State to 0x07130000 */
-    li t0, 0x07130000
-    li t1, 0x48535243       /* Magic: 'CRSH' */
-    sw t1, 0(t0)
-
-    csrr t1, mepc
-    sw t1, 4(t0)
-    csrr t1, mcause
-    sw t1, 8(t0)
-    csrr t1, mtval
-    sw t1, 12(t0)
-    sw ra, 16(t0)
-    sw sp, 20(t0)
-    sw gp, 24(t0)
-    sw a0, 28(t0)
-    sw a1, 32(t0)
-
-_fatal_hang:
-    wfi
-    j _fatal_hang
+    .size default_trap_entry, . - default_trap_entry
+    

@@ -1,17 +1,13 @@
 /*
- * resource_table.c - RemoteProc resource table for Allwinner XuanTie E907
- *
- * Declares one RSC_TRACE buffer at 0x00029000 in Shared SRAM C so the ARM host
- * can read RISC-V printk and telemetry strings from debugfs
- * (/sys/kernel/debug/remoteproc/remoteproc0/trace0) without colliding with
- * the binary telemetry block at 0x00028000.
+ * resource_table.c - RemoteProc Resource Table for XuanTie E907
+ * Declares one RSC_TRACE buffer at 0x00038000 in 256 KB RISC-V SRAM
  */
 
 #include <stdint.h>
 #include <stddef.h>
 
-#define TRACE_BUF_DA            0x00029000  /* Dedicated trace buffer in Shared SRAM C */
-#define TRACE_BUF_LEN           0x1000      /* 4 KB trace log window */
+#define TRACE_BUF_DA            0x00038000  /* 256 KB RISC-V SRAM (Host: 0x072B8000) */
+#define TRACE_BUF_LEN           0x1000      /* 4 KB Trace Buffer */
 
 /* Resource Types */
 #define RSC_CARVEOUT  0
@@ -27,19 +23,14 @@ struct fw_rsc_trace {
     char     name[32];
 } __attribute__((packed));
 
-/* Resource Table with 1 entry: Trace Buffer */
 struct cubie_resource_table {
-    /* header */
     uint32_t ver;
     uint32_t num;
     uint32_t reserved[2];
-    /* offsets to each entry */
     uint32_t offset[1];
-    /* entry 0: trace */
     struct fw_rsc_trace trace;
 } __attribute__((packed));
 
-/* Place the table in .resource_table ELF section with used attribute */
 __attribute__((used, section(".resource_table"), aligned(4)))
 const struct cubie_resource_table resource_table = {
     .ver        = 1,
@@ -57,7 +48,6 @@ const struct cubie_resource_table resource_table = {
     },
 };
 
-/* ---- Simple trace printf into the trace buffer ---- */
 static char *trace_buf = (char *)TRACE_BUF_DA;
 static int   trace_pos = 0;
 

@@ -17,13 +17,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  create mode 100644 arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
  create mode 100644 arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts
 
-diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
-index 1234567..89abcdef 100644
 --- a/arch/arm64/boot/dts/allwinner/Makefile
 +++ b/arch/arm64/boot/dts/allwinner/Makefile
-@@ -40,2 +40,4 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-transpeed-8k618-t.dtb
- dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h728-x96q-pro-plus.dtb
- dtb-$(CONFIG_ARCH_SUNXI) += sun55i-a523-cubie-a5e.dtb
+@@ -58,3 +58,5 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-a527-cubie-a5e.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-h728-x96qpro+.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-avaota-a1.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-orangepi-4a.dtb
 +dtb-$(CONFIG_ARCH_SUNXI) += sun60i-a733-cubie-a7a.dtb
 +dtb-$(CONFIG_ARCH_SUNXI) += sun60i-a733-cubie-a7z.dtb
 diff --git a/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
