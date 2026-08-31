@@ -11,8 +11,8 @@ MMIO resource and program the RGMII interface mode, delay chain, and internal cl
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 108 ++++++++++++++++++----
- 1 file changed, 91 insertions(+), 17 deletions(-)
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 117 ++++++++++++++++++----
+ 1 file changed, 100 insertions(+), 17 deletions(-)
 
 --- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
@@ -32,7 +32,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  #define SYSCON_REG		0x34
  
-@@ -37,17 +39,68 @@
+@@ -37,17 +39,70 @@
  #define SYSCON_ETCS_EXT_GMII	0x1
  #define SYSCON_ETCS_INT_GMII	0x2
  
@@ -41,6 +41,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +/* GMAC210 Clock Gate Register at syscfg + 0x80 */
 +#define SUNXI_DWMAC210_CLK_GATE_CFG_REG	0x80
 +#define SUNXI_DWMAC210_CLK_GATE_ALL	0xF8
++#define SUNXI_DWMAC210_CFG_ETXDC_H	GENMASK(17, 16)
++#define SUNXI_DWMAC210_CFG_ETXDC_L	GENMASK(12, 10)
 +
 +struct sun55i_gmac_priv {
 +	struct platform_device *pdev;
@@ -51,7 +53,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +};
 +
 +static int sun55i_gmac_init(struct device *dev, void *priv)
-+{
+ {
 +	struct sun55i_gmac_priv *gmac = priv;
 +
 +	if (gmac->syscfg_base) {
@@ -79,7 +81,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +static int sun55i_gmac200_set_syscon(struct platform_device *pdev,
 +				     struct plat_stmmacenet_data *plat,
 +				     struct sun55i_gmac_priv *gmac)
- {
++{
 +	struct device *dev = &pdev->dev;
  	struct device_node *node = dev->of_node;
 -	struct regmap *regmap;
@@ -108,7 +110,34 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  	if (!of_property_read_u32(node, "tx-internal-delay-ps", &val)) {
  		if (val % 100)
-@@ -95,17 +148,34 @@
+@@ -55,12 +110,21 @@
+ 					     "tx-delay must be a multiple of 100ps\n");
+ 		val /= 100;
+ 		dev_dbg(dev, "set tx-delay to %x\n", val);
+-		if (!FIELD_FIT(SYSCON_ETXDC_MASK, val))
+-			return dev_err_probe(dev, -EINVAL,
+-					     "TX clock delay exceeds maximum (%u00ps > %lu00ps)\n",
+-					     val, FIELD_MAX(SYSCON_ETXDC_MASK));
++		if (gmac->is_gmac210) {
++			if (val > 31)
++				return dev_err_probe(dev, -EINVAL,
++						     "TX clock delay exceeds maximum (%u00ps > 3100ps)\n",
++						     val);
++			reg |= FIELD_PREP(SUNXI_DWMAC210_CFG_ETXDC_H, val >> 3);
++			reg |= FIELD_PREP(SUNXI_DWMAC210_CFG_ETXDC_L, val & 0x7);
++		} else {
++			if (!FIELD_FIT(SYSCON_ETXDC_MASK, val))
++				return dev_err_probe(dev, -EINVAL,
++						     "TX clock delay exceeds maximum (%u00ps > %lu00ps)\n",
++						     val, FIELD_MAX(SYSCON_ETXDC_MASK));
+ 
+-		reg |= FIELD_PREP(SYSCON_ETXDC_MASK, val);
++			reg |= FIELD_PREP(SYSCON_ETXDC_MASK, val);
++		}
+ 	}
+ 
+ 	if (!of_property_read_u32(node, "rx-internal-delay-ps", &val)) {
+@@ -95,17 +159,34 @@
  				     phy_modes(plat->phy_interface));
  	}
  
@@ -147,7 +176,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	struct device *dev = &pdev->dev;
  	struct clk *clk;
  	int ret;
-@@ -118,11 +188,24 @@
+@@ -118,11 +199,24 @@
  	if (IS_ERR(plat_dat))
  		return PTR_ERR(plat_dat);
  
@@ -173,7 +202,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	if (ret)
  		return ret;
  
-@@ -140,6 +223,8 @@
+@@ -140,6 +234,8 @@
  
  static const struct of_device_id sun55i_gmac200_match[] = {
  	{ .compatible = "allwinner,sun55i-a523-gmac200" },
