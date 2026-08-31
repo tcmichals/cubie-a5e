@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,510 @@
+@@ -0,0 +1,492 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -262,66 +262,40 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
 +
++	if (is_iomem)
++		*is_iomem = false;
++
 +	/* 1. Shared System SRAM C (Resource "sram" / "r_sram") */
 +	if (priv->sram_va) {
-+		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size))
 +			return priv->sram_va + (da - priv->sram_phys);
-+		}
-+		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->sram_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->sram_size))
 +			return priv->sram_va + (da - 0x00020000);
-+		}
 +	}
 +
 +	if (priv->r_sram_va) {
-+		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size))
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
-+		}
-+		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size)
 +			return priv->r_sram_va + da;
-+		}
 +	}
 +
 +	/* 2. Instruction TCM (Resource "itcm" - Core VMA 0x00000000 / Host 0x07110000) */
 +	if (priv->itcm_va) {
-+		if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size))
 +			return priv->itcm_va + (da - priv->itcm_phys);
-+		}
-+		if (da >= E907_ITCM_DA && (da + len) <= (E907_ITCM_DA + priv->itcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= E907_ITCM_DA && (da + len) <= (E907_ITCM_DA + priv->itcm_size))
 +			return priv->itcm_va + (da - E907_ITCM_DA);
-+		}
 +	}
 +
 +	/* 3. Data TCM (Resource "dtcm" - Core VMA 0x00080000 / Host 0x07120000) */
 +	if (priv->dtcm_va) {
-+		if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size))
 +			return priv->dtcm_va + (da - priv->dtcm_phys);
-+		}
-+		if (da >= E907_DTCM_DA && (da + len) <= (E907_DTCM_DA + priv->dtcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
++		if (da >= E907_DTCM_DA && (da + len) <= (E907_DTCM_DA + priv->dtcm_size))
 +			return priv->dtcm_va + (da - E907_DTCM_DA);
-+		}
 +	}
 +
-+	/*
-+	 * Return NULL to delegate all DRAM carveouts (vrings, buffers,
-+	 * code/data placed in DDR) directly to the remoteproc core's
-+	 * internal carveout table.
-+	 */
 +	return NULL;
 +}
 +
@@ -368,7 +342,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->r_sram_phys = res->start;
 +		priv->r_sram_size = resource_size(res);
-+		priv->r_sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->r_sram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		if (!priv->r_sram_va)
++			priv->r_sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->r_sram_va)
 +			return -ENOMEM;
 +	}
@@ -378,7 +354,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->itcm_phys = res->start;
 +		priv->itcm_size = resource_size(res);
-+		priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->itcm_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		if (!priv->itcm_va)
++			priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->itcm_va)
 +			dev_warn(dev, "failed to map 'itcm' resource\n");
 +	}
@@ -388,7 +366,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->dtcm_phys = res->start;
 +		priv->dtcm_size = resource_size(res);
-+		priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->dtcm_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		if (!priv->dtcm_va)
++			priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->dtcm_va)
 +			dev_warn(dev, "failed to map 'dtcm' resource\n");
 +	}
@@ -398,7 +378,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->sram_phys = res->start;
 +		priv->sram_size = resource_size(res);
-+		priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->sram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		if (!priv->sram_va)
++			priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->sram_va)
 +			dev_warn(dev, "failed to map 'sram' resource; trace0 will be unavailable\n");
 +	}
