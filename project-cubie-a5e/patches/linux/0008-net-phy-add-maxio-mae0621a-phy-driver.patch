@@ -41,7 +41,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  obj-$(CONFIG_NCN26000_PHY)	+= ncn26000.o
 --- /dev/null
 +++ b/drivers/net/phy/maxio.c
-@@ -0,0 +1,420 @@
+@@ -0,0 +1,401 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/* drivers/net/phy/maxio.c
 + *
@@ -257,26 +257,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +static int maxio_mae0621a_status(struct phy_device *phydev)
 +{
-+	int err, old_link = phydev->link;
-+
-+	err = genphy_update_link(phydev);
-+	if (err)
-+		return err;
-+
-+	if (phydev->autoneg == AUTONEG_ENABLE && old_link && phydev->link)
-+		return 0;
-+
-+	phydev->speed = SPEED_UNKNOWN;
-+	phydev->duplex = DUPLEX_UNKNOWN;
-+	phydev->pause = 0;
-+	phydev->asym_pause = 0;
-+
-+	phy_resolve_aneg_linkmode_maxio(phydev);
-+
-+	if (phydev->autoneg == AUTONEG_ENABLE)
-+		phy_resolve_link_compatibility_maxio(phydev);
-+
-+	return 0;
++	return genphy_read_status(phydev);
 +}
 +
 +static void maxio_mae0621a_remove(struct phy_device *phydev)
