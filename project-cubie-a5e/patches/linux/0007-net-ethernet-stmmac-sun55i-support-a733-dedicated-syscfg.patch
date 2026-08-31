@@ -6,40 +6,79 @@ are located in dedicated per-GMAC memory resources (e.g. 0x04508000 for GMAC0)
 rather than the global system control syscon block (0x03000034).
 
 When no 'syscon' property is present, look up the dedicated 'syscfg' (or secondary)
-MMIO resource and program the RGMII interface mode and clock delay parameters.
+MMIO resource and program the RGMII interface mode, delay chain, and internal clock gates
+(syscfg + 0x80) via init/exit callbacks. Also set MDC clk_csr = 4.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 37 ++++++++++++++---
- 1 file changed, 31 insertions(+), 6 deletions(-)
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 95 ++++++++++++++++++----
+ 1 file changed, 78 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 --- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
-@@ -37,17 +37,32 @@
+@@ -37,17 +37,59 @@
  #define SYSCON_ETCS_EXT_GMII	0x1
  #define SYSCON_ETCS_INT_GMII	0x2
  
 -static int sun55i_gmac200_set_syscon(struct device *dev,
+-				     struct plat_stmmacenet_data *plat)
++/* GMAC210 Clock Gate Register at syscfg + 0x80 */
++#define SUNXI_DWMAC210_CLK_GATE_CFG_REG	0x80
++#define SUNXI_DWMAC210_CLK_GATE_ALL	0xF8
++
++struct sun55i_gmac_priv {
++	struct platform_device *pdev;
++	struct regmap *regmap;
++	void __iomem *syscfg_base;
++	u32 syscon_val;
++	bool is_gmac210;
++};
++
++static int sun55i_gmac_init(struct device *dev, void *priv)
+ {
++	struct sun55i_gmac_priv *gmac = priv;
++
++	if (gmac->syscfg_base) {
++		writel(gmac->syscon_val, gmac->syscfg_base + 0x00);
++		if (gmac->is_gmac210)
++			writel(SUNXI_DWMAC210_CLK_GATE_ALL, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
++	} else if (gmac->regmap) {
++		regmap_write(gmac->regmap, SYSCON_REG, gmac->syscon_val);
++	}
++
++	return 0;
++}
++
++static void sun55i_gmac_exit(struct device *dev, void *priv)
++{
++	struct sun55i_gmac_priv *gmac = priv;
++
++	if (gmac->syscfg_base) {
++		writel(0, gmac->syscfg_base + 0x00);
++		if (gmac->is_gmac210)
++			writel(0, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
++	}
++}
++
 +static int sun55i_gmac200_set_syscon(struct platform_device *pdev,
- 				     struct plat_stmmacenet_data *plat)
++				     struct plat_stmmacenet_data *plat,
++				     struct sun55i_gmac_priv *gmac)
  {
 +	struct device *dev = &pdev->dev;
  	struct device_node *node = dev->of_node;
 -	struct regmap *regmap;
-+	struct regmap *regmap = NULL;
-+	void __iomem *syscfg_base = NULL;
 +	struct resource *res;
  	u32 val, reg = 0;
- 	int ret;
+-	int ret;
  
 -	regmap = syscon_regmap_lookup_by_phandle(node, "syscon");
 -	if (IS_ERR(regmap))
 -		return dev_err_probe(dev, PTR_ERR(regmap), "Unable to map syscon\n");
 +	if (of_property_present(node, "syscon")) {
-+		regmap = syscon_regmap_lookup_by_phandle(node, "syscon");
-+		if (IS_ERR(regmap))
-+			return dev_err_probe(dev, PTR_ERR(regmap), "Unable to map syscon\n");
++		gmac->regmap = syscon_regmap_lookup_by_phandle(node, "syscon");
++		if (IS_ERR(gmac->regmap))
++			return dev_err_probe(dev, PTR_ERR(gmac->regmap), "Unable to map syscon\n");
 +	} else {
 +		/* A733 / sun60i dedicated per-GMAC syscfg MMIO block */
 +		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "syscfg");
@@ -47,40 +86,58 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
 +			res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 +		if (!res)
 +			return dev_err_probe(dev, -EINVAL, "No syscon or syscfg resource found\n");
-+		syscfg_base = devm_ioremap_resource(dev, res);
-+		if (IS_ERR(syscfg_base))
-+			return PTR_ERR(syscfg_base);
++		gmac->syscfg_base = devm_ioremap_resource(dev, res);
++		if (IS_ERR(gmac->syscfg_base))
++			return PTR_ERR(gmac->syscfg_base);
 +	}
  
  	if (!of_property_read_u32(node, "tx-internal-delay-ps", &val)) {
  		if (val % 100)
-@@ -95,9 +110,13 @@
+@@ -95,9 +137,8 @@
  				     phy_modes(plat->phy_interface));
  	}
  
 -	ret = regmap_write(regmap, SYSCON_REG, reg);
 -	if (ret < 0)
 -		return dev_err_probe(dev, ret, "Failed to write to syscon\n");
-+	if (syscfg_base) {
-+		writel(reg, syscfg_base + 0x00);
-+	} else {
-+		ret = regmap_write(regmap, SYSCON_REG, reg);
-+		if (ret < 0)
-+			return dev_err_probe(dev, ret, "Failed to write to syscon\n");
-+	}
- 
- 	return 0;
++	gmac->syscon_val = reg;
++	return sun55i_gmac_init(dev, gmac);
  }
-@@ -122,7 +141,7 @@
+ 
+ static int sun55i_gmac200_probe(struct platform_device *pdev)
+@@ -105,6 +146,7 @@
+ 	struct plat_stmmacenet_data *plat_dat;
+ 	struct stmmac_resources stmmac_res;
++	struct sun55i_gmac_priv *gmac_priv;
+ 	struct device *dev = &pdev->dev;
+ 	struct clk *clk;
+ 	int ret;
+@@ -120,9 +162,20 @@
+ 	if (IS_ERR(plat_dat))
+ 		return PTR_ERR(plat_dat);
+ 
++	gmac_priv = devm_kzalloc(dev, sizeof(*gmac_priv), GFP_KERNEL);
++	if (!gmac_priv)
++		return -ENOMEM;
++
++	gmac_priv->pdev = pdev;
++	gmac_priv->is_gmac210 = of_device_is_compatible(dev->of_node, "allwinner,sun60i-a733-gmac210") ||
++				of_device_is_compatible(dev->of_node, "allwinner,sunxi-gmac-210");
++
+ 	/* BSP disables it */
  	plat_dat->flags |= STMMAC_FLAG_SPH_DISABLE;
  	plat_dat->host_dma_width = 32;
++	plat_dat->clk_csr = 4; /* MDC clock divider: AHB(200M)/102 = ~2MHz */
++	plat_dat->bsp_priv = gmac_priv;
++	plat_dat->init = sun55i_gmac_init;
++	plat_dat->exit = sun55i_gmac_exit;
  
 -	ret = sun55i_gmac200_set_syscon(dev, plat_dat);
-+	ret = sun55i_gmac200_set_syscon(pdev, plat_dat);
++	ret = sun55i_gmac200_set_syscon(pdev, plat_dat, gmac_priv);
  	if (ret)
  		return ret;
  
-@@ -140,6 +159,8 @@
+@@ -140,6 +193,8 @@
  
  static const struct of_device_id sun55i_gmac200_match[] = {
  	{ .compatible = "allwinner,sun55i-a523-gmac200" },
