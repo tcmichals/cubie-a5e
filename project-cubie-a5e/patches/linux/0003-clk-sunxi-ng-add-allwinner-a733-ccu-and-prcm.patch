@@ -215,7 +215,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,358 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -349,6 +349,11 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_DATA(res_dcap_24m_clk, "res-dcap-24m", osc24M,
 +			   0x1a00, BIT(3), CLK_IS_CRITICAL);
 +
++/* USB reference and PHY clocks */
++static SUNXI_CCU_GATE_DATA(usb_ref_clk, "usb-ref", osc24M, 0x1340, BIT(31), CLK_IS_CRITICAL);
++static SUNXI_CCU_GATE_DATA(usb_phy0_clk, "usb-phy0", osc24M, 0x1300, BIT(31), 0);
++static SUNXI_CCU_GATE_DATA(usb_phy1_clk, "usb-phy1", osc24M, 0x1308, BIT(31), 0);
++
 +static const struct clk_parent_data mmc_parents[] = {
 +	{ .fw_name = "hosc" },
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
@@ -421,6 +426,9 @@ V0.93 and critical clock definitions.
 +	&bus_usb2_clk.common,
 +	&bus_msi_lite2_clk.common,
 +	&res_dcap_24m_clk.common,
++	&usb_ref_clk.common,
++	&usb_phy0_clk.common,
++	&usb_phy1_clk.common,
 +	&mmc0_clk.common,
 +	&mmc1_clk.common,
 +	&mmc2_clk.common,
@@ -475,7 +483,8 @@ V0.93 and critical clock definitions.
 +		[CLK_MMC2]		= &mmc2_clk.common.hw,
 +		[CLK_SPI0]		= &spi0_clk.common.hw,
 +		[CLK_SPI1]		= &spi1_clk.common.hw,
-+		[CLK_USB_PHY1]		= NULL,
++		[CLK_USB_PHY0]		= &usb_phy0_clk.common.hw,
++		[CLK_USB_PHY1]		= &usb_phy1_clk.common.hw,
 +		[CLK_BUS_MSI_LITE2]	= &bus_msi_lite2_clk.common.hw,
 +		[CLK_RES_DCAP_24M]	= &res_dcap_24m_clk.common.hw,
 +	},
