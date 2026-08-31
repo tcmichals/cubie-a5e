@@ -461,7 +461,7 @@ index 0000000..1234567
 +			reset-names = "stmmaceth";
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&gmac0_pins>;
-+			phy-mode = "rgmii-id";
++			phy-mode = "rgmii";
 +			phy-handle = <&ext_rgmii_phy>;
 +			phy-supply = <&reg_phy3v3>;
 +			snps,fixed-burst;
@@ -546,8 +546,8 @@ index 0000000..1234567
 +		rproc: remoteproc@7010000 {
 +			compatible = "allwinner,sun60i-a733-rproc";
 +			reg = <0x07010000 0x1000>,
-+			      <0x00020000 0x20000>;
-+			reg-names = "cfg", "sram";
++			      <0x07110000 0x40000>;
++			reg-names = "cfg", "itcm";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
