@@ -215,7 +215,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,358 @@
+@@ -0,0 +1,361 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -554,6 +554,9 @@ V0.93 and critical clock definitions.
 +	writel(0x010000FF | 0x110103FF, reg + 0x05C0);
 +	writel(0x41055800 | 0xF1055803, reg + 0x05E0);
 +	writel(0x00040302 | 0x0007FFFF, reg + 0x05E4);
++
++	/* Enable GMAC0 PHY 25MHz fanout clock (150MHz / (5+1) = 25MHz) */
++	writel(BIT(31) | 5, reg + 0x1410);
 +
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);
 +}

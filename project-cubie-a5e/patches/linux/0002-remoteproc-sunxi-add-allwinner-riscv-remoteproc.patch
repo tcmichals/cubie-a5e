@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,524 @@
+@@ -0,0 +1,529 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -287,6 +287,11 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->sram_va + (da - priv->sram_phys);
++		}
++		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->sram_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->sram_va + (da - 0x00020000);
 +		}
 +	}
 +
