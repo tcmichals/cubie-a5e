@@ -77,9 +77,11 @@ python3 project-cubie-a5e/board/radxa/cubie_a7a/tools/verify_sdcard_image.py bld
 - [x] Verify OP-TEE OS execution in Secure DRAM.
 - [x] Verify Mainline U-Boot 2026.01 prompt at `0x4A001000`.
 - [x] Verify Linux 7.1 `PREEMPT_RT` earlycon output on UART0 (`0x02500000`).
-- [x] Verify GICv3 interrupt controller probing across all 8 CPU cores (2x A78 + 6x A55).
 - [x] Realign GMAC0 PHY reset to `PH16` and restore `PH10` (`RGMII0-RXD3`) in pinmux.
 - [x] Realign Mailbox CCU gate/reset in `ccu-sun60i-a733.c` to prevent PLL register corruption.
 - [x] Realign USB0/1 EHCI gates (`BIT 4`) and resets (`BIT 20`) in CCU.
 - [x] Realign PRCM R-CCU `r-ahb` to offset `0x000`.
 - [x] Sync RemoteProc with safe fallback lookups for `main_ccu` and `sram`.
+- [x] Realign Wi-Fi 6 (AIC8800 USB) power sequencing with `wifi_chip_en` regulator on `PM1`.
+- [x] Support dual VMA/physical addressing for RISC-V E907 ITCM and DTCM in `sunxi_rproc.c`.
+- [x] Validate bootloader, eGON checksum, kernel DTB, and partitions with `verify_sdcard_image.py`.

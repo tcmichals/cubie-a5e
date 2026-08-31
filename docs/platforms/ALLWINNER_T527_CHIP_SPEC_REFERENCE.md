@@ -137,3 +137,43 @@ The Allwinner T527 / A527 (`sun55i`) is an octa-core ARM Cortex-A55 application 
 - **Bootloader Image**: `radxa_a527_bootloader.bin` (or `radxa_t527_bootloader.bin`) placed at sector 0 (with holes `(440; 512)`).
 - **Boot Partition (`boot.vfat`)**: Starts at offset **16 MB** (`16384 KiB`). Contains `boot.scr`, `sun55i-a527-cubie-a5e.dtb`, and `Image`.
 - **Rootfs Partition (`rootfs.ext4`)**: Starts immediately following Partition 1.
+
+---
+
+## 6. Camera & Video Input (VIN) Architecture (T527 / A527)
+
+| Block | Base Address | Interrupt | Description |
+| :--- | :--- | :--- | :--- |
+| `VIN_TOP` | `0x05800800` | `GIC_SPI 139` | Video In Subsystem Top Controller |
+| `MIPI_TOP`| `0x05810000` | — | MIPI CSI-2 Top Configuration |
+| `MIPI0` | `0x05810100` | `GIC_SPI 137` | MIPI CSI-2 Receiver 0 (2-lane / 4-lane) |
+| `MIPI1` | `0x05810200` | — | MIPI CSI-2 Receiver 1 (2-lane) |
+| `MIPI2` | `0x05810300` | — | MIPI CSI-2 Receiver 2 (2-lane / 4-lane) |
+| `MIPI3` | `0x05810400` | — | MIPI CSI-2 Receiver 3 (2-lane) |
+| `CSI0` | `0x05820000` | `GIC_SPI 130` | CSI Parser Channel 0 |
+| `CSI1` | `0x05821000` | `GIC_SPI 131` | CSI Parser Channel 1 |
+| `CSI2` | `0x05822000` | `GIC_SPI 132` | CSI Parser Channel 2 |
+| `CSI3` | `0x05823000` | `GIC_SPI 147` | NCSI BT.656/1120 Parallel Channel |
+| `ISP00` | `0x05900000` | `GIC_SPI 133` | Hardware Image Signal Processor |
+| `TDM0` | `0x05908000` | `GIC_SPI 138` | Time Division Multiplexing Routing Block |
+| `SCALER00`..`30` | `0x05910000`–`0x05910c00` | `GIC_SPI 126`–`129` | Multi-channel Hardware Scalers |
+
+* **Power Domain**: `A523_PCK_VI` (PCK-600 Domain 2)
+* **Clocks**: `CLK_CSI` (`CLK_PLL_VIDEO3_4X`), `CLK_ISP` (`CLK_PLL_VIDEO2_4X`), `CLK_BUS_CSI`, `CLK_CSI_MBUS_GATE`, `CLK_ISP_MBUS_GATE`
+* **Resets**: `RST_BUS_CSI`, `RST_BUS_ISP`
+
+---
+
+## 7. Neural Processing Unit (NPU) Architecture (T527 / A527)
+
+| Parameter | Specification |
+| :--- | :--- |
+| **NPU IP** | VeriSilicon VIP9000 (2.0 TOPS INT8 / FP16) |
+| **Base Address** | `0x07122000` (4 KB) |
+| **Interrupt** | `GIC_SPI 199` (`IRQ_TYPE_LEVEL_HIGH`) |
+| **Clocks** | `CLK_NPU` (`0x02001000`), `CLK_PLL_NPU_2X`, `CLK_BUS_MCU_NPU_ACLK`, `CLK_BUS_MCU_NPU_HCLK` (`0x07100000`) |
+| **Resets** | `RST_BUS_MCU_NPU` |
+| **Power Domain** | `A523_PD_NPU` (`ppu PD_NPU` / Domain 1) |
+| **DVFS Levels** | 546 MHz @ 0.92V, 696 MHz @ 1.05V |
+| **Kernel Device** | `/dev/vip_drv` (`aw_nna_vip`) or `/dev/galcore` (`aw_nna_galcore`) |
+

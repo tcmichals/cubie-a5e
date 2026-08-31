@@ -49,7 +49,7 @@ new file mode 100644
 index 0000000..e22afb6
 --- /dev/null
 +++ b/drivers/pinctrl/sunxi/pinctrl-sun60i-a733-r.c
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,46 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/module.h>
 +#include <linux/platform_device.h>
@@ -71,7 +71,6 @@ index 0000000..e22afb6
 +	.irq_banks = ARRAY_SIZE(a733_r_irq_bank_map),
 +	.irq_bank_map = a733_r_irq_bank_map,
 +	.irq_read_needs_mux = true,
-+	.io_bias_cfg_variant = BIAS_VOLTAGE_PIO_POW_MODE_SEL,
 +	.pin_base = PL_BASE,
 +};
 +

@@ -21,3 +21,7 @@ boot.scr
 !project-cubie-a5e/board/**/tools/*.bin
 !project-cubie-a5e/board/**/tools/dragonsecboot
 
+# Python caches
+__pycache__/
+*.pyc
+

@@ -177,10 +177,10 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | **Sector Range** | **Byte Offset** | **Size** | **Identifier / Content** | **Purpose** |
 | :--- | :--- | :--- | :--- | :--- |
 | **Sectors 0 – 255** | `0x00000000` (0 B) | 128 KB | `0xAA55` (MBR) | Master Boot Record & Partition Table |
-| **Sector 256** | **`0x00020000` (128 KB)** | **240 KB** (245,760 B) | **`eGON.BT0`** | **`boot0_sdcard.bin`** (LPDDR5 dynamic PHY training; Checksum `0xd6c0cbdf`) |
-| **Sector 24576** | **`0x00C00000` (12.0 MB)** | ~3.0 MB | **`sunxi-package` (TOC1)** | **`boot_package.fex`** (`u-boot` @ `0x4A000000`, `monitor` @ `0x4D000000`, `optee`, `scp`, `dtb`) |
-| **Sector 65536** | **`0x02000000` (32.0 MB)** | 64 MB | FAT32 (`0x0C`) | **Partition 1: `boot.vfat`** (`Image`, `sun60i-a733-cubie-a7a.dtb`, `boot.scr`, `uboot.env`) |
-| **Sector 196608** | **`0x06000000` (96.0 MB)** | 512 MB | Ext4 (`0x83`) | **Partition 2: `rootfs.ext4`** (Full Buildroot userspace rootfs) |
+| **Sector 256** | **`0x00020000` (128 KB)** | **296 KB** (303,104 B) | **`eGON.BT0`** | **`boot0_sdcard.bin`** (LPDDR5 dynamic PHY training; Checksum `0x316fb06b`) |
+| **Sector 2048** | **`0x00100000` (1.0 MB)** | ~1.6 MB | U-Boot / ATF Stage | U-Boot proper execution binary and firmware stage |
+| **Sector 32768** | **`0x01000000` (16.0 MB)** | 64 MB | FAT32 (`0x0C`) | **Partition 1: `boot.vfat`** (`Image`, `sun60i-a733-cubie-a7a.dtb`, `boot.scr`, `uboot.env`) |
+| **Sector 163840** | **`0x05000000` (80.0 MB)** | 512 MB | Ext4 (`0x83`) | **Partition 2: `rootfs.ext4`** (Full Buildroot userspace rootfs) |
 
 ---
 

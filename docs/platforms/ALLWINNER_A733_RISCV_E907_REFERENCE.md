@@ -103,14 +103,20 @@ echo stop > /sys/class/remoteproc/remoteproc0/state
 ### B. Device Tree Node (A733 DTS)
 ```dts
 rproc: remoteproc@7010000 {
-    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc";
-    reg = <0x00 0x07010000 0x00 0x1000>,  /* PRCM Base */
+    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
+    reg = <0x00 0x07010000 0x00 0x1000>,  /* PRCM / CFG Base */
           <0x00 0x07110000 0x00 0x10000>, /* ITCM (64 KB) */
           <0x00 0x07120000 0x00 0x10000>, /* DTCM (64 KB) */
           <0x00 0x07130000 0x00 0x50000>; /* SRAM C (320 KB) */
-    reg-names = "ccu", "itcm", "dtcm", "sram";
-    mboxes = <&msgbox 0 0>;
-    mbox-names = "arm-to-riscv";
+    reg-names = "cfg", "itcm", "dtcm", "sram";
+    clocks = <&r_ccu CLK_RISCV_24M>,
+             <&r_ccu CLK_RISCV_CFG>,
+             <&r_ccu CLK_RISCV>;
+    clock-names = "parent", "bus", "core";
+    resets = <&r_ccu RST_BUS_RISCV_CFG>;
+    reset-names = "cfg";
+    mboxes = <&msgbox 0>;
+    mbox-names = "tx";
     status = "okay";
 };
 ```

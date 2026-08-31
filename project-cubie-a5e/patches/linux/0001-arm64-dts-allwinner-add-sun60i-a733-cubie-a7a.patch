@@ -967,7 +967,7 @@ index 0000000..1234567
 +			reg = <0x07025000 0x410>;
 +			interrupts = <GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&r_ccu CLK_R_AHB>, <&osc24M>, <&osc32k>;
++			clocks = <&r_ccu CLK_R_APBS0>, <&osc24M>, <&osc32k>;
 +			clock-names = "apb", "hosc", "losc";
 +			#gpio-cells = <3>;
 +			gpio-controller;

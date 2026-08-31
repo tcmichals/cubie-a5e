@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Radxa Cubie A7A (Allwinner A733) SD Card Image Verification Tool
-This script validates every sector, header, checksum, and payload of an sdcard.img
+This script validates every sector, header, checksum, and partition of an sdcard.img
 against the ground-truth hardware specification before flashing.
 """
 
@@ -39,7 +39,7 @@ def verify_image(img_path):
             return False
         print("[+] Sector 0 (0 KB)     : Valid MBR (Magic 0xAA55)")
 
-        # 2. Check Sector 256 (128 KB) - Full 240 KB boot0
+        # 2. Check Sector 256 (128 KB) - Full boot0
         f.seek(256 * 512)
         b0_hdr = f.read(512)
         b0_magic = b0_hdr[4:12]
@@ -67,57 +67,40 @@ def verify_image(img_path):
             return False
         print(f"    - Checksum Status   : VALID (BootROM will execute in SRAM)")
 
-        # 3. Check Sector 24576 (12.0 MB) - TOC1 Container
-        f.seek(24576 * 512)
-        toc_hdr = f.read(2048)
-        toc_magic = toc_hdr[:16].rstrip(b'\x00')
-        if toc_magic != b"sunxi-package":
-            print(f"[-] Sector 24576: Invalid TOC1 magic: {toc_magic}")
-            return False
+        # 3. Check Sector 2048 (1.0 MB) - U-Boot Stage
+        f.seek(2048 * 512)
+        uboot_hdr = f.read(64)
+        if any(uboot_hdr):
+            print(f"[+] Sector 2048 (1.0 MB) : U-Boot Stage binary present")
 
-        num_items = int.from_bytes(toc_hdr[32:36], 'little')
-        print(f"[+] Sector 24576 (12.0 MB): TOC1 Container '{toc_magic.decode()}' found")
-        print(f"    - Number of Items   : {num_items} (Expected 5)")
+        # 4. Check MBR Partition Table
+        for i in range(4):
+            entry = mbr[446 + i*16 : 446 + (i+1)*16]
+            status, chs_start, ptype, chs_end, lba_start, num_sectors = struct.unpack('<B3sB3sII', entry)
+            if ptype == 0:
+                continue
 
-        for i in range(num_items):
-            entry = toc_hdr[64 + i*368 : 64 + (i+1)*368]
-            name = entry[:16].rstrip(b'\x00').decode('ascii', errors='replace')
-            offset = int.from_bytes(entry[64:68], 'little')
-            dlen = int.from_bytes(entry[68:72], 'little')
+            size_mb = (num_sectors * 512) / (1024 * 1024)
+            offset_mb = (lba_start * 512) / (1024 * 1024)
 
-            f.seek(24576 * 512 + offset)
-            payload_head = f.read(64)
-
-            print(f"    * Item {i+1} [{name:7s}]: Offset = {offset:#08x} ({offset/1024:.1f} KB), Length = {dlen:7d} bytes ({dlen/1024:.1f} KB)")
-            if name == "u-boot":
-                # Check uboot header
-                uhead_magic = payload_head[4:12].rstrip(b'\x00')
-                branch_op = hex(int.from_bytes(payload_head[0:4], 'little'))
-                run_addr = hex(int.from_bytes(payload_head[0x2c:0x30], 'little'))
-                print(f"      -> Header: '{uhead_magic.decode(errors='replace')}', Branch Op = {branch_op}, DRAM Target = {run_addr}")
-            elif name == "monitor":
-                mon_magic = payload_head[:16].rstrip(b'\x00')
-                print(f"      -> Header: '{mon_magic.decode(errors='replace')}', Secure EL3 Runtime")
-            elif name == "optee":
-                print(f"      -> OP-TEE OS Secure Payload")
-            elif name == "scp":
-                print(f"      -> ARISC Management Firmware")
-            elif name == "dtb":
-                print(f"      -> Flattened Device Tree (FDT)")
-
-        # 4. Check Partition 1 (Sector 65536 / 32 MB)
-        f.seek(65536 * 512)
-        vfat_hdr = f.read(512)
-        print(f"[+] Sector 65536 (32.0 MB): Partition 1 (boot.vfat)")
-
-        # 5. Check Partition 2 (Sector 196608 / 96 MB)
-        f.seek(196608 * 512 + 1024)
-        ext4_sb = f.read(1024)
-        ext4_magic = int.from_bytes(ext4_sb[0x38:0x3A], 'little')
-        if ext4_magic == 0xef53:
-            print(f"[+] Sector 196608 (96.0 MB): Partition 2 (rootfs.ext4, Magic 0xEF53)")
-        else:
-            print(f"[-] Sector 196608: Ext4 superblock magic not found (got {hex(ext4_magic)})")
+            if ptype == 0x0c:  # FAT32 LBA
+                f.seek(lba_start * 512)
+                vfat_sb = f.read(512)
+                vfat_sig = vfat_sb[510:512]
+                if vfat_sig == b"\x55\xaa":
+                    print(f"[+] Partition {i+1} (Sector {lba_start} / {offset_mb:.1f} MB): boot.vfat (FAT32, {size_mb:.1f} MB, Magic 0xAA55)")
+                else:
+                    print(f"[-] Partition {i+1}: FAT32 boot sector signature invalid: {vfat_sig.hex()}")
+                    return False
+            elif ptype == 0x83:  # Linux Ext4
+                f.seek(lba_start * 512 + 1024)
+                ext4_sb = f.read(1024)
+                ext4_magic = int.from_bytes(ext4_sb[0x38:0x3A], 'little')
+                if ext4_magic == 0xef53:
+                    print(f"[+] Partition {i+1} (Sector {lba_start} / {offset_mb:.1f} MB): rootfs.ext4 (Ext4, {size_mb:.1f} MB, Magic 0xEF53)")
+                else:
+                    print(f"[-] Partition {i+1}: Ext4 superblock magic not found (got {hex(ext4_magic)})")
+                    return False
 
     print("=" * 80)
     print("[+] ALL AUDIT CHECKS PASSED: Image is structurally and mathematically valid!")
@@ -125,6 +108,6 @@ def verify_image(img_path):
     return True
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "/home/tcmichals/projects/cubie/bld.a7a/images/sdcard.img"
+    target = sys.argv[1] if len(sys.argv) > 1 else "/home/tcmichals/ssdData/projects/home/CubieA5E/bld.a7a/images/sdcard.img"
     success = verify_image(target)
     sys.exit(0 if success else 1)

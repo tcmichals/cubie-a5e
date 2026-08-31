@@ -304,11 +304,24 @@ During kernel initialization on hardware, the system experienced intermittent st
   * Mapped `r-bus-twi0/1/2` and `r-bus-uart0/1` to parent `r-apbs1`, `r-bus-rtc` and `r-bus-cpucfg` to `r-apbs0`.
   * Added `include/dt-bindings/reset/sun60i-a733-r-ccu.h` with `RST_BUS_R_TWI0` (8), `RST_BUS_R_UART0` (5), `RST_BUS_RTC` (10) and bound `r_i2c0` in `sun60i-a733-cubie-a7a.dts`.
 
+### Milestone 13: Full Subsystem Realignment Against Vendor `A7A_kernel` (Aug 31, 2026)
+- **Wi-Fi 6 (AIC8800 USB) Chip Enable Regulator Activation**:
+  * **Symptom**: AIC8800 Wi-Fi 6 device failed to enumerate on USB 2.0 (`0xA69C:0x8800`).
+  * **Root Cause**: Board DTS supplied power enable `PM0` (USB_WIFI_PWR) but omitted `wifi_chip_en` on `PM1` (WIFI_REG_ON). The AIC8800 was held in constant hardware reset.
+  * **Resolution**: Added `reg_wifi_chip_en` regulator with `gpio = <&r_pio 1 1 GPIO_ACTIVE_HIGH>;` (`PM1`), `regulator-always-on`, `regulator-boot-on` in `sun60i-a733-cubie-a7a.dts`.
+- **RISC-V (XuanTie E907) Remoteproc Dual VMA / Memory Map Realignment**:
+  * **Defect**:
+    1. DTS node mapped only `0x07102000` and lacked the PRCM CFG register (`0x07010000`), ITCM (`0x07110000`), DTCM (`0x07120000`), SRAM C (`0x07130000`), and CCU clocks/resets.
+    2. Driver `da_to_va()` failed to translate native core VMAs `0x00000000` (ITCM) and `0x00080000` (DTCM) when loading ELF segments into memory.
+  * **Resolution**:
+    1. Updated `sunxi_rproc.c` `da_to_va()` to support dual addressing (core VMA `0x00000000` / `0x00080000` and host physical `0x07110000` / `0x07120000` / `0x07130000`).
+    2. Updated DTS `remoteproc@7010000` with `"cfg"`, `"itcm"`, `"dtcm"`, `"sram"`, clocks (`CLK_RISCV_24M`, `CLK_RISCV_CFG`, `CLK_RISCV`), resets (`RST_BUS_RISCV_CFG`), and mailbox (`&msgbox 0`).
+
 ---
 
 ## 8. Vendor BSP vs. Mainline Linux 7.1 Cross-Verification Matrix
 
-The table below documents the full line-by-line cross-reference comparing the vendor BSP (`radxa-pkg-linux-a733` / `device-a733` / `bsp`) against our mainline Linux 7.1 port:
+The table below documents the full line-by-line cross-reference comparing the vendor BSP (`A7A_kernel/linux-a733`) against our mainline Linux 7.1 port:
 
 | Subsystem / Node | Radxa Vendor BSP (`device-a733`/`bsp`) | Mainline Linux 7.1 Port (`sun60i-a733-cubie-a7a.dts`) | Verification Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
@@ -326,7 +339,22 @@ The table below documents the full line-by-line cross-reference comparing the ve
 | **UART0 Console**      | `0x02500000`, GIC SPI 2 | `0x02500000`, GIC SPI 2 | **100% MATCH** | `reg-shift = <2>`, `reg-io-width = <4>`. |
 | **PMIC I2C (R_I2C0)**  | `0x07083000`, GIC SPI 203, `s_twi0` | `0x07083000`, GIC SPI 203, `CLK_R_TWI0` | **100% MATCH** | Clock 18, Reset 8. |
 | **Mailbox 0**          | `0x03004000`, GIC SPI 211 | `0x03004000`, GIC SPI 211 | **100% MATCH** | CCU Gate `0x0744 BIT(0)`, Reset `BIT(16)`. |
-| **RISC-V Coprocessor** | CCU `0x07102000`, SRAM `0x07110000` | `remoteproc@7102000` | **100% MATCH** | E907 core with Write-Combining SRAM mapping. |
+| **RISC-V Coprocessor** | PRCM `0x07010000`, ITCM `0x07110000` | `remoteproc@7010000` | **100% MATCH** | E907 core with TCM/SRAM and mailbox IPC. |
+| **USB AHB Interconnect**| `0x05C0` (`AHB_GATE_SW_CFG`) bit 9   | `sun60i_a733_ccu_probe()` un-gate | **100% MATCH** | Key `0x10000FF` enables USB/PHY MMIO bus decoder. |
+| **USB PHY Resets**     | `0x1300 BIT(30)` / `0x1308 BIT(30)`   | `RST_USB_PHY0` / `RST_USB_PHY1` | **100% MATCH** | Independent from EHCI/OHCI bus resets (`0x1304`/`0x130c`). |
+
+### Milestone 14: USB Subsystem AHB Master Interconnect & PHY Reset Realignment (Aug 31, 2026)
+- **USB Controller & PHY MMIO Bus Stall Fix**:
+  * **Symptom**: Kernel hung at `[ 1.743520] phy phy-4100400.phy.0: Changing dr_mode to 1` when `ehci0` / `phy-sun4i-usb` attempted to access PHY/PMU registers (`0x04100400` / `0x04101800`).
+  * **Root Cause**:
+    1. On Allwinner A733 (`sun60iw2`), the CCU contains security interconnect gate registers at `0x05C0` (`AHB_GATE_SW_CFG`), `0x05E0` (`MBUS_MAT_CLK_GATING_REG`), and `0x05E4` (`MBUS_GATE_ENABLE_REG`). Bit 9 of `0x05C0` (`usb-sys-ahb-gate` with key `0x10000FF`) was gated, blocking all CPU transactions to the USB subsystem MMIO space and causing an AXI bus freeze.
+    2. USB PHY transceivers have dedicated hardware resets at `0x1300 BIT(30)` (`RST_USB_0_PHY_RSTN`) and `0x1308 BIT(30)` (`RST_USB_1_PHY_RSTN`), separate from the controller bus resets at `0x1304` / `0x130c`.
+  * **Resolution**:
+    1. In `ccu-sun60i-a733.c` (`sun60i_a733_ccu_probe`), added automatic un-gating for `0x05C0` (`0x110003FF`), `0x05E0`, and `0x05E4`.
+    2. Added `RST_USB_PHY0` (42) and `RST_USB_PHY1` (43) to `sun60i-a733-ccu.h` and bound them to `usbphy: phy@4100400`.
+    3. Added `keep_bootcon` to `bootargs` in `boot.cmd` to keep serial diagnostics visible across all driver handovers.
+
+
 
 
 
