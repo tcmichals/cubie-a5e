@@ -31,7 +31,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,531 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -363,82 +363,68 @@ index 0000000..1234567
 +		};
 +
 +		usbphy: phy@4100400 {
-+			compatible = "allwinner,sun55i-a523-usb-phy",
-+				     "allwinner,sun20i-d1-usb-phy";
++			compatible = "allwinner,sun50i-h616-usb-phy";
 +			reg = <0x04100400 0x100>,
 +			      <0x04101800 0x100>,
 +			      <0x04200800 0x100>;
 +			reg-names = "phy_ctrl",
 +				    "pmu0",
 +				    "pmu1";
-+			clocks = <&osc24M>,
-+				 <&osc24M>;
++			clocks = <&ccu CLK_USB_PHY0>,
++				 <&ccu CLK_USB_PHY1>;
 +			clock-names = "usb0_phy",
 +				      "usb1_phy";
-+			resets = <&ccu RST_USB_PHY0>,
-+				 <&ccu RST_USB_PHY1>;
++			resets = <&ccu RST_BUS_USB0>,
++				 <&ccu RST_BUS_USB1>;
 +			reset-names = "usb0_reset",
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
-+			usb1_vbus-supply = <&reg_usb1_vbus>;
 +			#phy-cells = <1>;
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ehci0: usb@4101000 {
-+			compatible = "allwinner,sun55i-a523-ehci",
-+				     "allwinner,sun50i-h616-ehci",
-+				     "generic-ehci";
++			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
 +			reg = <0x04101000 0x100>;
 +			interrupts = <GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
-+			clock-names = "bus_hci", "bus", "ohci";
++			clocks = <&ccu CLK_BUS_USB0>;
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ohci0: usb@4101400 {
-+			compatible = "allwinner,sun55i-a523-ohci",
-+				     "allwinner,sun50i-h616-ohci",
-+				     "generic-ohci";
++			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
 +			reg = <0x04101400 0x100>;
 +			interrupts = <GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&ccu CLK_BUS_USB0>, <&ccu CLK_USB_OHCI0>;
-+			clock-names = "bus_hci", "ohci";
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ehci1: usb@4200000 {
-+			compatible = "allwinner,sun55i-a523-ehci",
-+				     "allwinner,sun50i-h616-ehci",
-+				     "generic-ehci";
++			compatible = "allwinner,sun50i-h616-ehci", "generic-ehci";
 +			reg = <0x04200000 0x100>;
 +			interrupts = <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
-+			clock-names = "bus_hci", "bus", "ohci";
++			clocks = <&ccu CLK_BUS_USB1>;
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		ohci1: usb@4200400 {
-+			compatible = "allwinner,sun55i-a523-ohci",
-+				     "allwinner,sun50i-h616-ohci",
-+				     "generic-ohci";
++			compatible = "allwinner,sun50i-h616-ohci", "generic-ohci";
 +			reg = <0x04200400 0x100>;
 +			interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_BUS_USB1>;
-+			clock-names = "bus_hci", "ohci";
++			clocks = <&ccu CLK_BUS_USB1>, <&ccu CLK_USB_OHCI1>;
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		dwc3: usb@6a00000 {
@@ -462,17 +448,20 @@ index 0000000..1234567
 +		};
 +
 +		gmac0: ethernet@4500000 {
-+			compatible = "allwinner,sun55i-a523-gmac200", "snps,dwmac-4.20a";
-+			reg = <0x04500000 0x10000>;
-+			interrupts = <GIC_SPI 172 IRQ_TYPE_LEVEL_HIGH>;
-+			interrupt-names = "macirq";
++			compatible = "allwinner,sun60i-a733-gmac210", "allwinner,sunxi-gmac-210", "snps,dwmac-5.20";
++			reg = <0x04500000 0x8000>, <0x04508000 0x1000>;
++			reg-names = "mac", "syscfg";
++			interrupts = <GIC_SPI 172 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 178 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 173 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "macirq", "eth_lpi", "tx0_irq", "rx0_irq";
 +			clocks = <&ccu CLK_BUS_GMAC0>, <&ccu CLK_BUS_GMAC0>;
 +			clock-names = "stmmaceth", "mbus";
 +			resets = <&ccu RST_BUS_GMAC0>;
 +			reset-names = "stmmaceth";
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&gmac0_pins>;
-+			syscon = <&syscon>;
 +			phy-mode = "rgmii-id";
 +			phy-handle = <&ext_rgmii_phy>;
 +			phy-supply = <&reg_phy3v3>;
@@ -480,7 +469,7 @@ index 0000000..1234567
 +			snps,axi-config = <&gmac0_stmmac_axi_setup>;
 +			snps,mtl-rx-config = <&gmac0_mtl_rx_setup>;
 +			snps,mtl-tx-config = <&gmac0_mtl_tx_setup>;
-+			status = "disabled";
++			status = "okay";
 +
 +			mdio0: mdio {
 +				compatible = "snps,dwmac-mdio";
