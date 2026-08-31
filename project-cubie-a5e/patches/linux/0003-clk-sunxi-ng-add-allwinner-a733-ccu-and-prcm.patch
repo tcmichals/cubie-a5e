@@ -722,7 +722,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/reset/sun60i-a733-ccu.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,50 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_RST_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_RST_SUN60I_A733_CCU_H_

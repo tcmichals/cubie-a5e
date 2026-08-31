@@ -14,10 +14,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 95 ++++++++++++++++++----
  1 file changed, 78 insertions(+), 17 deletions(-)
 
-diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 --- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
-@@ -37,17 +37,59 @@
+@@ -37,17 +37,68 @@
  #define SYSCON_ETCS_EXT_GMII	0x1
  #define SYSCON_ETCS_INT_GMII	0x2
  
@@ -36,7 +35,7 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
 +};
 +
 +static int sun55i_gmac_init(struct device *dev, void *priv)
- {
++{
 +	struct sun55i_gmac_priv *gmac = priv;
 +
 +	if (gmac->syscfg_base) {
@@ -51,7 +50,7 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
 +}
 +
 +static void sun55i_gmac_exit(struct device *dev, void *priv)
-+{
+ {
 +	struct sun55i_gmac_priv *gmac = priv;
 +
 +	if (gmac->syscfg_base) {
@@ -64,7 +63,7 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
 +static int sun55i_gmac200_set_syscon(struct platform_device *pdev,
 +				     struct plat_stmmacenet_data *plat,
 +				     struct sun55i_gmac_priv *gmac)
- {
++{
 +	struct device *dev = &pdev->dev;
  	struct device_node *node = dev->of_node;
 -	struct regmap *regmap;
@@ -93,26 +92,28 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
  
  	if (!of_property_read_u32(node, "tx-internal-delay-ps", &val)) {
  		if (val % 100)
-@@ -95,9 +137,8 @@
+@@ -95,17 +146,15 @@ static int sun55i_gmac200_set_syscon(str
  				     phy_modes(plat->phy_interface));
  	}
  
 -	ret = regmap_write(regmap, SYSCON_REG, reg);
 -	if (ret < 0)
 -		return dev_err_probe(dev, ret, "Failed to write to syscon\n");
+-
+-	return 0;
 +	gmac->syscon_val = reg;
 +	return sun55i_gmac_init(dev, gmac);
  }
  
  static int sun55i_gmac200_probe(struct platform_device *pdev)
-@@ -105,6 +146,7 @@
+ {
  	struct plat_stmmacenet_data *plat_dat;
  	struct stmmac_resources stmmac_res;
 +	struct sun55i_gmac_priv *gmac_priv;
  	struct device *dev = &pdev->dev;
  	struct clk *clk;
  	int ret;
-@@ -120,9 +162,20 @@
+@@ -118,11 +167,23 @@ static int sun55i_gmac200_probe(struct p
  	if (IS_ERR(plat_dat))
  		return PTR_ERR(plat_dat);
  
@@ -137,7 +138,7 @@ diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c b/drivers/net/et
  	if (ret)
  		return ret;
  
-@@ -140,6 +193,8 @@
+@@ -140,6 +201,8 @@ static int sun55i_gmac200_probe(struct p
  
  static const struct of_device_id sun55i_gmac200_match[] = {
  	{ .compatible = "allwinner,sun55i-a523-gmac200" },

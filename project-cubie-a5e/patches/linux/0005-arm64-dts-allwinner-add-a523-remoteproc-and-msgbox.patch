@@ -5,7 +5,7 @@ Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 ---
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1086,5 +1086,25 @@
+@@ -1086,5 +1086,28 @@
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
  		};
@@ -20,11 +20,14 @@ Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 +		};
 +
 +		rproc: remoteproc@7102000 {
-+			compatible = "allwinner,sun55i-a523-rproc";
-+			reg = <0x07102000 0x1000>,
++			compatible = "allwinner,sun55i-a523-rproc",
++				     "allwinner,sun55i-a527-rproc",
++				     "allwinner,sunxi-rproc";
++			reg = <0x02001000 0x1000>,
++			      <0x07102000 0x1000>,
 +			      <0x07280000 0x40000>,
 +			      <0x00020000 0x20000>;
-+			reg-names = "cfg", "r_sram", "sram";
++			reg-names = "main_ccu", "ccu", "r_sram", "sram";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
 +			status = "disabled";
