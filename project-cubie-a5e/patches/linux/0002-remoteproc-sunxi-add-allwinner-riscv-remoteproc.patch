@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,529 @@
+@@ -0,0 +1,510 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -166,25 +166,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			goto err_disable_bus;
 +		}
 +	}
-+
-+	/*
-+	 * 5. Cleanly clear TCM, Dedicated Local SRAM, and Shared SRAM C.
-+	 * Matches upstream patterns (e.g., imx_rproc / ti_k3_r5_remoteproc) to:
-+	 *  - Prevent ECC/parity noise on uninitialized memory banks.
-+	 *  - Ensure NOBITS / .bss sections start strictly at zero.
-+	 *  - Clear stale trace0 logs/telemetry from previous runs.
-+	 */
-+	if (priv->itcm_va && priv->itcm_size)
-+		memset_io(priv->itcm_va, 0, priv->itcm_size);
-+
-+	if (priv->dtcm_va && priv->dtcm_size)
-+		memset_io(priv->dtcm_va, 0, priv->dtcm_size);
-+
-+	if (priv->r_sram_va && priv->r_sram_size)
-+		memset_io(priv->r_sram_va, 0, priv->r_sram_size);
-+
-+	if (priv->sram_va && priv->sram_size)
-+		memset_io(priv->sram_va, 0, priv->sram_size);
 +
 +	return 0;
 +
