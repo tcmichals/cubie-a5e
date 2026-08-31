@@ -307,9 +307,11 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(bus_gmac0_clk, "bus-gmac0", ahb_hws,  0x141c, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(bus_gmac1_clk, "bus-gmac1", ahb_hws,  0x142c, BIT(0), 0);
 +
-+static SUNXI_CCU_GATE_HWS(bus_usb0_clk,  "bus-usb0",  ahb_hws,  0x1304, BIT(4) | BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(bus_usb1_clk,  "bus-usb1",  ahb_hws,  0x130c, BIT(4) | BIT(0), 0);
-+static SUNXI_CCU_GATE_HWS(bus_usb2_clk,  "bus-usb2",  ahb_hws,  0x135c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb0_clk, "bus-usb0", ahb_hws, 0x1304, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(usb_ohci0_clk, "usb-ohci0", ahb_hws, 0x1304, BIT(4), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb1_clk, "bus-usb1", ahb_hws, 0x130c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(usb_ohci1_clk, "usb-ohci1", ahb_hws, 0x130c, BIT(4), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), 0);
 +
 +static const struct clk_parent_data mmc_parents[] = {
 +	{ .fw_name = "hosc" },
@@ -377,7 +379,9 @@ V0.93 and critical clock definitions.
 +	&bus_gmac0_clk.common,
 +	&bus_gmac1_clk.common,
 +	&bus_usb0_clk.common,
++	&usb_ohci0_clk.common,
 +	&bus_usb1_clk.common,
++	&usb_ohci1_clk.common,
 +	&bus_usb2_clk.common,
 +	&mmc0_clk.common,
 +	&mmc1_clk.common,
@@ -426,8 +430,8 @@ V0.93 and critical clock definitions.
 +		[CLK_BUS_USB0]		= &bus_usb0_clk.common.hw,
 +		[CLK_BUS_USB1]		= &bus_usb1_clk.common.hw,
 +		[CLK_BUS_USB2]		= &bus_usb2_clk.common.hw,
-+		[CLK_USB_OHCI0]		= &bus_usb0_clk.common.hw,
-+		[CLK_USB_OHCI1]		= &bus_usb1_clk.common.hw,
++		[CLK_USB_OHCI0]		= &usb_ohci0_clk.common.hw,
++		[CLK_USB_OHCI1]		= &usb_ohci1_clk.common.hw,
 +		[CLK_MMC0]		= &mmc0_clk.common.hw,
 +		[CLK_MMC1]		= &mmc1_clk.common.hw,
 +		[CLK_MMC2]		= &mmc2_clk.common.hw,
@@ -497,7 +501,7 @@ V0.93 and critical clock definitions.
 +		.of_match_table		= sun60i_a733_ccu_ids,
 +	},
 +};
-+module_platform_driver(sun60i_a733_ccu_driver);
++builtin_platform_driver(sun60i_a733_ccu_driver);
 +MODULE_LICENSE("GPL");
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.h

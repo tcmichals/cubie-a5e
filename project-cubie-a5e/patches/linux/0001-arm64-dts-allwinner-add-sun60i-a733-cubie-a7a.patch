@@ -431,7 +431,7 @@ index 0000000..155066b
 +			snps,dis-u2-entry-quirk;
 +			snps,dis_u3_susphy_quirk;
 +			snps,dis_u2_susphy_quirk;
-+			status = "okay";
++			status = "disabled";
 +		};
 +
 +		gmac0: ethernet@4500000 {
@@ -439,8 +439,8 @@ index 0000000..155066b
 +			reg = <0x04500000 0x10000>;
 +			interrupts = <GIC_SPI 172 IRQ_TYPE_LEVEL_HIGH>;
 +			interrupt-names = "macirq";
-+			clocks = <&ccu CLK_BUS_GMAC0>;
-+			clock-names = "stmmaceth";
++			clocks = <&ccu CLK_BUS_GMAC0>, <&ccu CLK_BUS_GMAC0>;
++			clock-names = "stmmaceth", "mbus";
 +			resets = <&ccu RST_BUS_GMAC0>;
 +			reset-names = "stmmaceth";
 +			pinctrl-names = "default";

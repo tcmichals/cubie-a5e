@@ -16,3 +16,8 @@ bld.*/
 *.img
 riscv-load
 boot.scr
+
+# Whitelist board vendor firmware tools
+!project-cubie-a5e/board/**/tools/*.bin
+!project-cubie-a5e/board/**/tools/dragonsecboot
+

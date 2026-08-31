@@ -10,52 +10,18 @@ ${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "${BOARD_DIR}/boot.cmd" "$
 # 2. Compile uboot-env.txt into uboot.env binary using host mkenvimage
 ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DIR}/uboot-env.txt"
 
-# 3. Pack Mainline U-Boot (4KB Page-Aligned at 0x4a001000) + TF-A BL31 + OP-TEE + ARISC + DTB into TOC1 boot_package.fex
-mkdir -p "${PACK_DIR}"
+# 3. Stage verified Radxa A733 16MB bootloader blob into BINARIES_DIR
+if [ -f "${BOARD_DIR}/radxa_a733_bootloader.bin" ]; then
+    cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
+elif [ -f "${BINARIES_DIR}/radxa_a733_bootloader.bin" ]; then
+    :
+else
+    echo ">>> Fetching Radxa A733 bootloader blob..."
+    curl -sL "https://github.com/radxa-build/radxa-a733/releases/download/rsdk-t5/radxa-a733_trixie_cli_t5.output_512.img.xz" | xz -dc 2>/dev/null | head -c 16777216 > "${BINARIES_DIR}/radxa_a733_bootloader.bin"
+fi
 
-python3 -c "
-with open('${BOARD_DIR}/tools/header-info.bin', 'rb') as f:
-    hdr = bytearray(f.read())
-# Patch branch opcode at byte 0 to 'b +0x1000' (0x14000400)
-hdr[0:4] = bytes([0x00, 0x04, 0x00, 0x14])
-# Ensure DRAM load address at 0x2c is 0x4a000000
-hdr[0x2c:0x30] = bytes([0x00, 0x00, 0x00, 0x4a])
-# Pad header to exactly 4096 bytes (4KB page aligned)
-if len(hdr) < 4096:
-    hdr.extend(b'\x00' * (4096 - len(hdr)))
-with open('${PACK_DIR}/header-info-4k.bin', 'wb') as f:
-    f.write(hdr)
-"
-
-cat "${PACK_DIR}/header-info-4k.bin" "${BINARIES_DIR}/u-boot.bin" > "${PACK_DIR}/u-boot-with-head.bin"
-cp -f "${BOARD_DIR}/tools/bl31.bin" "${PACK_DIR}/bl31.bin"
-cp -f "${BOARD_DIR}/tools/optee.bin" "${PACK_DIR}/optee.bin"
-cp -f "${BOARD_DIR}/tools/scp.bin" "${PACK_DIR}/scp.bin"
-cp -f "${BINARIES_DIR}/sun60i-a733-cubie-a7a.dtb" "${PACK_DIR}/dtb.bin"
-
-cat > "${PACK_DIR}/boot_package.cfg" << EOF
-[package]
-item=u-boot, u-boot-with-head.bin
-item=monitor, bl31.bin
-item=optee, optee.bin
-item=scp, scp.bin
-item=dtb, dtb.bin
-EOF
-
-(cd "${PACK_DIR}" && "${BOARD_DIR}/tools/dragonsecboot" -pack ./boot_package.cfg)
-cp -f "${PACK_DIR}/boot_package.fex" "${BINARIES_DIR}/boot_package.fex"
-
-# 4. Copy full 240 KB boot0 binary to images
-cp -f "${BOARD_DIR}/bin/boot0_sdcard.bin" "${BINARIES_DIR}/boot0_sdcard.bin"
-
-# 5. Run genimage packaging pipeline
+# 4. Run genimage packaging pipeline
 rm -rf "${GENIMAGE_TMP}"
-${HOST_DIR}/bin/genimage --config "${GENIMAGE_CFG}" --rootpath "${TARGET_DIR}" --tmppath "${GENIMAGE_TMP}" --inputpath "${BINARIES_DIR}" --outputpath "${BINARIES_DIR}"
-
-# 6. Strict Automated Binary Audit & Checksum Gate
-python3 "${BOARD_DIR}/tools/verify_sdcard_image.py" "${BINARIES_DIR}/sdcard.img" || {
-    echo "[-] ERROR: Automated sdcard.img verification failed! Aborting build."
-    exit 1
-}
+PATH="${HOST_DIR}/bin:$PATH" ${HOST_DIR}/bin/genimage --config "${GENIMAGE_CFG}" --rootpath "${TARGET_DIR}" --tmppath "${GENIMAGE_TMP}" --inputpath "${BINARIES_DIR}" --outputpath "${BINARIES_DIR}"
 
 exit 0

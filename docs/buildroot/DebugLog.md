@@ -373,9 +373,37 @@ The failure stemmed from an impedance mismatch between **modern mainline ARM64 d
          reg = <0x00 0x40000000 0x01 0x80000000>; /* 6 GiB */
      };
      ```
-3. **Rebuilt Build Pipeline**:
-   - Executed `make linux-rebuild` and `make` in `bld.a7a`, generating updated `boot.scr`, `uboot.env`, `sun60i-a733-cubie-a7a.dtb`, and `sdcard.img`.
 
+---
 
+## Case Study 11: Allwinner A733 CCU Clock Registration & Shared Pointer Null Pointer Dereference
+**Date:** August 30, 2026  
+**Component:** `drivers/clk/sunxi-ng/ccu-sun60i-a733.c` & `ccu_common.c`
 
+### 🚨 Symptoms
+Upon registering the CCU platform driver (`sun60i_a733_ccu_driver`), the kernel probed the driver during early boot initialization (`kernel_init_freeable`), but immediately panicked with a NULL pointer dereference:
+```text
+[    0.761403] Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000
+[    0.761487] pc : sunxi_ccu_probe+0xb0/0x280
+[    0.761500] lr : sunxi_ccu_probe+0xc0/0x280
+[    0.761541] x20: ffff8000817b7b18 x19: 000000000000004f ...
+[    0.761610] Call trace:
+[    0.761614]  sunxi_ccu_probe+0xb0/0x280 (P)
+[    0.761623]  devm_sunxi_ccu_probe+0x5c/0xb0
+[    0.761631]  sun60i_a733_ccu_probe+0x38/0x60
+```
 
+### 🔍 Root Cause Analysis
+1. Register `x19` held `0x4f` (79 in decimal), corresponding to `CLK_USB_OHCI0` in `include/dt-bindings/clock/sun60i-a733-ccu.h`.
+2. In `ccu-sun60i-a733.c`, `sun60i_a733_hw_clks` mapped:
+   - `[CLK_BUS_USB0] = &bus_usb0_clk.common.hw` (index 76)
+   - `[CLK_USB_OHCI0] = &bus_usb0_clk.common.hw` (index 79, DUPLICATE)
+   - `[CLK_BUS_USB1] = &bus_usb1_clk.common.hw` (index 77)
+   - `[CLK_USB_OHCI1] = &bus_usb1_clk.common.hw` (index 80, DUPLICATE)
+3. When `sunxi_ccu_probe()` iterates through `desc->hw_clks->hws`, it calls `clk_hw_register(dev, hw)`. Upon registering `bus_usb0_clk` at index 76, the Linux Common Clock Framework consumes and zeroes `hw->init = NULL`.
+4. When the loop reached index 79 (`CLK_USB_OHCI0`), it encountered the exact same `bus_usb0_clk` pointer. The driver attempted to read `hw->init->name`, resulting in a NULL pointer dereference.
+
+### 🛠️ The Fix
+1. Defined separate, dedicated clock gates for the OHCI 12M clocks (`usb_ohci0_clk` on bit 4 of `0x1304` and `usb_ohci1_clk` on bit 4 of `0x130c`) and isolated the bus gates (`bus_usb0_clk` on bit 0 of `0x1304` and `bus_usb1_clk` on bit 0 of `0x130c`).
+2. Mapped unique `struct clk_hw` pointers for every entry in `sun60i_a733_hw_clks`.
+3. Updated Linux patch `0003-clk-sunxi-ng-add-allwinner-a733-ccu-and-prcm.patch` and rebuilt `sdcard.img`.

@@ -13,6 +13,8 @@ BOOT0_A733_INSTALL_TARGET = NO
 define BOOT0_A733_INSTALL_IMAGES_CMDS
 	$(INSTALL) -D -m 0644 $(@D)/bin/boot0_sdcard_sun60iw2p1_lpddr5.bin \
 		$(BINARIES_DIR)/boot0_sdcard.bin
+	$(INSTALL) -D -m 0644 $(@D)/bin/optee_sun60iw2p1.bin \
+		$(BINARIES_DIR)/optee.bin
 endef
 
 $(eval $(generic-package))
