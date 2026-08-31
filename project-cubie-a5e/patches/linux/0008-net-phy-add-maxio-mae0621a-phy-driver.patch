@@ -41,7 +41,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  obj-$(CONFIG_NCN26000_PHY)	+= ncn26000.o
 --- /dev/null
 +++ b/drivers/net/phy/maxio.c
-@@ -0,0 +1,442 @@
+@@ -0,0 +1,435 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/* drivers/net/phy/maxio.c
 + *
@@ -79,29 +79,22 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +static int maxio_read_paged(struct phy_device *phydev, int page, u32 regnum)
 +{
-+	int ret = 0, oldpage;
++	int ret;
 +
-+	oldpage = PHY_READ(phydev, MAXIO_PAGE_SELECT);
-+	if (oldpage >= 0) {
-+		PHY_WRITE(phydev, MAXIO_PAGE_SELECT, page);
-+		ret = PHY_READ(phydev, regnum);
-+	}
-+	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, oldpage);
++	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, page);
++	ret = PHY_READ(phydev, regnum);
++	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, 0);
 +
 +	return ret;
 +}
 +
 +static int maxio_write_paged(struct phy_device *phydev, int page, u32 regnum, u16 val)
 +{
-+	int ret = 0, oldpage;
++	int ret;
 +
-+	oldpage = PHY_READ(phydev, MAXIO_PAGE_SELECT);
-+	if (oldpage >= 0) {
-+		PHY_WRITE(phydev, MAXIO_PAGE_SELECT, page);
-+		ret = PHY_WRITE(phydev, regnum, val);
-+	}
-+
-+	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, oldpage);
++	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, page);
++	ret = PHY_WRITE(phydev, regnum, val);
++	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, 0);
 +
 +	return ret;
 +}
