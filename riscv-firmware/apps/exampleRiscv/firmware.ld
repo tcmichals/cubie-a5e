@@ -8,24 +8,21 @@ ENTRY(_start)
 
 MEMORY
 {
-    /* XuanTie E907 ITCM: 64 KB (0x00000000 - 0x0000FFFF) */
-    ITCM (rx)     : ORIGIN = 0x00000000, LENGTH = 64K
+    /* 56 KB RISC-V SRAM for Code, Data, BSS, Heap, Stack (0x00000000 - 0x0000DFFF) */
+    R_SRAM (rwx)  : ORIGIN = 0x00000000, LENGTH = 56K
 
-    /* XuanTie E907 DTCM: 60 KB for Data, BSS, Heap, Stack (0x00080000 - 0x0008EFFF) */
-    DTCM (rwx)    : ORIGIN = 0x00080000, LENGTH = 60K
-
-    /* Top 4 KB of DTCM for RemoteProc Resource Table and Trace Buffer (0x0008F000 - 0x0008FFFF) */
-    R_TABLE (rwx) : ORIGIN = 0x0008F000, LENGTH = 4K
+    /* Top 8 KB for RemoteProc Resource Table and Trace Buffer (0x0000E000 - 0x0000FFFF) */
+    R_TABLE (rwx) : ORIGIN = 0x0000E000, LENGTH = 8K
 }
 
 SECTIONS
 {
-    /* 1. Vector table and CRT0 startup code at ITCM base (0x00000000) */
+    /* 1. Vector table and CRT0 startup code at SRAM base (0x00000000) */
     .vectors :
     {
         KEEP(*(.vectors))
         KEEP(*(.text.startup))
-    } > ITCM
+    } > R_SRAM
 
     /* 2. Program Code */
     .text :
@@ -34,7 +31,7 @@ SECTIONS
         *(.text)
         *(.text.*)
         . = ALIGN(4);
-    } > ITCM
+    } > R_SRAM
 
     .rodata :
     {
@@ -44,9 +41,9 @@ SECTIONS
         *(.srodata)
         *(.srodata.*)
         . = ALIGN(4);
-    } > ITCM
+    } > R_SRAM
 
-    /* 3. Linux RemoteProc Resource Table (placed in R_TABLE in DTCM) */
+    /* 3. Linux RemoteProc Resource Table */
     .resource_table :
     {
         . = ALIGN(4);
@@ -67,7 +64,7 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _data_end = .;
-    } > DTCM AT > ITCM
+    } > R_SRAM
 
     _sram_data_start = LOADADDR(.data);
 
@@ -83,22 +80,22 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
-    } > DTCM
+    } > R_SRAM
 
     /* 6. Stack and Heap */
     .heap (NOLOAD) :
     {
         . = ALIGN(8);
         _heap_start = .;
-        . = . + 8K;
+        . = . + 4K;
         _heap_end = .;
-    } > DTCM
+    } > R_SRAM
 
     .stack (NOLOAD) :
     {
         . = ALIGN(8);
         _stack_bottom = .;
-        . = . + 16K;
+        . = . + 8K;
         _stack_top = .;
-    } > DTCM
+    } > R_SRAM
 }
