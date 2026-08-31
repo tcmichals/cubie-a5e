@@ -1,12 +1,12 @@
 /*
  * resource_table.c - RemoteProc Resource Table for XuanTie E907
- * Declares one RSC_TRACE buffer at 0x00038000 in 256 KB RISC-V SRAM
+ * Declares one RSC_TRACE buffer at 0x00029000 in Shared System SRAM C
  */
 
 #include <stdint.h>
 #include <stddef.h>
 
-#define TRACE_BUF_DA            0x00038000  /* 256 KB RISC-V SRAM (Host: 0x072B8000) */
+#define TRACE_BUF_DA            0x00029000  /* Shared System SRAM C (Host: 0x00029000) */
 #define TRACE_BUF_LEN           0x1000      /* 4 KB Trace Buffer */
 
 /* Resource Types */
