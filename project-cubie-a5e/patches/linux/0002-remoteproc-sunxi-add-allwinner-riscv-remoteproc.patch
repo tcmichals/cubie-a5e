@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,544 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -260,7 +260,25 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	/* 1. Core boots directly from Dedicated SRAM (0x07280000 / Core 0x0) */
++	/*
++	 * 1. If entry point is not 0x0, install a 32-bit RISC-V jump trampoline
++	 * at the hardware reset vector (0x00000000 in Dedicated SRAM):
++	 *   lui   t0, %hi(bootaddr)
++	 *   jalr  zero, %lo(bootaddr)(t0)
++	 */
++	if (rproc->bootaddr != 0 && priv->r_sram_va) {
++		u32 addr = (u32)rproc->bootaddr;
++		u32 hi = (addr + 0x800) >> 12;
++		u32 lo = addr & 0xfff;
++		u32 lui_t0  = 0x000002b7 | (hi << 12);
++		u32 jalr_t0 = 0x00028067 | (lo << 20);
++
++		dev_info(priv->dev, "Installed reset trampoline: 0x0 -> 0x%x (0x%08x 0x%08x)\n",
++			 addr, lui_t0, jalr_t0);
++		writel(lui_t0,  priv->r_sram_va);
++		writel(jalr_t0, priv->r_sram_va + 4);
++		wmb();
++	}
 +
 +	/* 2. Enable core clock to begin execution */
 +	if (priv->clk_core) {
@@ -315,7 +333,15 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (is_iomem)
 +		*is_iomem = true;
 +
-+	/* 1. Shared System SRAM (SRAM A2 0x00040000 - 0x00068000) */
++	/* 1. Dedicated RISC-V SRAM (0x00000000 - 0x0003ffff) */
++	if (priv->r_sram_va) {
++		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size))
++			return priv->r_sram_va + (da - priv->r_sram_phys);
++		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size)
++			return priv->r_sram_va + da;
++	}
++
++	/* 2. Shared System SRAM (SRAM A2 0x00040000 - 0x00068000) */
 +	if (priv->sram_va) {
 +		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size))
 +			return priv->sram_va + (da - priv->sram_phys);
