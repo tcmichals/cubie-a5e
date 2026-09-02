@@ -39,12 +39,13 @@ flowchart TB
 | Architectural Feature | Radxa Cubie A5E (A523 / sun55iw3) | Radxa Cubie A7A (A733 / sun60iw2) |
 | :--- | :--- | :--- |
 | **RISC-V Core IP** | XuanTie E906 / E907 @ 600 MHz | XuanTie E907 (RV32IMAFDC) @ 600 MHz |
-| **TrustZone / OP-TEE State** | Open PRCM physical bus window | OP-TEE locks PRCM SRAM (`0x07110000`–`0x07130000`) |
-| **Host Loading Destination** | Direct Host MMIO (`0x07110000` / `0x07120000`) | Reserved DDR Carveout (`0x4E000000`) |
-| **Start Address Register** | R_CPUCFG / PRCM Subsystem Reset | `0x07010204` (`RV_CFG_STA_ADD_REG`) |
-| **CCU Clock & Reset Control** | `0x07010000` (Offset `0x0020` / `0x0100`) | `0x0701021C` (`R_CCU` Gate & Reset Register) |
+| **Primary SRAM Aperture** | Dedicated RISC-V SRAM (`0x07280000`) | Dedicated RISC-V SRAM (`0x07280000`, 256 KB) |
+| **Shared System SRAM** | System SRAM A2 (`0x00040000`, 160 KB) | System SRAM A2 (`0x00040000`, 160 KB) |
+| **Host Loading Destination** | Direct MMIO (`0x07280000` / `0x00040000`) | Direct MMIO (`0x07280000` / `0x00040000`) |
+| **Reset Vector Entry** | Fixed Hardware Vector `0x00000000` | Fixed Hardware Vector `0x00000000` |
+| **Subsystem Control Block** | MCU CCU (`0x07102000`) | MCU CCU (`0x07102000`, offset `0x124` = `0x00070001`) |
 | **Doorbell Mailbox** | `0x03003000` (`sun55i-msgbox`) | `0x03004000` (`sun60i-msgbox` Channel 0) |
-| **Trace Buffer Location** | `0x07130000` (SRAM C) or `0x4E000000` (DDR) | `0x4E010000` (DDR Carveout) |
+| **Trace Buffer Location** | `0x00040000` (SRAM A2) or `0x4E000000` (DDR) | `0x00040000` (SRAM A2) or `0x4E000000` (DDR) |
 
 ---
 
@@ -82,9 +83,7 @@ rproc: remoteproc@7010000 {
 
 ### B. Radxa Cubie A7A (Allwinner A733)
 
-On the A733 SoC, U-Boot SPL loads the TOC1 package containing ARM Trusted Firmware (BL31) and OP-TEE OS (`optee_sun60iw2p1.bin` at `0x48600000`). OP-TEE configures the Security Permission Controller (SPC) to restrict `0x07110000`–`0x07130000` to Secure-World only. Non-secure Linux accesses to that window trigger an AXI `DECERR` (Bus error).
-
-To achieve 100% reliability with upstream Linux 7.1, the A7A uses a **Dedicated DDR Carveout (`0x4E000000`)**:
+On the A733 SoC, the XuanTie E907 core and its Dedicated 256 KB Local SRAM are managed via the **MCU CCU (`0x07102000`)**:
 
 ```dts
 /* A7A Device Tree Node */
@@ -99,10 +98,12 @@ reserved-memory {
     };
 };
 
-rproc: remoteproc@7010000 {
-    compatible = "allwinner,sun60i-a733-rproc";
-    reg = <0x07010000 0x1000>;
-    reg-names = "cfg";
+rproc: remoteproc@7102000 {
+    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
+    reg = <0x07102000 0x1000>,
+          <0x07280000 0x40000>,
+          <0x00040000 0x28000>;
+    reg-names = "cfg", "r_sram", "sram";
     clocks = <&r_ccu CLK_RISCV_24M>, <&r_ccu CLK_RISCV_CFG>, <&r_ccu CLK_RISCV>;
     clock-names = "parent", "bus", "core";
     resets = <&r_ccu RST_BUS_RISCV_CFG>;
@@ -116,14 +117,14 @@ rproc: remoteproc@7010000 {
 ```
 
 #### Boot & Execution Flow:
-1. **Linux Remoteproc**:
-   * Reads ELF headers and copies `.text` and `.data` into `0x4E000000`.
-   * Writes the entry address (`0x4E000000` or `0x4E00004a`) into `0x07010204` (`RV_CFG_STA_ADD_REG`).
-   * De-asserts core reset via `0x0701021C` (Bit 0 and Bit 16).
+1. **Linux Remoteproc (`sunxi_rproc.c`)**:
+   * Reads ELF headers and maps `.vectors`, `.text`, and `.data` into Dedicated RISC-V SRAM (`0x07280000` / Core `0x00000000`).
+   * Configures MCU CCU bus bridges (`TZMA0`, `TZMA1`, `PUBSRAM`, `MBUS`).
+   * Releases core reset by writing `0x00070001` to `0x07102124`.
 2. **XuanTie E907 Core**:
-   * Begins execution directly out of DDR over the SoC AXI interconnect.
-   * Runs `trace_init()` and updates `trace_puts()` into the trace buffer at `0x4E010000`.
-   * (Optional 0-wait-state mode): Self-copies inner loops into local `0x00000000` ITCM.
+   * Begins execution directly at hardware reset vector `0x00000000` (Dedicated SRAM).
+   * Runs `startup.S` and jumps to `_start`.
+   * Telemetry and shared buffers are accessed in Shared System SRAM A2 (`0x00040000`) or DDR Carveout (`0x4E000000`).
 
 ---
 

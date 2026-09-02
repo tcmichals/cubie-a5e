@@ -53,42 +53,46 @@ Because the RISC-V core has its own internal bus address mapping, physical addre
 
 | Memory Region | Host (ARM64) Address | RISC-V Core Address | Size | Primary Usage |
 | :--- | :--- | :--- | :--- | :--- |
-| **ITCM** | `0x07110000` | `0x00000000` | 64 KB | Vector Table, Reset Trampoline, Fast ISRs |
-| **DTCM** | `0x07120000` | `0x00080000` | 64 KB | Stack Pointer (`sp`), Coroutine Frame Pools |
-| **SRAM C** | `0x07130000` | `0x07130000` | 320 KB | Main Application Code & SPSC IPC Rings |
+| **Dedicated SRAM** (`r_sram`) | `0x07280000` | `0x00000000` | 256 KB | **Hardware Reset Vector Table (`.vectors`)**, ISRs, Fast Code |
+| **Shared SRAM** (`sram`) | `0x00040000` | `0x00040000` | 160 KB | Shared SRAM A2 (Telemetry, SPSC IPC Rings) |
 | **DRAM Window** | `0x40000000`..`0x7FFFFFFF` | `0x40000000`..`0x7FFFFFFF` | 1 GiB | Direct Physical DDR access (DMA payloads) |
-| **PRCM (R-CCU)**| `0x07010000` | `0x40010000` / `0x07010000`| 64 KB | Power, Clock, and Reset Registers |
-| **MSGBOX (IPI)**| `0x03004000` | `0x07094000` | 4 KB | Inter-Core Mailbox Doorbell IRQ |
-| **S_UART0 (Debug)**| `0x07080000` | `0x07080000` | 4 KB | RISC-V Dedicated Serial Console (115200) |
+| **MCU CCU** (`cfg`) | `0x07102000` | `0x07102000` | 4 KB | E907 Core Reset, Bus Bridges, Clock Controls |
+| **MSGBOX (IPI)** | `0x03004000` | `0x07094000` | 4 KB | Inter-Core Mailbox Doorbell IRQ |
+| **S_UART0 (Debug)** | `0x07080000` | `0x07080000` | 4 KB | RISC-V Dedicated Serial Console (115200) |
 | **S_GPIO (R-PIO)** | `0x07025000` | `0x07025000` | 8 KB | Low-Latency I/O (`PL`, `PM` banks) |
 
 ---
 
-## 3. Power, Reset & Clock Control (PRCM Registers)
+## 3. Power, Reset & Clock Control (MCU CCU Registers at `0x07102000`)
 
-The RISC-V core is controlled via the Always-On PRCM block (`0x07010000`).
+The XuanTie E907 co-processor lifecycle and bus bridges are controlled via the **MCU CCU (`0x07102000`)**:
 
 ### Key Control Registers:
 | Offset | Register Name | Bitfields | Functional Description |
 | :--- | :--- | :--- | :--- |
-| `0x0210` | `RISCV_24M_CLK_REG` | `[25:24]` | **Clock Source Select**: `00` = DCXO (24MHz), `01` = RTC_32K, `10` = 16M_RC |
-| `0x021C` | `RISCV_BGR_REG` | **Bit 16**: `RISCV_CFG_RST`<br>**Bit 1**: `RISCV_CFG_GATING`<br>**Bit 0**: `RISCV_GATING` | **Bus Gating & Reset**: Controls peripheral clocks and reset de-assertion to the core subsystem. |
-| `0x0020` | `DSP_CLK_REG` | `[31]`: Enable<br>`[26:24]`: Factor N<br>`[18:16]`: Factor M | Main PLL Multiplier / Divider for core execution clock (up to 600 MHz). |
-| `0x0100` | `DSP_RST_REG` | **Bit 17**: `SYS_RST`<br>**Bit 16**: `CORE_RST` | **Core Execution Reset**:<br>- Assert `SYS_RST` while holding `CORE_RST` to initialize memory.<br>- Release `CORE_RST` to start executing instructions from `0x00000000`. |
+| `0x0108` | `TZMA0_REG` | `0x00010001` | **SRAM Adapter Bridge**: Un-gates CPU/DMA access to Dedicated SRAM. |
+| `0x010C` | `TZMA1_REG` | `0x00010001` | **Peripheral Adapter Bridge**: Un-gates core peripheral access. |
+| `0x0114` | `PUBSRAM_GATE` | `0x00010001` | **PubSRAM Clock Gate**: Connects core to shared system memory. |
+| `0x011C` | `MBUS_CLK` | `0x00000003` | **MBUS Subsystem Clock**: Interconnect clock for high-speed transfers. |
+| `0x0120` | `RISCV_CLK` | `0x80000000` | **Core Execution Clock**: Enables 24 MHz OSC reference clock. |
+| `0x0124` | `CORE_RST` | **`0x00070001`** (Run)<br>**`0x00030001`** (Reset) | **Core Execution Reset**: Writing `0x00070001` releases the XuanTie E907 core from reset to begin instruction fetch from `0x00000000`. |
+| `0x0128` | `MSGBOX_GATE` | `0x00010001` | **Hardware Mailbox Gate**: Enables hardware IPC mailbox. |
 
 ---
 
 ## 4. Linux 7.1 Remote Processor (`remoteproc`) Integration
 
-The kernel driver [`drivers/remoteproc/sunxi_rproc.c`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch) manages the complete lifecycle of the XuanTie core:
+The kernel driver `drivers/remoteproc/sunxi_rproc.c` adheres strictly to standard upstream Linux remoteproc architecture:
+* **No Synthetic Code / No Trampolines**: The driver is a pure lifecycle manager. It does not modify memory or inject trampolines.
+* **Firmware Contract**: The firmware ELF **must** link its reset vector table at **`0x00000000`** (`ORIGIN = 0x00000000` in Dedicated SRAM). The hardware E907 core always fetches its reset instruction directly from address `0x00000000`.
 
 ### A. Lifecycle Management Commands
 ```bash
 # 1. Install bare-metal ELF binary to Linux firmware directory
-cp firmware.elf /lib/firmware/sunxi_riscv_fw.elf
+cp firmware.elf /lib/firmware/riscv-firmware.elf
 
 # 2. Assign firmware to remoteproc instance
-echo sunxi_riscv_fw.elf > /sys/class/remoteproc/remoteproc0/firmware
+echo riscv-firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
 
 # 3. Boot XuanTie E907 RISC-V core
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -102,13 +106,12 @@ echo stop > /sys/class/remoteproc/remoteproc0/state
 
 ### B. Device Tree Node (A733 DTS)
 ```dts
-rproc: remoteproc@7010000 {
-    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc", "allwinner,sunxi-rproc";
-    reg = <0x00 0x07010000 0x00 0x1000>,  /* PRCM / CFG Base */
-          <0x00 0x07110000 0x00 0x10000>, /* ITCM (64 KB) */
-          <0x00 0x07120000 0x00 0x10000>, /* DTCM (64 KB) */
-          <0x00 0x07130000 0x00 0x50000>; /* SRAM C (320 KB) */
-    reg-names = "cfg", "itcm", "dtcm", "sram";
+rproc: remoteproc@7102000 {
+    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
+    reg = <0x07102000 0x1000>,
+          <0x07280000 0x40000>,
+          <0x00040000 0x28000>;
+    reg-names = "cfg", "r_sram", "sram";
     clocks = <&r_ccu CLK_RISCV_24M>,
              <&r_ccu CLK_RISCV_CFG>,
              <&r_ccu CLK_RISCV>;
@@ -117,6 +120,8 @@ rproc: remoteproc@7010000 {
     reset-names = "cfg";
     mboxes = <&msgbox 0>;
     mbox-names = "tx";
+    memory-region = <&rproc_trace>;
+    memory-region-names = "trace";
     status = "okay";
 };
 ```

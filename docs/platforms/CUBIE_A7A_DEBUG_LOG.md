@@ -441,6 +441,26 @@ The table below documents the full line-by-line cross-reference comparing the ve
 - **Stale firmware root cause**: An obsolete binary was checked into the A7A rootfs overlay at `board/radxa/cubie_a7a/rootfs-overlay/lib/firmware/riscv-firmware.elf`. The firmware package installed the newly built ELF first, but Buildroot `target-finalize` subsequently copied the overlay and silently restored the old ITCM trace resource (`DA 0x0000e000`, length `0x1000`). The A7A overlay copy was removed so the package is now the single authoritative installer.
 - **Corrected image proof**: After a clean firmware package build and explicit `rootfs-ext2 target-post-image`, the build-tree, target-tree, and packed-rootfs firmware ELFs all have SHA-256 `927e9b7647a80fa92e9e52a813dcabb30ee8c7aa2a90d1142d8c3a9f477a587e`. Their resource table advertises reserved DDR trace DA `0x4e000000`, length `0x8000`. The rebuilt `sdcard.img` still requires target validation.
 
+### Pinctrl Bank Stride Fix, Status LEDs, and VBUS GPIOs (Sep 2, 2026)
+- **Root Cause Identified**: The Allwinner A733 PIO controller uses hardware layout `HW_TYPE_10` with a `0x80` byte memory stride per GPIO bank, `pull_regs_offset = 0x30`, and `dlevel_field_width = 4`. The initial mainline port used the legacy `0x24` stride, causing all bank offsets beyond PA (PB..PN) to miscalculate and silent MMIO read/write failures.
+- **Mainline Implementation**: Added `SUNXI_PINCTRL_A733_LAYOUT` (`BIT(11)`) to `drivers/pinctrl/sunxi/pinctrl-sunxi.h` and `pinctrl-sunxi.c`, dynamically allocating `0x80` bank sizes and correct pull offsets.
+- **Hardware Verification**: Target boot confirmed 100% functionality. Blue heartbeat LED (`PJ27`) and Green power LED (`PJ26`) successfully registered in sysfs and toggled via `/sys/class/leds/radxa:green:power/brightness`.
+
+### CCU 24MHz Clock Fallback & RSB PMIC Configuration (Sep 2, 2026)
+- **Clock Bug Resolved**: In both Main CCU (`ccu-sun60i-a733.c`) and R-CCU (`ccu-sun60i-a733-r.c`), `osc24M` and parent arrays used only `{ .fw_name = "hosc" }` without string fallback `.name = "osc24M"`. Linux CCU failed to resolve the parent rate, leaving `r-ahb`, `r-apbs1`, `r-twi0`, and USB reference clocks reporting `0 Hz`.
+- **Mainline Fix**: Added explicit `.name = "osc24M"` fallback to all 24MHz parents across Main CCU and R-CCU.
+- **RSB Verification**: In DTS, switched `r_i2c0` at `0x07083000` to `allwinner,sun8i-a23-rsb` (`r_rsb`) with child `axp8191: pmic@3a3` to match U-Boot's RSB mode initialization.
+
+### XuanTie E907 RemoteProc & MCU CCU Architecture (Sep 2, 2026)
+- **Hardware Controller Isolation**: The XuanTie E907 auxiliary core on A733 / T527 is controlled via the **MCU CCU at `0x07102000`** (not `r_ccu` `0x07010000`). The core reset line is at `0x07102124` (`0x00070001` = run, `0x00030001` = hold in reset), with 24MHz clock gate at `0x07102120` (`0x80000000`), and bus adapter bridges at `0x108`, `0x10c`, `0x114`, `0x11c`, `0x128`.
+- **Synchronous Abort Eliminated**: Removed legacy `0x0204` (`RISCV_STA_ADD`) MMIO read/write from `sunxi_rproc_start()`. On newer A733 silicon, `0x07130000` is unmapped or absent, and reading offset `0x204` triggered an immediate hardware bus abort.
+- **Firmware Reset Contract (Standard Linux Upstream Design)**:
+  - The XuanTie E907 hardware silicon always begins execution at `0x00000000` upon reset release.
+  - In A733, address `0x00000000` maps to **Dedicated RISC-V Local SRAM at `0x07280000` (256 KB)**.
+  - Aligned `cubie-a5e/riscv-firmware/apps/exampleRiscv/firmware.ld` to `ORIGIN = 0x00000000, LENGTH = 256K` so `.vectors` sits directly at the hardware reset vector.
+  - `sunxi_rproc.c` adheres strictly to standard upstream Linux remoteproc architecture: it is a pure lifecycle manager that maps memory via `da_to_va`, enables clocks, and deasserts reset without synthesizing synthetic code or trampolines.
+
+
 
 
 
