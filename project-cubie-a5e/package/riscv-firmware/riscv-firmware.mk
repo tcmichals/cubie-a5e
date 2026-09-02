@@ -28,4 +28,13 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh
 endef
 
+RISCV_FIRMWARE_INSTALL_IMAGES = YES
+
+define RISCV_FIRMWARE_INSTALL_IMAGES_CMDS
+	if [ -f $(@D)/apps/exampleRiscv/firmware.elf ]; then \
+		$(INSTALL) -D -m 0644 $(@D)/apps/exampleRiscv/firmware.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/apps/exampleRiscv/firmware.bin $(BINARIES_DIR)/riscv-firmware.bin; \
+	fi
+endef
+
 $(eval $(generic-package))
