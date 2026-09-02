@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,556 @@
+@@ -0,0 +1,574 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -92,7 +92,7 @@ index 0000000..1234567
 +		regulator-name = "usb0-vbus";
 +		regulator-min-microvolt = <5000000>;
 +		regulator-max-microvolt = <5000000>;
-+		gpio = <&r_pio 0 2 GPIO_ACTIVE_HIGH>; /* PL2 */
++		gpios = <&r_pio 0 2 GPIO_ACTIVE_HIGH>; /* PL2 */
 +		enable-active-high;
 +		regulator-always-on;
 +		regulator-boot-on;
@@ -103,7 +103,7 @@ index 0000000..1234567
 +		regulator-name = "usb1-vbus";
 +		regulator-min-microvolt = <5000000>;
 +		regulator-max-microvolt = <5000000>;
-+		gpio = <&r_pio 1 5 GPIO_ACTIVE_HIGH>; /* PM5 (USB_HOST_EN) */
++		gpios = <&r_pio 1 5 GPIO_ACTIVE_HIGH>; /* PM5 (USB_HOST_EN) */
 +		enable-active-high;
 +		regulator-always-on;
 +		regulator-boot-on;
@@ -114,7 +114,7 @@ index 0000000..1234567
 +		regulator-name = "wifi_power_en";
 +		regulator-min-microvolt = <3300000>;
 +		regulator-max-microvolt = <3300000>;
-+		gpio = <&r_pio 1 0 GPIO_ACTIVE_HIGH>; /* PM0 (USB_WIFI_PWR) */
++		gpios = <&r_pio 1 0 GPIO_ACTIVE_HIGH>; /* PM0 (USB_WIFI_PWR) */
 +		enable-active-high;
 +		regulator-always-on;
 +		regulator-boot-on;
@@ -125,7 +125,7 @@ index 0000000..1234567
 +		regulator-name = "wifi_chip_en";
 +		regulator-min-microvolt = <3300000>;
 +		regulator-max-microvolt = <3300000>;
-+		gpio = <&r_pio 1 1 GPIO_ACTIVE_HIGH>; /* PM1 (WIFI_REG_ON) */
++		gpios = <&r_pio 1 1 GPIO_ACTIVE_HIGH>; /* PM1 (WIFI_REG_ON) */
 +		enable-active-high;
 +		regulator-always-on;
 +		regulator-boot-on;
@@ -138,6 +138,23 @@ index 0000000..1234567
 +		regulator-max-microvolt = <3300000>;
 +		regulator-always-on;
 +		regulator-boot-on;
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led-0 {
++			label = "radxa:blue:user";
++			gpios = <&pio 9 27 GPIO_ACTIVE_HIGH>; /* PJ27 */
++			linux,default-trigger = "heartbeat";
++		};
++
++		led-1 {
++			label = "radxa:green:power";
++			gpios = <&pio 9 26 GPIO_ACTIVE_HIGH>; /* PJ26 */
++			linux,default-trigger = "default-on";
++			default-state = "on";
++		};
 +	};
 +
 +	cpus {
@@ -450,7 +467,7 @@ index 0000000..1234567
 +
 +		dwc3: usb@6a00000 {
 +			compatible = "snps,dwc3";
-+			reg = <0x06a00000 0x10000>;
++			reg = <0x06a00000 0x100000>;
 +			interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&ccu CLK_BUS_USB2>,
 +				 <&ccu CLK_BUS_USB2>,
@@ -465,7 +482,7 @@ index 0000000..1234567
 +			snps,dis-u2-entry-quirk;
 +			snps,dis_u3_susphy_quirk;
 +			snps,dis_u2_susphy_quirk;
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		gmac0: ethernet@4500000 {
@@ -552,7 +569,8 @@ index 0000000..1234567
 +
 +			r_i2c0_pins: r-i2c0-pins {
 +				pins = "PL0", "PL1";
-+				function = "s_twi0";
++				allwinner,pinmux = <2>;
++				function = "r_i2c0";
 +				bias-pull-up;
 +			};
 +		};
