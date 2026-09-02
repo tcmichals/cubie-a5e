@@ -1,23 +1,43 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Mon, 24 Aug 2026 12:00:00 +0000
-Subject: [PATCH] phy: allwinner: sun4i-usb: use shared reset control
+Subject: [PATCH] phy: allwinner: sun4i-usb: add A733 and A523 support with shared reset control
 
 Modern Allwinner SoCs (A733 / A523) gate both the analog PHY transceiver
 and the Host Controller DMA engine via master bus reset lines. Using
 exclusive devm_reset_control_get() prevents host controllers from probing
 with -EBUSY and causes multi-PHY probe to terminate prematurely on -ENOENT.
-Use devm_reset_control_get_shared() to enable clean reset sharing.
+Use devm_reset_control_get_shared() to enable clean reset sharing, add
+compatible strings for sun60i-a733-usb-phy and sun55i-a523-usb-phy, and
+guard against missing optional secondary PHY pointers.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/phy/allwinner/phy-sun4i-usb.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ drivers/phy/allwinner/phy-sun4i-usb.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/phy/allwinner/phy-sun4i-usb.c b/drivers/phy/allwinner/phy-sun4i-usb.c
 index a1b2c3d..e4f5a6b 100644
 --- a/drivers/phy/allwinner/phy-sun4i-usb.c
 +++ b/drivers/phy/allwinner/phy-sun4i-usb.c
+@@ -279,7 +279,7 @@ static int sun4i_usb_phy_init(struct phy *_phy)
+ 	if (ret)
+ 		return ret;
+ 
+-	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2) {
++	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2 && !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk)) {
+ 		ret = clk_prepare_enable(phy->clk2);
+ 		if (ret) {
+ 			reset_control_assert(phy->reset);
+@@ -386,7 +386,7 @@ static int sun4i_usb_phy_exit(struct phy *_phy)
+ 	if (phy->index == 0)
+ 		data->phy0_init = false;
+ 
+-	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2)
++	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2 && !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk))
+ 		clk_disable_unprepare(phy->clk2);
+ 
+ 	clk_disable_unprepare(phy->clk);
 @@ -787,7 +787,7 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
  			continue;
  
@@ -27,5 +47,14 @@ index a1b2c3d..e4f5a6b 100644
  		if (IS_ERR(phy->reset)) {
  			if (PTR_ERR(phy->reset) == -ENOENT)
  				break;
+@@ -1027,6 +1027,8 @@ static const struct of_device_id sun4i_usb_phy_of_match[] = {
+ 	{ .compatible = "allwinner,sun8i-r40-usb-phy", .data = &sun8i_r40_cfg },
+ 	{ .compatible = "allwinner,sun8i-v3s-usb-phy", .data = &sun8i_v3s_cfg },
+ 	{ .compatible = "allwinner,sun20i-d1-usb-phy", .data = &sun20i_d1_cfg },
++	{ .compatible = "allwinner,sun55i-a523-usb-phy", .data = &sun20i_d1_cfg },
++	{ .compatible = "allwinner,sun60i-a733-usb-phy", .data = &sun20i_d1_cfg },
+ 	{ .compatible = "allwinner,sun50i-a64-usb-phy",
+ 	  .data = &sun50i_a64_cfg},
+ 	{ .compatible = "allwinner,sun50i-h6-usb-phy", .data = &sun50i_h6_cfg },
 -- 
 2.34.1

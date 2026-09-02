@@ -1,48 +1,123 @@
-# Radxa Cubie A7A V1.10 USB and Power Schematic Reference
+# Radxa Cubie A7A USB, PHY, Power & PMIC Architecture Reference
 
-> **Source**: [Radxa Cubie A7A V1.10 schematic](https://dl.radxa.com/cubie/a7a/docs/hw/radxa_cubie_a7a_v1.10_schematic.pdf), sheets 4, 14, and 15 of 19, reviewed on 2026-09-01.
->
-> **Local searchable conversion**: [`../extracted_vendor/radxa_cubie_a7a_v1.10_schematic.txt`](../extracted_vendor/radxa_cubie_a7a_v1.10_schematic.txt)
+This document provides complete register definitions, hardware schematics, and bring-up analysis for USB 2.0/3.0, PHY transceivers, FE1.1S hub, AIC8800 Wi-Fi/BT, and the dual AXP PMIC power subsystem on the **Radxa Cubie A7A (Allwinner A733 / sun60i)**.
 
-## Sheet map
+---
 
-| Sheet | Content | Bring-up use |
-|---|---|---|
-| 4 | AXP318 PMIC and board power rails | Verify regulator origin, voltage, and always-on dependencies |
-| 13 | Wi-Fi/BT | Wi-Fi module power and USB relationship |
-| 14 | USB 3.0 / 2.0 / hub | VBUS switches, FE1.1S hub, USB data routing |
-| 15 | USB-C and TF card | USB0 Type-C power/data wiring |
-| 18 | Ethernet | PHY, RJ45, magnetics, and PHY supply |
+## 1. USB Topology Overview
 
-## USB physical topology
+```
+                      ┌─────────────────────────────────────────────────────────┐
+                      │                 Allwinner A733 SoC                     │
+                      │                                                         │
+                      │   EHCI0 / OHCI0 (0x04101000 / 0x04101400)               │
+                      │        │                                                │
+                      │      PHY0 (0x04100400 / 0x04101800)                     │
+                      │        │  (USB1-DP / USB1-DM)                           │
+                      └────────┼────────────────────────────────────────────────┘
+                               │
+                               ▼
+                   Bottom USB 3.0 / 2.0 Type-A Port (CON_U3_U2)
+                   5V VBUS powered by U2 (SGM2576), enabled by PL2 (USB0-DRVVBUS)
 
-| Function | Board circuit | Linux-visible control |
-|---|---|---|
-| USB0 / USB3 OTG bottom connector | CON1 bottom Type-A USB2/USB3 connector; `USB1-DM/DP` and SuperSpeed pairs | VBUS switch U2 (`SGM2576YN5G/TR`) output `VCC5V0_USB30_OTG`; enable net `USB0-DRVVBUS` is **PL2** |
-| USB1 host top connector | CON1 top Type-A USB2 connector; `USB1_DM/DP` | Fed from `VCC5V0_USB20` |
-| USB2 hub path | J4 USB2D0_2, then FE1.1S U6 downstream ports | VBUS switch U5 (`SGM2576YN5G/TR`) output `VCC5V0_USB20`; enable net `USB_HOST_EN` is **PM5** |
-| USB hub | U6 (`FE1.1S`) with Y4 12 MHz crystal | Separate `VCC_3V3_USB20HUB` rail from DCDC1 through R58 |
+                      ┌─────────────────────────────────────────────────────────┐
+                      │                 Allwinner A733 SoC                     │
+                      │                                                         │
+                      │   EHCI1 / OHCI1 (0x04200000 / 0x04200400)               │
+                      │        │                                                │
+                      │      PHY1 (0x04200800)                                  │
+                      │        │  (USB2-DP / USB2-DM)                           │
+                      └────────┼────────────────────────────────────────────────┘
+                               │
+                               ▼
+                   FE1.1S 4-Port USB 2.0 Hub (U6)
+                   5V VBUS powered by U5 (SGM2576), enabled by PM5 (USB_HOST_EN)
+                   Hub 3.3V power: DCDC1 via R58 (0R) -> VCC_3V3_USB20HUB
+                               │
+            ┌──────────────────┼──────────────────┐
+            ▼                  ▼                  ▼
+     Downstream Port 1   Downstream Ports 2 & 3  Downstream Port 4
+     Top USB Type-A Port   Internal USB2D0_2     FCU760K / AIC8800 Wi-Fi 6
+     (CON1)                Header (J4)           Module (U3)
+```
 
-## Power rails and enable controls
+---
 
-| Rail/control | Schematic source and destination | DTS status |
-|---|---|---|
-| `VCC5V0_SYS` | Board 5 V source feeding VBUS switches U2 and U5 | Fixed upstream board rail; not GPIO controlled by Linux |
-| `USB0-DRVVBUS` / PL2 | Enables U2, switching `VCC5V0_SYS` to `VCC5V0_USB30_OTG` | `reg_usb0_vbus` GPIO `<&r_pio 0 2 GPIO_ACTIVE_HIGH>` |
-| `USB_HOST_EN` / PM5 | Enables U5, switching `VCC5V0_SYS` to `VCC5V0_USB20` | `reg_usb1_vbus` GPIO `<&r_pio 1 5 GPIO_ACTIVE_HIGH>` |
-| `VCC_3V3_USB20HUB` | DCDC1 through fitted R58, then hub U6 | Hardware PMIC rail; do not model it as a GPIO VBUS regulator |
-| `USB_WIFI_PWR` / PM0 | Wi-Fi/BT sheet power-enable net | `reg_wifi_power_en`; separate from USB VBUS |
-| `WIFI_REG_ON` / PM1 | Wi-Fi module enable/reset | `reg_wifi_chip_en`; separate from USB VBUS |
+## 2. Power Architecture & Voltage Rails
 
-## Disabled-USB policy
+### 2.1 5V System Rail (`VCC5V0_SYS`)
+- **Source**: Type-C Power Input (`J16`) via Ferrite Bead `FB2` (60R 5A).
+- **Physical Verification**: Measured at **5.24V** on 40-pin header Pins 2 and 4 (Pin 6 is GND).
+- **Supplies**:
+  - `U2` Pin 5 (`IN`) -> SGM2576 Power Switch for Bottom Type-A port (`VCC5V0_USB30_OTG`).
+  - `U5` Pin 5 (`IN`) -> SGM2576 Power Switch for Top Type-A port & FE1.1S Hub (`VCC5V0_USB20`).
+  - `AXP PMIC` DCIN pins.
 
-All USB PHY, EHCI, OHCI, and DWC3 nodes currently remain `status = "disabled"`. Consequently, `reg_usb0_vbus` and `reg_usb1_vbus` must **not** be `regulator-always-on`: those properties drive PL2 and PM5 and energize external USB VBUS even though the controllers are disabled.
+### 2.2 GPIO Bank Power (`VCC-PL` / `VCC-PM`)
+- **Bank PL (pins PL0 - PL12)** and **Bank PM (pins PM0 - PM9)** require an external 3.3V I/O supply rail:
+  - `VCC-PL` (ball `1M23`) is supplied by **`ALDO1` (3.3V)** from the **AXP PMIC**.
+  - `VCC-PM` (ball `1P22`) is tied to `VCC-PL` via 0-ohm resistor `RA13`.
+- **Significance**: If `ALDO1` is not enabled by the PMIC driver, GPIO outputs (`PL2`, `PM0`, `PM1`, `PM5`) cannot source 3.3V to enable `U2`, `U5`, or Wi-Fi FET `Q8`.
 
-When bringing up one USB path later:
+### 2.3 Wi-Fi Module Power (`U3` AIC8800)
+- `VBAT` (pin 11): 3.3V supplied by `WIFI_3V3` via P-channel MOSFET `Q8` (WPM2015).
+- `Q8` gate is pulled up to `VCC-WIFI` and pulled down by NPN transistor `Q9` driven by `PM0` (`USB_WIFI_PWR`).
+- `CHIP_EN` (pin 18): Driven by `PM1` (`WL-REG-ON`).
 
-1. Enable only its controller, PHY index, and matching VBUS regulator.
-2. Keep the unrelated VBUS regulator and all other USB nodes disabled.
-3. Confirm the applicable enable net (PL2 or PM5), the switched 5 V rail, and the controller's clock/reset domain before accessing USB MMIO.
-4. For the hub path, also confirm `VCC_3V3_USB20HUB` from DCDC1 and Y4's 12 MHz clock.
+---
 
-This prevents a disabled controller from powering connectors or a powered connector from being paired with an unclocked controller.
+## 3. CCU Clock and Reset Registers for USB
+
+| Register Name | Physical Addr | CCU Offset | Config Value | Description |
+|:---|:---|:---|:---|:---|
+| `USB_SYS_AHB_GATE` | `0x020025a4` | `0x05a4` | `0x00000001` | Bit 0: Master AHB Clock Gate for USB subsystem |
+| `RES_DCAP_24M_CLK` | `0x02003a00` | `0x1a00` | `0x00000008` | Bit 3: 24 MHz Reference for PHY Resistance Calibration |
+| `USB_REF_MSI_LITE` | `0x02003340` | `0x1340` | `0x80010001` | Bit 31: USB_REF (24M), Bit 16: MSI_LITE2 reset, Bit 0: MSI_LITE2 clk |
+| `USB0_PHY_CFG` | `0x02003300` | `0x1300` | `0xc0000000` | Bit 31: PHY0 24M Clock Gate, Bit 30: PHY0 Reset Deassert |
+| `USB0_HCI_CFG` | `0x02003304` | `0x1304` | `0x00110011` | Bits 20, 16: EHCI0/OHCI0 Resets, Bits 4, 0: EHCI0/OHCI0 Bus Clocks |
+| `USB1_PHY_CFG` | `0x02003308` | `0x1308` | `0xc0000000` | Bit 31: PHY1 24M Clock Gate, Bit 30: PHY1 Reset Deassert |
+| `USB1_HCI_CFG` | `0x0200330c` | `0x130c` | `0x00110011` | Bits 20, 16: EHCI1/OHCI1 Resets, Bits 4, 0: EHCI1/OHCI1 Bus Clocks |
+
+---
+
+## 4. USB PHY Transceiver Calibration & PMU Configuration
+
+### 4.1 SYSCFG 200-Ohm Resistor Calibration
+Allwinner A733 requires initial resistor calibration in the SYSCFG register block (`0x03000000`):
+```bash
+devmem 0x03000160 32 0x00000030  # RESCAL Calibration Control
+devmem 0x03000164 32 0x00000000  # RES0 Trim Offset
+```
+
+### 4.2 PHY PMU Passby & SIDDQ Power-Down Clear
+```bash
+# Clear SIDDQ power-down bit on PHY0 and PHY1:
+devmem 0x04101810 32 0x00000000
+devmem 0x04200810 32 0x00000000
+
+# Enable ULPI bypass & AHB burst flags on PHY0 and PHY1 PMUs:
+devmem 0x04101800 32 0x0000cf01
+devmem 0x04200800 32 0x0000cf01
+```
+
+---
+
+## 5. Dual PMIC Subsystem on `R_I2C0` (`0x07083000`)
+
+The board uses two PMICs connected to `R_I2C0` (SoC pins `PL0` / `PL1`):
+1. **AXP515 (`0x34`)**:
+   - Manages Type-C port, CC logic, and USB Power Delivery (`drivevbus`).
+   - Register `0x11` (`AXP515_RBFET_SET`): Bit 6 enables `drivevbus`.
+2. **AXP8191 (`0x36`)**:
+   - Multi-channel DC-DC and LDO system PMIC.
+   - Register `0x20` (`AXP8191_LDO_POWER_ON_OFF_CTL1`): Bit 0 enables `ALDO1` (3.3V for `VCC-PL`/`VCC-PM`).
+   - Register `0x24` (`AXP8191_ALDO1OUT_VOL`): Sets `ALDO1` voltage level.
+
+### R_CCU TWI Enable Sequence:
+```bash
+# Enable R_TWI0 clock (bit 0) and deassert reset (bit 16) in R_CCU (0x0701019c):
+devmem 0x0701019c 32 0x00010001
+
+# Enable TWI controller (bit 6 = BUS_EN in 0x0708300c):
+devmem 0x0708300c 32 0x00000040
+```

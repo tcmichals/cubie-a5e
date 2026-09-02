@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,545 @@
+@@ -0,0 +1,556 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -94,6 +94,8 @@ index 0000000..1234567
 +		regulator-max-microvolt = <5000000>;
 +		gpio = <&r_pio 0 2 GPIO_ACTIVE_HIGH>; /* PL2 */
 +		enable-active-high;
++		regulator-always-on;
++		regulator-boot-on;
 +	};
 +
 +	reg_usb1_vbus: usb1-vbus {
@@ -103,6 +105,8 @@ index 0000000..1234567
 +		regulator-max-microvolt = <5000000>;
 +		gpio = <&r_pio 1 5 GPIO_ACTIVE_HIGH>; /* PM5 (USB_HOST_EN) */
 +		enable-active-high;
++		regulator-always-on;
++		regulator-boot-on;
 +	};
 +
 +	reg_wifi_power_en: wifi-power-en {
@@ -317,6 +321,14 @@ index 0000000..1234567
 +			#reset-cells = <1>;
 +		};
 +
++		wdt: watchdog@2050000 {
++			compatible = "allwinner,sun55i-a523-wdt", "allwinner,sun20i-d1-wdt";
++			reg = <0x02050000 0x20>;
++			clocks = <&osc24M>;
++			interrupts = <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>;
++			status = "okay";
++		};
++
 +		uart0: serial@2500000 {
 +			compatible = "snps,dw-apb-uart";
 +			reg = <0x02500000 0x400>;
@@ -371,7 +383,7 @@ index 0000000..1234567
 +		};
 +
 +		usbphy: phy@4100400 {
-+			compatible = "allwinner,sun50i-h616-usb-phy";
++			compatible = "allwinner,sun60i-a733-usb-phy", "allwinner,sun55i-a523-usb-phy", "allwinner,sun20i-d1-usb-phy";
 +			reg = <0x04100400 0x100>,
 +			      <0x04101800 0x100>,
 +			      <0x04200800 0x100>;
@@ -382,13 +394,14 @@ index 0000000..1234567
 +				 <&ccu CLK_USB_PHY1>;
 +			clock-names = "usb0_phy",
 +				      "usb1_phy";
-+			resets = <&ccu RST_BUS_USB0>,
-+				 <&ccu RST_BUS_USB1>;
++			resets = <&ccu RST_USB_PHY0>,
++				 <&ccu RST_USB_PHY1>;
 +			reset-names = "usb0_reset",
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
++			usb1_vbus-supply = <&reg_usb1_vbus>;
 +			#phy-cells = <1>;
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ehci0: usb@4101000 {
@@ -399,7 +412,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ohci0: usb@4101400 {
@@ -410,7 +423,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ehci1: usb@4200000 {
@@ -421,7 +434,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		ohci1: usb@4200400 {
@@ -432,7 +445,7 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			status = "disabled";
++			status = "okay";
 +		};
 +
 +		dwc3: usb@6a00000 {
@@ -539,8 +552,8 @@ index 0000000..1234567
 +
 +			r_i2c0_pins: r-i2c0-pins {
 +				pins = "PL0", "PL1";
-+				function = "r_i2c0";
-+				allwinner,pinmux = <2>;
++				function = "s_twi0";
++				bias-pull-up;
 +			};
 +		};
 +
@@ -557,8 +570,9 @@ index 0000000..1234567
 +
 +		rproc: remoteproc@7010000 {
 +			compatible = "allwinner,sun60i-a733-rproc";
-+			reg = <0x07010000 0x1000>;
-+			reg-names = "cfg";
++			reg = <0x07010000 0x1000>,
++			      <0x00040000 0x28000>;
++			reg-names = "cfg", "sram";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
