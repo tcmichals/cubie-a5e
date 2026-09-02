@@ -2,6 +2,8 @@
 
 This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E** (Allwinner A527/T527) and **Radxa Cubie A7A** (Allwinner A733) single-board computers and run the flight controller application stack.
 
+> **Active A7A restart checklist**: [`TODO.md`](TODO.md). The chronological hardware evidence is in [`docs/platforms/CUBIE_A7A_DEBUG_LOG.md`](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
+
 ---
 
 ## Why This Repository? (Mainline vs. Vendor BSP)
@@ -82,10 +84,10 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
   - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
 
-* **✅ RISC-V Co-Processor Lifecycle & Live Trace (100% OPERATIONAL & VERIFIED ON HARDWARE):**
+* **⚠️ A7A RISC-V Co-Processor Lifecycle & Trace (active bring-up):**
   - **Option A Direct SRAM Execution Proven:** Proven that the XuanTie E907 co-processor has **no silicon BootROM** and executes directly from **256 KB Dedicated Zero-Wait-State RISC-V Local SRAM at `0x0728_0000`** (Core address `0x0000_0000`) with zero wait states.
   - **Linux RemoteProc Standard (`sunxi_rproc.c`):** Full kernel lifecycle management (`echo start/stop > /sys/class/remoteproc/remoteproc0/state`). Driver implements `.prepare()` to clock `CLK_DSP` and `TZMA` bus bridges before ELF loading, and `devm_ioremap_wc()` (Normal Non-Cacheable RAM) matching upstream TI/Xilinx/NXP standards.
-  - **Standard Debugfs Live Trace Stream:** Co-processor streams real-time ASCII flight diagnostics directly to Linux userspace via `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+   - **Debugfs trace safety issue:** Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` currently causes an ARM64 external abort in `rproc_trace_read()` while dereferencing an ITCM-mapped trace buffer. Do not read it on target until the shared-SRAM trace migration in `TODO.md` has been built and verified.
   - **Live SRAM C Telemetry:** Verified real-time telemetry block at `0x00028000` with active heartbeat ticking at **~130 Hz** (`Magic = 0x52495343` "RISC").
   
 * **⚠️ RISC-V SRAM / OP-TEE note:**
@@ -93,7 +95,7 @@ As of the current bring-up phase, here is the functional status of the flight st
       - `0x00020000 - 0x0003FFFF` (128 KB) — System SRAM A1 reserved by OP-TEE / Secure World (TrustZone-protected). Non-secure Linux cannot access this region.
       - `0x07110000 - 0x0714FFFF` (256 KB) — Dedicated RISC-V co-processor SRAM, seen by the RISC-V core as `0x00000000 - 0x0003FFFF` (100% non-secure, shared with Linux host).
    - Root cause: older linker scripts used `SRAM_C = 0x00020000` and placed trace data at `0x00029000`, which on A733 is inside OP-TEE's secure SRAM and causes TrustZone aborts when Linux reads it.
-   - Fix applied: keep OP-TEE at `0x00020000`; map the RISC-V firmware and trace region into the dedicated 256 KB SRAM at `0x07110000`. We place `trace0` at `0x00038000` (top 32 KB of the RISC-V SRAM in core address space) so Linux can safely read it from on-chip SRAM without aborts.
+   - Current state: the active `exampleRiscv` firmware instead advertises `trace0` at ITCM device address `0x0000e000`; its Linux mapping aborts on read. The pending remediation moves trace data to the existing CPU-visible SRAM-C trace location `0x07138100` and adds that SRAM-C range to the A7A remoteproc DTS.
    - Consequence: yes — 128 KB of the legacy shared SRAM address range is reserved by OP-TEE on A733 (so that space is not available to non-secure firmware). The RISC-V still has the full 256 KB dedicated SRAM available at `0x07110000`.
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 

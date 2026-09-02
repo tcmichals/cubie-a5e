@@ -3,19 +3,25 @@
 namespace hal {
 
 void Timer::init() noexcept {
-    // Disable timer interrupts at boot by setting compare to maximum value
-    set_compare(UINT64_MAX);
+#if defined(__riscv)
+    // Enable mcycle/minstret hardware counters (clear mcountinhibit)
+    asm volatile (
+        "csrw 0x320, zero\n"   // mcountinhibit = 0 (allow all counters to increment)
+        "csrw 0x306, %0\n"     // mcounteren = 0xFFFFFFFF (enable access)
+        :: "r"(-1)
+    );
+#endif
 }
 
 uint64_t Timer::get_ticks() noexcept {
 #if defined(__riscv)
-    // Atomic 64-bit counter read for 32-bit RISC-V using hardware time CSRs
+    // Atomic 64-bit cycle counter read using hardware mcycle CSRs
     uint32_t hi0 = 0, lo = 0, hi1 = 0;
     do {
         asm volatile (
-            "rdtimeh %0\n"
-            "rdtime  %1\n"
-            "rdtimeh %2\n"
+            "csrr %0, mcycleh\n"
+            "csrr %1, mcycle\n"
+            "csrr %2, mcycleh\n"
             : "=r"(hi0), "=r"(lo), "=r"(hi1)
         );
     } while (hi0 != hi1);

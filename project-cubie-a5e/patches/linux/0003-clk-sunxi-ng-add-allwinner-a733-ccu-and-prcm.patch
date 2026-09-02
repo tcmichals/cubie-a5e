@@ -215,7 +215,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,361 @@
+@@ -0,0 +1,368 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -354,6 +354,9 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_DATA(usb_phy0_clk, "usb-phy0", osc24M, 0x1300, BIT(31), 0);
 +static SUNXI_CCU_GATE_DATA(usb_phy1_clk, "usb-phy1", osc24M, 0x1308, BIT(31), 0);
 +
++/* GMAC IEEE 1588 reference clock; vendor uses the 24 MHz parent by default. */
++static SUNXI_CCU_GATE_DATA(gmac_ptp_clk, "gmac-ptp", osc24M, 0x1400, BIT(31), 0);
++
 +static const struct clk_parent_data mmc_parents[] = {
 +	{ .fw_name = "hosc" },
 +	{ .hw = &pll_periph0_2x_clk.common.hw },
@@ -429,6 +432,7 @@ V0.93 and critical clock definitions.
 +	&usb_ref_clk.common,
 +	&usb_phy0_clk.common,
 +	&usb_phy1_clk.common,
++	&gmac_ptp_clk.common,
 +	&mmc0_clk.common,
 +	&mmc1_clk.common,
 +	&mmc2_clk.common,
@@ -436,7 +440,7 @@ V0.93 and critical clock definitions.
 +	&spi1_clk.common,
 +};
 +
-+#define CLK_NUMBER (CLK_RES_DCAP_24M + 1)
++#define CLK_NUMBER (CLK_GMAC_PTP + 1)
 +static struct {
 +	unsigned int num;
 +	struct clk_hw *hws[CLK_NUMBER];
@@ -487,6 +491,7 @@ V0.93 and critical clock definitions.
 +		[CLK_USB_PHY1]		= &usb_phy1_clk.common.hw,
 +		[CLK_BUS_MSI_LITE2]	= &bus_msi_lite2_clk.common.hw,
 +		[CLK_RES_DCAP_24M]	= &res_dcap_24m_clk.common.hw,
++		[CLK_GMAC_PTP]		= &gmac_ptp_clk.common.hw,
 +	},
 +};
 +
@@ -513,8 +518,10 @@ V0.93 and critical clock definitions.
 +	[RST_BUS_SPI1]	= { 0x0f0c, BIT(16) },
 +	[RST_BUS_SPI2]	= { 0x0f14, BIT(16) },
 +	[RST_BUS_SPI3]	= { 0x0f1c, BIT(16) },
-+	[RST_BUS_GMAC0]	= { 0x141c, BIT(17) | BIT(16) },
-+	[RST_BUS_GMAC1]	= { 0x142c, BIT(17) | BIT(16) },
++	[RST_BUS_GMAC0]	= { 0x141c, BIT(16) },
++	[RST_BUS_GMAC1]	= { 0x142c, BIT(16) },
++	[RST_BUS_GMAC0_AXI] = { 0x141c, BIT(17) },
++	[RST_BUS_GMAC1_AXI] = { 0x142c, BIT(17) },
 +	[RST_BUS_USB0]	= { 0x1304, BIT(20) | BIT(16) },
 +	[RST_BUS_USB1]	= { 0x130c, BIT(20) | BIT(16) },
 +	[RST_BUS_USB2]	= { 0x135c, BIT(16) },
@@ -590,7 +597,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-ccu.h
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,92 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
@@ -680,6 +687,7 @@ V0.93 and critical clock definitions.
 +#define CLK_USB_PHY1		82
 +#define CLK_BUS_MSI_LITE2	83
 +#define CLK_RES_DCAP_24M	84
++#define CLK_GMAC_PTP		85
 +
 +#endif
 --- /dev/null
@@ -722,7 +730,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/reset/sun60i-a733-ccu.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,52 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_RST_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_RST_SUN60I_A733_CCU_H_
@@ -771,6 +779,8 @@ V0.93 and critical clock definitions.
 +#define RST_BUS_USB2		41
 +#define RST_USB_PHY0		42
 +#define RST_USB_PHY1		43
++#define RST_BUS_GMAC0_AXI	44
++#define RST_BUS_GMAC1_AXI	45
 +
 +#endif
 --- /dev/null

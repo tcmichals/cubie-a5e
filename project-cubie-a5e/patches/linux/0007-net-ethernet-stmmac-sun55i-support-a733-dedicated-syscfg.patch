@@ -59,7 +59,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (gmac->syscfg_base) {
 +		writel(gmac->syscon_val, gmac->syscfg_base + 0x00);
 +		if (gmac->is_gmac210)
-+			writel(SUNXI_DWMAC210_CLK_GATE_ALL, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
++			writel(0, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
 +	} else if (gmac->regmap) {
 +		regmap_write(gmac->regmap, SYSCON_REG, gmac->syscon_val);
 +	}
@@ -74,7 +74,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (gmac->syscfg_base) {
 +		writel(0, gmac->syscfg_base + 0x00);
 +		if (gmac->is_gmac210)
-+			writel(0, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
++			writel(SUNXI_DWMAC210_CLK_GATE_ALL, gmac->syscfg_base + SUNXI_DWMAC210_CLK_GATE_CFG_REG);
 +	}
 +}
 +
@@ -176,7 +176,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	struct device *dev = &pdev->dev;
  	struct clk *clk;
  	int ret;
-@@ -118,11 +199,24 @@
+@@ -118,11 +199,26 @@
  	if (IS_ERR(plat_dat))
  		return PTR_ERR(plat_dat);
  
@@ -190,6 +190,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
  	/* BSP disables it */
  	plat_dat->flags |= STMMAC_FLAG_SPH_DISABLE;
++	if (gmac_priv->is_gmac210)
++		plat_dat->flags |= STMMAC_FLAG_MULTI_MSI_EN;
  	plat_dat->host_dma_width = 32;
 +	plat_dat->clk_csr = 4; /* MDC clock divider: AHB(200M)/102 = ~2MHz */
 +	plat_dat->bsp_priv = gmac_priv;
@@ -202,7 +204,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	if (ret)
  		return ret;
  
-@@ -140,6 +234,8 @@
+@@ -140,6 +236,8 @@
  
  static const struct of_device_id sun55i_gmac200_match[] = {
  	{ .compatible = "allwinner,sun55i-a523-gmac200" },

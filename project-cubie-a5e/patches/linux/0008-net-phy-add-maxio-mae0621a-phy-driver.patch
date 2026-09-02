@@ -41,7 +41,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  obj-$(CONFIG_NCN26000_PHY)	+= ncn26000.o
 --- /dev/null
 +++ b/drivers/net/phy/maxio.c
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,460 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/* drivers/net/phy/maxio.c
 + *
@@ -132,7 +132,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	for (i = 0; i < checknum; i++) {
 +		ret = maxio_adcc_check(phydev);
 +		if (0 == ret) {
-+			printk("MAE0621A READY\n");
++			phydev_dbg(phydev, "MAE0621A READY\n");
 +			break;
 +		} else {
 +			maxio_write_paged(phydev, 0x0, 0x0, 0x1940 );
@@ -290,7 +290,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +static void maxio_mae0621a_remove(struct phy_device *phydev)
 +{
-+	printk("maxio driver remove\r\n");
++	phydev_dbg(phydev, "maxio driver remove\n");
 +	if (phydev->priv != NULL) {
 +		kfree(phydev->priv);
 +	}
@@ -301,7 +301,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +{
 +	int ret = 0;
 +
-+	printk("MAXIO_PHY_VER: %s \n",MAXIO_PHY_VER);
++	phydev_dbg(phydev, "MAXIO_PHY_VER: %s\n", MAXIO_PHY_VER);
 +
 +	ret |= maxio_write_paged(phydev, 0xda0, 0x10, 0xc13);
 +	ret |= maxio_write_paged(phydev, 0x0, 0xd, 0x7);
@@ -342,7 +342,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +	phydev->priv = paras;
 +
-+	printk("maxio_mae0621a_probe clkmode(oscillator) PHY_ID: 0x%x\n", phydev->phy_id);
++	phydev_dbg(phydev, "maxio_mae0621a_probe clkmode(oscillator) PHY_ID: 0x%x\n", phydev->phy_id);
 +
 +	PHY_WRITE(phydev, MAXIO_PAGE_SELECT, 0x0);
 +	mdelay(100);
@@ -359,15 +359,39 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +	phydev->priv = paras;
 +
-+	printk("maxio_mae0621aQ3C probe PHY_ID: 0x%x\n", phydev->phy_id);
++	phydev_dbg(phydev, "maxio_mae0621aQ3C probe PHY_ID: 0x%x\n", phydev->phy_id);
 +
 +	return 0;
++}
++
++static int maxio_mae0621aq3ci_config_leds(struct phy_device *phydev)
++{
++	int val;
++	int ret;
++
++	/* Green: link at any speed plus activity. */
++	val = maxio_read_paged(phydev, 0xd04, 0x10);
++	if (val < 0)
++		return val;
++
++	val |= BIT(5) | BIT(8) | BIT(10) | BIT(11);
++	val &= ~BIT(14);
++	ret = maxio_write_paged(phydev, 0xd04, 0x10, val);
++	if (ret < 0)
++		return ret;
++
++	/* Yellow: steady link at any speed; disable EEE indication. */
++	val = maxio_read_paged(phydev, 0xd04, 0x11);
++	if (val < 0)
++		return val;
++
++	return maxio_write_paged(phydev, 0xd04, 0x11, val & ~BIT(3));
 +}
 +
 +static int maxio_mae0621aq3ci_config_init(struct phy_device *phydev)
 +{
 +	int ret = 0;
-+	printk("MAXIO_PHY_VER: %s \n",MAXIO_PHY_VER);
++	phydev_dbg(phydev, "MAXIO_PHY_VER: %s\n", MAXIO_PHY_VER);
 +
 +	ret |= maxio_write_paged(phydev, 0xa43, 0x19, 0x823);
 +	ret |= maxio_write_paged(phydev, 0xdab, 0x17, 0xC13);
@@ -399,6 +423,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	ret |= maxio_write_paged(phydev, 0x0, 0x0, 0x9140);
 +
 +	ret |= PHY_WRITE(phydev, MAXIO_PAGE_SELECT, 0);
++	if (ret < 0)
++		return ret;
++
++	ret = maxio_mae0621aq3ci_config_leds(phydev);
++	if (ret < 0)
++		return ret;
 +
 +	msleep(50);
 +
@@ -440,7 +470,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		.probe = maxio_mae0621a_probe,
 +		.config_init	= maxio_mae0621a_config_init,
 +		.config_aneg = &genphy_config_aneg,
-+		.read_status = maxio_mae0621a_status,
++		.read_status = genphy_read_status,
 +		.suspend = maxio_mae0621a_suspend,
 +		.resume = maxio_mae0621a_resume,
 +		.remove = maxio_mae0621a_remove,
@@ -453,7 +483,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		.probe = maxio_mae0621aq3ci_probe,
 +		.config_aneg = &genphy_config_aneg,
 +		.config_init = maxio_mae0621aq3ci_config_init,
-+		.read_status = &maxio_mae0621a_status,
++		.read_status = genphy_read_status,
 +		.suspend = maxio_mae0621aq3ci_suspend,
 +		.resume = maxio_mae0621aq3ci_resume,
 +		.remove = maxio_mae0621a_remove,

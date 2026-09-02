@@ -30,6 +30,10 @@
 #define IPC_TRACE_BUFFER_OFFSET     0x8100      /* 32 KB  - Barectf CTF Binary Packet Buffer */
 #define IPC_TRACE_BUFFER_SIZE       0x8000
 
+/* Linux-reserved normal DDR, directly addressable by both A5E and A7A E907. */
+#define RPROC_TRACE_BUFFER_BASE     0x4E000000
+#define RPROC_TRACE_BUFFER_SIZE     0x00008000
+
 /* Core SoC Peripheral Base Addresses (RISC-V Local MMIO View) */
 #define PIO_BASE                    0x02000000  /* Main PIO Controller (PB-PK) */
 #define CCU_BASE                    0x02001000  /* Main Clock Control Unit */

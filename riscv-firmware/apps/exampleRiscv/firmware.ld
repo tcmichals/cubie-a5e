@@ -8,21 +8,17 @@ ENTRY(_start)
 
 MEMORY
 {
-    /* 56 KB RISC-V SRAM for Code, Data, BSS, Heap, Stack (0x00000000 - 0x0000DFFF) */
-    R_SRAM (rwx)  : ORIGIN = 0x00000000, LENGTH = 56K
-
-    /* Top 8 KB for RemoteProc Resource Table and Trace Buffer (0x0000E000 - 0x0000FFFF) */
-    R_TABLE (rwx) : ORIGIN = 0x0000E000, LENGTH = 8K
+    SRAM (rwx) : ORIGIN = 0x00044000, LENGTH = 160K
 }
 
 SECTIONS
 {
-    /* 1. Vector table and CRT0 startup code at SRAM base (0x00000000) */
+    /* 1. Vector table and CRT0 startup code at SRAM A2 base. */
     .vectors :
     {
         KEEP(*(.vectors))
         KEEP(*(.text.startup))
-    } > R_SRAM
+    } > SRAM
 
     /* 2. Program Code */
     .text :
@@ -31,28 +27,25 @@ SECTIONS
         *(.text)
         *(.text.*)
         . = ALIGN(4);
-    } > R_SRAM
+    } > SRAM
 
     .rodata :
     {
         . = ALIGN(4);
         *(.rodata)
         *(.rodata.*)
-        *(.srodata)
-        *(.srodata.*)
         . = ALIGN(4);
-    } > R_SRAM
+    } > SRAM
 
-    /* 3. Linux RemoteProc Resource Table */
+    /* 3. RemoteProc Resource Table */
     .resource_table :
     {
         . = ALIGN(4);
         KEEP(*(.resource_table))
         KEEP(*(.resource_table*))
         . = ALIGN(4);
-    } > R_TABLE
+    } > SRAM
 
-    /* 4. Initialized Data Segment */
     .data :
     {
         . = ALIGN(4);
@@ -64,9 +57,7 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _data_end = .;
-    } > R_SRAM
-
-    _sram_data_start = LOADADDR(.data);
+    } > SRAM
 
     /* 5. Zero-initialized BSS Segment */
     .bss :
@@ -80,22 +71,23 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
-    } > R_SRAM
+    } > SRAM
 
-    /* 6. Stack and Heap */
-    .heap (NOLOAD) :
-    {
-        . = ALIGN(8);
-        _heap_start = .;
-        . = . + 4K;
-        _heap_end = .;
-    } > R_SRAM
-
+    /* 6. Execution Stack (8 KB) */
     .stack (NOLOAD) :
     {
-        . = ALIGN(8);
+        . = ALIGN(16);
         _stack_bottom = .;
-        . = . + 8K;
+        . += 0x2000;
         _stack_top = .;
-    } > R_SRAM
+    } > SRAM
+
+    /* Discard unwinding and metadata sections */
+    /DISCARD/ :
+    {
+        *(.eh_frame)
+        *(.eh_frame_hdr)
+        *(.comment)
+        *(.note.gnu.build-id)
+    }
 }

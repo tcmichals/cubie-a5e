@@ -1,13 +1,15 @@
 /*
  * resource_table.c - RemoteProc Resource Table for XuanTie E907
- * Declares one RSC_TRACE buffer at 0x00038000 in 256 KB RISC-V SRAM
+ * Exports a trace buffer in Linux-reserved normal DDR.
  */
 
 #include <stdint.h>
 #include <stddef.h>
 
-#define TRACE_BUF_DA            0x0000E000  /* 56 KB offset in 64 KB SRAM (0x0000E000 - 0x0000EFFF) */
-#define TRACE_BUF_LEN           0x1000      /* 4 KB Trace Buffer */
+#include "include/memory_map.h"
+
+#define TRACE_BUF_DA            0x4E010000  /* DDR Carveout */
+#define TRACE_BUF_LEN           4096        /* 4 KB Trace Buffer */
 
 /* Resource Types */
 #define RSC_CARVEOUT  0
@@ -48,7 +50,7 @@ const struct cubie_resource_table resource_table = {
     },
 };
 
-static char *trace_buf = (char *)TRACE_BUF_DA;
+static char *trace_buf = (char *)(uintptr_t)TRACE_BUF_DA;
 static int   trace_pos = 0;
 
 void trace_init(void) {

@@ -34,6 +34,9 @@ static void put_uint(uint32_t val) {
 }
 
 int main(void) {
+    volatile uint32_t *sram_counter = (volatile uint32_t *)0x00050004;
+    volatile uint32_t *dram_counter = (volatile uint32_t *)0x4E010004;
+
     // 1. Initialize remoteproc trace buffer
     trace_init();
     trace_puts("================================================================\n");
@@ -49,8 +52,10 @@ int main(void) {
 
     // 3. Periodic 1-second heartbeat loop
     while (1) {
+        *sram_counter = ++uptime_sec;
+        *dram_counter = uptime_sec;
+
         hal::Timer::delay_ms(1000);
-        uptime_sec++;
 
         trace_puts("[E907 HAL] Heartbeat #");
         put_uint(uptime_sec);

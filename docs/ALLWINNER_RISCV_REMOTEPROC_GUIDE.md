@@ -1,188 +1,187 @@
-# Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide & Patch Documentation
+# Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Dual-SoC Architecture Guide
 
 **Author:** tcmichals (`tcmichals@gmail.com`)  
-**Date:** August 19, 2026  
+**Date:** September 1, 2026  
 **License:** GPL-2.0-only  
-**Copyright:** Copyright (C) 2024–2026 Allwinner Technology Co., Ltd. & Copyright (C) 2026 tcmichals
+**Target Platforms:** Radxa Cubie A5E (Allwinner A523/A527) & Radxa Cubie A7A (Allwinner A733)
 
 ---
 
-## 1. Overview & Architecture
+## 1. Executive Summary & SoC Comparison
 
-Modern Allwinner SoCs (**A523**, **A527 / T527**, and **A733**) feature an embedded **XuanTie E907/E902 RISC-V co-processor** (RV32IMAC @ 600 MHz) alongside the main ARM64 application cores.
+Modern Allwinner SoCs embed a high-performance **T-Head XuanTie E907/E906 32-bit RISC-V core** (RV32IMAFD[C] @ 600 MHz) alongside the main octa-core ARM64 Cortex-A55 application processors.
 
-The [`sunxi_rproc.c`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch) driver integrates this co-processor into the standard **Linux 7.1 Remote Processor (`remoteproc`) Framework**, allowing standard user-space firmware loading, lifecycle management, trace logging, and RPMsg IPC.
+Because of hardware security partitioning (ARM TrustZone / OP-TEE OS) differences between the **A523 (sun55i)** and **A733 (sun60i)**, firmware memory placement and remoteproc loading vary between the two architectures:
 
 ```mermaid
 flowchart TB
-    subgraph "Linux User Space"
-        SYSFS["/sys/class/remoteproc/remoteproc0/<br/>• firmware (firmware.elf)<br/>• state (start / stop)"]
-        TRACE["/sys/kernel/debug/remoteproc/remoteproc0/trace0"]
+    subgraph "Radxa Cubie A5E (Allwinner A523 / sun55i)"
+        direction TB
+        A5E_LINUX["Linux Remoteproc (Non-Secure EL1)"] -->|"Direct MMIO Write"| A5E_ITCM["ITCM: 0x07110000 (64 KB)"]
+        A5E_LINUX -->|"Direct MMIO Write"| A5E_DTCM["DTCM: 0x07120000 (64 KB)"]
+        A5E_LINUX -->|"Direct MMIO Write"| A5E_SRAM["SRAM C: 0x07130000 (320 KB)"]
+        A5E_E907["E907 RISC-V Core"] -->|"0-Wait-State Fetch"| A5E_ITCM
     end
 
-    subgraph "Linux Kernel 7.1 (drivers/remoteproc/sunxi_rproc.c)"
-        CORE["RemoteProc Core (rproc_boot / rproc_shutdown)"]
-        ELF["ELF Segment Parser (rproc_elf_load_segments)"]
-        OPS["struct rproc_ops (sunxi_rproc_ops)"]
+    subgraph "Radxa Cubie A7A (Allwinner A733 / sun60i)"
+        direction TB
+        A7A_LINUX["Linux Remoteproc (Non-Secure EL1)"] -->|"Direct DDR DMA/Write"| A7A_DDR["Reserved DDR Carveout: 0x4E000000 (1 MB)"]
+        A7A_OPTEE["OP-TEE OS (Secure World @ 0x48600000)"] -.->|"SPC Firewall Locks"| A7A_SEC["PRCM SRAM Window: 0x07110000 (Protected)"]
+        A7A_E907["E907 RISC-V Core (AXI Master)"] -->|"Stage 1: Boot @ 0x4E000000"| A7A_DDR
+        A7A_E907 -->|"Stage 2: Self-Relocate Text/Data"| A7A_LOCAL_TCM["Local ITCM (0x00000000) / DTCM (0x00080000)"]
     end
-
-    subgraph "Physical Hardware Memory Map"
-        CCU["DSP/MCU CCU (0x07010000)<br/>• Clock: 0x0020 (0x00000003)<br/>• Reset: 0x0100 (BIT 17 | BIT 16)"]
-        ITCM["ITCM (0x07110000, 64 KB)<br/>• Core Address: 0x00000000"]
-        DTCM["DTCM (0x07120000, 64 KB)<br/>• Core Address: 0x00080000"]
-        SRAM["SRAM C (0x07130000, 320 KB)<br/>• Core Address: 0x07130000"]
-        MBOX["Hardware MSGBOX (0x03003000)"]
-    end
-
-    SYSFS --> CORE
-    TRACE --> CORE
-    CORE --> OPS
-    CORE --> ELF
-    OPS --> CCU
-    ELF --> ITCM
-    ELF --> DTCM
-    ELF --> SRAM
-    CORE <--> MBOX
 ```
 
 ---
 
-## 2. Hardware Physical Memory Map
+## 2. Architectural Comparison Matrix
 
-| Region | ARM Physical Address | RISC-V Core Address | Size | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **DSP CCU** | `0x07010000` | `0x40010000` | 4 KB | Clock gate (`0x20`) and Reset control (`0x100`) |
-| **ITCM** | `0x07110000` | `0x00000000` | 64 KB | Instruction TCM (Fast zero-wait execution) |
-| **DTCM** | `0x07120000` | `0x00080000` | 64 KB | Data TCM (Fast zero-wait data & stack) |
-| **SRAM C** | `0x07130000` | `0x07130000` | 320 KB | Shared SRAM window for ring buffers & IPC |
-| **MSGBOX** | `0x03003000` | `0x40030000` | 4 KB | Hardware 8-channel Mailbox Doorbell |
-
----
-
-## 3. Remoteproc Patch Implementation Details
-
-The standalone kernel patch is located at:  
-[`project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)
-
-### A. Core Lifecycle Operations (`struct rproc_ops`)
-
-```c
-static int sunxi_rproc_start(struct rproc *rproc)
-{
-    struct sunxi_rproc *priv = rproc->priv;
-
-    /* 1. Assert DSP Subsystem Bus Clocks */
-    writel(0x00000003, priv->ccu_base + CCU_DSP_CLK_REG);
-
-    /* 2. De-assert Subsystem Reset while holding Core in Reset */
-    writel(DSP_RST_SYS_DEASSERT, priv->ccu_base + CCU_DSP_RST_REG);
-
-    /* 3. Release RISC-V Core Reset to start execution */
-    writel(DSP_RST_SYS_DEASSERT | DSP_RST_CORE_DEASSERT, priv->ccu_base + CCU_DSP_RST_REG);
-
-    return 0;
-}
-
-static int sunxi_rproc_stop(struct rproc *rproc)
-{
-    struct sunxi_rproc *priv = rproc->priv;
-
-    /* Hold Core in Reset */
-    writel(DSP_RST_SYS_DEASSERT, priv->ccu_base + CCU_DSP_RST_REG);
-
-    return 0;
-}
-```
-
-### B. Device Address Translation (`da_to_va`)
-
-Maps ELF segments linked for the XuanTie core into host ARM physical virtual addresses:
-
-```c
-static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
-{
-    struct sunxi_rproc *priv = rproc->priv;
-
-    if (is_iomem)
-        *is_iomem = true;
-
-    /* Map ITCM: Core 0x00000000 -> Host 0x07110000 */
-    if (da >= 0x00000000 && (da + len) <= (0x00000000 + ITCM_SIZE))
-        return priv->itcm_base + (da - 0x00000000);
-
-    /* Map DTCM: Core 0x00080000 -> Host 0x07120000 */
-    if (da >= 0x00080000 && (da + len) <= (0x00080000 + DTCM_SIZE))
-        return priv->dtcm_base + (da - 0x00080000);
-
-    /* Map SRAM C: Core 0x07130000 -> Host 0x07130000 */
-    if (da >= 0x07130000 && (da + len) <= (0x07130000 + SRAM_SIZE))
-        return priv->sram_base + (da - 0x07130000);
-
-    return NULL;
-}
-```
+| Architectural Feature | Radxa Cubie A5E (A523 / sun55iw3) | Radxa Cubie A7A (A733 / sun60iw2) |
+| :--- | :--- | :--- |
+| **RISC-V Core IP** | XuanTie E906 / E907 @ 600 MHz | XuanTie E907 (RV32IMAFDC) @ 600 MHz |
+| **TrustZone / OP-TEE State** | Open PRCM physical bus window | OP-TEE locks PRCM SRAM (`0x07110000`–`0x07130000`) |
+| **Host Loading Destination** | Direct Host MMIO (`0x07110000` / `0x07120000`) | Reserved DDR Carveout (`0x4E000000`) |
+| **Start Address Register** | R_CPUCFG / PRCM Subsystem Reset | `0x07010204` (`RV_CFG_STA_ADD_REG`) |
+| **CCU Clock & Reset Control** | `0x07010000` (Offset `0x0020` / `0x0100`) | `0x0701021C` (`R_CCU` Gate & Reset Register) |
+| **Doorbell Mailbox** | `0x03003000` (`sun55i-msgbox`) | `0x03004000` (`sun60i-msgbox` Channel 0) |
+| **Trace Buffer Location** | `0x07130000` (SRAM C) or `0x4E000000` (DDR) | `0x4E010000` (DDR Carveout) |
 
 ---
 
-## 4. Device Tree Binding
+## 3. Detailed SoC Implementations
 
-In `arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts` (or `sun55i-a527`):
+### A. Radxa Cubie A5E (Allwinner A523)
+
+On the A523 SoC, the Linux kernel has direct Non-Secure access to the PRCM memory apertures. Linux remoteproc maps ITCM, DTCM, and SRAM C directly into its kernel address space:
 
 ```dts
+/* A5E Device Tree Node */
 rproc: remoteproc@7010000 {
-    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sun55i-a527-rproc";
-    reg = <0x00 0x07010000 0x00 0x1000>,  /* CCU Base */
-          <0x00 0x07110000 0x00 0x10000>, /* ITCM (64 KB) */
-          <0x00 0x07120000 0x00 0x10000>, /* DTCM (64 KB) */
-          <0x00 0x07130000 0x00 0x50000>; /* SRAM C (320 KB) */
-    reg-names = "ccu", "itcm", "dtcm", "sram";
+    compatible = "allwinner,sun55i-a523-rproc";
+    reg = <0x07010000 0x1000>,
+          <0x07110000 0x10000>,
+          <0x07120000 0x10000>,
+          <0x07130000 0x50000>;
+    reg-names = "cfg", "itcm", "dtcm", "sram";
+    clocks = <&r_ccu CLK_RISCV_24M>, <&r_ccu CLK_RISCV_CFG>, <&r_ccu CLK_RISCV>;
+    clock-names = "parent", "bus", "core";
+    resets = <&r_ccu RST_BUS_RISCV_CFG>;
+    reset-names = "cfg";
+    mboxes = <&msgbox 0>;
+    mbox-names = "tx";
     status = "okay";
+};
+```
+
+* **Linker Layout (`firmware.ld`)**:
+  * `ITCM (rx)`: `ORIGIN = 0x00000000, LENGTH = 64K` (Host `0x07110000`)
+  * `DTCM (rwx)`: `ORIGIN = 0x00080000, LENGTH = 64K` (Host `0x07120000`)
+  * `SRAM (rwx)`: `ORIGIN = 0x07130000, LENGTH = 320K` (Host `0x07130000`)
+
+---
+
+### B. Radxa Cubie A7A (Allwinner A733)
+
+On the A733 SoC, U-Boot SPL loads the TOC1 package containing ARM Trusted Firmware (BL31) and OP-TEE OS (`optee_sun60iw2p1.bin` at `0x48600000`). OP-TEE configures the Security Permission Controller (SPC) to restrict `0x07110000`–`0x07130000` to Secure-World only. Non-secure Linux accesses to that window trigger an AXI `DECERR` (Bus error).
+
+To achieve 100% reliability with upstream Linux 7.1, the A7A uses a **Dedicated DDR Carveout (`0x4E000000`)**:
+
+```dts
+/* A7A Device Tree Node */
+reserved-memory {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    ranges;
+
+    rproc_trace: trace@4e000000 {
+        reg = <0x00 0x4e000000 0x00 0x00100000>; /* 1 MB Carveout */
+        no-map;
+    };
+};
+
+rproc: remoteproc@7010000 {
+    compatible = "allwinner,sun60i-a733-rproc";
+    reg = <0x07010000 0x1000>;
+    reg-names = "cfg";
+    clocks = <&r_ccu CLK_RISCV_24M>, <&r_ccu CLK_RISCV_CFG>, <&r_ccu CLK_RISCV>;
+    clock-names = "parent", "bus", "core";
+    resets = <&r_ccu RST_BUS_RISCV_CFG>;
+    reset-names = "cfg";
+    mboxes = <&msgbox 0>;
+    mbox-names = "tx";
+    memory-region = <&rproc_trace>;
+    memory-region-names = "trace";
+    status = "okay";
+};
+```
+
+#### Boot & Execution Flow:
+1. **Linux Remoteproc**:
+   * Reads ELF headers and copies `.text` and `.data` into `0x4E000000`.
+   * Writes the entry address (`0x4E000000` or `0x4E00004a`) into `0x07010204` (`RV_CFG_STA_ADD_REG`).
+   * De-asserts core reset via `0x0701021C` (Bit 0 and Bit 16).
+2. **XuanTie E907 Core**:
+   * Begins execution directly out of DDR over the SoC AXI interconnect.
+   * Runs `trace_init()` and updates `trace_puts()` into the trace buffer at `0x4E010000`.
+   * (Optional 0-wait-state mode): Self-copies inner loops into local `0x00000000` ITCM.
+
+---
+
+## 4. Resource Table & Debugfs Trace Logging
+
+To expose real-time logging to Linux userspace without serial UART cables, the firmware exports a standard `struct fw_rsc_trace` in `.resource_table`:
+
+```c
+#define TRACE_BUF_DA    0x4E010000  /* 64 KB offset in DDR carveout */
+#define TRACE_BUF_LEN   4096        /* 4 KB circular ASCII buffer */
+
+struct cubie_resource_table {
+    uint32_t ver;
+    uint32_t num;
+    uint32_t reserved[2];
+    uint32_t offset[1];
+    struct fw_rsc_trace trace;
+} __attribute__((packed));
+
+__attribute__((used, section(".resource_table"), aligned(4)))
+const struct cubie_resource_table resource_table = {
+    .ver = 1,
+    .num = 1,
+    .reserved = {0, 0},
+    .offset = { offsetof(struct cubie_resource_table, trace) },
+    .trace = {
+        .type     = RSC_TRACE,
+        .da       = TRACE_BUF_DA,
+        .len      = TRACE_BUF_LEN,
+        .reserved = 0,
+        .name     = "trace0",
+    },
 };
 ```
 
 ---
 
-## 5. User-Space Operating Runbook
+## 5. Build, Deployment, & Verification Procedures
 
-### A. Building the Bare-Metal RISC-V Firmware
+### A. Building the Firmware
 ```bash
-cd /home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware
-make
-# Produces: firmware.elf
+# Clean and compile the RISC-V application
+make -C bld.a7a riscv-firmware-dirclean riscv-firmware
 ```
 
-### B. Loading Firmware & Starting Remoteproc
+### B. Live Updating Over the Network
+With Gigabit Ethernet active (`192.168.1.33`):
 ```bash
-# 1. Copy ELF to kernel firmware search path
-cp firmware.elf /lib/firmware/riscv_firmware.elf
+# SCP binary directly from dev host to running board:
+scp bld.a7a/target/lib/firmware/riscv-firmware.elf root@192.168.1.33:/lib/firmware/
+```
 
-# 2. Tell remoteproc driver which file to load
-echo riscv_firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
-
-# 3. Boot the XuanTie RISC-V core
+### C. Controlling Core & Reading Trace on Target
+```bash
+# 1. Restart co-processor:
+echo stop > /sys/class/remoteproc/remoteproc0/state
 echo start > /sys/class/remoteproc/remoteproc0/state
 
-# 4. Check kernel dmesg
-dmesg | tail -n 20
-
-# 5. Read real-time printk trace buffer from RISC-V
+# 2. View live real-time heartbeat:
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
-
-### C. Stopping Remoteproc
-```bash
-echo stop > /sys/class/remoteproc/remoteproc0/state
-```
-
----
-
-## 6. Upstream Mailing List Submission Details
-
-* **RFC Series Header:** `[RFC PATCH 0/2] remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver`
-* **Maintainers:**
-  * Mathieu Poirier (`mathieu.poirier@linaro.org`) & Bjorn Andersson (`andersson@kernel.org`)
-  * Chen-Yu Tsai (`wens@csie.org`) & Jernej Skrabec (`jernej.skrabec@gmail.com`)
-* **Mailing Lists:**
-  * `linux-remoteproc@vger.kernel.org`
-  * `linux-sunxi@lists.linux.sunxi.org`
-  * `linux-arm-kernel@lists.infradead.org`

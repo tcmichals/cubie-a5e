@@ -6,7 +6,7 @@ namespace hal {
 
 class Timer {
 public:
-    static constexpr uint32_t TICKS_PER_US = 24; // 24MHz counter
+    static constexpr uint32_t TICKS_PER_US = 600; // 600MHz core cycle counter
     static constexpr uintptr_t MTIME_REG = 0x07090000;
     static constexpr uintptr_t MTIMECMP_REG = 0x07090008;
 

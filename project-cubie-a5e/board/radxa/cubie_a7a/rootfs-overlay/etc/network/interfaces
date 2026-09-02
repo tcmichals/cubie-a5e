@@ -1,9 +1,5 @@
 auto lo
 iface lo inet loopback
 
-auto eth0
-iface eth0 inet dhcp
-	pre-up ip link set eth0 up 2>/dev/null || true
-
 iface wlan0 inet dhcp
 	wpa-conf /etc/wpa_supplicant.conf

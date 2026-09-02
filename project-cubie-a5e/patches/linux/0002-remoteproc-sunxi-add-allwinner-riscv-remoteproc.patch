@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,502 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -82,6 +82,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct clk *clk_core;
 +	struct reset_control *rst_cfg;
 +	struct reset_control *rst_core;
++	struct reset_control *rst_module;
 +
 +	/* Hardware Memory Windows (TCM, Dedicated SRAM & Shared System SRAM) */
 +	void __iomem *cfg_va;
@@ -101,11 +102,58 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	phys_addr_t sram_phys;
 +	size_t sram_size;
 +
-+	/* Reserved Memory & Mailbox State */
-+	bool has_reserved_mem;
++	/* Mailbox State */
 +	struct mbox_client cl;
 +	struct mbox_chan *tx_chan;
 +};
++
++static int sunxi_rproc_mem_alloc(struct rproc *rproc,
++				 struct rproc_mem_entry *mem)
++{
++	mem->va = memremap(mem->dma, mem->len, MEMREMAP_WB);
++	if (!mem->va) {
++		dev_err(rproc->dev.parent, "failed to map reserved memory %pad+%zx\n",
++			&mem->dma, mem->len);
++		return -ENOMEM;
++	}
++
++	return 0;
++}
++
++static int sunxi_rproc_mem_release(struct rproc *rproc,
++				   struct rproc_mem_entry *mem)
++{
++	memunmap(mem->va);
++	return 0;
++}
++
++static int sunxi_rproc_register_carveouts(struct rproc *rproc)
++{
++	struct device *dev = rproc->dev.parent;
++	struct device_node *np = dev->of_node;
++	struct rproc_mem_entry *mem;
++	struct resource res;
++	int index = 0;
++	int ret;
++
++	while (!(ret = of_reserved_mem_region_to_resource(np, index++, &res))) {
++		if (res.start > U32_MAX || resource_size(&res) > U32_MAX)
++			return -EINVAL;
++
++		mem = rproc_mem_entry_init(dev, NULL, (dma_addr_t)res.start,
++					   resource_size(&res), (u32)res.start,
++					   sunxi_rproc_mem_alloc,
++					   sunxi_rproc_mem_release,
++					   "%.*s", strchrnul(res.name, '@') - res.name,
++					   res.name);
++		if (!mem)
++			return -ENOMEM;
++
++		rproc_add_carveout(rproc, mem);
++	}
++
++	return 0;
++}
 +
 +static void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)
 +{
@@ -131,6 +179,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct sunxi_rproc *priv = rproc->priv;
 +	int ret;
 +
++	ret = sunxi_rproc_register_carveouts(rproc);
++	if (ret)
++		return ret;
++
 +	/* 1. Deassert configuration bus reset */
 +	if (priv->rst_cfg) {
 +		ret = reset_control_deassert(priv->rst_cfg);
@@ -150,6 +202,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	}
 +
 +	/* 3. Enable interconnect bus clock (allows host to access TCM/SRAM) */
++	/* 3. Enable bus clock */
 +	if (priv->clk_bus) {
 +		ret = clk_prepare_enable(priv->clk_bus);
 +		if (ret) {
@@ -158,20 +211,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
-+	/* 4. Enable core clock */
-+	if (priv->clk_core) {
-+		ret = clk_prepare_enable(priv->clk_core);
-+		if (ret) {
-+			dev_err(priv->dev, "failed to enable core clock: %d\n", ret);
-+			goto err_disable_bus;
-+		}
-+	}
-+
 +	return 0;
 +
-+err_disable_bus:
-+	if (priv->clk_bus)
-+		clk_disable_unprepare(priv->clk_bus);
 +err_disable_parent:
 +	if (priv->clk_parent)
 +		clk_disable_unprepare(priv->clk_parent);
@@ -186,12 +227,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct sunxi_rproc *priv = rproc->priv;
 +
 +	/* Symmetrical CCU unwinding */
-+	if (priv->rst_core)
-+		reset_control_assert(priv->rst_core);
-+
-+	if (priv->clk_core)
-+		clk_disable_unprepare(priv->clk_core);
-+
 +	if (priv->clk_bus)
 +		clk_disable_unprepare(priv->clk_bus);
 +
@@ -214,18 +249,17 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	/* 1. Program the initial boot entry address into hardware register */
++	/* 1. Program entry address if hardware register exists */
 +	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + RISCV_STA_ADD_OFFSET);
-+		/* Read back to ensure the posted write landed before reset release */
 +		readl(priv->cfg_va + RISCV_STA_ADD_OFFSET);
 +	}
 +
-+	/* 2. Release core reset to begin execution */
-+	if (priv->rst_core) {
-+		ret = reset_control_deassert(priv->rst_core);
++	/* 2. Enable core clock to begin execution */
++	if (priv->clk_core) {
++		ret = clk_prepare_enable(priv->clk_core);
 +		if (ret) {
-+			dev_err(priv->dev, "failed to release core reset: %d\n", ret);
++			dev_err(priv->dev, "failed to enable core clock: %d\n", ret);
 +			return ret;
 +		}
 +	}
@@ -239,8 +273,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	dev_info(priv->dev, "Halting XuanTie RISC-V core...\n");
 +
-+	if (priv->rst_core)
-+		reset_control_assert(priv->rst_core);
++	if (priv->clk_core)
++		clk_disable_unprepare(priv->clk_core);
 +
 +	return 0;
 +}
@@ -263,24 +297,15 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct sunxi_rproc *priv = rproc->priv;
 +
 +	if (is_iomem)
-+		*is_iomem = false;
++		*is_iomem = true;
 +
-+	/* 1. Shared System SRAM C (Resource "sram" / "r_sram") */
++	/* 1. Shared System SRAM (SRAM A2 0x00040000 - 0x00068000) */
 +	if (priv->sram_va) {
 +		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size))
 +			return priv->sram_va + (da - priv->sram_phys);
-+		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->sram_size))
-+			return priv->sram_va + (da - 0x00020000);
 +	}
 +
-+	if (priv->r_sram_va) {
-+		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size))
-+			return priv->r_sram_va + (da - priv->r_sram_phys);
-+		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size)
-+			return priv->r_sram_va + da;
-+	}
-+
-+	/* 2. Instruction TCM (Resource "itcm" - Core VMA 0x00000000 / Host 0x07110000) */
++	/* 2. Instruction TCM */
 +	if (priv->itcm_va) {
 +		if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size))
 +			return priv->itcm_va + (da - priv->itcm_phys);
@@ -288,7 +313,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			return priv->itcm_va + (da - E907_ITCM_DA);
 +	}
 +
-+	/* 3. Data TCM (Resource "dtcm" - Core VMA 0x00080000 / Host 0x07120000) */
++	/* 3. Data TCM */
 +	if (priv->dtcm_va) {
 +		if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size))
 +			return priv->dtcm_va + (da - priv->dtcm_phys);
@@ -342,9 +367,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->r_sram_phys = res->start;
 +		priv->r_sram_size = resource_size(res);
-+		priv->r_sram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
-+		if (!priv->r_sram_va)
-+			priv->r_sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->r_sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->r_sram_va)
 +			return -ENOMEM;
 +	}
@@ -354,9 +377,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->itcm_phys = res->start;
 +		priv->itcm_size = resource_size(res);
-+		priv->itcm_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
-+		if (!priv->itcm_va)
-+			priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->itcm_va)
 +			dev_warn(dev, "failed to map 'itcm' resource\n");
 +	}
@@ -366,23 +387,21 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (res) {
 +		priv->dtcm_phys = res->start;
 +		priv->dtcm_size = resource_size(res);
-+		priv->dtcm_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
-+		if (!priv->dtcm_va)
-+			priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->dtcm_va)
 +			dev_warn(dev, "failed to map 'dtcm' resource\n");
 +	}
 +
-+	/* 5. Map Shared System SRAM C ("sram") for trace0 / telemetry */
++	/* 5. Map Shared System SRAM A2 / C ("sram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
 +	if (res) {
 +		priv->sram_phys = res->start;
 +		priv->sram_size = resource_size(res);
-+		priv->sram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->sram_va)
-+			priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		if (!priv->sram_va)
-+			dev_warn(dev, "failed to map 'sram' resource; trace0 will be unavailable\n");
++			dev_err(dev, "failed to map 'sram' resource\n");
++		else
++			dev_info(dev, "mapped sram %pad+%zx to %p\n", &priv->sram_phys, priv->sram_size, priv->sram_va);
 +	}
 +
 +	return 0;
@@ -432,21 +451,16 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (IS_ERR(priv->rst_cfg))
 +		return dev_err_probe(dev, PTR_ERR(priv->rst_cfg), "failed to get 'cfg' reset\n");
 +
++	priv->rst_module = devm_reset_control_get_optional_exclusive(dev, "module");
++	if (IS_ERR(priv->rst_module))
++		return dev_err_probe(dev, PTR_ERR(priv->rst_module), "failed to get 'module' reset\n");
++
 +	/* 3. Memory Windows (TCM, SRAM, CFG) */
 +	ret = sunxi_rproc_register_mem(pdev, rproc);
 +	if (ret)
 +		return ret;
 +
-+	/* 4. Reserved Memory Carveouts (for VirtIO/RPMsg & DRAM code/data) */
-+	ret = of_reserved_mem_device_init(dev);
-+	if (ret == 0) {
-+		priv->has_reserved_mem = true;
-+	} else if (ret != -ENODEV) {
-+		dev_err(dev, "failed to initialize reserved memory: %d\n", ret);
-+		return ret;
-+	}
-+
-+	/* 5. Optional Hardware Crash Notification IRQ */
++	/* 4. Optional Hardware Crash Notification IRQ */
 +	crash_irq = platform_get_irq_byname_optional(pdev, "crash");
 +	if (crash_irq > 0) {
 +		ret = devm_request_threaded_irq(dev, crash_irq, NULL,
@@ -457,7 +471,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			dev_warn(dev, "failed to request crash IRQ %d: %d\n", crash_irq, ret);
 +	}
 +
-+	/* 6. Mailbox IPC Client */
++	/* 5. Mailbox IPC Client */
 +	priv->cl.dev = dev;
 +	priv->cl.rx_callback = sunxi_rproc_mb_rx_callback;
 +	priv->cl.tx_block = false;
@@ -488,8 +502,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (priv->tx_chan)
 +		mbox_free_channel(priv->tx_chan);
 +err_mem_release:
-+	if (priv->has_reserved_mem)
-+		of_reserved_mem_device_release(dev);
 +	return ret;
 +}
 +
@@ -503,8 +515,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (priv->tx_chan)
 +		mbox_free_channel(priv->tx_chan);
 +
-+	if (priv->has_reserved_mem)
-+		of_reserved_mem_device_release(&pdev->dev);
 +}
 +
 +static const struct of_device_id sunxi_rproc_of_match[] = {

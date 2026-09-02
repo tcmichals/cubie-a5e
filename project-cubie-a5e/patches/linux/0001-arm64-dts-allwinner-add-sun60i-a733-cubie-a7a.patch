@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,545 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -68,6 +68,17 @@ index 0000000..1234567
 +		reg = <0x00 0x40000000 0x01 0x80000000>; /* 6 GiB */
 +	};
 +
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		rproc_trace: trace@4e000000 {
++			reg = <0x00 0x4e000000 0x00 0x00100000>;
++			no-map;
++		};
++	};
++
 +	reg_vcc3v3: vcc-3v3 {
 +		compatible = "regulator-fixed";
 +		regulator-name = "vcc-3v3";
@@ -83,7 +94,6 @@ index 0000000..1234567
 +		regulator-max-microvolt = <5000000>;
 +		gpio = <&r_pio 0 2 GPIO_ACTIVE_HIGH>; /* PL2 */
 +		enable-active-high;
-+		regulator-always-on;
 +	};
 +
 +	reg_usb1_vbus: usb1-vbus {
@@ -93,7 +103,6 @@ index 0000000..1234567
 +		regulator-max-microvolt = <5000000>;
 +		gpio = <&r_pio 1 5 GPIO_ACTIVE_HIGH>; /* PM5 (USB_HOST_EN) */
 +		enable-active-high;
-+		regulator-always-on;
 +	};
 +
 +	reg_wifi_power_en: wifi-power-en {
@@ -454,11 +463,12 @@ index 0000000..1234567
 +				     <GIC_SPI 178 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 173 IRQ_TYPE_LEVEL_HIGH>,
 +				     <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
-+			interrupt-names = "macirq", "eth_lpi", "tx0_irq", "rx0_irq";
-+			clocks = <&ccu CLK_BUS_GMAC0>, <&ccu CLK_BUS_GMAC0>;
-+			clock-names = "stmmaceth", "mbus";
-+			resets = <&ccu RST_BUS_GMAC0>;
-+			reset-names = "stmmaceth";
++			interrupt-names = "macirq", "eth_lpi", "tx-queue-0", "rx-queue-0";
++			clocks = <&ccu CLK_BUS_GMAC0>, <&ccu CLK_BUS_GMAC0>,
++				 <&ccu CLK_GMAC_PTP>;
++			clock-names = "stmmaceth", "mbus", "ptp_ref";
++			resets = <&ccu RST_BUS_GMAC0_AXI>, <&ccu RST_BUS_GMAC0>;
++			reset-names = "stmmaceth", "ahb";
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&gmac0_pins>;
 +			phy-mode = "rgmii";
@@ -481,7 +491,7 @@ index 0000000..1234567
 +					compatible = "ethernet-phy-id7b74.4412", "ethernet-phy-ieee802.3-c22";
 +					reg = <1>;
 +					phy-supply = <&reg_phy3v3>;
-+					reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>; /* PH16 (GMAC1_RSTn_L via R185) */
++					reset-gpios = <&pio 7 16 GPIO_ACTIVE_LOW>; /* PH16 (GMAC0_RSTn via R185) */
 +					reset-assert-us = <10000>;
 +					reset-deassert-us = <150000>;
 +				};
@@ -547,9 +557,8 @@ index 0000000..1234567
 +
 +		rproc: remoteproc@7010000 {
 +			compatible = "allwinner,sun60i-a733-rproc";
-+			reg = <0x07010000 0x1000>,
-+			      <0x07110000 0x40000>;
-+			reg-names = "cfg", "itcm";
++			reg = <0x07010000 0x1000>;
++			reg-names = "cfg";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
@@ -558,6 +567,8 @@ index 0000000..1234567
 +			reset-names = "cfg";
 +			mboxes = <&msgbox 0>;
 +			mbox-names = "tx";
++			memory-region = <&rproc_trace>;
++			memory-region-names = "trace";
 +			status = "okay";
 +		};
 +	};

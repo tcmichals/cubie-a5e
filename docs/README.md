@@ -22,7 +22,12 @@ docs/
 │   ├── CUBIE_A5E_PLATFORM_GUIDE.md            <-- Radxa Cubie A5E (Allwinner A527/T527, Mainline U-Boot, SDIO)
 │   ├── CUBIE_A7A_PLATFORM_GUIDE.md            <-- Radxa Cubie A7A (Allwinner A733, LPDDR5 boot0, GICv3, Dual GMAC)
 │   ├── CUBIE_A7Z_PLATFORM_GUIDE.md            <-- Radxa Cubie A7Z (Allwinner A733 Zero Form Factor, Micro-HDMI)
+│   ├── CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md <-- Decoded Cubie A7A V1.10 Ethernet sheet (PHY, RJ45, clock, reset, straps)
+│   ├── CUBIE_A7A_USB_POWER_SCHEMATIC_REFERENCE.md <-- Decoded USB and power sheets (VBUS switches, hub rails, enable GPIOs)
 │   └── CUBIE_A7A_DEBUG_LOG.md                 <-- Radxa Cubie A7A Forensic Bring-Up Log & Silicon Realignment
+│
+├── extracted_vendor/                           <-- Searchable text conversions of vendor artifacts
+│   └── radxa_cubie_a7a_v1.10_schematic.txt     <-- Complete 19-sheet Cubie A7A V1.10 schematic conversion
 │
 ├── vendor-a733-reference/                     <-- Allwinner A733 Official Hardware Reference Library
 │   ├── A733_Datasheet_V0.93.pdf               <-- Official Allwinner A733 Datasheet V0.93 PDF
@@ -35,6 +40,7 @@ docs/
 │   ├── BuildRootHowTo.md                      <-- Buildroot Package Management & Build Flow
 │   ├── DeviceTreeHowTo.md                     <-- Device Tree & Overlay (DTBO) Guide
 │   ├── DebugLog.md                            <-- Chronological Engineering Case Studies & Bug History (Cases 1–7)
+│   ├── A7A_KERNEL_PATCH_VALIDATION.md          <-- Required clean-tree Buildroot patch validation gate
 │   └── A7A_BRINGUP_AND_KNOWN_ISSUES.md        <-- A7A Bring-Up Post-Mortem & Verified Fixes
 │
 ├── flightcontroller/                          <-- High-Level Avionics, FPGA & Application Stack
