@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,502 @@
+@@ -0,0 +1,522 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -211,6 +211,17 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
++	/* 4. Initialize MCU CCU Bus Bridges and hold core in reset */
++	if (priv->cfg_va) {
++		writel(0x00010001, priv->cfg_va + 0x108); /* TZMA0 */
++		writel(0x00010001, priv->cfg_va + 0x10c); /* TZMA1 */
++		writel(0x00010001, priv->cfg_va + 0x114); /* PubSRAM Gate */
++		writel(0x00000003, priv->cfg_va + 0x11c); /* MBUS Subsystem */
++		writel(0x80000000, priv->cfg_va + 0x120); /* RISCV_CLK */
++		writel(0x00010001, priv->cfg_va + 0x128); /* MSGBOX Mailbox */
++		writel(0x00030001, priv->cfg_va + 0x124); /* Hold Core in Reset */
++	}
++
 +	return 0;
 +
 +err_disable_parent:
@@ -264,6 +275,11 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
++	/* 3. Release XuanTie E907 Core Reset */
++	if (priv->cfg_va) {
++		writel(0x00070001, priv->cfg_va + 0x124);
++	}
++
 +	return 0;
 +}
 +
@@ -275,6 +291,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	if (priv->clk_core)
 +		clk_disable_unprepare(priv->clk_core);
++
++	/* Hold XuanTie E907 Core in Reset */
++	if (priv->cfg_va)
++		writel(0x00030001, priv->cfg_va + 0x124);
 +
 +	return 0;
 +}

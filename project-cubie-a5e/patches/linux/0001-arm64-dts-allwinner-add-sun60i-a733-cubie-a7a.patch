@@ -30,7 +30,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,574 @@
+@@ -0,0 +1,582 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -575,22 +575,30 @@ index 0000000..1234567
 +			};
 +		};
 +
-+		r_i2c0: i2c@7083000 {
-+			compatible = "allwinner,sun60i-a733-i2c", "allwinner,sun6i-a31-i2c";
++		r_rsb: rsb@7083000 {
++			compatible = "allwinner,sun8i-a23-rsb";
 +			reg = <0x07083000 0x400>;
 +			interrupts = <GIC_SPI 203 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&r_ccu CLK_R_TWI0>;
 +			resets = <&r_ccu RST_BUS_R_TWI0>;
 +			pinctrl-names = "default";
 +			pinctrl-0 = <&r_i2c0_pins>;
++			#address-cells = <1>;
++			#size-cells = <0>;
 +			status = "okay";
++
++			axp8191: pmic@3a3 {
++				compatible = "x-powers,axp8191";
++				reg = <0x3a3>;
++			};
 +		};
 +
-+		rproc: remoteproc@7010000 {
-+			compatible = "allwinner,sun60i-a733-rproc";
-+			reg = <0x07010000 0x1000>,
++		rproc: remoteproc@7102000 {
++			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
++			reg = <0x07102000 0x1000>,
++			      <0x07280000 0x40000>,
 +			      <0x00040000 0x28000>;
-+			reg-names = "cfg", "sram";
++			reg-names = "cfg", "r_sram", "sram";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
