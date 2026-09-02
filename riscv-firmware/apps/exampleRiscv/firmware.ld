@@ -8,7 +8,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    SRAM (rwx) : ORIGIN = 0x00044000, LENGTH = 160K
+    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 256K
 }
 
 SECTIONS
