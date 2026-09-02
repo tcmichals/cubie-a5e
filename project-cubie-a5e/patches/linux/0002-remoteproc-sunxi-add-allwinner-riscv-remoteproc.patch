@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,522 @@
+@@ -0,0 +1,518 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E907/E902 RISC-V Remote Processor Driver
@@ -260,11 +260,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	/* 1. Program entry address if hardware register exists */
-+	if (priv->cfg_va) {
-+		writel((u32)rproc->bootaddr, priv->cfg_va + RISCV_STA_ADD_OFFSET);
-+		readl(priv->cfg_va + RISCV_STA_ADD_OFFSET);
-+	}
++	/* 1. Core boots directly from Dedicated SRAM (0x07280000 / Core 0x0) */
 +
 +	/* 2. Enable core clock to begin execution */
 +	if (priv->clk_core) {
