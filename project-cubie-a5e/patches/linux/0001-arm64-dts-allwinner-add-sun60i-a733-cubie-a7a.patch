@@ -593,18 +593,16 @@ index 0000000..1234567
 +			};
 +		};
 +
-+		rproc: remoteproc@7102000 {
++		rproc: remoteproc@40000 {
 +			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
-+			reg = <0x07102000 0x1000>,
-+			      <0x07280000 0x40000>,
-+			      <0x00040000 0x28000>;
-+			reg-names = "cfg", "r_sram", "sram";
++			reg = <0x00040000 0x28000>;
++			reg-names = "sram";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
 +			clock-names = "parent", "bus", "core";
 +			resets = <&r_ccu RST_BUS_RISCV_CFG>;
-+			reset-names = "cfg";
++			reset-names = "core";
 +			mboxes = <&msgbox 0>;
 +			mbox-names = "tx";
 +			memory-region = <&rproc_trace>;
@@ -1042,13 +1040,18 @@ index 0000000..1234567
 +			status = "okay";
 +		};
 +
-+		rproc: remoteproc@7102000 {
-+			compatible = "allwinner,sun60i-a733-rproc";
-+			reg = <0x07102000 0x1000>,
-+			      <0x07110000 0x40000>;
-+			reg-names = "cfg", "r_sram";
-+			mboxes = <&msgbox 0>, <&msgbox 1>;
-+			mbox-names = "rx", "tx";
++		rproc: remoteproc@40000 {
++			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
++			reg = <0x00040000 0x28000>;
++			reg-names = "sram";
++			clocks = <&r_ccu CLK_RISCV_24M>,
++			         <&r_ccu CLK_RISCV_CFG>,
++			         <&r_ccu CLK_RISCV>;
++			clock-names = "parent", "bus", "core";
++			resets = <&r_ccu RST_BUS_RISCV_CFG>;
++			reset-names = "core";
++			mboxes = <&msgbox 0>;
++			mbox-names = "tx";
 +			status = "okay";
 +		};
 +	};
