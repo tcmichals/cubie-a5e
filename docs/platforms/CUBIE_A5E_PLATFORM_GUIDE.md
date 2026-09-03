@@ -10,6 +10,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 (`sun55iw3`) | 8× ARM Cortex-A55 Cores (Octa-core) |
 | **RAM** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | Dynamic probing via U-Boot `dram_init` |
+| **Co-Processors** | **XuanTie E906 RISC-V** (up to 200 MHz) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | Managed via `mcu_ccu` @ `0x07102000` (ITCM @ `0x07110000`, DTCM @ `0x07120000`) |
 | **NPU** | **2.0 TOPS VeriSilicon VIP9000** | VIPLite / Galcore kernel driver (`0x07122000`) |
 | **Camera Subsystem** | **Allwinner Gen-4 Video In (VIN)** | 4× MIPI CSI-2 receivers + ISP + Multi-scalers |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Base MMIO at `0x03400000` / `0x03460000` |

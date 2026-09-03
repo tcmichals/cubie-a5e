@@ -1,4 +1,4 @@
-# Makefile for XuanTie E907 RISC-V exampleRiscv Application
+# Makefile for XuanTie RISC-V exampleRiscv Application (A733: E902, T527: E906)
 
 CROSS_COMPILE ?= /home/tcmichals/tools/Xilinx/2025.2/gnu/riscv/lin/bin/riscv64-unknown-elf-
 ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
@@ -14,7 +14,17 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 
-ARCH_FLAGS = -march=rv32imafdc -mabi=ilp32d -mcmodel=medany
+# Target Board Selection: a7a (Allwinner A733 / E902) or a5e (Allwinner T527 / E906)
+BOARD ?= a7a
+
+ifeq ($(BOARD),a7a)
+# Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
+ARCH_FLAGS = -march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
+else
+# Allwinner T527: XuanTie E906 (RV32I 32 registers, hardware double float, 5-stage, up to 200 MHz)
+ARCH_FLAGS = -march=rv32imafdc_zicsr -mabi=ilp32d -mcmodel=medany
+endif
+
 OPT_FLAGS  = -O2 -g
 
 INCLUDES = -I. -I../../common
@@ -23,7 +33,7 @@ COMMON_FLAGS = $(ARCH_FLAGS) $(OPT_FLAGS) $(INCLUDES) -Wall -ffreestanding -ffun
 CFLAGS       = $(COMMON_FLAGS)
 CXXFLAGS     = $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics
 
-LDFLAGS      = -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles
+LDFLAGS      = $(ARCH_FLAGS) -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles
 
 SRCS_S   = startup.S
 SRCS_C   = resource_table.c

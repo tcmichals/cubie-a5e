@@ -14,7 +14,7 @@ This document is the authoritative hardware, bootloader, firmware provenance, an
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big @ 2.0 GHz) + 6× Cortex-A55 (LITTLE @ 1.8 GHz) DynamIQ Cluster |
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 1800 MHz) | 4-PState dynamic PHY training executed by `boot0` in SRAM |
-| **Co-Processor** | XuanTie E902 / E907 RISC-V (RV32IMAC @ 200–600 MHz) | Managed via Linux `remoteproc` framework (`sunxi_rproc.c`) |
+| **Co-Processor** | **XuanTie E902 RISC-V** (RV32IMC @ up to 200 MHz, per Linux-Sunxi) | No DSP; managed via Linux `remoteproc` framework (`sunxi_rproc.c`) executing from SRAM A2 |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Distributor: `0x03400000`, Redistributors: `0x03460000`, ITS: `0x03440000` |
 | **Clock Controller (CCU)** | Main CCU: `0x02002000`, PRCM R_CCU: `0x07010000` | Verified against A733 silicon memory map |
 | **Mainline Kernel** | **Linux 7.1 PREEMPT_RT** | Ingests CCU, RTC, Pinctrl, and GICv3 patches |

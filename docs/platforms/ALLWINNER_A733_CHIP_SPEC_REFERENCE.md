@@ -17,8 +17,8 @@ The Allwinner A733 is an 8-core, heterogeneous 64-bit application processor targ
 |  +-------------------------------------+   +-----------------------------------------+  |
 |  |             CPUX Cluster            |   |               Co-Processors             |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | 2x ARM Cortex-A76 @ 2.0 GHz   |  |   |  | XuanTie E907 / E902 RISC-V Core   |  |  |
-|  |  | L1: 64KB I / 64KB D, L2: 256KB|  |   |  | (Avionics / ARISC / Power Mgmt)   |  |  |
+|  |  | 2x ARM Cortex-A76 @ 2.0 GHz   |  |   |  | XuanTie E902 RISC-V Core @ 200MHz |  |  |
+|  |  | L1: 64KB I / 64KB D, L2: 256KB|  |   |  | (Linux-Sunxi A733 Coprocessor)   |  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | 6x ARM Cortex-A55 @ 1.8 GHz   |  |   |  | 3.0 TOPS Neural Processing Unit   |  |  |
@@ -108,7 +108,7 @@ Allwinner A733 maps peripheral registers into the lower 32-bit physical address 
 
 The A733 features two distinct clock controller domains:
 1. **Main CCU** (`0x02002000`, 16 KB): Feeds all high-speed buses, CPU clusters, GPU, NPU, DRAM, and standard peripherals.
-2. **R-CCU / PRCM** (`0x07010000`, 64 KB): Feeds the Always-On power domain, RTC, PMIC interfaces, and the XuanTie E907 co-processor.
+2. **R-CCU / PRCM** (`0x07010000`, 64 KB): Feeds the Always-On power domain, RTC, PMIC interfaces, and the XuanTie E902 co-processor (running up to 200 MHz, documented by Linux-Sunxi).
 
 ### Key CCU Clock & Reset Offsets
 | Subsystem | Register Offset | Clock Enable Bit | Reset Deassert Bit | Gate Type / Notes |
@@ -175,7 +175,7 @@ The interrupt controller is a fully compliant ARM GIC-600 supporting GICv3 archi
 | **SPI 53** | `<GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH>` | USB1 OHCI Host |
 | **SPI 62** | `<GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>` | GMAC0 Ethernet |
 | **SPI 89** | `<GIC_SPI 89 IRQ_TYPE_LEVEL_HIGH>` | System Timer 0 |
-| **SPI 120** | `<GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>` | XuanTie E907 Mailbox |
+| **SPI 120** | `<GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>` | XuanTie E906 Mailbox |
 
 ---
 
@@ -212,7 +212,7 @@ The Allwinner A733 BootROM (BROM) executes on **ARM Cortex-A55 Core 0** upon pow
 |                                 |                                                       |
 |                                 v                                                       |
 |                       [Stage 3: U-Boot 2018.07 / 2024.x]                                |
-|                       - Boots XuanTie E907 RISC-V co-processor (SCP)                    |
+|                       - Boots XuanTie E906 RISC-V co-processor (SCP)                    |
 |                       - Loads boot.scr + Image + DTB from FAT @ 16MB Offset             |
 |                                 |                                                       |
 |                                 v                                                       |

@@ -21,7 +21,7 @@ The Allwinner T527 / A527 (`sun55i`) is an octa-core ARM Cortex-A55 application 
 |  |  | L1: 32KB I / 32KB D, L2: 128KB|  |   |  | (Audio, DSP algorithms)           |  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | 4x ARM Cortex-A55 (Little Cl.)|  |   |  | XuanTie E907 / E902 RISC-V Core   |  |  |
+|  |  | 4x ARM Cortex-A55 (Little Cl.)|  |   |  | XuanTie E906 RISC-V Core          |  |  |
 |  |  | L1: 32KB I / 32KB D, L2: 64KB |  |   |  | (Real-time avionics / ARISC / SCP)|  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
@@ -91,7 +91,7 @@ The Allwinner T527 / A527 (`sun55i`) is an octa-core ARM Cortex-A55 application 
 | `RTC` | `0x07090000` | `0x070903FF` | 1 KB | Real-Time Clock & Alarm |
 | `DSP_CFG` | `0x07100000` | `0x071003FF` | 1 KB | HiFi4 DSP Subsystem Config |
 | `MCU_PRCM` | `0x07102000` | `0x07102FFF` | 4 KB | DSP / MCU Clock & Reset Control |
-| `RISCV_CFG` | `0x07130000` | `0x07130FFF` | 4 KB | **XuanTie E907 RISC-V Configuration** |
+| `RISCV_CFG` | `0x07130000` | `0x07130FFF` | 4 KB | **XuanTie E906 CFG (`0x0204` = Start Vector Register)** |
 | `RISCV_MSGBOX` | `0x07136000` | `0x07136FFF` | 4 KB | RISC-V Dedicated Mailbox |
 | **System DRAM** | | | | |
 | **DRAM Space** | `0x40000000` | `0x13FFFFFFF` | 4 GiB Max | Physical RAM (`0x40000000` base) |
@@ -104,7 +104,7 @@ The Allwinner T527 / A527 (`sun55i`) is an octa-core ARM Cortex-A55 application 
 | :--- | :--- | :--- |
 | **CPUX Cores** | 8x Cortex-A55 @ 1.8 GHz | 2x Cortex-A76 @ 2.0 GHz + 6x Cortex-A55 @ 1.8 GHz |
 | **DSP Co-Processor** | Cadence Tensilica HiFi4 DSP | None (Replaced by dual RISC-V / NPU architecture) |
-| **RISC-V Co-Processor** | XuanTie E907 / E902 (RV32IMAC) | XuanTie E907 / E902 (RV32IMAFDCP with FPU/Double) |
+| **RISC-V Co-Processor** | XuanTie E906 (Up to 200 MHz, RV32IMAFDC, 5-stage) | XuanTie E902 (Up to 200 MHz, RV32EMC, 2-stage) |
 | **Ethernet Interfaces** | **Dual GMAC** (GMAC0 @ `0x04500000`, GMAC1 @ `0x04510000`) | **Single GMAC** (GMAC0 @ `0x04508000`) |
 | **CCU Base Address** | `0x02001000` (Size: 4 KB) | `0x02002000` (Size: 16 KB) |
 | **DMAC Base Address** | `0x03002000` (Size: 4 KB) | `0x04601000` / `0x04024000` (Dual DMAC) |

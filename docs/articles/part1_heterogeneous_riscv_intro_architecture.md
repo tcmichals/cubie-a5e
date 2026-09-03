@@ -128,7 +128,10 @@ Because the ARM Cortex-A55 Linux host and the XuanTie E907 RISC-V core share the
 The presentation that inspired this approach is well worth watching:  
 🎥 **[Debugging Heterogeneous SoC Using OpenOCD — Nishanth Menon, Texas Instruments (YouTube)](https://youtu.be/hKFvxgbHUfg?si=Mhd7lEJgq9oBp3t9)**
 
-By coupling OpenOCD with on-chip register access, we can pause the core, set hardware breakpoints, inspect CPU general-purpose registers (`x0`–`x31`), and single-step firmware without a single physical debug wire attached to the board!
+> [!WARNING]
+> **Hardware Reality on Allwinner Silicon:**
+> While memory-mapped debug access (DMEM) was successfully pioneered on TI AM62x/AM64x SoCs, Allwinner's implementation on the T527 and A733 **does not expose the RISC-V Debug Module to the non-secure ARM bus interconnect**. 
+> As a result, on-chip OpenOCD/DMEM debugging is unsupported on these chips, leaving developers without interactive GDB breakpoints or stepping. All live debugging in production is achieved through Linux RemoteProc trace buffers (`trace0`), dedicated serial UART logging, and shared SRAM memory probing.
 
 ---
 

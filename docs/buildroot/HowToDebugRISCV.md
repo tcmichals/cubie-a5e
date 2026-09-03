@@ -1,17 +1,18 @@
-# How To Debug the XuanTie E906/E907 Co-Processor with GDB
+# How To Debug XuanTie RISC-V Co-Processors (T527 E906 / A733 E902)
 
-This guide is your step-by-step reference for attaching GDB to the RISC-V
-co-processor running on the Allwinner T527 (Radxa Cubie A5E) **without
-needing JTAG hardware**. We use the Linux **remoteproc framework** for
-firmware loading and the **ARM CoreSight Debug Access Port (DAP)** to
-expose co-processor registers to OpenOCD running on the ARM host itself.
-
-> [!NOTE]
-> **No `iomem=relaxed` required.** All clock gating, reset sequencing,
-> and ITCM firmware loading is handled entirely inside the kernel's
-> `sunxi_t527_rproc.c` driver. The kernel driver has unrestricted physical
-> memory access — userspace never touches hardware registers directly.
-> `CONFIG_STRICT_DEVMEM` remains enabled for system security.
+> [!CAUTION]
+> **CRITICAL HARDWARE REALITY: NO ON-CHIP DMEM / OPENOCD SUPPORT**
+> Direct memory-mapped debugging via `/dev/mem` (OpenOCD `dmem` or `rbb_server`) is **UNSUPPORTED** on Allwinner T527 and A733 silicon.
+> The RISC-V hardware Debug Module (DM) is not routed to the non-secure ARM interconnect. Any attempt to access debug registers from Linux userspace fails with a bus error.
+>
+> **We operate "blind" without interactive GDB/OpenOCD capabilities**:
+> - There are **no breakpoints**, **no single-stepping**, and **no interactive GDB register inspection via Linux**.
+> - Part 2 below is a theoretical architecture and **does not function on production silicon**.
+> - **All practical debugging must strictly rely on**:
+>   1. **RemoteProc Trace Buffer** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
+>   2. **Dedicated Serial Console** (`S_UART0` @ `0x07080000` / 115200 baud).
+>   3. **Direct Memory Probing** in Shared SRAM A2 (`0x00040000`–`0x00073FFF`).
+>   4. **Hardware Mailbox Doorbell IRQ & IPC Rings**.
 
 ---
 
@@ -66,7 +67,12 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ---
 
-## Part 2 — Attach GDB Remotely from Your x86 Dev Host
+## Part 2 — Theoretical On-Chip GDB Debugging (UNSUPPORTED on Allwinner Hardware)
+
+> [!WARNING]
+> **UNSUPPORTED ON ALLWINNER HARDWARE**:
+> The steps below describe a theoretical on-chip MMIO bridge concept. In physical reality on Allwinner T527 and A733, the RISC-V Debug Module is **not mapped to the non-secure host bus**. Address `0x07090000` is the SoC RTC controller, not a RISC-V debug module.
+> Attempting to run `dmi_test.py` or attach OpenOCD over `/dev/mem` will fail. Do not rely on this method; use Part 1 (RemoteProc Trace Buffer + Serial) for all active development.
 
 This uses the **target-side `rbb_server` bridge** combined with a **software MMIO OpenOCD bridge** that reads co-processor registers through `/dev/mem` at physical address `0x07090000`.
 

@@ -451,14 +451,38 @@ The table below documents the full line-by-line cross-reference comparing the ve
 - **Mainline Fix**: Added explicit `.name = "osc24M"` fallback to all 24MHz parents across Main CCU and R-CCU.
 - **RSB Verification**: In DTS, switched `r_i2c0` at `0x07083000` to `allwinner,sun8i-a23-rsb` (`r_rsb`) with child `axp8191: pmic@3a3` to match U-Boot's RSB mode initialization.
 
-### XuanTie E907 RemoteProc & MCU CCU Architecture (Sep 2, 2026)
-- **Hardware Controller Isolation**: The XuanTie E907 auxiliary core on A733 / T527 is controlled via the **MCU CCU at `0x07102000`** (not `r_ccu` `0x07010000`). The core reset line is at `0x07102124` (`0x00070001` = run, `0x00030001` = hold in reset), with 24MHz clock gate at `0x07102120` (`0x80000000`), and bus adapter bridges at `0x108`, `0x10c`, `0x114`, `0x11c`, `0x128`.
-- **Synchronous Abort Eliminated**: Removed legacy `0x0204` (`RISCV_STA_ADD`) MMIO read/write from `sunxi_rproc_start()`. On newer A733 silicon, `0x07130000` is unmapped or absent, and reading offset `0x204` triggered an immediate hardware bus abort.
-- **Firmware Reset Contract (Standard Linux Upstream Design)**:
-  - The XuanTie E907 hardware silicon always begins execution at `0x00000000` upon reset release.
-  - In A733, address `0x00000000` maps to **Dedicated RISC-V Local SRAM at `0x07280000` (256 KB)**.
-  - Aligned `cubie-a5e/riscv-firmware/apps/exampleRiscv/firmware.ld` to `ORIGIN = 0x00000000, LENGTH = 256K` so `.vectors` sits directly at the hardware reset vector.
-  - `sunxi_rproc.c` adheres strictly to standard upstream Linux remoteproc architecture: it is a pure lifecycle manager that maps memory via `da_to_va`, enables clocks, and deasserts reset without synthesizing synthetic code or trampolines.
+### XuanTie E902 Core Architecture & Lack of TCMs Breakthrough (Sep 3, 2026)
+- **Definitive Core Identification**:
+  - The Allwinner A733 coprocessor is confirmed as the **XuanTie E902** (RV32EMC, up to 200 MHz), as documented by Linux-Sunxi.
+  - The E902 silicon **DOES NOT HAVE Tightly Coupled Memories (NO ITCM, NO DTCM)**.
+  - This definitively explains the earlier Sep 1 aborts where accessing `0x07110000` (ITCM) and `0x07120000` (DTCM) caused asynchronous SErrors and external aborts. Those addresses do not exist on the A733!
+- **Memory Architecture**:
+  - On the A733, the E902 executes 100% out of **Shared SRAM A2 (`0x00040000`–`0x00073FFF`, 208 KB)**.
+  - The firmware ELF links to `ORIGIN = 0x00044000` in SRAM A2.
+  - The A733 Device Tree does not declare TCM memory windows.
+- **Compiler / ABI Contract**:
+  - Because the E902 is RV32E, it possesses only **16 general-purpose integer registers** (`x0`–`x15`) and **NO FPU**.
+  - Firmware MUST be compiled targeting:
+    `-march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany`
+  - Compiling with standard `ilp32` or `ilp32d` emits instructions touching registers `x16`–`x31` or hardware float opcodes, which trigger hardware illegal instruction exceptions on the E902.
+- **No On-Chip OpenOCD / DMEM Support**:
+  - The RISC-V hardware Debug Module is not exposed over the non-secure ARM bus interconnect.
+  - Interactive GDB/OpenOCD debugging over `/dev/mem` is unsupported. Developers operate "blind" and must rely on RemoteProc trace buffers (`trace0`), S_UART0 serial logging, and SRAM memory probing.
+
+### XuanTie E906 vs E902 Register Map & Lifecycle Sequencing Rules (Sep 3, 2026)
+- **E906 CFG Register Map (`0x07130000`) on T527**:
+  * `0x0000`: `E906_VER_REG`
+  * `0x0010`: `E906_RF1P_CFG_REG`
+  * `0x0040`: `E906_TS_TMODE_SEL_REG`
+  * `0x0204`: `E906_STA_ADD_REG` (Start Vector / Boot Address)
+  * `0x0220`: `E906_WAKEUP_EN_REG`
+  * `0x0224`–`0x0234`: `E906_WAKEUP_MASK0..4_REG`
+  * `0x0248`: `E906_WORK_MODE_REG`
+- **Bus Error Prevention & Symmetrical Sequencing Rules**:
+  * **Start Rule**: `cfg_clk` (`CLK_BUS_RV_CFG`) must be enabled and `cfg_rst` (`RST_BUS_RV_CFG`) deasserted BEFORE writing `E906_STA_ADD_REG` (`0x0204`). Touching unclocked registers triggers an immediate AXI/AHB SLVERR/DECERR (Synchronous External Abort).
+  * **Stop Rule**: `mod_rst` (`RST_BUS_RV`) must be asserted BEFORE gating `mod_clk` (`CLK_BUS_RV`). Gating the clock on an active core mid-burst freezes the bus transaction and deadlocks the SoC bus.
+  * **A733 Contrast**: The `0x07130000` block does not exist on A733 silicon. The A733 E902 is clocked and reset purely via `r_ccu` (`0x07010000`), executing directly from SRAM A2 (`0x00040000`) with no `0x0204` register needed.
+
 
 
 

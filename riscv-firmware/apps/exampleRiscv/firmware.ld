@@ -1,6 +1,6 @@
 /*
- * firmware.ld - Linker script for XuanTie E907 RISC-V Firmware
- * Running in 256 KB Dedicated RISC-V SRAM (0x00000000 - 0x0003FFFF)
+ * firmware.ld - Linker script for XuanTie RISC-V Firmware (A733: E902, T527: E906)
+ * Running in Shared SRAM A2 (0x00040000 - 0x00073FFF)
  */
 
 OUTPUT_ARCH("riscv")

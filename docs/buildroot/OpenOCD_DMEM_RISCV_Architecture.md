@@ -1,10 +1,21 @@
 # On-Chip Direct Memory-Mapped Debug Access (DMEM) Architecture for ARM & RISC-V SoCs
 
+> [!CAUTION]
+> **CRITICAL HARDWARE REALITY: NO DMEM / OPENOCD ON-CHIP DEBUG SUPPORT**
+> On-chip memory-mapped debugging (`dmem` / `/dev/mem` OpenOCD bridge) is **UNSUPPORTED on Allwinner T527 and A733 silicon**.
+> The RISC-V hardware Debug Module (DM) is not mapped into the non-secure ARM interconnect and is firewalled by TrustZone. Any attempt to read or write debug registers from Linux userspace triggers an immediate **Bus Error / Synchronous External Abort**.
+> 
+> **We operate "blind" without interactive GDB/OpenOCD capabilities**:
+> - There is **no OpenOCD on-chip bridge**, **no GDB breakpoints**, **no single-stepping**, and **no register inspection**.
+> - All debugging must strictly rely on:
+>   1. **RemoteProc Trace Buffer** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0` via `rproc_trace` carveout).
+>   2. **Dedicated Serial Console** (`S_UART0` @ `0x07080000`).
+>   3. **Direct Memory Probing** in Shared SRAM A2 (`0x00040000`–`0x00073FFF`).
+>   4. **Hardware Mailbox Doorbell IPC**.
+
 ## Executive Summary
 
-This document details the technical architecture for **JTAG-less, on-chip debugging** of real-time co-processors (such as the XuanTie E907 RISC-V core on the Allwinner T527 / Radxa Cubie A5E) directly from the primary ARM Linux host OS.
-
-By leveraging **Direct Memory-Mapped I/O (MMIO)** via `/dev/mem`, the ARM Cortex-A55 host reads and writes hardware Debug Module registers directly over the SoC's internal system bus. This eliminates the need for external physical JTAG hardware probes (e.g., SEGGER J-Link or T-Head CK-Link), breadboard wiring, or hardware header soldering.
+This document details the theoretical architecture for on-chip debugging, and explains why **Direct Memory-Mapped I/O (MMIO) via `/dev/mem` cannot be used** on Allwinner T527/A733 platforms.
 
 ---
 
