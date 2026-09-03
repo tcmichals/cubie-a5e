@@ -20,24 +20,26 @@ diff --git a/drivers/phy/allwinner/phy-sun4i-usb.c b/drivers/phy/allwinner/phy-s
 index a1b2c3d..e4f5a6b 100644
 --- a/drivers/phy/allwinner/phy-sun4i-usb.c
 +++ b/drivers/phy/allwinner/phy-sun4i-usb.c
-@@ -279,7 +279,7 @@ static int sun4i_usb_phy_init(struct phy *_phy)
- 	if (ret)
- 		return ret;
+@@ -278,7 +278,8 @@ static int sun4i_usb_phy_init(struct phy *_phy)
+ 	}
  
--	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2) {
-+	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2 && !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk)) {
- 		ret = clk_prepare_enable(phy->clk2);
- 		if (ret) {
- 			reset_control_assert(phy->reset);
-@@ -386,7 +386,7 @@ static int sun4i_usb_phy_exit(struct phy *_phy)
- 	if (phy->index == 0)
+ 	/* Some PHYs on some SoCs need the help of PHY2 to work. */
+-	if (data->cfg->needs_phy2_siddq && phy->index != 2) {
++	if (data->cfg->needs_phy2_siddq && phy->index != 2 &&
++	    !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk)) {
+ 		struct sun4i_usb_phy *phy2 = &data->phys[2];
+ 
+ 		ret = clk_prepare_enable(phy2->clk);
+@@ -384,7 +385,8 @@ static int sun4i_usb_phy_exit(struct phy *_phy)
  		data->phy0_init = false;
+ 	}
  
--	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2)
-+	if (data->cfg->phy2_needs_secondary_clk && phy->index == 2 && !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk))
- 		clk_disable_unprepare(phy->clk2);
+-	if (data->cfg->needs_phy2_siddq && phy->index != 2) {
++	if (data->cfg->needs_phy2_siddq && phy->index != 2 &&
++	    !IS_ERR_OR_NULL(data->phys[2].reset) && !IS_ERR_OR_NULL(data->phys[2].clk)) {
+ 		struct sun4i_usb_phy *phy2 = &data->phys[2];
  
- 	clk_disable_unprepare(phy->clk);
+ 		clk_disable_unprepare(phy2->clk);
 @@ -787,7 +787,7 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
  			continue;
  
