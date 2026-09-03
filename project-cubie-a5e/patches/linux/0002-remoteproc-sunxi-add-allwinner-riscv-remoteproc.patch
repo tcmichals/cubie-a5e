@@ -5,8 +5,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 ---
  drivers/remoteproc/Kconfig       |   9 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 596 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 606 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 622 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 632 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -35,7 +35,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,596 @@
+@@ -0,0 +1,622 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E902 RISC-V Remote Processor Driver
@@ -243,16 +243,39 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		return -EINVAL;
 +
 +	/*
-+	 * Program initial boot entry vector into hardware register if present
++	 * 1. Program initial boot entry vector into hardware register if present
 +	 * (e.g., XuanTie E906 on Allwinner T527 / A523 at cfg_va + 0x0204).
-+	 * On SRAM-only architectures (e.g., A733 / E902), cfg_va is NULL and the
-+	 * core fetches directly from hardwired SRAM A2 (0x00040000).
 +	 */
-+	if (priv->cfg_va)
++	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
++		readl(priv->cfg_va + E906_STA_ADD_REG);
++	}
 +
 +	/*
-+	 * Release core reset to begin execution.
++	 * 2. On SRAM-only architectures (e.g., A733 / E902), the core fetches
++	 * directly from the hardware reset vector at the base of SRAM A2 (0x00040000).
++	 * If firmware is linked at an offset (e.g. 0x00044000), install a standard
++	 * RISC-V jump trampoline (JAL x0, offset) at the SRAM base to safely leap to the entry point.
++	 */
++	if (priv->sram_va && rproc->bootaddr > priv->sram_phys &&
++	    (rproc->bootaddr - priv->sram_phys) < 0x100000) {
++		u32 offset = (u32)(rproc->bootaddr - priv->sram_phys);
++		u32 imm20 = (offset >> 20) & 1;
++		u32 imm10_1 = (offset >> 1) & 0x3ff;
++		u32 imm11 = (offset >> 11) & 1;
++		u32 imm19_12 = (offset >> 12) & 0xff;
++		u32 jal = (imm20 << 31) | (imm10_1 << 21) | (imm11 << 20) | (imm19_12 << 12) | 0x6f;
++
++		writel(jal, priv->sram_va);
++		dev_dbg(priv->dev, "installed reset trampoline (0x%08x) at SRAM base 0x%llx -> 0x%llx\n",
++			jal, (u64)priv->sram_phys, (u64)rproc->bootaddr);
++	}
++
++	/* 3. Flush all write buffers to ensure code and vectors are in physical SRAM */
++	wmb();
++
++	/*
++	 * 4. Release core reset to begin execution.
 +	 * Uses standard Linux Reset Framework (no MMIO pokes).
 +	 */
 +	if (priv->rst_core) {
@@ -268,6 +291,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			return ret;
 +		}
 +	}
++
++	/* 5. Allow pipeline and clock tree to settle */
++	udelay(10);
 +
 +	return 0;
 +}
