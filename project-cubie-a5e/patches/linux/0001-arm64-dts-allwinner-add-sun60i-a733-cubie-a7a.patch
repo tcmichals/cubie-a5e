@@ -601,9 +601,8 @@ index 0000000..1234567
 +		rproc: remoteproc@7032000 {
 +			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
 +			reg = <0x07032000 0x1000>,
-+			      <0x40014000 0x40000>,
 +			      <0x00040000 0x28000>;
-+			reg-names = "cfg", "dram", "sram";
++			reg-names = "cfg", "sram";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;
@@ -612,8 +611,8 @@ index 0000000..1234567
 +			reset-names = "core";
 +			mboxes = <&msgbox 0>;
 +			mbox-names = "tx";
-+			memory-region = <&rproc_trace>;
-+			memory-region-names = "trace";
++			memory-region = <&rproc_dram>, <&rproc_trace>;
++			memory-region-names = "vram", "trace";
 +			status = "okay";
 +		};
 +	};

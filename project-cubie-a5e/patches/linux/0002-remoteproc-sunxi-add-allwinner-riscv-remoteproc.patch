@@ -478,7 +478,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			dev_warn(dev, "failed to map 'sram' resource\n");
 +	}
 +
-+	/* 5b. Map Boot DRAM Carveout ("dram") */
++	/* 5b. Map Boot DRAM Carveout ("dram" or memory-region "vram"/"dram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram");
 +	if (res) {
 +		priv->dram_phys = res->start;
@@ -488,6 +488,26 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			priv->dram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
 +		if (!priv->dram_va)
 +			dev_warn(dev, "failed to map 'dram' resource\n");
++	} else if (dev->of_node) {
++		int idx = of_property_match_string(dev->of_node, "memory-region-names", "vram");
++		if (idx < 0)
++			idx = of_property_match_string(dev->of_node, "memory-region-names", "dram");
++		if (idx >= 0) {
++			struct device_node *rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
++			if (rmem_np) {
++				struct resource r;
++				if (of_address_to_resource(rmem_np, 0, &r) == 0) {
++					priv->dram_phys = r.start;
++					priv->dram_size = resource_size(&r);
++					priv->dram_va = devm_memremap(dev, r.start, resource_size(&r), MEMREMAP_WB);
++					if (!priv->dram_va)
++						priv->dram_va = devm_ioremap_wc(dev, r.start, resource_size(&r));
++					dev_info(dev, "mapped DT vram reserved-memory %pa+%zu to %p\n",
++						 &priv->dram_phys, priv->dram_size, priv->dram_va);
++				}
++				of_node_put(rmem_np);
++			}
++		}
 +	}
 +
 +	dev_info(dev, "Memory resources: sram=%s, dram=%s, itcm=%s, dtcm=%s, r_sram=%s, cfg=%s\n",
