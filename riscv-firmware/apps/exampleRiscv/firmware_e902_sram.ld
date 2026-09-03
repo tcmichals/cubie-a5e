@@ -1,6 +1,7 @@
 /*
- * firmware.ld - Linker script for XuanTie RISC-V Firmware (A733: E902, T527: E906)
- * Running in Shared SRAM A2 (0x00040000 - 0x00073FFF)
+ * firmware_e902_sram.ld - Linker script for Allwinner A733 XuanTie E902
+ * Running in Shared SRAM A2 (0x00040000 - 0x00067FFF, 160 KB)
+ * E902 hardware reset vector is hardwired to 0x00040000.
  */
 
 OUTPUT_ARCH("riscv")
@@ -13,7 +14,7 @@ MEMORY
 
 SECTIONS
 {
-    /* 1. Vector table and CRT0 startup code at SRAM A2 base. */
+    /* 1. Vector table and CRT0 startup code at SRAM A2 base (0x00040000). */
     .vectors :
     {
         KEEP(*(.vectors))
@@ -59,7 +60,6 @@ SECTIONS
         _data_end = .;
     } > SRAM
 
-    /* 5. Zero-initialized BSS Segment */
     .bss :
     {
         . = ALIGN(4);
@@ -73,7 +73,7 @@ SECTIONS
         _bss_end = .;
     } > SRAM
 
-    /* 6. Execution Stack (8 KB) */
+    /* Execution Stack (8 KB) */
     .stack (NOLOAD) :
     {
         . = ALIGN(16);
@@ -82,7 +82,6 @@ SECTIONS
         _stack_top = .;
     } > SRAM
 
-    /* Discard unwinding and metadata sections */
     /DISCARD/ :
     {
         *(.eh_frame)

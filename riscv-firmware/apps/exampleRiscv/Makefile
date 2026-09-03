@@ -20,9 +20,11 @@ BOARD ?= a7a
 ifeq ($(BOARD),a7a)
 # Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
+LDSCRIPT  ?= firmware_e902_sram.ld
 else
 # Allwinner T527: XuanTie E906 (RV32I 32 registers, hardware double float, 5-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32imafdc_zicsr -mabi=ilp32d -mcmodel=medany
+LDSCRIPT  ?= firmware_e906_itcm.ld
 endif
 
 OPT_FLAGS  = -O2 -g
@@ -33,7 +35,7 @@ COMMON_FLAGS = $(ARCH_FLAGS) $(OPT_FLAGS) $(INCLUDES) -Wall -ffreestanding -ffun
 CFLAGS       = $(COMMON_FLAGS)
 CXXFLAGS     = $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics
 
-LDFLAGS      = $(ARCH_FLAGS) -T firmware.ld -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles
+LDFLAGS      = $(ARCH_FLAGS) -T $(LDSCRIPT) -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles
 
 SRCS_S   = startup.S
 SRCS_C   = resource_table.c
