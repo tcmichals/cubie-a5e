@@ -74,3 +74,22 @@ To prevent `sboot` from ever touching the E902 or loading `scp.fex`:
 1. **Package Configuration**: In the U-Boot package generator (`dragon_toc.cfg` / `boot_package.cfg`), remove the `item=scp, scp.fex` line.
 2. **Result**: `sboot` does not allocate DRAM for SCP and leaves the E902 held in reset from cold boot.
 3. **Clean Handover**: When Linux boots, the E902 is untouched and cold-reset, ready for full initialization by `sunxi_rproc`.
+
+---
+
+## 6. Remoteproc Status & Comparison: A733 vs. T527
+
+| Feature / Architecture | Allwinner A733 (Cubie A7A) | Allwinner T527 (Cubie A5E) |
+| :--- | :--- | :--- |
+| **Coprocessor IP** | XuanTie E902 (RV32EMC) | XuanTie E906 (RV32IMAFDC + FPU) |
+| **Role in Silicon** | CPUS / Power Management Core | Dedicated MCU / Real-Time DSP Core |
+| **Is a FEX loaded by U-Boot?** | **Yes** (`scp.fex` loaded by vendor SPL) | **NO!** (E906 is never touched by U-Boot) |
+| **Is it a Power Management Core?**| Yes (in factory Android BSP) | **NO!** (T527 uses a separate AR100 for PM) |
+| **TrustZone Protection** | Yes (`0x07032204` locked by ATF) | **None** (`0x07130204` is open MMIO) |
+| **Boot Address Register** | `0x07032204` (Fixed at `0x40014000`) | `0x07130204` (Freely writable via Linux) |
+| **Memory Architecture** | System SRAM A2 (`0x00040000`), DRAM | 64 KB ITCM, 64 KB DTCM, SRAM C |
+| **Remoteproc Driver Status** | `sunxi_rproc` (DRAM Carveout @ `0x40014000`)| `sunxi_rproc` (Direct ITCM/DTCM MMIO) |
+
+### Key Takeaway for T527:
+**We do NOT have this problem on the T527.** The T527 E906 is not a power management core, no `fex` is loaded into it by U-Boot, and Linux `remoteproc` has direct, unrestricted control over its clocks, resets, and memory windows from cold boot.
+
