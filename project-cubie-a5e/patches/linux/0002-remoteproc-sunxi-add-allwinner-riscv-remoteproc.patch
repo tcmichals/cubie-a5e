@@ -71,7 +71,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +#define E906_ITCM_DA	0x00000000
 +#define E906_DTCM_DA	0x00080000
 +
-+/* XuanTie E906 Boot Address Register (when CFG block is present) */
++/* XuanTie E906 Control & Boot Address Registers (when CFG block is present) */
++#define E906_CTRL_REG		0x0000
 +#define E906_STA_ADD_REG	0x0204
 +
 +struct sunxi_rproc {
@@ -273,7 +274,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	/*
 +	 * 2. Release core reset to begin execution.
-+	 * Uses standard Linux Reset Framework (no MMIO pokes).
 +	 */
 +	if (priv->rst_core) {
 +		ret = reset_control_deassert(priv->rst_core);
@@ -289,6 +289,31 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
++	/*
++	 * 3. Assert / deassert core control bit 0 in CFG register (0x07032000 / 0x07130000).
++	 * On Allwinner RISC-V coprocessors, bit 0 controls core execution.
++	 * If MMIO is write-protected by ATF/TrustZone, invoke SMC calls.
++	 */
++	if (priv->cfg_va) {
++		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
++		writel(val | BIT(0), priv->cfg_va + E906_CTRL_REG);
++#if IS_ENABLED(CONFIG_ARM64)
++		if ((readl(priv->cfg_va + E906_CTRL_REG) & BIT(0)) == 0) {
++			struct arm_smccc_res res;
++			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_CTRL_REG,
++				      val | BIT(0), 0, 0, 0, 0, 0, &res);
++			dev_info(priv->dev, "CTRL SMC 0x8000ff06 result: 0x%lx (readback: 0x%08x)\n",
++				 res.a0, readl(priv->cfg_va + E906_CTRL_REG));
++
++			arm_smccc_smc(0x8000ff10, 0, 0, 0, 0, 0, 0, 0, &res);
++			dev_info(priv->dev, "ARISC_STARTUP SMC 0x8000ff10 result: 0x%lx (readback: 0x%08x)\n",
++				 res.a0, readl(priv->cfg_va + E906_CTRL_REG));
++		}
++#endif
++		dev_info(priv->dev, "CTRL register 0x0 readback: 0x%08x\n",
++			 readl(priv->cfg_va + E906_CTRL_REG));
++	}
++
 +	return 0;
 +}
 +
@@ -302,6 +327,18 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		reset_control_assert(priv->rst_core);
 +	else if (priv->rst_cfg)
 +		reset_control_assert(priv->rst_cfg);
++
++	if (priv->cfg_va) {
++		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
++		writel(val & ~BIT(0), priv->cfg_va + E906_CTRL_REG);
++#if IS_ENABLED(CONFIG_ARM64)
++		if ((readl(priv->cfg_va + E906_CTRL_REG) & BIT(0)) != 0) {
++			struct arm_smccc_res res;
++			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_CTRL_REG,
++				      val & ~BIT(0), 0, 0, 0, 0, 0, &res);
++		}
++#endif
++	}
 +
 +	return 0;
 +}
