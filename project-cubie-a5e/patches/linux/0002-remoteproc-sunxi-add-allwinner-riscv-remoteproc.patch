@@ -61,6 +61,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +#include <linux/pm.h>
 +#include <linux/remoteproc.h>
 +#include <linux/reset.h>
++#include <linux/arm-smccc.h>
 +
 +#include "remoteproc_internal.h"
 +
@@ -86,6 +87,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	/* Hardware Memory Windows (TCM, Dedicated SRAM & Shared System SRAM) */
 +	void __iomem *cfg_va;
++	phys_addr_t cfg_phys;
 +	void __iomem *itcm_va;
 +	phys_addr_t itcm_phys;
 +	size_t itcm_size;
@@ -245,9 +247,21 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	/*
 +	 * 1. Program initial boot entry vector into hardware register if present
 +	 * (e.g., XuanTie E906 on Allwinner T527 / A523 at cfg_va + 0x0204).
++	 * Writes via MMIO, and also executes an SMCCC secure write in case the
++	 * platform security controller write-protects the register against Non-Secure EL1.
 +	 */
-+	if (priv->cfg_va)
++	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
++#if IS_ENABLED(CONFIG_ARM64)
++		if (readl(priv->cfg_va + E906_STA_ADD_REG) != (u32)rproc->bootaddr) {
++			struct arm_smccc_res res;
++			arm_smccc_smc(0xC000ff06, priv->cfg_phys + E906_STA_ADD_REG,
++				      (u32)rproc->bootaddr, 0, 0, 0, 0, 0, &res);
++		}
++#endif
++		dev_info(priv->dev, "STA_ADD set to 0x%llx (hardware readback: 0x%08x)\n",
++			 (u64)rproc->bootaddr, readl(priv->cfg_va + E906_STA_ADD_REG));
++	}
 +
 +	/*
 +	 * 2. Release core reset to begin execution.
@@ -401,6 +415,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	/* 1. Map Optional RISC-V CFG Block ("cfg") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cfg");
 +	if (res) {
++		priv->cfg_phys = res->start;
 +		priv->cfg_va = devm_ioremap(dev, res->start, resource_size(res));
 +		if (!priv->cfg_va)
 +			dev_warn(dev, "failed to map 'cfg' registers\n");
