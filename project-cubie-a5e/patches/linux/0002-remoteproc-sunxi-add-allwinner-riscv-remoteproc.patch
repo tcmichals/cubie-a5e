@@ -255,8 +255,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +#if IS_ENABLED(CONFIG_ARM64)
 +		if (readl(priv->cfg_va + E906_STA_ADD_REG) != (u32)rproc->bootaddr) {
 +			struct arm_smccc_res res;
-+			arm_smccc_smc(0xC000ff06, priv->cfg_phys + E906_STA_ADD_REG,
++			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_STA_ADD_REG,
 +				      (u32)rproc->bootaddr, 0, 0, 0, 0, 0, &res);
++			dev_info(priv->dev, "STA_ADD SMC 0x8000ff06 result: 0x%lx\n", res.a0);
 +		}
 +#endif
 +		dev_info(priv->dev, "STA_ADD set to 0x%llx (hardware readback: 0x%08x)\n",
