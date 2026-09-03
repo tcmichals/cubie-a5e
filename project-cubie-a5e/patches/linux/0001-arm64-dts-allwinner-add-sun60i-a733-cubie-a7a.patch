@@ -73,6 +73,11 @@ index 0000000..1234567
 +		#size-cells = <2>;
 +		ranges;
 +
++		rproc_dram: rproc_dram@40014000 {
++			reg = <0x00 0x40014000 0x00 0x00040000>;
++			no-map;
++		};
++
 +		rproc_trace: trace@4e000000 {
 +			reg = <0x00 0x4e000000 0x00 0x00100000>;
 +			no-map;
@@ -596,8 +601,9 @@ index 0000000..1234567
 +		rproc: remoteproc@7032000 {
 +			compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
 +			reg = <0x07032000 0x1000>,
++			      <0x40014000 0x40000>,
 +			      <0x00040000 0x28000>;
-+			reg-names = "cfg", "sram";
++			reg-names = "cfg", "dram", "sram";
 +			clocks = <&r_ccu CLK_RISCV_24M>,
 +			         <&r_ccu CLK_RISCV_CFG>,
 +			         <&r_ccu CLK_RISCV>;

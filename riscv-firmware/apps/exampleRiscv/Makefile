@@ -20,7 +20,7 @@ BOARD ?= a7a
 ifeq ($(BOARD),a7a)
 # Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
-LDSCRIPT  ?= firmware_e902_sram.ld
+LDSCRIPT  ?= firmware_e902_dram.ld
 else
 # Allwinner T527: XuanTie E906 (RV32I 32 registers, hardware double float, 5-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32imafdc_zicsr -mabi=ilp32d -mcmodel=medany
@@ -54,7 +54,7 @@ all: firmware.elf firmware.bin
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-firmware.elf: $(OBJS) firmware.ld
+firmware.elf: $(OBJS) $(LDSCRIPT)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
 	$(SIZE) $@
 

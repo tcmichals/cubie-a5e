@@ -104,6 +104,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	phys_addr_t sram_phys;
 +	size_t sram_size;
 +
++	void *dram_va;
++	phys_addr_t dram_phys;
++	size_t dram_size;
++
 +	/* Trace / DDR Reserved Memory Window */
 +	void *trace_va;
 +	phys_addr_t trace_phys;
@@ -194,6 +198,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	if (priv->sram_va && priv->sram_size)
 +		memset_io(priv->sram_va, 0, priv->sram_size);
++
++	if (priv->dram_va && priv->dram_size)
++		memset(priv->dram_va, 0, priv->dram_size);
 +
 +	return 0;
 +
@@ -375,6 +382,15 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
++	/* 5. Boot DRAM Carveout (Resource "dram" - Core/Host 0x40014000) */
++	if (priv->dram_va) {
++		if (da >= priv->dram_phys && (da + len) <= (priv->dram_phys + priv->dram_size)) {
++			if (is_iomem)
++				*is_iomem = false;
++			return priv->dram_va + (da - priv->dram_phys);
++		}
++	}
++
 +	/*
 +	 * Return NULL to delegate all DRAM carveouts (vrings, buffers,
 +	 * code/data placed in DDR) directly to the remoteproc core's
@@ -462,8 +478,21 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			dev_warn(dev, "failed to map 'sram' resource\n");
 +	}
 +
-+	dev_info(dev, "Memory resources: sram=%s, itcm=%s, dtcm=%s, r_sram=%s, cfg=%s\n",
++	/* 5b. Map Boot DRAM Carveout ("dram") */
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram");
++	if (res) {
++		priv->dram_phys = res->start;
++		priv->dram_size = resource_size(res);
++		priv->dram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
++		if (!priv->dram_va)
++			priv->dram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		if (!priv->dram_va)
++			dev_warn(dev, "failed to map 'dram' resource\n");
++	}
++
++	dev_info(dev, "Memory resources: sram=%s, dram=%s, itcm=%s, dtcm=%s, r_sram=%s, cfg=%s\n",
 +		 priv->sram_va ? "yes" : "no",
++		 priv->dram_va ? "yes" : "no",
 +		 priv->itcm_va ? "yes" : "no",
 +		 priv->dtcm_va ? "yes" : "no",
 +		 priv->r_sram_va ? "yes" : "no",
