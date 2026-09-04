@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <coroutine>
-#include <etl/span.h>
 
 namespace fc::hal {
 

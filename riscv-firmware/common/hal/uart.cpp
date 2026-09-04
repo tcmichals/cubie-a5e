@@ -1,8 +1,7 @@
 #include "uart.hpp"
 #include "timer.hpp"
 #include "memory_map.h"
-#include <abstractx/coro.hpp>
-#include <etl/circular_buffer.h>
+#include <atomic>
 
 namespace fc::hal {
 
