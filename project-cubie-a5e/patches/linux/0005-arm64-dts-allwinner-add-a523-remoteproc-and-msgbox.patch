@@ -11,7 +11,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1086,5 +1086,36 @@
+@@ -1086,5 +1086,35 @@
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
  		};
