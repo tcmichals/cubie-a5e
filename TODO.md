@@ -35,36 +35,12 @@ See `docs/buildroot/A7A_KERNEL_PATCH_VALIDATION.md`.
 
 See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
 
-## Remoteproc: unsafe trace mapping
+## Remoteproc: A733 Decommissioned (Power Management Only)
 
-### Upstream-quality acceptance gate
-
-- [ ] Add a reviewed Devicetree binding that defines the A733 E907 compatible, required clocks/resets/mailbox, and memory-resource contract.
-- [ ] Define one common E907 firmware device-address map for A5E and A7A. Use core-local DTCM for portable trace storage; DTS translates its common core address to each SoC's physical DTCM window.
-- [ ] Use only the documented binding contract in `sunxi_rproc.c`; no board-name conditionals, raw register writes, or legacy vendor-driver behavior.
-- [ ] Represent Linux-readable trace/shared memory as explicitly CPU-accessible shared SRAM or reserved memory; never expose a TCM mapping to generic debugfs unless host reads are verified safe.
-- [ ] Keep ELF load, start/stop, mailbox kick, error unwind, and `.remove()` lifetimes aligned with current remoteproc subsystem conventions.
-- [ ] Run clean Buildroot patch application/build and target lifecycle/trace tests before submission.
-- [ ] Preserve the complete Git history for `patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`, A7A DTS patch `0001`, and A5E DTS patch `0005` in the engineering record before replacing a prior memory layout.
-
-- [x] Reproduced two faults: ITCM trace at `0x0000e000` aborts on generic debugfs read, and an ELF DTCM segment at `0x00080000` caused an SError in `rproc_elf_load_segments()`.
-- [x] Found and fixed the DTCM loader bug: `sunxi_rproc` returned `is_iomem = false` for `__iomem` TCM mappings, so remoteproc used generic `memcpy()`/`memset()` instead of `memcpy_toio()`/`memset_io()`.
-- [x] TCM mappings now use `devm_ioremap_wc()` and report `is_iomem = true`, matching the in-tree ZynqMP R5 TCM model. A7A DTS again declares separate 64 KiB ITCM and DTCM resources.
-- [x] Hardened debugfs: TCM addresses return `NULL` when `da_to_va()` is called without an I/O-memory result pointer, preventing `rproc_trace_read()` from calling `strnlen()` on an I/O-mapped TCM buffer.
-- [x] Legacy-kernel audit: the vendor remoteproc driver uses DTS `memory-mappings` device-address/length/physical-address triples and `ioremap_wc()`; it does not prove a fixed A733 DTCM alias. The vendor A733 DTS has no E907 remoteproc mapping table.
-- [x] Rebuilt the firmware package, kernel, and audited SD image with explicit DTCM ELF segments and correct I/O-copy semantics.
-- [x] Target remoteproc starts successfully with ITCM/DTCM segments after the I/O-memory mapping fix; no SError during firmware load.
-- [x] Target still exposes `trace0`, proving it was booted with an older firmware resource table containing `RSC_TRACE`; the current TCM-loader test firmware intentionally has an empty resource table and must be verified in the flashed rootfs before retesting remoteproc.
-- [x] Target-verified debugfs safety: `cat trace0` returns `Trace not available` with no kernel abort.
-- [x] Keep generic `trace0` disabled in the current test firmware: its implementation uses `strnlen()` and cannot safely consume an I/O-mapped TCM address.
-- [ ] Design a normal-memory reserved carveout for Linux-readable live trace before reintroducing an `RSC_TRACE` entry.
-- [ ] Add explicit 64 KiB ITCM and DTCM resources to the A5E remoteproc DTS and validate the common driver on A5E.
-
-**Local-source package rule:** after modifying `riscv-firmware/`, run `make -C bld.a7a riscv-firmware-dirclean riscv-firmware` before repacking. A plain rebuild can retain pre-existing local package outputs when timestamps are preserved during rsync.
-
-- [x] Removed stale A7A overlay copy `board/radxa/cubie_a7a/rootfs-overlay/lib/firmware/riscv-firmware.elf`; it overwrote the package-built ELF during `target-finalize`.
-- [x] Repacked image verifies trace DA `0x4e000000`, length `0x8000`; build, target, and packed ELF hashes all equal `927e9b7647a80fa92e9e52a813dcabb30ee8c7aa2a90d1142d8c3a9f477a587e`.
-- [ ] Flash corrected `bld.a7a/images/sdcard.img`, start remoteproc, and target-test `trace0`.
+- [x] **Silicon Architectural Discovery**: On the Allwinner A733 (`sun60iw2`), the XuanTie E902 core is embedded inside the CPUS / Always-On (`R_`) power management domain and initialized by `boot0` / U-Boot with `scp.fex` for PMIC power rail sequencing (AXP8191 over RSB) and sleep/standby control.
+- [x] **Remoteproc Decommissioned for A7A/A7Z**: Removed Linux `remoteproc` node and trace memory from `sun60i-a733-cubie-a7a.dts` and `sun60i-a733-cubie-a7z.dts`.
+- [x] **SCP Bootloader Restored**: `post-image.sh` retains `scp.fex` inside `radxa_a733_bootloader.bin` so U-Boot / `boot0` controls power and PMIC `DCDC1` (supplying USB hub and AIC8800 Wi-Fi).
+- [x] **Linux Remoteproc Targeted to T527**: Cleaned `sunxi_rproc.c` driver to focus strictly on T527 / A527 / A523 where the E906/E907 is a dedicated real-time coprocessor with ITCM, DTCM, and MCU CCU.
 
 ## USB and power: hold
 

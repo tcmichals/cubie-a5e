@@ -47,6 +47,7 @@
 #define R_PIO_BASE                  0x07022000  /* PRCM R_PIO Controller (PL, PM) */
 
 /* Core Frequency Definition */
-#define CPU_FREQ_HZ                 600000000ULL /* XuanTie E907 Core Frequency: 600 MHz */
+#define CPU_FREQ_HZ                 200000000ULL /* XuanTie E906/E907 Core Frequency: Up to 200 MHz */
 
 #endif /* IOPROCESSOR_MEMORY_MAP_H */
+

@@ -61,35 +61,30 @@ In an unmanned aerial vehicle (UAV) or high-reliability robotics controller:
 
 ---
 
-## 5. Architectural Implementation Options
+## 5. Architectural Decision: E902 Dedicated to Bootloader Power Management
 
-### Option 1: Linux Remoteproc Runtime Loading (DRAM Carveout)
-* **Device Tree**: Carve out `0x40014000` (256 KB) using a `reserved-memory` node with `no-map`. This prevents the Linux page allocator from allocating kernel or user pages across `0x40014000`.
-* **Remoteproc Mapping**: Add `<0x40014000 0x40000>` to `reg` in `remoteproc@7032000` with `reg-names = "cfg", "dram", "sram"`.
-* **Firmware Linker**: Link `riscv-firmware.elf` at `0x40014000`.
-* **Execution**: Linux `remoteproc` loads the ELF directly into `0x40014000` and pulses the E902 reset line in `R_CCU`. The core boots at `0x40014000` into your firmware.
-
-### Option 2: Pure Bootloader-Level Decoupling (Own U-Boot / ATF)
-To prevent `sboot` from ever touching the E902 or loading `scp.fex`:
-1. **Package Configuration**: In the U-Boot package generator (`dragon_toc.cfg` / `boot_package.cfg`), remove the `item=scp, scp.fex` line.
-2. **Result**: `sboot` does not allocate DRAM for SCP and leaves the E902 held in reset from cold boot.
-3. **Clean Handover**: When Linux boots, the E902 is untouched and cold-reset, ready for full initialization by `sunxi_rproc`.
+Because the E902 on the Allwinner A733 (sun60iw2) is fundamentally integrated into the CPUS / Always-On (`R_`) power management domain and initialized by `boot0` / U-Boot with `scp.fex`:
+1. **Remoteproc Decommissioned for A733**: Linux `remoteproc` is completely disabled on the A733 / Cubie A7A & A7Z. The E902 is not used as a Linux coprocessor.
+2. **`scp.fex` Power Management Retained**: The bootloader (`radxa_a733_bootloader.bin`) retains `scp.fex` inside the TOC1 container. `scp.fex` initializes the AXP8191 PMIC over RSB (`r_rsb: rsb@7083000`), turns on `DCDC1` (3.3V system power for the FE1.1S USB hub and AIC8800 Wi-Fi), and handles low-power standby sequencing.
+3. **DRAM Protection**: In `sun60i-a733-cubie-a7a.dts`, `0x40014000` is reserved via `scp_dram: scp@40014000` with `no-map` so Linux never overwrites active SCP firmware.
 
 ---
 
 ## 6. Remoteproc Status & Comparison: A733 vs. T527
 
-| Feature / Architecture | Allwinner A733 (Cubie A7A) | Allwinner T527 (Cubie A5E) |
+| Feature / Architecture | Allwinner A733 (Cubie A7A / A7Z) | Allwinner T527 / A523 (Cubie A5E) |
 | :--- | :--- | :--- |
-| **Coprocessor IP** | XuanTie E902 (RV32EMC) | XuanTie E906 (RV32IMAFDC + FPU) |
-| **Role in Silicon** | CPUS / Power Management Core | Dedicated MCU / Real-Time DSP Core |
-| **Is a FEX loaded by U-Boot?** | **Yes** (`scp.fex` loaded by vendor SPL) | **NO!** (E906 is never touched by U-Boot) |
-| **Is it a Power Management Core?**| Yes (in factory Android BSP) | **NO!** (T527 uses a separate AR100 for PM) |
-| **TrustZone Protection** | Yes (`0x07032204` locked by ATF) | **None** (`0x07130204` is open MMIO) |
-| **Boot Address Register** | `0x07032204` (Fixed at `0x40014000`) | `0x07130204` (Freely writable via Linux) |
-| **Memory Architecture** | System SRAM A2 (`0x00040000`), DRAM | 64 KB ITCM, 64 KB DTCM, SRAM C |
-| **Remoteproc Driver Status** | `sunxi_rproc` (DRAM Carveout @ `0x40014000`)| `sunxi_rproc` (Direct ITCM/DTCM MMIO) |
+| **Coprocessor IP** | XuanTie E902 (RV32EMC) | **XuanTie E906 / E907** (RV32IMAFDC + FPU) |
+| **Role in Silicon** | **Dedicated Power Management (CPUS)** | **Dedicated MCU / Real-Time DSP Core** |
+| **Firmware Execution** | **`scp.fex` loaded by U-Boot / boot0** | **Linux `remoteproc` (`sunxi_rproc.c`)** |
+| **Power Management Role** | **Yes** (PMIC AXP8191 RSB control) | **NO!** (T527 uses separate AR100 core for PM) |
+| **TrustZone Protection** | Locked (`0x07032204` entry vector) | **None** (`0x07130204` is open Non-Secure MMIO) |
+| **Fast Memories** | None (Runs out of DRAM @ `0x40014000`) | **64 KB ITCM, 64 KB DTCM, 256 KB MCU SRAM** |
+| **Clock / Reset Control**| Shared CPUS `r_ccu` | **Dedicated `mcu_ccu` (`0x07102000`)** |
+| **Linux Remoteproc** | **Disabled (Power-only E902)** | **Fully Supported & Active (`sunxi_rproc`)** |
 
-### Key Takeaway for T527:
-**We do NOT have this problem on the T527.** The T527 E906 is not a power management core, no `fex` is loaded into it by U-Boot, and Linux `remoteproc` has direct, unrestricted control over its clocks, resets, and memory windows from cold boot.
+### Key Takeaway:
+* **A733 / Cubie A7A**: E902 is for **power management only** via U-Boot `scp.fex`. No Linux `remoteproc`.
+* **T527 / Cubie A5E**: XuanTie E906/E907 has full, native Linux `remoteproc` support with complete CCU clocking, TCMs, and mailbox IPC.
+
 

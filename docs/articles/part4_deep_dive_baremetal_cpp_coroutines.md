@@ -32,7 +32,7 @@ When writing firmware for an auxiliary real-time core (like the XuanTie E907 wit
 **[AbstractX](https://github.com/tcmichals/AbstractX)** solves this by utilizing **C++20 stackless coroutines (`co_await`, `co_yield`)**:
 * Tasks look like clean, sequential functions.
 * Instead of allocating multi-kilobyte stacks, the compiler generates a tiny coroutine frame (**32 to 64 bytes**) per task.
-* Cooperative task switching takes only **11 clock cycles (~18 ns at 600 MHz)**—over **19x faster** than an RTOS context switch!
+* Cooperative task switching takes only **11 clock cycles (~55 ns at 200 MHz)**—over **19x faster** than an RTOS context switch!
 
 ---
 
@@ -183,8 +183,6 @@ AsyncTask telemetry_loop(CooperativeScheduler& scheduler) {
 
         // Push result to shared SRAM C lock-free ring buffer
         uint32_t sample = read_adc_result();
-        sram_ring_buffer_push(sample);
-
         // Pulse host interrupt doorbell
         pulse_host_irq();
 
@@ -196,7 +194,7 @@ AsyncTask telemetry_loop(CooperativeScheduler& scheduler) {
 
 ---
 
-## 5. Benchmarks: AbstractX vs. FreeRTOS on XuanTie E907 @ 600 MHz
+## 5. Benchmarks: AbstractX vs. FreeRTOS on XuanTie E907 @ 200 MHz
 
 We ran side-by-side performance benchmarks on the XuanTie E907:
 

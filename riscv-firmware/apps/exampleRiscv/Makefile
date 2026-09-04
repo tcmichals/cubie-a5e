@@ -43,7 +43,12 @@ SRCS_CPP = main.cpp ../../common/hal/timer.cpp
 
 OBJS = $(SRCS_S:.S=.o) $(SRCS_C:.c=.o) $(SRCS_CPP:.cpp=.o)
 
-all: firmware.elf firmware.bin
+TARGET = exampleRiscv
+ELF    = $(TARGET).elf
+BIN    = $(TARGET).bin
+MAP    = $(TARGET).map
+
+all: $(ELF) $(BIN)
 
 %.o: %.S
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -54,14 +59,16 @@ all: firmware.elf firmware.bin
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-firmware.elf: $(OBJS) $(LDSCRIPT)
-	$(CC) $(OBJS) $(LDFLAGS) -o $@
+$(ELF): $(OBJS) $(LDSCRIPT)
+	$(CC) $(OBJS) $(LDFLAGS) -Wl,-Map=$(MAP) -o $@
+	@echo "--- Memory Footprint ($@) ---"
 	$(SIZE) $@
 
-firmware.bin: firmware.elf
+$(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
 
 clean:
-	rm -f *.o ../../common/hal/*.o firmware.elf firmware.bin firmware.map
+	rm -f $(OBJS) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
 
 .PHONY: all clean
+

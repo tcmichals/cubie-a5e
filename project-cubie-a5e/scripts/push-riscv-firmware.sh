@@ -2,76 +2,99 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # push-riscv-firmware.sh
-# Build, sync, and deploy RISC-V firmware to rootfs-overlay and/or live target board
+# Build, sync, and deploy all XuanTie E907 RISC-V firmware ELFs to rootfs-overlay and target board
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-FIRMWARE_SRC="${WORKSPACE_ROOT}/cubie-a5e/riscv-firmware/apps/exampleRiscv"
-FIRMWARE_ELF="${FIRMWARE_SRC}/firmware.elf"
+FIRMWARE_DIR="${WORKSPACE_ROOT}/cubie-a5e/riscv-firmware"
+BIN_DIR="${FIRMWARE_DIR}/bin"
 
 # Target IP from argument or environment
 TARGET_IP="${1:-$TARGET_IP}"
+DEFAULT_FW="${2:-testBasicTrace0.elf}"
 
 echo "========================================================"
-echo "  Deploying RISC-V XuanTie E907 Firmware"
+echo "  Deploying All XuanTie E907 RISC-V Firmware ELFs"
 echo "========================================================"
 
-# 1. Build RISC-V firmware if toolchain is available
-if command -v riscv64-unknown-elf-gcc >/dev/null 2>&1 || command -v riscv-none-elf-gcc >/dev/null 2>&1; then
-    echo "[1/4] Compiling RISC-V firmware in ${FIRMWARE_SRC}..."
-    make -C "${FIRMWARE_SRC}" clean
-    make -C "${FIRMWARE_SRC}" -j$(nproc)
-else
-    echo "[1/4] Using prebuilt firmware at ${FIRMWARE_ELF}"
-fi
+# 1. Build all firmware applications & host tools
+echo "[1/4] Compiling all RISC-V applications in ${FIRMWARE_DIR}..."
+make -C "${FIRMWARE_DIR}" clean
+make -C "${FIRMWARE_DIR}" -j$(nproc)
 
-if [ ! -f "${FIRMWARE_ELF}" ]; then
-    echo "ERROR: Firmware binary not found at ${FIRMWARE_ELF}"
+if [ ! -d "${BIN_DIR}" ]; then
+    echo "ERROR: Output directory not found at ${BIN_DIR}"
     exit 1
 fi
 
-# 2. Sync to rootfs overlays for all board variants
-echo "[2/4] Syncing ELF to rootfs-overlay..."
-for board in cubie_a7a cubie_a7z cubie_a5e; do
+# 2. Sync all ELFs to rootfs overlay for Radxa Cubie A5E
+echo "[2/4] Syncing all firmware ELFs to rootfs-overlay..."
+for board in cubie_a5e; do
     overlay_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/lib/firmware"
     mkdir -p "${overlay_dir}"
-    cp -v "${FIRMWARE_ELF}" "${overlay_dir}/riscv-firmware.elf"
+    cp -v "${BIN_DIR}"/*.elf "${overlay_dir}/"
+    cp -v "${BIN_DIR}/${DEFAULT_FW}" "${overlay_dir}/riscv-firmware.elf"
+    
+    # Copy host tools to rootfs overlay /usr/local/bin
+    tools_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/usr/local/bin"
+    mkdir -p "${tools_dir}"
+    if [ -f "${BIN_DIR}/ping_shm" ]; then
+        cp -v "${BIN_DIR}/ping_shm" "${tools_dir}/"
+    fi
+    if [ -f "${BIN_DIR}/ping_rpmsg" ]; then
+        cp -v "${BIN_DIR}/ping_rpmsg" "${tools_dir}/"
+    fi
+    if [ -f "${BIN_DIR}/ping_dram" ]; then
+        cp -v "${BIN_DIR}/ping_dram" "${tools_dir}/"
+    fi
 done
 
-# 3. Sync to active buildroot targets if they exist
-echo "[3/4] Syncing ELF to active build targets..."
-for bld in bld.a7a bld.a7a.test bld.a5e; do
-    target_dir="${WORKSPACE_ROOT}/${bld}/target/lib/firmware"
-    if [ -d "${target_dir}" ]; then
-        cp -v "${FIRMWARE_ELF}" "${target_dir}/riscv-firmware.elf"
+# 3. Sync to active buildroot target directories if they exist
+echo "[3/4] Syncing to active buildroot targets..."
+for bld in bld.a5e; do
+    target_fw="${WORKSPACE_ROOT}/${bld}/target/lib/firmware"
+    target_bin="${WORKSPACE_ROOT}/${bld}/target/usr/local/bin"
+    if [ -d "${target_fw}" ]; then
+        cp -v "${BIN_DIR}"/*.elf "${target_fw}/"
+        cp -v "${BIN_DIR}/${DEFAULT_FW}" "${target_fw}/riscv-firmware.elf"
+    fi
+    if [ -d "${target_bin}" ]; then
+        [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${target_bin}/"
+        [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${target_bin}/"
+        [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${target_bin}/"
     fi
 done
 
 # 4. Push live to running target board via SSH/SCP if IP is supplied
 if [ -n "${TARGET_IP}" ]; then
     echo "[4/4] Deploying live to target board at ${TARGET_IP}..."
-    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${FIRMWARE_ELF}" "root@${TARGET_IP}:/lib/firmware/riscv-firmware.elf"
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${TARGET_IP}" "mkdir -p /lib/firmware /usr/local/bin"
+    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${BIN_DIR}"/*.elf "root@${TARGET_IP}:/lib/firmware/"
+    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${BIN_DIR}/ping_shm" "${BIN_DIR}/ping_rpmsg" "${BIN_DIR}/ping_dram" "root@${TARGET_IP}:/usr/local/bin/" 2>/dev/null || true
+
     
-    echo "Restarting remoteproc on target..."
-    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${TARGET_IP}" '
-        if [ -f /etc/init.d/S60riscv ]; then
-            /etc/init.d/S60riscv restart
-        else
-            echo stop > /sys/class/remoteproc/remoteproc0/state 2>/dev/null || true
-            sleep 1
-            echo "riscv-firmware.elf" > /sys/class/remoteproc/remoteproc0/firmware
-            echo start > /sys/class/remoteproc/remoteproc0/state
-        fi
-        echo "Remote processor status:"
+    echo "Restarting remoteproc on target with default firmware: ${DEFAULT_FW}..."
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${TARGET_IP}" "
+        echo stop > /sys/class/remoteproc/remoteproc0/state 2>/dev/null || true
+        sleep 1
+        echo \"${DEFAULT_FW}\" > /sys/class/remoteproc/remoteproc0/firmware
+        echo start > /sys/class/remoteproc/remoteproc0/state
+        echo 'Remote processor status:'
         cat /sys/class/remoteproc/remoteproc0/state
-    '
-    echo "Deployment to ${TARGET_IP} completed successfully!"
+    "
+    echo "========================================================"
+    echo " Deployment to ${TARGET_IP} completed successfully!"
+    echo " To switch to another firmware on target:"
+    echo "   echo stop > /sys/class/remoteproc/remoteproc0/state"
+    echo "   echo \"testPing.elf\" > /sys/class/remoteproc/remoteproc0/firmware"
+    echo "   echo start > /sys/class/remoteproc/remoteproc0/state"
+    echo "========================================================"
 else
     echo "[4/4] No target IP provided. To deploy live to board, run:"
-    echo "      $0 <board-ip-address>"
+    echo "      $0 <board-ip-address> [firmware-name.elf]"
 fi
 
 echo "========================================================"

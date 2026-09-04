@@ -96,13 +96,13 @@
 - **Silicon Verification**:
   * 6x Cortex-A55 efficiency cores (Part `0xd05`) + 2x Cortex-A78 performance cores (Part `0xd0b`) all online.
   * GICv3 PPI 27 architectural timer generating independent 1,000 Hz RT interrupts across all 8 cores.
-  * XuanTie E907 RISC-V co-processor registered in Linux sysfs (`/sys/class/remoteproc/remoteproc0`).
+  * XuanTie E902 RISC-V co-processor dedicated to CPUS/Always-On power management via U-Boot `scp.fex` (remoteproc deactivated on A733).
   * Hardware power regulators verified via `gpioinfo` (`PL2` USB0 VBUS, `PM0` Wi-Fi Power, `PM5` USB Hub Power).
 
 ### Milestone 7: Gigabit Ethernet & USB PHY / Wi-Fi 6 Subsystem Integration
 - **Ethernet**: Added `gmac0: ethernet@4500000` with `syscon@3000000` regmap and Motorcomm `MAE0621A` PHY reset on `PH16`; compiled `CONFIG_DWMAC_SUN8I=y` and `CONFIG_MOTORCOMM_PHY=y` built-in.
 - **USB & Wi-Fi**: Added `usbphy: phy@4100400` (`sun20i-d1-usb-phy`) with `CONFIG_PHY_SUN4I_USB=y` to drive the analog transceivers for `ehci1`, the FE1.1S 4-port hub, and the onboard **AIC8800 Wi-Fi 6 chip** (`0xA69C:0x8800`).
-- **RISC-V Firmware**: Packaged compiled XuanTie E907 binary into `/lib/firmware/riscv-firmware.elf`.
+- **Power Subsystem**: E902 initialized natively by U-Boot / boot0 with `scp.fex` for power sequencing.
 
 ### Milestone 8: Peripheral Timing & Reset Collision Resolutions (Aug 23, 2026)
 
@@ -465,9 +465,8 @@ The table below documents the full line-by-line cross-reference comparing the ve
   - Firmware MUST be compiled targeting:
     `-march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany`
   - Compiling with standard `ilp32` or `ilp32d` emits instructions touching registers `x16`–`x31` or hardware float opcodes, which trigger hardware illegal instruction exceptions on the E902.
-- **No On-Chip OpenOCD / DMEM Support**:
-  - The RISC-V hardware Debug Module is not exposed over the non-secure ARM bus interconnect.
-  - Interactive GDB/OpenOCD debugging over `/dev/mem` is unsupported. Developers operate "blind" and must rely on RemoteProc trace buffers (`trace0`), S_UART0 serial logging, and SRAM memory probing.
+- **No Memory-Mapped DMEM Interface**:
+  - Unlike TI AM62x or STM32MP1 SoCs, current Allwinner silicon does not expose a memory-mapped `dmem` bus interface for on-chip OpenOCD debugging. Standard firmware diagnostics rely on RemoteProc trace buffers (`trace0`), S_UART0 serial logging, and shared SRAM buffers.
 
 ### XuanTie E906 vs E902 Register Map & Lifecycle Sequencing Rules (Sep 3, 2026)
 - **E906 CFG Register Map (`0x07130000`) on T527**:

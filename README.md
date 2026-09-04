@@ -28,7 +28,7 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 | **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | **Ultra-Compact Zero (65×30 mm)** |
 | **System on Chip (SoC)** | Allwinner **A527 / T527** (`sun55i-a527`) | Allwinner **A733** (`sun60i-a733`) | Allwinner **A733** (`sun60i-a733`) |
 | **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 + 6× Cortex-A55 | 2× Arm Cortex-A76 + 6× Cortex-A55 |
-| **Real-Time Co-Processor** | XuanTie E907 RISC-V @ 600 MHz | XuanTie E907 RISC-V @ 600 MHz | XuanTie E907 RISC-V @ 600 MHz |
+| **Real-Time Co-Processor** | XuanTie E906/E907 RISC-V (Linux `remoteproc`) | XuanTie E902 RISC-V (U-Boot `scp.fex` Power Only) | XuanTie E902 RISC-V (U-Boot `scp.fex` Power Only) |
 | **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
 | **Video Engine (VPU)** | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) |
 | **GPU Core** | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 | Imagination BXM-4-64 MC1 |
@@ -40,6 +40,36 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 | **Storage Interfaces** | MicroSD / eMMC Module / SPI NOR | MicroSD / eMMC Module / UFS / SPI NOR | MicroSD / eMMC Module / SPI NOR |
 | **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
 | **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
+
+```text
++-----------------------------------------------------------------------------------------+
+|                    ALLWINNER T527 / A527 (CUBIE A5E) ARCHITECTURE                       |
+|                                                                                         |
+|  +-------------------------------------+   +-----------------------------------------+  |
+|  |             CPUX Cluster            |   |               Co-Processors             |  |
+|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
+|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | Cadence Tensilica HiFi4 Audio DSP |  |  |
+|  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
+|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
+|  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
+|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
+|  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
+|  +-------------------------------------+   |  +-----------------------------------+  |  |
+|  |             NPU Engine              |   |  +-----------------------------------+  |  |
+|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
+|  +-------------------------------------+   +-----------------------------------------+  |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                           Memory Hierarchy & Interconnect                         |  |
+|  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
+|  |  - 208 KB Shared SRAM A2 (0x00040000) [Zero-Wait-State Low-Latency Control & IPC]  |  |
+|  |  - 320 KB Dedicated MCU SRAM C (0x07130000)                                       |  |
+|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
+|  +-----------------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------------+
+```
+
 
 ---
 
@@ -69,13 +99,12 @@ As of the current bring-up phase, here is the functional status of the flight st
 * **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
   - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, real-time CPU Core 7 flight isolation, Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
   - **Radxa Cubie A7A (Allwinner A733):** Full multi-stage boot chain verified on real silicon: `BootROM` $\rightarrow$ `boot0` (6 GiB LPDDR5 auto-training) $\rightarrow$ `TOC1` $\rightarrow$ `TF-A BL31` $\rightarrow$ `OP-TEE` $\rightarrow$ `Mainline U-Boot 2026.01-rc1` (4KB page-aligned at `0x4a001000`) $\rightarrow$ `Mainline Linux 7.1.0 PREEMPT_RT` booted across all 8 SMP cores (6× Cortex-A55 + 2× Cortex-A78) with 6 GiB RAM.
-   - **Bring-up status (A7A):** The A7A is booting on real hardware; work remains on USB, Ethernet, and the RISC-V co-processor bring-up. Wi‑Fi on the A7A (USB transport) is still a work-in-progress and not yet provided in released images — SDIO Wi‑Fi on the A5E remains the primary supported path for now.
   - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`), Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`), and Radxa Cubie A7Z (`sun60i-a733-cubie-a7z.dtb`).
 
 * **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & DUAL-BUS READY):** 
   - **Unified Dual-Bus Architecture:** Mainline kernel driver (`aic8800-upstream`) unified with modular transport HAL backends:
     - **SDIO Transport (Radxa Cubie A5E):** Multi-module `aic8800_bsp.ko` + `aic8800_fdrv.ko` verified on real silicon with sub-300ms firmware upload and full Wi-Fi 6 association.
-   - **USB Transport (Radxa Cubie A7A):** Work-in-progress. The USB transport and firmware upload path for the A7A are under active development and not yet available in production images. SDIO transport on the A5E remains verified.
+    - **USB Transport (Radxa Cubie A7A):** Driver package ready (`BR2_PACKAGE_AIC8800_DRIVER_USB=y`), with power delivered by the AXP8191 PMIC (`DCDC1`) initialized via U-Boot `scp.fex`.
   - **Bus Timing & Probe Wakeup Stabilized:** Guarded internal IOPAD delay registers (`0xF0`/`0xF8`/`0xF1`) to prevent MMC data errors at 25 MHz, added explicit chip wakeup during probe, and implemented safe BootROM fallback.
   - **Linux 7.1 PREEMPT_RT Verified:** Clean 0-warning, 0-error compilation across both `bld.a5e` and `bld.a7a` target buildroots.
   - **RFC v3 Mainline Preparation:** Clean 4-patch series codified under [`docs/upstream_patches/`](docs/upstream_patches/) and tracked in the [Action Plan](docs/buildroot/AIC8800_Porting_Action_Plan.md).
@@ -84,23 +113,23 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
   - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
 
-* **⚠️ A7A RISC-V Co-Processor Lifecycle & Trace (active bring-up):**
-  - **Option A Direct SRAM Execution Proven:** Proven that the XuanTie E907 co-processor has **no silicon BootROM** and executes directly from **256 KB Dedicated Zero-Wait-State RISC-V Local SRAM at `0x0728_0000`** (Core address `0x0000_0000`) with zero wait states.
-  - **Linux RemoteProc Standard (`sunxi_rproc.c`):** Full kernel lifecycle management (`echo start/stop > /sys/class/remoteproc/remoteproc0/state`). Driver implements `.prepare()` to clock `CLK_DSP` and `TZMA` bus bridges before ELF loading, and `devm_ioremap_wc()` (Normal Non-Cacheable RAM) matching upstream TI/Xilinx/NXP standards.
-   - **Debugfs trace safety issue:** Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` currently causes an ARM64 external abort in `rproc_trace_read()` while dereferencing an ITCM-mapped trace buffer. Do not read it on target until the shared-SRAM trace migration in `TODO.md` has been built and verified.
-  - **Live SRAM C Telemetry:** Verified real-time telemetry block at `0x00028000` with active heartbeat ticking at **~130 Hz** (`Magic = 0x52495343` "RISC").
-  
-* **⚠️ RISC-V SRAM / OP-TEE note:**
-   - The Allwinner A733 silicon exposes two physically separate on-chip SRAM blocks:
-      - `0x00020000 - 0x0003FFFF` (128 KB) — System SRAM A1 reserved by OP-TEE / Secure World (TrustZone-protected). Non-secure Linux cannot access this region.
-      - `0x07110000 - 0x0714FFFF` (256 KB) — Dedicated RISC-V co-processor SRAM, seen by the RISC-V core as `0x00000000 - 0x0003FFFF` (100% non-secure, shared with Linux host).
-   - Root cause: older linker scripts used `SRAM_C = 0x00020000` and placed trace data at `0x00029000`, which on A733 is inside OP-TEE's secure SRAM and causes TrustZone aborts when Linux reads it.
-   - Current state: the active `exampleRiscv` firmware instead advertises `trace0` at ITCM device address `0x0000e000`; its Linux mapping aborts on read. The pending remediation moves trace data to the existing CPU-visible SRAM-C trace location `0x07138100` and adds that SRAM-C range to the A7A remoteproc DTS.
-   - Consequence: yes — 128 KB of the legacy shared SRAM address range is reserved by OP-TEE on A733 (so that space is not available to non-secure firmware). The RISC-V still has the full 256 KB dedicated SRAM available at `0x07110000`.
+* **✅ T527 RISC-V Real-Time Co-Processor (100% OPERATIONAL via `remoteproc` on Cubie A5E):**
+  - **Mainline Linux RemoteProc Standard (`sunxi_rproc.c`):** Dedicated XuanTie E906/E907 co-processor managed seamlessly via `/sys/class/remoteproc/remoteproc0/state`.
+  - **Hardware Resources:** Zero-wait-state 64 KB ITCM (`0x00000000`), 64 KB DTCM (`0x00020000`), and 256 KB MCU SRAM (`0x07100000`), controlled via non-secure MMIO register `0x07102124`.
+  - **High-Throughput Diagnostics:** Live firmware telemetry exposed via debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`), dedicated serial console (`S_UART0` @ `0x07080000` / 115200 baud), and lock-free shared SRAM ring buffers in SRAM A2 (`0x00040000`).
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 
-* **🔄 Next Step — Local OpenOCD & GDB Remote Debugging (In Progress):**
-  - **JTAG-Less On-Chip Debugging (MMIO):** Connect `riscv-none-elf-gdb` and OpenOCD directly to the XuanTie E907 Debug Module registers (`0x07090000`) over the SoC internal bus for hardware breakpoints, register inspection (`x0`–`x31`), and single-stepping without physical JTAG hardware dongles.
+* **📌 Allwinner A733 / Cubie A7A & A7Z E902 Status (Dedicated to Power Management Only):**
+  - **Decision — No Linux RemoteProc on A733:** We have stopped all Linux `remoteproc` usage on the A733/A7A/A7Z platforms.
+  - **Root Cause & Hardware Dependency:** The embedded XuanTie E902 core on the A733 is architecturally part of the CPUS / Always-On power subsystem. It runs `scp.fex`, communicating with the AXP8191 PMIC over RSB (`r_rsb` @ `0x07083000`) to regulate power rails such as `DCDC1` (which supplies `VCC_3V3_USB20HUB` for the FE1.1S USB hub and AIC8800 Wi-Fi 6). De-coupling the E902 for Linux remoteproc disabled `DCDC1`, leaving onboard USB ports and Wi-Fi unpowered.
+  - **Current Implementation:** The E902 is strictly dedicated to bootloader/U-Boot power management (`scp.fex`), packaged natively in `radxa_a733_bootloader.bin`. RemoteProc nodes have been removed from the A7A/A7Z device trees and kernel configs.
+  - **Future Roadmap:** If co-processor offloading or custom auxiliary functions are needed on the A733 in the future, we will use the standard U-Boot/SCP loading model and extend `scp.fex` with custom API calls / firmware service handlers rather than attempting to hijack the core via Linux remoteproc.
+
+* **🔍 Direct Memory Debug (`dmem`) / OpenOCD Architecture:**
+  - **Comparison with Other SoCs:** SoCs from Texas Instruments (AM62x / AM64x / K3) and STMicroelectronics (STM32MP1 / STM32MP2) implement a memory-mapped `dmem` bus interface that exposes core debug registers directly to the system interconnect, enabling native, JTAG-less OpenOCD and GDB remote debugging via Linux `/dev/mem`.
+  - **Allwinner T527 Reality:** Current Allwinner T527 silicon does not route a memory-mapped `dmem` bus interface for the XuanTie RISC-V Debug Module to the non-secure ARM interconnect.
+  - **Future Silicon Hope:** We hope Allwinner will incorporate a memory-mapped `dmem` bus interface in future SoC revisions so the open-source Linux community can run self-hosted OpenOCD and GDB directly on Allwinner targets.
+  - **Active T527 Debugging:** Diagnostics on current T527 silicon rely on Linux RemoteProc trace buffers (`trace0`), dedicated serial console (`S_UART0`), lock-free shared SRAM ring buffers, and external physical JTAG debug probes.
 
 * **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
 

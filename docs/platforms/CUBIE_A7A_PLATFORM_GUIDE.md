@@ -14,7 +14,7 @@ This document is the authoritative hardware, bootloader, firmware provenance, an
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big @ 2.0 GHz) + 6× Cortex-A55 (LITTLE @ 1.8 GHz) DynamIQ Cluster |
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 1800 MHz) | 4-PState dynamic PHY training executed by `boot0` in SRAM |
-| **Co-Processor** | **XuanTie E902 RISC-V** (RV32IMC @ up to 200 MHz, per Linux-Sunxi) | No DSP; managed via Linux `remoteproc` framework (`sunxi_rproc.c`) executing from SRAM A2 |
+| **Co-Processor** | **XuanTie E902 RISC-V** (RV32EMC) | Dedicated CPUS / Always-On Power Management coprocessor running `scp.fex` loaded by U-Boot / boot0 (Linux `remoteproc` deactivated on A733) |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Distributor: `0x03400000`, Redistributors: `0x03460000`, ITS: `0x03440000` |
 | **Clock Controller (CCU)** | Main CCU: `0x02002000`, PRCM R_CCU: `0x07010000` | Verified against A733 silicon memory map |
 | **Mainline Kernel** | **Linux 7.1 PREEMPT_RT** | Ingests CCU, RTC, Pinctrl, and GICv3 patches |
@@ -116,9 +116,9 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | **TF-A (BL31)** | Source Build | [dlan17/trusted-firmware-a](https://github.com/dlan17/trusted-firmware-a) | `A733` | `PLAT=sun60i_a733` (`bl31.bin`) | Secure EL3 handler; configures GICv3 system registers (`ICC_SRE_EL3=0x7`, `ICC_SRE_EL2=0x7`) and handles PSCI 1.1. |
 | **U-Boot Mainline** | Source Build | [dlan17/u-boot](https://github.com/dlan17/u-boot) | `allwinner/A733/boot-2026.01` | `configs/radxa-cubie-a7a_defconfig` | Linked at `0x4a001000` (4KB page aligned) with `b +0x1000` (`0x14000400`) header branch. |
 | **TOC1 Tool** | Host Binary | Local board tools | `v1.4.6` | `dragonsecboot` | Packages 4KB page-aligned U-Boot + BL31 + OP-TEE + ARISC + DTB into `boot_package.fex`. |
-| **Linux Kernel** | Mainline + Patches | [git.kernel.org / sunxi](https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux.git) | `sunxi-clk-for-7.3` / `7.1` | `sun60i-a733-cubie-a7a.dts` + CCU/RTC/PRCM | Pure `PREEMPT_RT` baseline with native GICv3 and `sunxi_rproc.c`. |
-| **Wi-Fi Driver** | Out-of-tree Driver | Local `aic8800-upstream` | Unified v3.0 | `BR2_PACKAGE_AIC8800_DRIVER_USB=y` | High-throughput USB 2.0 (`0xA69C:0x8800`) Wi-Fi 6 interface. |
-| **RISC-V Driver** | In-tree Driver | `patches/linux/0002` | Linux 7.1 | `CONFIG_SUNXI_REMOTEPROC=y` | RemoteProc driver for XuanTie E907 avionics co-processor. |
+| **Linux Kernel** | Mainline + Patches | [git.kernel.org / sunxi](https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux.git) | `sunxi-clk-for-7.3` / `7.1` | `sun60i-a733-cubie-a7a.dts` + CCU/RTC/PRCM | Pure `PREEMPT_RT` baseline with native GICv3 and SMP. |
+| **Wi-Fi Driver** | Out-of-tree Driver | Local `aic8800-upstream` | Unified v3.0 | `BR2_PACKAGE_AIC8800_DRIVER_USB=y` | High-throughput USB 2.0 (`0xA69C:0x8800`) Wi-Fi 6 interface via FE1.1S hub. |
+| **Power Co-Processor** | Vendor Firmware | In-TOC1 Package | `scp.fex` | `radxa_a733_bootloader.bin` | XuanTie E902 dedicated to AXP8191 PMIC power management and power rail sequencing. |
 
 ---
 

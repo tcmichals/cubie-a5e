@@ -142,13 +142,14 @@ Both the XuanTie E906 (T527) and XuanTie E902 (A733) operate at the **exact same
 
 ---
 
-## 4. Linux 7.1 Remote Processor (`remoteproc`) Integration
+## 4. Linux 7.1 Remote Processor (`remoteproc`) Integration (T527 / A523)
 
-The kernel driver `drivers/remoteproc/sunxi_rproc.c` adheres strictly to standard upstream Linux remoteproc architecture:
+The kernel driver `drivers/remoteproc/sunxi_rproc.c` targets the **Allwinner T527, A527, and A523** platforms where the XuanTie E906/E907 is a dedicated real-time coprocessor:
 * **No Synthetic Code / No Trampolines**: The driver is a pure lifecycle manager. It does not modify memory or inject trampolines.
-* **Firmware Contract**: The firmware ELF **must** link its reset vector table at **`0x00000000`** (`ORIGIN = 0x00000000` in Dedicated SRAM). The hardware E907 core always fetches its reset instruction directly from address `0x00000000`.
+* **Firmware Contract**: The firmware ELF links its reset vector table to Dedicated SRAM / TCM at `0x00000000` or local SRAM at `0x07280000`.
+* **A733 Status**: On the Allwinner A733, the E902 is dedicated to CPUS / Always-On power management running U-Boot `scp.fex` and is not managed by Linux `remoteproc`.
 
-### A. Lifecycle Management Commands
+### A. Lifecycle Management Commands (T527 / Cubie A5E)
 ```bash
 # 1. Install bare-metal ELF binary to Linux firmware directory
 cp firmware.elf /lib/firmware/riscv-firmware.elf
@@ -156,7 +157,7 @@ cp firmware.elf /lib/firmware/riscv-firmware.elf
 # 2. Assign firmware to remoteproc instance
 echo riscv-firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
 
-# 3. Boot XuanTie E907 RISC-V core
+# 3. Boot XuanTie E906/E907 RISC-V core
 echo start > /sys/class/remoteproc/remoteproc0/state
 
 # 4. View real-time printk / trace buffer from RISC-V
@@ -166,24 +167,29 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 echo stop > /sys/class/remoteproc/remoteproc0/state
 ```
 
-### B. Device Tree Node (A733 DTS)
+### B. Device Tree Node (T527 / A523 DTS)
 ```dts
+msgbox: mailbox@3003000 {
+    compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun8i-a83t-msgbox";
+    reg = <0x03003000 0x1000>;
+    clocks = <&ccu CLK_BUS_MSGBOX>;
+    resets = <&ccu RST_BUS_MSGBOX>;
+    interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
+    #mbox-cells = <1>;
+};
+
 rproc: remoteproc@7102000 {
-    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
-    reg = <0x07102000 0x1000>,
+    compatible = "allwinner,sun55i-a523-rproc",
+                 "allwinner,sun55i-a527-rproc",
+                 "allwinner,sun55i-t527-rproc",
+                 "allwinner,sunxi-rproc";
+    reg = <0x02001000 0x1000>,
+          <0x07102000 0x1000>,
           <0x07280000 0x40000>,
-          <0x00040000 0x28000>;
-    reg-names = "cfg", "r_sram", "sram";
-    clocks = <&r_ccu CLK_RISCV_24M>,
-             <&r_ccu CLK_RISCV_CFG>,
-             <&r_ccu CLK_RISCV>;
-    clock-names = "parent", "bus", "core";
-    resets = <&r_ccu RST_BUS_RISCV_CFG>;
-    reset-names = "cfg";
-    mboxes = <&msgbox 0>;
-    mbox-names = "tx";
-    memory-region = <&rproc_trace>;
-    memory-region-names = "trace";
+          <0x00020000 0x20000>;
+    reg-names = "main_ccu", "ccu", "r_sram", "sram";
+    mboxes = <&msgbox 0>, <&msgbox 1>;
+    mbox-names = "rx", "tx";
     status = "okay";
 };
 ```
@@ -208,16 +214,16 @@ The full firmware workspace is located at:
 
 ---
 
-## 6. Debugging Realities: No On-Chip OpenOCD / DMEM Support
+## 6. Co-Processor Debug Architecture: Direct Memory Debug (`dmem`) Comparison
 
-> [!CAUTION]
-> **OPERATING "BLIND": NO ON-CHIP MMIO DEBUG ACCESS**
-> There is **no way to support on-chip `dmem` / OpenOCD debugging** on Allwinner T527 or A733 silicon.
-> The RISC-V hardware Debug Module (DM) is not mapped into the non-secure ARM bus interconnect. Any attempt to read or write debug registers over `/dev/mem` triggers an interconnect Bus Error / Synchronous External Abort.
->
-> **Developer Visibility & Debugging Strategy**:
-> Developers operate without an interactive GDB debugger attached to the running core (no breakpoints, no stepping, no register dumping). All firmware debugging must strictly rely on:
-> 1. **RemoteProc Trace Buffer** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0` via `rproc_trace` carveout).
-> 2. **Dedicated Hardware UART** (`S_UART0` @ `0x07080000`, 115200 8N1).
-> 3. **Shared Memory Probing** (Reading/writing test signatures via `devmem` on Shared SRAM A2 @ `0x00040000`–`0x00073FFF`).
-> 4. **Hardware Mailbox Doorbell IPC** (Interrupt synchronization).
+Unlike TI Sitara (AM62x/AM64x), STM32MP1, and NXP i.MX SoCs which implement a memory-mapped `dmem` interface exposing auxiliary core debug registers directly to the non-secure ARM interconnect (enabling self-hosted OpenOCD/GDB debugging via Linux `/dev/mem`), the current **Allwinner T527 silicon does not route a `dmem` bus interface** for the XuanTie RISC-V Debug Module (DM) into Linux userspace.
+
+### Debugging Capabilities on Current T527 Silicon:
+1. **RemoteProc Trace Buffer**: High-throughput circular telemetry (`/sys/kernel/debug/remoteproc/remoteproc0/trace0` via `rproc_trace` carveout).
+2. **Dedicated Hardware UART**: Low-level bare-metal serial console (`S_UART0` @ `0x07080000` / 115200 baud).
+3. **Lock-Free Shared SRAM Ring Buffers**: High-speed Single Producer Single Consumer (SPSC) telemetry in Shared SRAM A2 (`0x00040000`).
+4. **Hardware Mailbox IPC Doorbell**: Single-cycle inter-core synchronization.
+
+### Future Silicon Outlook:
+If future Allwinner SoC revisions incorporate a standard memory-mapped `dmem` interface to the RISC-V Debug Module Interface (DMI), native self-hosted OpenOCD and GDB remote debugging can be used directly from Linux without external hardware probes, matching the workflow on TI and ST devices.
+

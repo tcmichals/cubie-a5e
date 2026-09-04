@@ -6,11 +6,40 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 
 ## 1. Hardware Architecture Specification
 
+```text
++-----------------------------------------------------------------------------------------+
+|                                    ALLWINNER T527 / A527 (sun55i)                       |
+|                                                                                         |
+|  +-------------------------------------+   +-----------------------------------------+  |
+|  |             CPUX Cluster            |   |               Co-Processors             |  |
+|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
+|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | Cadence Tensilica HiFi4 Audio DSP |  |  |
+|  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
+|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
+|  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
+|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
+|  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
+|  +-------------------------------------+   |  +-----------------------------------+  |  |
+|  |             NPU Engine              |   |  +-----------------------------------+  |  |
+|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
+|  +-------------------------------------+   +-----------------------------------------+  |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                           Memory Hierarchy & Interconnect                         |  |
+|  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
+|  |  - 208 KB Shared SRAM A2 (0x00040000) [Zero-Wait-State Low-Latency Control & IPC]  |  |
+|  |  - 320 KB Dedicated MCU SRAM C (0x07130000)                                       |  |
+|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
+|  +-----------------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------------+
+```
+
 | Parameter | Specification | Notes |
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 (`sun55iw3`) | 8× ARM Cortex-A55 Cores (Octa-core) |
 | **RAM** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | Dynamic probing via U-Boot `dram_init` |
-| **Co-Processors** | **XuanTie E906 RISC-V** (up to 200 MHz) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | Managed via `mcu_ccu` @ `0x07102000` (ITCM @ `0x07110000`, DTCM @ `0x07120000`) |
+| **Co-Processors** | **XuanTie E906/E907 RISC-V** (up to 200 MHz) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | Managed via `mcu_ccu` @ `0x07102000` (ITCM @ `0x07110000`, DTCM @ `0x07120000`) |
 | **NPU** | **2.0 TOPS VeriSilicon VIP9000** | VIPLite / Galcore kernel driver (`0x07122000`) |
 | **Camera Subsystem** | **Allwinner Gen-4 Video In (VIN)** | 4× MIPI CSI-2 receivers + ISP + Multi-scalers |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Base MMIO at `0x03400000` / `0x03460000` |
@@ -19,6 +48,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 | **Mainline U-Boot Status** | **In Mainline U-Boot** | U-Boot 2026.01 (`BR2_TARGET_UBOOT=y`) |
 | **Wi-Fi / BT Transport** | **SDIO 3.0** (4-bit, 50 MHz) | Uses `aic8800_bsp.ko` + `aic8800_fdrv.ko` |
 | **BROM Boot Geometry** | Sector 16 / Offset 8 KiB | Standard Allwinner eMMC/SD boot geometry |
+
 
 ---
 
@@ -109,7 +139,28 @@ Allwinner Gen-4 Video In pipeline (`vind0` @ `0x05800800`):
 
 ---
 
-## 5. Platform-Specific Bring-Up Quirks & Fixes
+## 5. Heterogeneous Co-Processor (RISC-V E907) IPC Frameworks
+
+The Cubie A5E platform supports four distinct inter-processor communication options between the 8x Cortex-A55 Linux host and the XuanTie E907 co-processor:
+
+| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM A2 (`0x00040000`) | Lock-Free SPSC in SRAM A2 (`0x00040000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM A2 (`0x00040000`, 64B frames) |
+| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | Direct MMIO (`/dev/mem`) |
+| **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
+| **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
+| **Typical RTT Latency** | **~60 – 160 $\mu\text{s}$** | **~50 – 90 $\mu\text{s}$** | **~3.0 – 6.0 $\mu\text{s}$** (DDR bus latency) | **~1.5 – 2.5 $\mu\text{s}$** (Zero-wait-state SRAM) |
+| **Jitter (StdDev)**     | Moderate (Kernel context switches) | Moderate (Kernel context switches) | **Ultra-Low (<0.5 $\mu\text{s}$)** | **Ultra-Low (<0.2 $\mu\text{s}$)** |
+| **Max Payload Size**    | Medium (512 B default) | Medium (512 B default) | **Large (Up to 4 KB per frame, MBs pool)** | Small (40–64 B, SRAM capacity bounded) |
+| **Throughput Bandwidth**| Moderate (~10–20 MB/s) | Moderate (~10–20 MB/s) | **High Bandwidth (>100 MB/s)** | High Packet Rate (Low Payload) |
+| **Target Use Case**     | Generic standard OS interop | Lightweight standard Linux RPMsg | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
+
+
+---
+
+## 6. Platform-Specific Bring-Up Quirks & Fixes
 
 1. **Serial Console Disconnect (`ttyS0` vs `ttyS2`)**:
    - *Problem*: Adding `&uart2` in the flight stack overlay dynamically shifted `ttyS0` to UART2, breaking the debug console.
@@ -126,7 +177,7 @@ Allwinner Gen-4 Video In pipeline (`vind0` @ `0x05800800`):
 
 ---
 
-## 6. Build Commands for A5E
+## 7. Build Commands for A5E
 
 ```bash
 # In build directory (e.g. bld.a5e)
@@ -134,4 +185,5 @@ make cubie_a5e_defconfig
 make
 ```
 - Output Disk Image: `images/sdcard.img`
+
 

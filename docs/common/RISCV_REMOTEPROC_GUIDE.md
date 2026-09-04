@@ -63,12 +63,13 @@ echo stop > /sys/class/remoteproc/remoteproc0/state
 
 ---
 
-## 4. Hardware Verification via OpenOCD & JTAG
+## 4. Hardware Verification via External JTAG & OpenOCD
 
-For low-level hardware verification independent of Linux software, OpenOCD interfaces with the Core Debug Module (DM):
+For low-level hardware verification independent of Linux software, an external JTAG debug probe interfaces with OpenOCD on your development host:
 
 ```bash
-openocd -f board/radxa/cubie_a5e/openocd_t527_local.cfg
+# On development host connected to JTAG probe:
+openocd -f interface/ftdi/jtag-lock-pick_tiny_2.cfg -f target/xuantie_e906.cfg
 ```
 - In Telnet (`localhost:4444`):
   ```text
@@ -76,3 +77,5 @@ openocd -f board/radxa/cubie_a5e/openocd_t527_local.cfg
   running (or halted)
   > riscv.cpu mdw 0x07110000 8
   ```
+
+> *Note*: Current T527 silicon does not expose a memory-mapped `dmem` bus interface for on-chip OpenOCD over `/dev/mem` (unlike TI AM62x or STM32MP1). We hope future Allwinner SoC revisions will support `dmem` for self-hosted debugging. For on-chip diagnostics today, use the `trace0` debugfs node above.

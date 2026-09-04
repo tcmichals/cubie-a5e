@@ -1,107 +1,111 @@
 /*
- * XuanTie E907 / RISC-V Unified Startup & Trap Frame
- * - .text.sram_trampoline : 8-byte reset entry in SRAM (jumps directly to DRAM)
- * - .text.dram_init       : Executes _start, relocations, and C++ init from DRAM
- * - .vectors              : Copied to 0x00000000 (ITCM) for 0-wait trap handling
+ * startup.S - XuanTie E907 (RV32IMAFDC) Unified Startup & Exception Vector Table
  */
 
-    /* ============================================================= */
-    /* SRAM Trampoline: Reset entry point at SRAM Base (0x07140000)  */
-    /* ============================================================= */
-    .section .text.sram_trampoline, "ax", @progbits
-    .global _sram_entry
-    .type _sram_entry, @function
+    .section .vectors, "ax", @progbits
+    .align 6
+    .global _vectors
+    .type _vectors, @function
 
-_sram_entry:
-    /* Absolute jump from SRAM to DRAM init entry point */
-    la t0, _start
-    jr t0
+_vectors:
+    j _start                /* Vector 0: Reset Entry */
+    .align 2
+    .rept 31
+    j default_trap_entry    /* Vectors 1..31: Hardware Traps & IRQs */
+    .endr
 
-    .size _sram_entry, . - _sram_entry
+    .global default_trap_entry
+    .type default_trap_entry, @function
 
+default_trap_entry:
+    /* Allocate 144 bytes on stack for CrashFrame */
+    addi sp, sp, -144
+
+    /* Save GPRs x1..x31 */
+    sw ra,   0(sp)
+    /* Save original sp before trap */
+    addi t0, sp, 144
+    sw t0,   4(sp)
+    sw gp,   8(sp)
+    sw tp,  12(sp)
+    sw t0,  16(sp)
+    sw t1,  20(sp)
+    sw t2,  24(sp)
+    sw s0,  28(sp)
+    sw s1,  32(sp)
+    sw a0,  36(sp)
+    sw a1,  40(sp)
+    sw a2,  44(sp)
+    sw a3,  48(sp)
+    sw a4,  52(sp)
+    sw a5,  56(sp)
+    sw a6,  60(sp)
+    sw a7,  64(sp)
+    sw s2,  68(sp)
+    sw s3,  72(sp)
+    sw s4,  76(sp)
+    sw s5,  80(sp)
+    sw s6,  84(sp)
+    sw s7,  88(sp)
+    sw s8,  92(sp)
+    sw s9,  96(sp)
+    sw s10, 100(sp)
+    sw s11, 104(sp)
+    sw t3,  108(sp)
+    sw t4,  112(sp)
+    sw t5,  116(sp)
+    sw t6,  120(sp)
+
+    /* Save CSRs */
+    csrr t0, mepc
+    sw t0,  124(sp)
+    csrr t0, mcause
+    sw t0,  128(sp)
+    csrr t0, mtval
+    sw t0,  132(sp)
+    csrr t0, mstatus
+    sw t0,  136(sp)
+
+    /* Pass pointer to CrashFrame in a0 to C++ crash dispatcher */
+    mv a0, sp
+    call hal_crash_dispatcher
+
+.Ltrap_hang:
+    wfi
+    j .Ltrap_hang
+
+    .size default_trap_entry, . - default_trap_entry
 
     /* ============================================================= */
-    /* DRAM Init: Runs CRT0, copy loops, and C++ init from DRAM      */
+    /* Core Reset Entry Point                                        */
     /* ============================================================= */
-    .section .text.dram_init, "ax", @progbits
+    .section .text.startup, "ax", @progbits
     .global _start
     .type _start, @function
 
 _start:
-    /* 1. Disable all interrupts during early initialization */
+    /* 1. Disable all interrupts */
     csrw mie, zero
     csrw mip, zero
 
-    /* 2. Setup Hardware Stack Pointer in DTCM (0x00080000) */
-    la sp, _estack
+    /* 2. Setup Hardware Stack Pointer in DTCM (0x00080000 + 64K) */
+    la sp, _stack_top
 
-    /* 3. Setup Global Pointer anchored to SRAM .data + 0x800 */
+    /* 3. Setup Global Pointer */
 .option push
 .option norelax
     la gp, __global_pointer$
 .option pop
 
-    /* 4. Enable FPU (FS = 0b11) if hardware floating point present */
+    /* 4. Enable FPU (mstatus.FS = 0b11) for hardware float/double */
     li t0, (3 << 13)
     csrs mstatus, t0
 
-    /* ============================================================= */
-    /* Relocation: Copy from DRAM (LMA) into ITCM / SRAM (VMA)       */
-    /* ============================================================= */
+    /* 5. Set mtvec CSR to vector table in ITCM (0x00000000) */
+    la t0, _vectors
+    csrw mtvec, t0
 
-    /* Copy .vectors -> ITCM (0x00000000) */
-    la a0, _vectors_start
-    la a1, _vectors_end
-    la a2, _vectors_load
-.Lcopy_vectors:
-    bgeu a0, a1, .Lcopy_vectors_done
-    lw t0, 0(a2)
-    sw t0, 0(a0)
-    addi a0, a0, 4
-    addi a2, a2, 4
-    j .Lcopy_vectors
-.Lcopy_vectors_done:
-
-    /* Copy .fastcode -> ITCM */
-    la a0, _fastcode_start
-    la a1, _fastcode_end
-    la a2, _fastcode_load
-.Lcopy_fastcode:
-    bgeu a0, a1, .Lcopy_fastcode_done
-    lw t0, 0(a2)
-    sw t0, 0(a0)
-    addi a0, a0, 4
-    addi a2, a2, 4
-    j .Lcopy_fastcode
-.Lcopy_fastcode_done:
-
-    /* Copy .text -> SRAM C */
-    la a0, _stext
-    la a1, _etext
-    la a2, _text_load
-.Lcopy_text:
-    bgeu a0, a1, .Lcopy_text_done
-    lw t0, 0(a2)
-    sw t0, 0(a0)
-    addi a0, a0, 4
-    addi a2, a2, 4
-    j .Lcopy_text
-.Lcopy_text_done:
-
-    /* Copy .rodata -> SRAM C */
-    la a0, _srodata
-    la a1, _erodata
-    la a2, _rodata_load
-.Lcopy_rodata:
-    bgeu a0, a1, .Lcopy_rodata_done
-    lw t0, 0(a2)
-    sw t0, 0(a0)
-    addi a0, a0, 4
-    addi a2, a2, 4
-    j .Lcopy_rodata
-.Lcopy_rodata_done:
-
-    /* Copy .data -> SRAM C */
+    /* 6. Copy .data from ITCM (LMA) to DTCM (VMA) */
     la a0, _sdata
     la a1, _edata
     la a2, _sidata
@@ -114,11 +118,7 @@ _start:
     j .Lcopy_data
 .Lcopy_data_done:
 
-    /* ============================================================= */
-    /* Zero Initialization: .bss, .dtcm, and .dram_bss               */
-    /* ============================================================= */
-
-    /* Zero .bss in SRAM C */
+    /* 7. Zero .bss in DTCM */
     la a0, _sbss
     la a1, _ebss
 .Lzero_bss:
@@ -128,113 +128,17 @@ _start:
     j .Lzero_bss
 .Lzero_bss_done:
 
-    /* Zero .dtcm scratchpad in DTCM */
-    la a0, _sdtcm
-    la a1, _edtcm
-.Lzero_dtcm:
-    bgeu a0, a1, .Lzero_dtcm_done
-    sw zero, 0(a0)
-    addi a0, a0, 4
-    j .Lzero_dtcm
-.Lzero_dtcm_done:
-
-    /* Zero .dram_bss in DRAM */
-    la a0, _sdram_bss
-    la a1, _edram_bss
-.Lzero_dram:
-    bgeu a0, a1, .Lzero_dram_done
-    sw zero, 0(a0)
-    addi a0, a0, 4
-    j .Lzero_dram
-.Lzero_dram_done:
-
-    /* ============================================================= */
-    /* Core Trap & Interrupt Configuration                          */
-    /* ============================================================= */
-
-    /* Point mtvec CSR to vector entry in ITCM (0x00000000) */
-    la t0, default_trap_entry
-    csrw mtvec, t0
-
-    /* Instruction pipeline barrier */
-    fence.i
-
-    /* ============================================================= */
-    /* C++ Runtime Construction & Execution                          */
-    /* ============================================================= */
-
-    /* Execute global static C++ constructors (tables live in DRAM) */
+    /* 8. Call global static C++ constructors (if any) */
     la t0, __libc_init_array
+    beqz t0, .Lcall_main
     jalr ra, t0, 0
 
-    /* Jump to C++ Application Entry in SRAM */
-    la t0, main
-    jalr ra, t0, 0
-
-    /* Call destructors if main returns */
-    la t0, __libc_fini_array
-    jalr ra, t0, 0
+.Lcall_main:
+    /* 9. Jump to application main */
+    call main
 
 .Lhang:
     wfi
     j .Lhang
 
     .size _start, . - _start
-
-
-/* ================================================================= */
-/* Hardware Trap Vector Entry & Context Preservation Frame (ITCM)    */
-/* ================================================================= */
-    .section .vectors, "ax", @progbits
-    .align 6
-    .global default_trap_entry
-    .type default_trap_entry, @function
-
-default_trap_entry:
-    /* Allocate 64 bytes on DTCM stack and save caller-saved registers */
-    addi sp, sp, -64
-    sw ra,  0(sp)
-    sw t0,  4(sp)
-    sw t1,  8(sp)
-    sw t2, 12(sp)
-    sw a0, 16(sp)
-    sw a1, 20(sp)
-    sw a2, 24(sp)
-    sw a3, 28(sp)
-    sw a4, 32(sp)
-    sw a5, 36(sp)
-    sw a6, 40(sp)
-    sw a7, 44(sp)
-    sw t3, 48(sp)
-    sw t4, 52(sp)
-    sw t5, 56(sp)
-    sw t6, 60(sp)
-
-    /* Pass mcause (a0) and mepc (a1) to C++ dispatcher */
-    csrr a0, mcause
-    csrr a1, mepc
-    call riscv_trap_dispatcher
-
-    /* Restore caller-saved registers */
-    lw ra,  0(sp)
-    lw t0,  4(sp)
-    lw t1,  8(sp)
-    lw t2, 12(sp)
-    lw a0, 16(sp)
-    lw a1, 20(sp)
-    lw a2, 24(sp)
-    lw a3, 28(sp)
-    lw a4, 32(sp)
-    lw a5, 36(sp)
-    lw a6, 40(sp)
-    lw a7, 44(sp)
-    lw t3, 48(sp)
-    lw t4, 52(sp)
-    lw t5, 56(sp)
-    lw t6, 60(sp)
-    addi sp, sp, 64
-
-    /* Return from Machine Trap / Interrupt */
-    mret
-    .size default_trap_entry, . - default_trap_entry
-    

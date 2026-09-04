@@ -16,6 +16,10 @@ bld.*/
 *.img
 riscv-load
 boot.scr
+ping_shm
+ping_rpmsg
+ping_dram
+riscv-firmware/bin/
 
 # Whitelist board vendor firmware tools
 !project-cubie-a5e/board/**/tools/*.bin

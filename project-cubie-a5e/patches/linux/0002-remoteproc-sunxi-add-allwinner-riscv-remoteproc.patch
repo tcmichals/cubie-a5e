@@ -19,8 +19,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	depends on (ARCH_SUNXI || COMPILE_TEST)
 +	default y
 +	help
-+	  Say y or m here to support the Allwinner XuanTie E906/E902 RISC-V
-+	  co-processor on Allwinner A523, A527, T527, and A733 SoCs via the
++	  Say y or m here to support the Allwinner XuanTie E906/E907 RISC-V
++	  co-processor on Allwinner A523, A527, and T527 SoCs via the
 +	  remote processor framework.
 +
  endif # REMOTEPROC
@@ -38,13 +38,13 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 @@ -0,0 +1,594 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
-+ * Allwinner XuanTie E906/E902 RISC-V Remote Processor Driver
++ * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
 + *
 + * Copyright (C) 2024-2026 Allwinner Technology Co., Ltd.
 + * Copyright (C) 2026 Tim Michals <tcmichals@gmail.com>
 + *
 + * CCU-integrated remoteproc driver for XuanTie RISC-V co-processors on
-+ * Allwinner SoCs (T527/A527: E906, A733: E902) supporting TCM, SRAM, and DRAM.
++ * Allwinner SoCs (T527/A527/A523: E906/E907) supporting TCM, SRAM, and DRAM.
 + */
 +
 +#include <linux/clk.h>
@@ -61,7 +61,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +#include <linux/pm.h>
 +#include <linux/remoteproc.h>
 +#include <linux/reset.h>
-+#include <linux/arm-smccc.h>
 +
 +#include "remoteproc_internal.h"
 +
@@ -253,23 +252,12 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		return -EINVAL;
 +
 +	/*
-+	 * 1. Program initial boot entry vector into hardware register if present
-+	 * (e.g., XuanTie E906 on Allwinner T527 / A523 at cfg_va + 0x0204).
-+	 * Writes via MMIO, and also executes an SMCCC secure write in case the
-+	 * platform security controller write-protects the register against Non-Secure EL1.
++	 * 1. Program initial boot entry vector into hardware register
++	 * (XuanTie E906 on Allwinner T527 / A523 / A527 at cfg_va + 0x0204).
 +	 */
 +	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
-+#if IS_ENABLED(CONFIG_ARM64)
-+		if (readl(priv->cfg_va + E906_STA_ADD_REG) != (u32)rproc->bootaddr) {
-+			struct arm_smccc_res res;
-+			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_STA_ADD_REG,
-+				      (u32)rproc->bootaddr, 0, 0, 0, 0, 0, &res);
-+			dev_info(priv->dev, "STA_ADD SMC 0x8000ff06 result: 0x%lx\n", res.a0);
-+		}
-+#endif
-+		dev_info(priv->dev, "STA_ADD set to 0x%llx (hardware readback: 0x%08x)\n",
-+			 (u64)rproc->bootaddr, readl(priv->cfg_va + E906_STA_ADD_REG));
++		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
 +	}
 +
 +	/*
@@ -284,34 +272,18 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	} else if (priv->rst_cfg) {
 +		ret = reset_control_deassert(priv->rst_cfg);
 +		if (ret) {
-+			dev_err(priv->dev, "failed to release cfg/core reset: %d\n", ret);
++			dev_err(priv->dev, "failed to release cfg reset: %d\n", ret);
 +			return ret;
 +		}
 +	}
 +
 +	/*
-+	 * 3. Assert / deassert core control bit 0 in CFG register (0x07032000 / 0x07130000).
-+	 * On Allwinner RISC-V coprocessors, bit 0 controls core execution.
-+	 * If MMIO is write-protected by ATF/TrustZone, invoke SMC calls.
++	 * 3. Assert core control bit 0 in CFG register (0x07130000).
++	 * On Allwinner T527/A523 RISC-V MCU, bit 0 enables core execution.
 +	 */
 +	if (priv->cfg_va) {
 +		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
 +		writel(val | BIT(0), priv->cfg_va + E906_CTRL_REG);
-+#if IS_ENABLED(CONFIG_ARM64)
-+		if ((readl(priv->cfg_va + E906_CTRL_REG) & BIT(0)) == 0) {
-+			struct arm_smccc_res res;
-+			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_CTRL_REG,
-+				      val | BIT(0), 0, 0, 0, 0, 0, &res);
-+			dev_info(priv->dev, "CTRL SMC 0x8000ff06 result: 0x%lx (readback: 0x%08x)\n",
-+				 res.a0, readl(priv->cfg_va + E906_CTRL_REG));
-+
-+			arm_smccc_smc(0x8000ff10, 0, 0, 0, 0, 0, 0, 0, &res);
-+			dev_info(priv->dev, "ARISC_STARTUP SMC 0x8000ff10 result: 0x%lx (readback: 0x%08x)\n",
-+				 res.a0, readl(priv->cfg_va + E906_CTRL_REG));
-+		}
-+#endif
-+		dev_info(priv->dev, "CTRL register 0x0 readback: 0x%08x\n",
-+			 readl(priv->cfg_va + E906_CTRL_REG));
 +	}
 +
 +	return 0;
@@ -331,13 +303,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (priv->cfg_va) {
 +		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
 +		writel(val & ~BIT(0), priv->cfg_va + E906_CTRL_REG);
-+#if IS_ENABLED(CONFIG_ARM64)
-+		if ((readl(priv->cfg_va + E906_CTRL_REG) & BIT(0)) != 0) {
-+			struct arm_smccc_res res;
-+			arm_smccc_smc(0x8000ff06, priv->cfg_phys + E906_CTRL_REG,
-+				      val & ~BIT(0), 0, 0, 0, 0, 0, &res);
-+		}
-+#endif
 +	}
 +
 +	return 0;
@@ -713,7 +678,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +static const struct of_device_id sunxi_rproc_of_match[] = {
 +	{ .compatible = "allwinner,sun55i-a523-rproc" },
-+	{ .compatible = "allwinner,sun60i-a733-rproc" },
++	{ .compatible = "allwinner,sun55i-a527-rproc" },
++	{ .compatible = "allwinner,sun55i-t527-rproc" },
 +	{ /* sentinel */ }
 +};
 +MODULE_DEVICE_TABLE(of, sunxi_rproc_of_match);
@@ -730,5 +696,5 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +MODULE_AUTHOR("Allwinner Technology Co., Ltd.");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
-+MODULE_DESCRIPTION("Allwinner XuanTie E907/E902 RISC-V Remoteproc Driver");
++MODULE_DESCRIPTION("Allwinner XuanTie E906/E907 RISC-V Remoteproc Driver");
 +MODULE_LICENSE("GPL");

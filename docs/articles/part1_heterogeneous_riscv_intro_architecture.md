@@ -1,6 +1,6 @@
 # Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 1): Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks
 
-Heterogeneous multi-core SoCs—pairing high-performance 64-bit ARM Cortex-A application cores with low-power, deterministic auxiliary microcontrollers—have become standard in modern embedded hardware. Silicon like the **Allwinner T527 / A527** (featured on the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFDC @ 600 MHz).
+Heterogeneous multi-core SoCs—pairing high-performance 64-bit ARM Cortex-A application cores with low-power, deterministic auxiliary microcontrollers—have become standard in modern embedded hardware. Silicon like the **Allwinner T527 / A527** (featured on the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFDC @ 200 MHz) and a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz).
 
 Getting these co-processors online is rarely plug-and-play. Early bring-up is iterative, and teams often start with quick userspace hacks (such as poking registers via `/dev/mem` and dumping raw binaries) before hitting a wall.
 
@@ -34,7 +34,7 @@ sun55i Generation (Same Die IP) ┼─────────────► Al
 | :--- | :--- | :--- |
 | **SoC** | **Allwinner T527 / A527** (`sun55i`) | **Allwinner A733** (`sun60i`) |
 | **Application Cores** | 8x ARM Cortex-A55 @ 1.8 GHz | 2x ARM Cortex-A76 @ 2.0 GHz + 6x Cortex-A55 |
-| **Auxiliary Real-Time Core** | **XuanTie E907 RISC-V** (RV32IMAFDC @ 600 MHz) | **XuanTie E907 RISC-V** (RV32IMAFDC @ 600 MHz) |
+| **Auxiliary Real-Time Core** | **XuanTie E907 RISC-V** (RV32IMAFDC @ 200 MHz) | **XuanTie E907 RISC-V** (RV32IMAFDC @ 200 MHz) |
 | **TCM Memory** | 64 KB ITCM + 64 KB DTCM | 64 KB ITCM + 64 KB DTCM |
 | **On-Chip SRAM** | 320 KB System SRAM C | 320 KB System SRAM C |
 | **Hardware Mailbox** | 8-channel MSGBOX (`0x03003000`) | 8-channel MSGBOX (`0x03003000`) |
@@ -122,16 +122,17 @@ Because the ARM Cortex-A55 Linux host and the XuanTie E907 RISC-V core share the
 └─────────────────────────────┴───────────────────────────────┘
 ```
 
-> **Precedent in the Open-Source Community (Nishanth Menon & Jason Kridner):**  
-> This on-chip debugging methodology has a proven lineage in the open-source Linux community. **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) pioneered self-hosted "soft-wire" JTAG-less debugging on platforms like the **BeaglePlay** and **BeagleBone AI-64** (TI AM62x / AM64x) by introducing the `dmem` driver into OpenOCD (`board/ti_am625_swd_native.cfg`). By mapping CoreSight debug registers directly across the internal bus via `/dev/mem`, developers could debug auxiliary Cortex-M4F and Cortex-R5F cores natively from Linux without external hardware probes or header soldering. We are applying that same powerful architectural principle to the **Allwinner + XuanTie RISC-V ecosystem**.
+> **Precedent in the Open-Source Community (TI, ST, and BeagleBoard):**  
+> This on-chip debugging methodology has a proven lineage in the open-source Linux community. **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) pioneered self-hosted "soft-wire" JTAG-less debugging on platforms like the **BeaglePlay** and **BeagleBone AI-64** (TI AM62x / AM64x) by introducing the `dmem` driver into OpenOCD (`board/ti_am625_swd_native.cfg`). By mapping debug registers directly across the internal bus via `/dev/mem`, developers could debug auxiliary cores natively from Linux without external hardware probes or header soldering. STMicroelectronics and NXP implement similar memory-mapped debug interfaces on their heterogeneous SoCs.
 
 The presentation that inspired this approach is well worth watching:  
 🎥 **[Debugging Heterogeneous SoC Using OpenOCD — Nishanth Menon, Texas Instruments (YouTube)](https://youtu.be/hKFvxgbHUfg?si=Mhd7lEJgq9oBp3t9)**
 
-> [!WARNING]
-> **Hardware Reality on Allwinner Silicon:**
-> While memory-mapped debug access (DMEM) was successfully pioneered on TI AM62x/AM64x SoCs, Allwinner's implementation on the T527 and A733 **does not expose the RISC-V Debug Module to the non-secure ARM bus interconnect**. 
-> As a result, on-chip OpenOCD/DMEM debugging is unsupported on these chips, leaving developers without interactive GDB breakpoints or stepping. All live debugging in production is achieved through Linux RemoteProc trace buffers (`trace0`), dedicated serial UART logging, and shared SRAM memory probing.
+> [!NOTE]
+> **Hardware Architecture & Future Outlook:**
+> While memory-mapped debug access (`dmem`) is supported on TI (AM62x/K3) and STMicroelectronics (STM32MP1) SoCs, current **Allwinner T527 silicon does not route a `dmem` bus interface** for the RISC-V Debug Module to the non-secure ARM interconnect.
+> 
+> We hope Allwinner will incorporate a memory-mapped `dmem` interface in future silicon revisions so that developers can take full advantage of native Linux-hosted OpenOCD and GDB remote debugging. On current T527 hardware, production debugging is achieved cleanly through Linux RemoteProc trace buffers (`trace0`), dedicated serial UART logging (`S_UART0`), lock-free shared SRAM ring buffers, and external JTAG hardware probes.
 
 ---
 
@@ -141,12 +142,12 @@ In this introductory article, we established:
 1. The silicon naming relationship between **T527**, **A527**, and **`sun55i-a523`**.
 2. Why userspace `/dev/mem` loaders and `iomem=relaxed` workarounds are dead ends for reliable bring-up.
 3. The TRM physical memory layout for the XuanTie E907 MCU subsystem.
-4. How on-chip memory-mapped debugging allows OpenOCD and GDB to control the RISC-V core directly over the internal bus without hardware JTAG probes.
+4. The `dmem` memory-mapped debugging architecture and how current T527 firmware leverages Linux `remoteproc` trace buffers and hardware serial.
 
 In **Part 2**, we will dive straight into the implementation:
 * Authoring the **Linux 7.1 `sunxi_rproc.c` RemoteProc kernel driver**.
 * Configuring multi-segment ELF placement (ITCM, DTCM, SRAM C) and built-in debugfs trace logging.
-* Executing the **3-Step Hardware Proof** (`dmstatus` signature, `dmactive` loopback, and halt/resume transitions) using our automated Python test harness (`dmi_test.py`).
+* Implementing low-latency IPC doorbells and shared memory communication.
 
 ---
 

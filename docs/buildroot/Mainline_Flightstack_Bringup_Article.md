@@ -57,12 +57,13 @@ Instead of introducing heavy, unpredictable frameworks like RPMsg or OpenAMP:
 
 ---
 
-## 6. Blueprint 5: Local Debugging Bridge via ARM MMIO
+## 6. Blueprint 5: High-Throughput RemoteProc Telemetry & Diagnostics
 
-To allow debugging of the co-processor without connecting external JTAG hardware probes:
-* **System Bus Debugging:** The SoC maps the XuanTie RISC-V Debug Module Interface (DMI) registers directly into the global ARM memory-mapped I/O (MMIO) bus space.
-* **MMIO-Mapped OpenOCD:** We cross-compile OpenOCD in Buildroot with a memory-mapped driver (`sunxi_mmap`). The host ARM core can read/write the co-processor's run-control register addresses directly over the system bus, exposing a local GDB server target port (`localhost:3333`) on the flight computer terminal.
-* **On-Board Multi-arch GDB:** We compile the target GDB debugger in Buildroot with `--enable-targets=all` enabled. This generates a native GDB debugger running on the ARM64 flight controller that supports full debugging of guest RISC-V binary structures, allowing developers to inspect variables, backtrace stacks, and step through co-processor execution directly from the target shell.
+To provide robust visibility into co-processor operations:
+* **Kernel Trace Buffer Mapping:** The co-processor firmware declares a high-throughput circular trace buffer in SRAM (`0x7A000`) inside its resource table. The Linux `remoteproc` subsystem automatically binds this buffer and exposes it directly to `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+* **Dedicated Serial Diagnostics:** The XuanTie core is routed to a dedicated hardware serial console (`S_UART0` @ `0x07080000`), providing completely independent 115200 baud serial telemetry without interfering with the ARM64 Linux system console.
+* **Direct Memory Debug (`dmem`) Architecture:** While TI and STMicroelectronics devices provide a memory-mapped `dmem` interface allowing target-hosted OpenOCD over `/dev/mem`, current Allwinner silicon uses RemoteProc trace buffers and dedicated UARTs. We look forward to future Allwinner silicon revisions adding native `dmem` support for self-hosted OpenOCD/GDB workflows.
+
 
 ---
 

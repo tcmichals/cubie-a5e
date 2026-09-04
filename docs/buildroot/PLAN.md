@@ -76,9 +76,9 @@ flowchart TD
   # Read live firmware trace output:
   cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
   ```
-- **Validate Hardware Debug Module (OpenOCD + Python DMI):**
+- **Monitor co-processor serial output (`S_UART0`):**
   ```bash
-  openocd -f /etc/openocd/openocd_t527_local.cfg &
-  dmi_test.py
+  minicom -D /dev/ttyS0 -b 115200
   ```
+
 

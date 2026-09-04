@@ -350,32 +350,31 @@ If you are developing on a separate Ubuntu x86 development PC:
 
 ---
 
-## 9. Remote Debugging Pipeline (GDB + OpenOCD)
+## 9. Co-Processor Debugging & Diagnostic Pipeline
 
-Debugging bare-metal co-processor code running on the physical flight controller from your Ubuntu x86 development host is orchestrated through a local OpenOCD bridge:
+### Diagnostics on Allwinner T527
+On current Allwinner T527 silicon, the XuanTie RISC-V co-processor is supported via Linux `remoteproc`. Because the current T527 silicon does not expose a memory-mapped `dmem` bus interface for on-chip OpenOCD debugging (unlike TI AM62x or STM32MP1 SoCs), co-processor diagnostics are primarily performed via high-throughput Linux `remoteproc` trace buffers and dedicated hardware UART:
 
-![Remote Debugging Pipeline](images/debug.svg)
-
-### Step A: Start OpenOCD on the Flight Controller (Target)
-OpenOCD runs on the flight controller, using the `sunxi_mmap` driver to interface with the co-processor's Debug Module Interface (DMI) registers mapped at physical address `0x07090000`:
+#### Method A: Linux RemoteProc Trace Buffer (`trace0`)
+The co-processor firmware declares a 4 KB trace buffer in SRAM (`0x7A000`) within its resource table. The kernel exposes this buffer directly to Linux userspace:
 ```bash
-openocd -f board/radxa/cubie_a5e/openocd_t527_local.cfg
-```
-*OpenOCD starts up and opens a GDB remote target server listening on port `3333`.*
-
-### Step B: Connect GDB from Ubuntu x86 (Development Host)
-On your Ubuntu x86 development machine, open a terminal in your project directory and launch GDB, pointing it to the board's IP address:
-```bash
-# Start GDB and connect to the board remote port
-riscv-none-elf-gdb firmware.elf -ex "target remote [board_ip]:3333"
+# Monitor live co-processor log output
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
 
-Once connected, you have full JTAG-like control over the XuanTie core:
-* **`h`** or **`interrupt`**: Halt execution of the co-processor.
-* **`b main`**: Set a breakpoint at `main()`.
-* **`c`**: Continue execution.
-* **`step`** or **`next`**: Step through assembly or C source lines.
-* **`info registers`**: Print all RISC-V register values (like `ra`, `sp`, `gp`, `pc`).
+#### Method B: Dedicated Hardware UART (`S_UART0`)
+The XuanTie core has direct access to `S_UART0` at physical address `0x07080000` (115200 baud), providing an independent bare-metal serial console that does not block or conflict with the Linux ARM console (`UART0` @ `0x02500000`).
+
+#### Method C: External Hardware JTAG Probe
+For source-level hardware breakpoints and single-stepping, an external JTAG probe (such as T-Head CK-Link or FTDI adapter) can be connected to the dedicated JTAG test pins, with OpenOCD and GDB running on your x86 development host:
+```bash
+# On development host connected to JTAG probe:
+openocd -f interface/ftdi/jtag-lock-pick_tiny_2.cfg -f target/xuantie_e906.cfg
+riscv-none-elf-gdb firmware.elf -ex "target remote localhost:3333"
+```
+
+> **Note on Direct Memory Debug (`dmem`)**: Texas Instruments (AM62x/AM64x) and STMicroelectronics SoCs provide an on-chip `dmem` bus interface allowing OpenOCD to attach over `/dev/mem` from Linux. We hope Allwinner will incorporate `dmem` bus access in future SoC revisions for native target-hosted OpenOCD/GDB debugging.
+
 
 ---
 

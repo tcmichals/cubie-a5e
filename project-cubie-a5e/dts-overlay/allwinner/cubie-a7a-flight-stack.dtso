@@ -122,7 +122,3 @@
     status = "okay";
 };
 
-&rproc {
-    firmware-name = "riscv-firmware.elf";
-    status = "okay";
-};

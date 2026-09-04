@@ -9,112 +9,71 @@
 
 ## 1. Executive Summary & SoC Comparison
 
-Modern Allwinner SoCs embed a high-performance **T-Head XuanTie E907/E906 32-bit RISC-V core** (RV32IMAFD[C] @ 600 MHz) alongside the main octa-core ARM64 Cortex-A55 application processors.
-
-Because of hardware security partitioning (ARM TrustZone / OP-TEE OS) differences between the **A523 (sun55i)** and **A733 (sun60i)**, firmware memory placement and remoteproc loading vary between the two architectures:
-
-```mermaid
-flowchart TB
-    subgraph "Radxa Cubie A5E (Allwinner A523 / sun55i)"
-        direction TB
-        A5E_LINUX["Linux Remoteproc (Non-Secure EL1)"] -->|"Direct MMIO Write"| A5E_ITCM["ITCM: 0x07110000 (64 KB)"]
-        A5E_LINUX -->|"Direct MMIO Write"| A5E_DTCM["DTCM: 0x07120000 (64 KB)"]
-        A5E_LINUX -->|"Direct MMIO Write"| A5E_SRAM["SRAM C: 0x07130000 (320 KB)"]
-        A5E_E907["E907 RISC-V Core"] -->|"0-Wait-State Fetch"| A5E_ITCM
-    end
-
-    subgraph "Radxa Cubie A7A (Allwinner A733 / sun60i)"
-        direction TB
-        A7A_LINUX["Linux Remoteproc (Non-Secure EL1)"] -->|"Direct DDR DMA/Write"| A7A_DDR["Reserved DDR Carveout: 0x4E000000 (1 MB)"]
-        A7A_OPTEE["OP-TEE OS (Secure World @ 0x48600000)"] -.->|"SPC Firewall Locks"| A7A_SEC["PRCM SRAM Window: 0x07110000 (Protected)"]
-        A7A_E907["E907 RISC-V Core (AXI Master)"] -->|"Stage 1: Boot @ 0x4E000000"| A7A_DDR
-        A7A_E907 -->|"Stage 2: Self-Relocate Text/Data"| A7A_LOCAL_TCM["Local ITCM (0x00000000) / DTCM (0x00080000)"]
-    end
-```
+* **Allwinner T527 / A523 / A527 (sun55i / Cubie A5E)**: Integrates a dedicated **T-Head XuanTie E906 / E907 32-bit RISC-V core** (RV32IMAFDC + FPU) inside an open MCU peripheral domain (`0x07100000+`). Full, unrestricted Linux `remoteproc` support with ITCM, DTCM, MCU SRAM, and mailbox IPC.
+* **Allwinner A733 (sun60iw2 / Cubie A7A & A7Z)**: Integrates a **XuanTie E902** (RV32EMC) inside the CPUS / Always-On power management domain (`0x07000000+`). The E902 is dedicated strictly to power management running vendor `scp.fex` loaded by U-Boot / `boot0` for PMIC power rail control. Linux `remoteproc` is deactivated for A733.
 
 ---
 
 ## 2. Architectural Comparison Matrix
 
-| Architectural Feature | Radxa Cubie A5E (A523 / sun55iw3) | Radxa Cubie A7A (A733 / sun60iw2) |
+| Architectural Feature | Radxa Cubie A5E (T527 / A523 / sun55i) | Radxa Cubie A7A / A7Z (A733 / sun60iw2) |
 | :--- | :--- | :--- |
-| **RISC-V Core IP** | XuanTie E906 / E907 @ 600 MHz | XuanTie E907 (RV32IMAFDC) @ 600 MHz |
-| **Primary SRAM Aperture** | Dedicated RISC-V SRAM (`0x07280000`) | Dedicated RISC-V SRAM (`0x07280000`, 256 KB) |
-| **Shared System SRAM** | System SRAM A2 (`0x00040000`, 160 KB) | System SRAM A2 (`0x00040000`, 160 KB) |
-| **Host Loading Destination** | Direct MMIO (`0x07280000` / `0x00040000`) | Direct MMIO (`0x07280000` / `0x00040000`) |
-| **Reset Vector Entry** | Fixed Hardware Vector `0x00000000` | Fixed Hardware Vector `0x00000000` |
-| **Subsystem Control Block** | MCU CCU (`0x07102000`) | MCU CCU (`0x07102000`, offset `0x124` = `0x00070001`) |
-| **Doorbell Mailbox** | `0x03003000` (`sun55i-msgbox`) | `0x03004000` (`sun60i-msgbox` Channel 0) |
-| **Trace Buffer Location** | `0x00040000` (SRAM A2) or `0x4E000000` (DDR) | `0x00040000` (SRAM A2) or `0x4E000000` (DDR) |
+| **Coprocessor IP** | **XuanTie E906 / E907** (RV32IMAFDC + FPU) | XuanTie E902 (RV32EMC) |
+| **Subsystem Domain** | **Dedicated MCU Domain** (`0x07100000+`) | CPUS / Always-On Domain (`0x07000000+`) |
+| **Primary SRAM / TCM** | **64 KB ITCM, 64 KB DTCM, 256 KB MCU SRAM** | System SRAM A2 (`0x00040000`), DRAM |
+| **Clock / Reset Control**| **Dedicated `mcu_ccu` (`0x07102000`)** | Shared CPUS `r_ccu` (`0x07010000`) |
+| **Bootloader Role** | **None** (Untouched by U-Boot) | U-Boot loads `scp.fex` for PMIC power |
+| **Linux Remoteproc** | **Full Native Support (`sunxi_rproc.c`)** | **Deactivated (Dedicated to `scp.fex`)** |
 
 ---
 
 ## 3. Detailed SoC Implementations
 
-### A. Radxa Cubie A5E (Allwinner A523)
+### A. Radxa Cubie A5E (Allwinner T527 / A523)
 
-On the A523 SoC, the Linux kernel has direct Non-Secure access to the PRCM memory apertures. Linux remoteproc maps ITCM, DTCM, and SRAM C directly into its kernel address space:
+On the T527/A523 SoC, the Linux kernel has direct Non-Secure access to the MCU CCU, TCMs, and SRAM apertures. Linux remoteproc maps ITCM, DTCM, and SRAM directly into its kernel address space:
 
 ```dts
-/* A5E Device Tree Node */
-rproc: remoteproc@7010000 {
-    compatible = "allwinner,sun55i-a523-rproc";
-    reg = <0x07010000 0x1000>,
-          <0x07110000 0x10000>,
-          <0x07120000 0x10000>,
-          <0x07130000 0x50000>;
-    reg-names = "cfg", "itcm", "dtcm", "sram";
-    clocks = <&r_ccu CLK_RISCV_24M>, <&r_ccu CLK_RISCV_CFG>, <&r_ccu CLK_RISCV>;
-    clock-names = "parent", "bus", "core";
-    resets = <&r_ccu RST_BUS_RISCV_CFG>;
-    reset-names = "cfg";
-    mboxes = <&msgbox 0>;
-    mbox-names = "tx";
+/* A5E / T527 Device Tree Nodes */
+msgbox: mailbox@3003000 {
+    compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun8i-a83t-msgbox";
+    reg = <0x03003000 0x1000>;
+    clocks = <&ccu CLK_BUS_MSGBOX>;
+    resets = <&ccu RST_BUS_MSGBOX>;
+    interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
+    #mbox-cells = <1>;
+};
+
+rproc: remoteproc@7102000 {
+    compatible = "allwinner,sun55i-a523-rproc",
+                 "allwinner,sun55i-a527-rproc",
+                 "allwinner,sun55i-t527-rproc",
+                 "allwinner,sunxi-rproc";
+    reg = <0x02001000 0x1000>,
+          <0x07102000 0x1000>,
+          <0x07280000 0x40000>,
+          <0x00020000 0x20000>;
+    reg-names = "main_ccu", "ccu", "r_sram", "sram";
+    mboxes = <&msgbox 0>, <&msgbox 1>;
+    mbox-names = "rx", "tx";
     status = "okay";
 };
 ```
 
 * **Linker Layout (`firmware.ld`)**:
-  * `ITCM (rx)`: `ORIGIN = 0x00000000, LENGTH = 64K` (Host `0x07110000`)
-  * `DTCM (rwx)`: `ORIGIN = 0x00080000, LENGTH = 64K` (Host `0x07120000`)
-  * `SRAM (rwx)`: `ORIGIN = 0x07130000, LENGTH = 320K` (Host `0x07130000`)
+  * `ITCM (rx)`: `ORIGIN = 0x00000000, LENGTH = 64K`
+  * `DTCM (rwx)`: `ORIGIN = 0x00080000, LENGTH = 64K`
+  * `SRAM (rwx)`: `ORIGIN = 0x07280000, LENGTH = 256K`
 
 ---
 
-### B. Radxa Cubie A7A (Allwinner A733)
+### B. Radxa Cubie A7A & A7Z (Allwinner A733) — Dedicated Power Management Core
 
-On the A733 SoC, the XuanTie E907 core and its Dedicated 256 KB Local SRAM are managed via the **MCU CCU (`0x07102000`)**:
-
-```dts
-/* A7A Device Tree Node */
-reserved-memory {
-    #address-cells = <2>;
-    #size-cells = <2>;
-    ranges;
-
-    rproc_trace: trace@4e000000 {
-        reg = <0x00 0x4e000000 0x00 0x00100000>; /* 1 MB Carveout */
-        no-map;
-    };
-};
-
-rproc: remoteproc@7102000 {
-    compatible = "allwinner,sun60i-a733-rproc", "allwinner,sunxi-rproc";
-    reg = <0x07102000 0x1000>,
-          <0x07280000 0x40000>,
-          <0x00040000 0x28000>;
-    reg-names = "cfg", "r_sram", "sram";
-    clocks = <&r_ccu CLK_RISCV_24M>, <&r_ccu CLK_RISCV_CFG>, <&r_ccu CLK_RISCV>;
-    clock-names = "parent", "bus", "core";
-    resets = <&r_ccu RST_BUS_RISCV_CFG>;
-    reset-names = "cfg";
-    mboxes = <&msgbox 0>;
-    mbox-names = "tx";
-    memory-region = <&rproc_trace>;
-    memory-region-names = "trace";
-    status = "okay";
-};
-```
+On the A733 SoC:
+* **The E902 is for Power Management**: It is initialized during the multi-stage boot sequence by `boot0` and U-Boot with `scp.fex`.
+* **PMIC Control**: `scp.fex` connects to the AXP8191 PMIC over RSB (`r_rsb: rsb@7083000`) and activates `DCDC1` (supplying power to the FE1.1S USB hub and AIC8800 Wi-Fi 6 module) and system power rails.
+* **DRAM Protection**: `sun60i-a733-cubie-a7a.dts` reserves DRAM at `0x40014000` (`scp_dram: scp@40014000`) with `no-map` so Linux never collides with SCP memory.
+* **Remoteproc**: Decommissioned on A733.
 
 #### Boot & Execution Flow:
 1. **Linux Remoteproc (`sunxi_rproc.c`)**:
@@ -162,19 +121,19 @@ const struct cubie_resource_table resource_table = {
 
 ---
 
-## 5. Build, Deployment, & Verification Procedures
+## 5. Build, Deployment, & Verification Procedures (Cubie A5E)
 
 ### A. Building the Firmware
 ```bash
 # Clean and compile the RISC-V application
-make -C bld.a7a riscv-firmware-dirclean riscv-firmware
+make -C bld.a5e riscv-firmware-dirclean riscv-firmware
 ```
 
 ### B. Live Updating Over the Network
-With Gigabit Ethernet active (`192.168.1.33`):
+With network active (`192.168.1.33`):
 ```bash
-# SCP binary directly from dev host to running board:
-scp bld.a7a/target/lib/firmware/riscv-firmware.elf root@192.168.1.33:/lib/firmware/
+# Push firmware via deployment script or SCP:
+./project-cubie-a5e/scripts/push-riscv-firmware.sh 192.168.1.33
 ```
 
 ### C. Controlling Core & Reading Trace on Target
@@ -186,3 +145,4 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 # 2. View live real-time heartbeat:
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
+

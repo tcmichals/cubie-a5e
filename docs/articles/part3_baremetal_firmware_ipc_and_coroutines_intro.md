@@ -14,7 +14,7 @@ This article covers:
 
 ## 1. Memory Determinism: Zero-Wait-State TCM vs. DDR DRAM
 
-The XuanTie E907 core features a Harvard architecture with 32 KB I-Cache and 32 KB D-Cache, running at **600 MHz** (RV32IMAFDC). 
+The XuanTie E907 core features a Harvard architecture with 32 KB I-Cache and 32 KB D-Cache, running at **200 MHz** (RV32IMAFDC). 
 
 While the RISC-V core *can* access the SoC's main system DDR RAM (mapped above `0x4000_0000`), executing code or polling data from DDR is **strongly discouraged for hard real-time tasks**:
 

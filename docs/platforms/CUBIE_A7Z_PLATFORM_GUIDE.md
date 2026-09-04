@@ -68,7 +68,7 @@ This document details the hardware architecture, pinout, schematic analysis, and
 | **Camera Port** | 15-pin / 22-pin FPC MIPI CSI-2 | **15-pin FPC MIPI CSI-2** | Shared `sunxi-csi` & ISP |
 | **NPU AI Engine** | 3.0 TOPs @ `0x03600000` | **3.0 TOPs @ `0x03600000`** | 100% Identical |
 | **VPU Video Engine** | H.264/H.265 @ `0x01C0E000` | **H.264/H.265 @ `0x01C0E000`** | 100% Identical |
-| **Real-Time RISC-V** | XuanTie E907 Remoteproc | **XuanTie E907 Remoteproc** | 100% Identical |
+| **Power Co-Processor** | XuanTie E902 (`scp.fex` U-Boot PM) | **XuanTie E902 (`scp.fex` U-Boot PM)** | 100% Identical |
 
 ---
 

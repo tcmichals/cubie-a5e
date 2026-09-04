@@ -1,214 +1,117 @@
-# On-Chip Direct Memory-Mapped Debug Access (DMEM) Architecture for ARM & RISC-V SoCs
-
-> [!CAUTION]
-> **CRITICAL HARDWARE REALITY: NO DMEM / OPENOCD ON-CHIP DEBUG SUPPORT**
-> On-chip memory-mapped debugging (`dmem` / `/dev/mem` OpenOCD bridge) is **UNSUPPORTED on Allwinner T527 and A733 silicon**.
-> The RISC-V hardware Debug Module (DM) is not mapped into the non-secure ARM interconnect and is firewalled by TrustZone. Any attempt to read or write debug registers from Linux userspace triggers an immediate **Bus Error / Synchronous External Abort**.
-> 
-> **We operate "blind" without interactive GDB/OpenOCD capabilities**:
-> - There is **no OpenOCD on-chip bridge**, **no GDB breakpoints**, **no single-stepping**, and **no register inspection**.
-> - All debugging must strictly rely on:
->   1. **RemoteProc Trace Buffer** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0` via `rproc_trace` carveout).
->   2. **Dedicated Serial Console** (`S_UART0` @ `0x07080000`).
->   3. **Direct Memory Probing** in Shared SRAM A2 (`0x00040000`–`0x00073FFF`).
->   4. **Hardware Mailbox Doorbell IPC**.
+# Direct Memory-Mapped Debug Access (DMEM) Architecture & Co-Processor Debugging
 
 ## Executive Summary
 
-This document details the theoretical architecture for on-chip debugging, and explains why **Direct Memory-Mapped I/O (MMIO) via `/dev/mem` cannot be used** on Allwinner T527/A733 platforms.
+Direct Memory-Mapped Debug Access (**DMEM**) is an on-chip debugging paradigm used in modern heterogeneous asymmetric multiprocessing (AMP) SoCs. It connects core debug modules (ARM CoreSight DAPBUS or RISC-V Debug Module Interface) directly to the system interconnect, enabling native, Linux-hosted OpenOCD and GDB remote debugging without external hardware debug probes.
+
+This document describes:
+1. How the `dmem` architecture is implemented on SoCs from Texas Instruments, STMicroelectronics, and NXP.
+2. The current hardware reality on **Allwinner T527** silicon.
+3. The future roadmap and hope for Allwinner `dmem` support.
+4. Recommended debugging workflows for active T527 firmware development.
 
 ---
 
-## 1. Architectural Overview
+## 1. How `dmem` Operates on Heterogeneous SoCs (TI, ST, NXP)
 
-In heterogeneous asymmetric multiprocessing (AMP) SoCs, the primary Linux CPU and real-time co-processors share an internal system interconnect (AHB/AXI bus).
+In SoCs with native `dmem` support (e.g. TI AM62x / AM64x / K3, STMicroelectronics STM32MP1 / STM32MP2, and NXP i.MX):
 
 ```text
   ┌────────────────────────────────────────────────────────┐
   │                    GDB Debugger                        │
-  │   (e.g. riscv-none-elf-gdb / gdb set arch riscv:rv32)  │
+  │   (e.g. riscv-none-elf-gdb / gdb-multiarch)            │
   └───────────────────────────┬────────────────────────────┘
                               │ 
                               │  GDB Remote Serial Protocol (RSP)
                               │  (TCP Port 3333)
                               ▼
   ┌────────────────────────────────────────────────────────┐
-  │                        OpenOCD                         │
-  │    (Translates GDB commands into RISC-V DM actions)   │
+  │              OpenOCD (Running on Linux Target)         │
+  │        (adapter driver dmem / devmem transport)        │
   └───────────────────────────┬────────────────────────────┘
                               │ 
-                              │  remote_bitbang TCP Protocol (Port 9999)
-                              │  OR Native OpenOCD `dmem` Driver
+                              │  Physical System Bus Access (/dev/mem)
                               ▼
   ┌────────────────────────────────────────────────────────┐
-  │             rbb_server (C++20 Real-Time Daemon)        │
-  │     On-Chip Direct MMIO Debug Access Bridge (/dev/mem) │
-  └───────────────────────────┬────────────────────────────┘
-                              │ 
-                              │  Physical AHB Bus Access (/dev/mem)
-                              ▼
-  ┌────────────────────────────────────────────────────────┐
-  │     XuanTie E907 RISC-V Hardware Debug Module (DM)     │
-  │                (Physical Address 0x07090000)           │
+  │       Memory-Mapped Debug Module Interface (DM / DMI)  │
+  │        (Directly accessible by non-secure ARM core)    │
   └────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 2. Direct Memory-Mapped Access (`/dev/mem` / `devmem`)
-
-### What is `/dev/mem`?
-`/dev/mem` (short for **Device Memory**) is a special Linux character device file that provides raw access to physical memory addresses on the SoC bus.
-
-### How `mmap()` Bypasses Kernel Overhead
-When `rbb_server` or OpenOCD opens `/dev/mem` and calls `mmap()`:
-```cpp
-// 1. Open raw physical memory device
-int fd = open("/dev/mem", O_RDWR | O_SYNC);
-
-// 2. Map physical base address 0x07090000 into virtual memory pointer
-volatile uint32_t* dm_base = (volatile uint32_t*)mmap(
-    NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x07090000
-);
-
-// 3. Direct 32-bit MMIO bus access (executes raw ARM64 LDR/STR instructions)
-uint32_t status = dm_base[0x11 / 4]; // Read dmstatus register (offset 0x11)
-```
-Once mapped, reading and writing to pointer offsets executes raw ARM64 bus instructions (`LDR`/`STR`) at **zero syscall latency**.
+### The Soft-Wire JTAG Paradigm
+- **Pioneering Work**: Demonstrated by Texas Instruments (Nishanth Menon) and the BeagleBoard.org Foundation (Jason Kridner) on platforms like the BeaglePlay and BeagleBone AI-64.
+- **Mechanism**: The Linux host opens `/dev/mem` and maps the auxiliary core debug registers directly into virtual address space via `mmap()`. OpenOCD reads and writes debug run-control registers (`dmcontrol`, `dmstatus`, CoreSight DP/AP) using standard 32-bit load/store instructions.
+- **Benefit**: Fully self-hosted debugging over SSH. Developers can set breakpoints, single-step co-processor firmware, and inspect registers without soldering JTAG headers or purchasing external debug probes.
 
 ---
 
-## 3. Comparison: OpenOCD `--enable-dmem` vs. RISC-V `rbb_server`
+## 2. Allwinner T527 Silicon Reality
 
-### OpenOCD `--enable-dmem` Driver (ARM CoreSight)
-OpenOCD contains a built-in driver enabled via `./configure --enable-dmem`:
-- **Target**: Created by TI/Linaro for TI K3 / AM62x / BeagleBoard platforms (e.g. `ti_am625_swd_native.cfg`).
-- **Protocol**: Maps **ARM CoreSight DAPBUS** registers via `/dev/mem` (base address `0x2B000000`).
-- **Commands**: `dmem device /dev/mem`, `dmem base_address 0x2B000000`.
-- **Reference Config**: `openocd -f board/ti_am625_swd_native.cfg` (used on BeaglePlay / PocketBeagle 2 for Cortex-M4F/R5F native debugging).
+On the current **Allwinner T527 silicon (Radxa Cubie A5E)**:
+- The XuanTie E906/E907 co-processor is fully functional for real-time applications with dedicated clocks (`mcu_ccu`), 64KB ITCM, 64KB DTCM, 256KB MCU SRAM, and open non-secure MMIO reset control at `0x07102124`.
+- However, **Allwinner does not route a memory-mapped `dmem` interface** for the XuanTie RISC-V Debug Module (DM) into the non-secure ARM bus interconnect.
+- Because the debug module is not memory-mapped to the ARM interconnect, target-side OpenOCD cannot attach to the core via `/dev/mem`.
 
-### `rbb_server` (RISC-V 0.13 Debug Module Bridge)
-Created for this repository to bridge OpenOCD and the XuanTie E907 RISC-V core:
-- **Target**: XuanTie E907 RISC-V Co-processor (Allwinner T527 / Radxa Cubie A5E).
-- **Protocol**: Maps **RISC-V 0.13 Debug Module (DM)** registers via `/dev/mem` (base address `0x07090000`).
-- **Real-Time Features**:
-  - Pinned to isolated CPU core 7 (`pthread_setaffinity_np`).
-  - POSIX Real-Time Priority (`SCHED_FIFO` priority 90).
-  - Memory locking (`mlockall(MCL_CURRENT | MCL_FUTURE)`) to prevent page fault jitter.
+### Future Silicon Outlook
+We hope that Allwinner will incorporate a standard memory-mapped `dmem` bus interface in future SoC revisions. Adding a non-secure MMIO window to the RISC-V Debug Module Interface (DMI) will allow the Linux open-source community to use native OpenOCD and GDB workflows directly on Allwinner SoCs, matching the experience on TI and ST platforms.
 
 ---
 
-## 4. Standard RISC-V 0.13 Debug Module (DM) Registers
+## 3. Standard Debugging Methods on Current T527 Silicon
 
-The RISC-V External Debug Specification 0.13 standardizes the Debug Module register layout across all compliant RISC-V cores:
+For developers building firmware for the XuanTie co-processor on T527 today, the following standard mechanisms provide robust, high-performance diagnostics:
 
-| Register Name | Offset | Function |
-| :--- | :--- | :--- |
-| **`data0` .. `data3`** | `0x04` .. `0x07` | Transfers data / register values between GDB and RISC-V core |
-| **`dmcontrol`** | `0x10` | Asserts `haltreq` (pause core) or `resumereq` (resume core) |
-| **`dmstatus`** | `0x11` | Reads core execution state (e.g., `0x00004010` = halted & active) |
-| **`abstractcs`** | `0x16` | Abstract command control and status |
-| **`command`** | `0x17` | Executes abstract commands to read/write GPRs (`x0`–`x31`), `pc`, and CSRs |
-
----
-
-## 5. Verification Commands on Target Board
-
-### Step 1: Boot RISC-V Core via RemoteProc
+### A. Linux RemoteProc Trace Buffer (`trace0`)
+The standard Linux `remoteproc` subsystem automatically exposes circular trace buffers declared in the firmware ELF resource table:
 ```bash
+# Start the co-processor
 echo "riscv-firmware.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
+
+# Read live firmware logs from debugfs
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
 
-### Step 2: Un-gate MCU CCU Clocks & Probe Debug Module
-```bash
-probe_riscv_debug.sh
-# Verification: devmem 0x07090000 32 returns 0x00004010
-```
+### B. Dedicated Serial Console (`S_UART0`)
+The XuanTie co-processor has direct access to `S_UART0` at physical base `0x07080000`. This enables low-overhead, independent serial output (115200 baud) that does not interfere with the main Linux kernel console (`UART0` @ `0x02500000`).
 
-### Step 3: Launch Debug Bridge & OpenOCD
-```bash
-rbb_server 0x07090000 &
-openocd -f /etc/openocd/openocd_t527_local.cfg &
-```
+### C. Lock-Free Shared SRAM Ring Buffers
+High-bandwidth telemetry (such as high-rate IMU samples or motor telemetry) can be streamed through Shared SRAM A2 (`0x00040000`–`0x00073FFF`) using lock-free Single Producer Single Consumer (SPSC) circular queues.
 
-### Step 4: Interactive GDB Debugging Workflows
+### D. Hardware Mailbox Doorbell IPC
+The Allwinner hardware mailbox at `0x03003000` provides sub-microsecond interrupt signaling between the ARM64 Linux host and the RISC-V core.
 
-#### Method A: Spin Stub Workflow (Iterative Development)
-Load a simple spin stub via `remoteproc` to keep clocks enabled, then flash & debug your real firmware directly over GDB:
-```gdb
-# Launch GDB
-gdb /lib/firmware/riscv-firmware.elf
-
-(gdb) set architecture riscv:rv32
-(gdb) target remote localhost:3333
-(gdb) load new_firmware_build.elf    # Flash new ELF directly over MMIO into ITCM/DTCM
-(gdb) break main
-(gdb) continue
-```
-
-#### Method B: Direct RemoteProc Boot (Production Deployment)
-Load the final firmware directly via Linux `remoteproc` and attach GDB to inspect running state:
-```gdb
-(gdb) set architecture riscv:rv32
-(gdb) target remote localhost:3333
-(gdb) break main
-(gdb) info registers
-```
+### E. Physical Hardware JTAG Probe
+For source-level interactive debugging with breakpoints and single-stepping, developers can connect a physical hardware debug probe (e.g. T-Head CK-Link, SEGGER J-Link, or FT2232D) to the board's dedicated JTAG pins and run OpenOCD on their host development PC.
 
 ---
 
-## 6. Upstream Roadmap & Hackster.io Article Plan
+## 4. Reset & Clocks Architecture on T527
 
-### Hackster.io Article Pitch
-- **Title**: *"JTAG Without Wires: Live Debugging a RISC-V Co-Processor from ARM Linux on the Allwinner T527"*
-- **Key Highlight**: Demonstrating On-Chip Direct MMIO Debug Access on cheap hybrid SoCs.
-- **Industry Context**: Comparing BeagleBoard TI AM62x ARM CoreSight MMIO vs. Allwinner T527 RISC-V MMIO.
+The T527 provides clean, non-secure MMIO register control for the RISC-V MCU subsystem without requiring TrustZone Secure Monitor Calls (`smc`):
 
-### OpenOCD Upstream Contribution (`riscv_mmio`)
-Extend OpenOCD's existing `--enable-dmem` driver (`src/jtag/drivers/dmem.c`) or create a native `riscv_mmio` transport driver (`src/jtag/drivers/riscv_mmio.c`) to allow native RISC-V MMIO debug module access in OpenOCD:
-
-```tcl
-adapter driver riscv_mmio
-riscv_mmio base 0x07090000
-target create e907.cpu riscv -dap dmem
-```
-
----
-
-## 7. Reset Vector & Security Architecture (No TrustZone / SMC APIs Needed)
-
-Unlike high-security ARM SoCs (such as Qualcomm, NXP i.MX8, or TI High-Security variants) that require Secure Monitor Calls (`smc #0`) into ARM TrustZone / TF-A to control co-processor resets or set boot vectors:
-
-1. **Unrestricted Physical MMIO**:
-   On the Allwinner T527 / A523, the MCU CCU clock gate and hardware reset controls sit at physical memory address **`0x07102124`** in non-secure physical I/O space.
-   - Bit 0 = `CLK_BUS_MCU_RISCV_CFG` (Clock gate enable)
-   - Bit 16 = `RST_BUS_MCU_RISCV_CFG` (CFG bus reset deassert)
-   - Bit 17 = `RST_BUS_MCU_RISCV_DEBUG` (Debug module reset deassert)
-   - Bit 18 = `RST_BUS_MCU_RISCV_CORE` (Core execution reset deassert)
-   The Linux kernel or `devmem` can write `0x00070001` directly to `0x07102124` without requiring any TrustZone SMC security APIs or kernel panics.
+1. **MCU CCU Register (`0x07102124`)**:
+   - Bit 0: `CLK_BUS_MCU_RISCV_CFG` (MCU CFG bus clock enable)
+   - Bit 16: `RST_BUS_MCU_RISCV_CFG` (CFG bus reset release)
+   - Bit 17: `RST_BUS_MCU_RISCV_DEBUG` (Debug module reset release)
+   - Bit 18: `RST_BUS_MCU_RISCV_CORE` (Core execution reset release)
 
 2. **Hardwired ITCM Reset Vector (`0x00000000`)**:
-   The XuanTie E907 RISC-V core's reset vector is hardwired to boot from the start of ITCM (**`0x00000000`**).
-   - Linux `remoteproc` copies the `.vectors` section and entry point (`startup.S` / `_enter`) into ITCM at `0x00000000`.
-   - Releasing bit 18 (`RST_BUS_MCU_RISCV_CORE`) immediately begins execution from ITCM `0x00000000`.
+   - The XuanTie E907 boots directly from ITCM base `0x00000000` when bit 18 is released.
+   - The mainline `sunxi_rproc` driver handles loading the ELF vectors into ITCM, un-gating clocks, and releasing reset cleanly.
 
 ---
 
-## 8. References, Presentations & Prior Art
+## 5. References & Prior Art
 
 1. **"Debugging Heterogeneous SoC Using OpenOCD"**
    - **Author**: Nishanth Menon (Texas Instruments Inc.)
-   - **Conference / Video**: Embedded Linux Conference / YouTube Presentation
-   - **Summary**: Key technical talk demonstrating how TI soft-wires OpenOCD directly to the SoC's CoreSight debug registers via `/dev/mem` (`--enable-dmem`) from the Linux environment, eliminating physical USB-JTAG cables for Cortex-M4F / Cortex-R5F cores.
+   - **Summary**: Technical presentation detailing self-hosted OpenOCD debugging over `/dev/mem` (`--enable-dmem`) on TI AM62x/AM64x SoCs.
 
-2. **OpenOCD Board Configuration Benchmark**:
-   - `board/ti_am625_swd_native.cfg` — Standard TI/BeagleBoard native OpenOCD configuration script using `adapter driver dmem` and `/dev/mem`.
+2. **OpenOCD `dmem` Driver**:
+   - `src/jtag/drivers/dmem.c` in upstream OpenOCD tree.
+   - `board/ti_am625_swd_native.cfg` — Reference native OpenOCD configuration script using `adapter driver dmem`.
 
-3. **BeagleBoard Forum Discussion — Minimal Cortex-R5 Example on BBAI-64**:
-   - **Link**: [https://forum.beagleboard.org/t/minimal-cortex-r5-example-on-bbai-64/32443](https://forum.beagleboard.org/t/minimal-cortex-r5-example-on-bbai-64/32443)
-   - **Summary**: Community discussion on troubleshooting co-processor power state (`target->coreid 0 powered down!`), demonstrating why `remoteproc` must power on/un-gate co-processor clocks before attaching OpenOCD over `dmem`.
-
-4. **RISC-V External Debug Support Specification**:
-   - **Version**: v0.13 / v1.0 (RISC-V International)
-   - **Details**: Standardizes Debug Module (DM) register interfaces (`dmcontrol`, `dmstatus`, `abstractcs`, `command`, `data0`).
+3. **RISC-V External Debug Support Specification**:
+   - Version 0.13 / 1.0 (RISC-V International).
+   - Standardizes Debug Module (DM) register definitions (`dmcontrol`, `dmstatus`, `abstractcs`, `command`, `data0`).
