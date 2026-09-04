@@ -46,16 +46,78 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
   - **DSP / RVP**: Packed SIMD & DSP extensions for accelerated digital signal processing and audio/sensor filtering.
   - **_zicsr**: Standard Control & Status Register manipulation.
 * **Pipeline & Speed**: 5-stage dual-issue in-order pipeline operating at **up to 200 MHz** (managed by `mcu_ccu` @ `0x07102000`). *(Note: The companion Cadence Tensilica HiFi4 Audio DSP on T527 operates at 600 MHz).*
-* **Memory Subsystem**:
-  - **64 KB ITCM** (Instruction Tightly-Coupled Memory @ `0x00000000`, 0 wait states)
-  - **64 KB DTCM** (Data Tightly-Coupled Memory @ `0x00080000`, 0 wait states)
-  - **256 KB Dedicated MCU SRAM** (`0x07100000`)
-  - **Shared System SRAM A2** (`0x00040000`–`0x00073FFF`)
 * **Toolchain / ABI**: Target `-march=rv32imafdc_zicsr_zifencei -mabi=ilp32d -mcmodel=medany`.
 
 ---
 
-## 2. Test Applications Suite (`apps/`)
+## 2. Memory Map of XuanTie E907 on Allwinner T527 (Linux Perspective)
+
+### 2.1 Memory Subsystem Mapping
+
+| Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address | Size | Latency & Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **Instruction TCM (ITCM)** | **`0x07110000`** | **`0x00000000`** | **64 KB** | Zero-wait-state instruction execution (`.text`, `.vectors`) |
+| **Data TCM (DTCM)** | **`0x07120000`** | **`0x00080000`** | **64 KB** | Zero-wait-state data, stack (`.stack`), and `.resource_table` |
+| **Shared System SRAM A2** | **`0x00040000`** | **`0x00040000`** | **208 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`) |
+| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; fast scratchpad / DSP / MCU shared memory |
+| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / system power-management SRAM |
+| **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc ASCII & binary log buffer (`/sys/.../trace0`) |
+| **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
+
+### 2.2 Control, Peripheral & Inter-Core Registers
+
+| Peripheral Block | Linux Host Physical Address | E907 RISC-V Address | Description & Hardware Usage |
+| :--- | :--- | :--- | :--- |
+| **MCU CCU & Core Control** | **`0x07102000`** | **`0x07102000`** | Co-processor clock gate (`0x07102000`), reset (`0x07102004`), boot entry vector register (`0x07102204`) |
+| **Main SoC CCU** | **`0x02001000`** | **`0x02001000`** | Root DSP/Co-processor clock gate (`0x02001c70`) |
+| **Hardware MSGBOX (Mailbox)** | **`0x03003000`** | **`0x03003000`** | Hardware doorbell FIFO: <br>• **Channel 0**: RISC-V $\rightarrow$ Linux (GIC SPI 147)<br>• **Channel 1**: Linux $\rightarrow$ RISC-V (PLIC IRQ 25) |
+| **Main PIO (GPIO B–K)** | **`0x02000000`** | **`0x02000000`** | 1:1 mapped GPIO pin control registers |
+| **UART0 (Debug Console)** | **`0x02500000`** | **`0x02500000`** | Shared serial console |
+| **UART2 (Co-processor Port)** | **`0x02500800`** | **`0x02500800`** | High-speed serial / RC receiver interface |
+| **SPI0 Controller** | **`0x04025000`** | **`0x04025000`** | Direct high-speed peripheral bus |
+
+### 2.3 Visual Memory Architecture Diagram
+
+```
++===================================================================================+
+|                     ALLWINNER T527 ADDRESS SPACE MAPPING                          |
++===================================================================================+
+
+  LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
+  ================================                  =============================
+  0x00040000 - 0x00073FFF [ 208 KB ] ─────────────> 0x00040000 - 0x00073FFF (SRAM A2)
+    (Shared System SRAM / testPing SPSC)              (Direct Identity Mapped)
+
+  0x07110000 - 0x0711FFFF [  64 KB ] ─────────────> 0x00000000 - 0x0000FFFF (ITCM)
+    (Mapped via devm_ioremap_wc)                      (Vector Table & .text execution)
+
+  0x07120000 - 0x0712FFFF [  64 KB ] ─────────────> 0x00080000 - 0x0008FFFF (DTCM)
+    (Mapped via devm_ioremap_wc)                      (Data, Stack & .resource_table)
+
+  0x07130000 - 0x0716FFFF [ 256 KB ] ─────────────> 0x07130000 - 0x0716FFFF (SRAM C)
+    (MCU Dedicated SRAM)                              (Direct Identity Mapped)
+
+  0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
+    (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
+
+  0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR Carveout)
+    (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Payload Buffers)
++===================================================================================+
+```
+
+### 2.4 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
+
+When Linux RemoteProc loads a firmware ELF:
+1. **ITCM Segments (`0x00000000`–`0x0000FFFF`)**:
+   `sunxi_rproc_da_to_va()` offsets device address by `0x07110000` and copies code directly into ITCM via `memcpy_toio()`.
+2. **DTCM Segments (`0x00080000`–`0x0008FFFF`)**:
+   `sunxi_rproc_da_to_va()` offsets device address by `0x07120000` and initializes `.data` and `.resource_table` via `memcpy_toio()`.
+3. **Shared SRAM A2 (`0x00040000`) & SRAM C (`0x07130000`)**:
+   1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address.
+
+---
+
+## 3. Test Applications Suite (`apps/`)
 
 Under `apps/`, seven progressive test applications validate core functionality, memory mapping, telemetry, exception handling, and three inter-processor communication paradigms:
 
@@ -218,7 +280,7 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 
 ---
 
-## 3. Communication Paradigm & IPC Architecture Comparison
+## 4. Communication Paradigm & IPC Architecture Comparison
 
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -234,11 +296,9 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 | **Throughput Bandwidth**| Moderate (~10–20 MB/s) | Moderate (~10–20 MB/s) | **High Bandwidth (>100 MB/s)** | High Packet Rate (Low Payload) |
 | **Target Use Case**     | Generic standard OS interop | Lightweight standard Linux RPMsg | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
 
-
-
 ---
 
-## 4. How to Build
+## 5. How to Build
 
 ### Build Everything (Firmware + Linux Tools)
 ```bash
@@ -265,7 +325,8 @@ make -C apps/testPingRpmsg/linux
 
 ---
 
-## 5. How to Deploy & Run on Target (Cubie A5E)
+## 6. How to Deploy & Run on Target (Cubie A5E)
+
 
 All compiled firmware ELF files are staged into `riscv-firmware/bin/` with distinct names:
 * `testBasic.elf`
