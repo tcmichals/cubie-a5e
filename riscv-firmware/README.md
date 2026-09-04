@@ -110,20 +110,24 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
     (Mapped via devm_ioremap_wc)                      (Vector Table & .text execution)
 
   0x07120000 - 0x0712FFFF [  64 KB ] ─────────────> 0x00080000 - 0x0008FFFF (DTCM)
-    (Mapped via devm_ioremap_wc)                      (Data, Stack & .resource_table)
+    (Mapped via devm_ioremap_wc)                      (Data, Stack, .resource_table, .dtcm_scratch)
 
-  0x07130000 - 0x0716FFFF [ 256 KB ] ─────────────> 0x07130000 - 0x0716FFFF (SRAM C)
-    (MCU Dedicated SRAM / testPing SPSC)              (Direct Identity Mapped)
+  0x07130000 - 0x07130FFF [   4 KB ] ─────────────> 0x07130000 - 0x07130FFF (.trace_buffer)
+    (RemoteProc Trace0 in on-chip SRAM)               (Direct Identity Mapped, Zero-Wait)
 
-  0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
-    (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
+  0x07131000 - 0x0716FFFF [ 252 KB ] ─────────────> 0x07131000 - 0x0716FFFF (.sram_c)
+    (MCU Dedicated SRAM / testPing SPSC)              (Direct Identity Mapped, Zero-Wait)
 
   0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR Carveout)
     (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Payload Buffers)
 +===================================================================================+
 ```
 
-### 2.4 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
+> [!TIP]
+> **Why Trace in SRAM avoids DDR Cache Hazards:**
+> When the trace buffer is in external DDR, the E907 core buffers writes in its private L1 Data Cache (write-back). Without PMP or explicit cache cleaning (`dcache_clean_range`), writes stay dirty in L1 and do not reach physical DDR DRAM, making them invisible to the Linux host. Moving `.trace_buffer` into on-chip `SRAM_C` (`0x07130000`) completely bypasses the L1 cache writeback issue because on-chip SRAM is mapped as zero-wait-state strongly-ordered memory.
+
+### 2.5 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
 
 When Linux RemoteProc loads a firmware ELF:
 1. **ITCM Segments (`0x00000000`–`0x0000FFFF`)**:
@@ -131,72 +135,103 @@ When Linux RemoteProc loads a firmware ELF:
 2. **DTCM Segments (`0x00080000`–`0x0008FFFF`)**:
    `sunxi_rproc_da_to_va()` offsets device address by `0x07120000` and initializes `.data` and `.resource_table` via `memcpy_toio()`.
 3. **Dedicated MCU SRAM C (`0x07130000`)**:
-   1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address.
-4. **DDR Carveouts (`0x48000000` & `0x48100000`)**:
+   1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address. The linker script places `.trace_buffer` at `0x07130000` and `.sram_c` at `0x07131000`.
+4. **DDR Carveouts (`0x48100000`)**:
    Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings.
 
 ---
 
 ## 3. Test Applications Suite (`apps/`)
 
-Under `apps/`, seven progressive test applications validate core functionality, memory mapping, telemetry, exception handling, and three inter-processor communication paradigms:
+## 3. Test Applications Suite (`apps/`) & Performance Roadmap
+
+The firmware test suite follows a progressive **"Walk -> Run"** architecture, starting with basic bring-up sanity and trace logging before advancing to high-throughput, low-latency IPC:
 
 ```text
 apps/
-├── testBasic/               # Minimal boot, ITCM execution, and Dedicated MCU SRAM C writes
-├── testBasicTrace0/         # RemoteProc resource table, ASCII startup banner & 1s periodic trace
-├── testStringBinaryTrace0/  # Combined ASCII text + packed binary telemetry with hardware FPU
-├── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
-├── testPing/                # Fast, low-jitter Direct Shared Memory (hal::SpscQueue) + Linux benchmark
-│   └── linux/               # ping_shm Linux host companion benchmark tool
-├── testPingRpmsg/           # Standard Linux VirtIO RPMsg (hal::Rpmsg) echo firmware + Linux benchmark
-│   └── linux/               # ping_rpmsg Linux host companion benchmark tool
-└── testDRAMMsg/             # Hybrid SRAM SPSC Queue + DDR DRAM Payload Buffers + PMP non-cacheable
-    └── linux/               # ping_dram Linux host companion benchmark tool
+├── [PHASE 1: WALK - BOOT, TRACE & TELEMETRY]
+│   ├── testBasic/               # Minimal boot, ITCM execution, linker-mapped SRAM C & DTCM sanity
+│   ├── testStringBinaryTrace0/  # SRAM trace0 (0x07130000), Mixed ASCII text + packed binary telemetry + FPU
+│   └── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
+│
+└── [PHASE 2: RUN - GETTING FASTER CODE & REAL-TIME IPC]
+    ├── testPing/                # Ultra-low-latency (~2us) Direct SRAM SPSC Queue + Linux benchmark
+    │   └── linux/               # ping_shm Linux host companion benchmark tool
+    ├── testDRAMMsg/             # High-throughput Hybrid SRAM Control + DDR DRAM DMA Payload Buffers
+    │   └── linux/               # ping_dram Linux host companion benchmark tool
+    └── testPingRpmsg/           # Standards-based Linux VirtIO RPMsg (hal::Rpmsg) + Mailbox Doorbells
+        └── linux/               # ping_rpmsg Linux host companion benchmark tool
 ```
 
 ---
 
 ### App 1: `testBasic`
-* **Purpose**: Basic bring-up and memory sanity verification.
+* **Purpose**: Basic bring-up, memory sanity, and linker-script layout validation.
 * **Functionality**:
   - Boots into ITCM `0x00000000`, configures stack in DTCM `0x00080000`.
-  - Writes magic signatures to Dedicated MCU SRAM C (`0x07130000`, `0x07131000`) and DTCM (`0x00081000`).
-  - Continuously increments counters so host Linux can verify life via `devmem 0x07130000 32`.
+  - Maps variables into dedicated linker sections (`.sram_c_loc1`, `.sram_c_loc2`, `.dtcm_scratch`) without hardcoded pointer macros.
+  - Continuously increments counters so host Linux can verify life via `devmem 0x07131000 32` or via `trace0`.
 
 ---
 
-### App 2: `testBasicTrace0`
-* **Purpose**: RemoteProc resource table and debugfs trace buffer verification.
+### App 2: `testStringBinaryTrace0` (Mixed String & Binary Telemetry)
+* **Purpose**: Demonstrates structured telemetry streaming over `trace0` combining formatted ASCII strings with packed binary structures and hardware FPU computation.
 * **Functionality**:
-  - Declares `.resource_table` section exporting `trace0` buffer in DDR carveout (`0x48000000`).
-  - Emits ASCII startup banner.
-  - Runs a 1-second periodic loop outputting heartbeat logs:
-    ```text
-    [E907 Trace0] Heartbeat #1 | Uptime: 1s | Status: OK | SRAM: 0x00000001
-    [E907 Trace0] Heartbeat #2 | Uptime: 2s | Status: OK | SRAM: 0x00000002
-    ```
-  - Read output on Linux target:
-    ```bash
-    cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
-    ```
-
----
-
-### App 3: `testStringBinaryTrace0`
-* **Purpose**: Demonstrates structured telemetry combining formatted ASCII strings with packed binary structures and hardware FPU computation.
-* **Functionality**:
+  - Declares `.resource_table` section exporting `trace0` buffer in Dedicated MCU SRAM C (`0x07130000`).
+  - Completely eliminates DDR caching issues—trace writes are immediately visible to Linux without software cache flushes.
   - Utilizes single-precision (`float`) and double-precision (`double`) hardware FPU math (sine wave computation).
-  - Populates a 32-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`0x07131000`).
-  - Interleaves formatted ASCII telemetry with decoded float values into `trace0`:
-    ```text
-    [TELM #1] Accel: (0.015, -0.008, 9.811) | FPU Sin: 0.0998 | SRAM: 0x54454C4D
-    [TELM #2] Accel: (0.030, -0.016, 9.816) | FPU Sin: 0.1986 | SRAM: 0x54454C4D
-    ```
+  - Populates a 36-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`.sram_c` @ `0x07131000`).
+  - Interleaves three data streams directly into the `trace0` buffer:
+    1. **ASCII String Log (`STRING:`)**: Human-readable log line with formatted float values.
+    2. **Framed Binary Struct (`BINARY:`)**: Raw packed binary struct (`TelemetryPacket`) for high-speed programmatic ingestion.
+    3. **Hex Dump (`HEXDUMP:`)**: Terminal-inspectable formatted hex dump of the binary packet.
+
+#### Standard RemoteProc Python Monitor (`apps/testStringBinaryTrace0/monitor_trace.py`)
+Run the standard debugfs monitor on the Linux host to stream and decode the mixed trace:
+
+```bash
+python3 apps/testStringBinaryTrace0/monitor_trace.py
+```
+
+Example decoded output:
+```text
+=== RemoteProc Trace0 Live Monitor (T527 E907) ===
+Target: /sys/kernel/debug/remoteproc/remoteproc0/trace0 | Packet Size: 36 bytes | Poll: 50ms
+
+[ASCII]   [TELM #1] Accel: (+0.015, -0.008, +9.811) | FPU Sin: +0.0998 | SRAM: 0x07131000
+[STRUCT]  Seq #1     | Up: 500   ms | Accel: (+0.015, -0.008, +9.811) | FPU Sin: +0.0998 | Csum: 0xA5A4
+[HEXDUMP]
+         0x00000000: 4D 4C 45 54 01 00 00 00 F4 01 00 00 7B 14 AE 3C |MLE.........{..<|
+         0x00000010: 2F DD 03 BC 25 1B 1D 41 84 FC 3B 21 00 00 00 00 |/...%..A..;!....|
+         0x00000020: A4 A5 AA 55                                     |...U            |
+```
+
+#### Lite / Fast Direct SRAM Python Monitor (`apps/testStringBinaryTrace0/fast_sram_telemetry.py`)
+For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` memory-maps the Dedicated MCU SRAM C (`0x07131000`) directly via `/dev/mem` for zero-copy polling:
+
+```bash
+sudo python3 apps/testStringBinaryTrace0/fast_sram_telemetry.py
+```
+
+Example high-rate output:
+```text
+=== Direct Zero-Copy SRAM Telemetry Reader (Lite/Fast) ===
+Device: /dev/mem | Physical Target: 0x07131000 | Packet Size: 36 bytes
+Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
+
+[SRAM-DIRECT] Seq #124   | Up: 62000 ms | Accel: (+1.860, -0.992, +9.814) | FPU Sin: +0.1542 | Rate: 1042.5 Hz
+[SRAM-DIRECT] Seq #125   | Up: 62500 ms | Accel: (+1.875, -1.000, +9.809) | FPU Sin: +0.0544 | Rate: 1040.1 Hz
+```
+
+> [!NOTE]
+> **Why `epoll` Cannot Be Used on `trace0` or `/dev/mem` (The Polling Trade-Off)**:
+> In the Linux kernel RemoteProc subsystem (`drivers/remoteproc/remoteproc_debugfs.c`), `trace0` is a simple debugfs file implementing only `.read`, `.open`, and `.llseek`. It has **no `.poll` method and no wait-queue**; attempting to register it with `epoll_ctl()` immediately returns `EPERM` (*Operation not permitted*). Likewise, direct SRAM mapping via `/dev/mem` provides raw physical memory with no event notification.
+>
+> Consequently, both `monitor_trace.py` and `fast_sram_telemetry.py` must **poll** in user-space, consuming host CPU cycles. This is the baseline in Phase 1 ("Walk"). Phase 2 ("Run") introduces hardware Mailbox doorbells and `/dev/rpmsg0` where the kernel's `virtio_rpmsg_bus` implements `.poll`, enabling true event-driven `epoll` with **0% idle CPU utilization**.
 
 ---
 
-### App 4: `testCrash`
+### App 3: `testCrash`
 * **Purpose**: Fault simulation, trap vector validation, and crash autopsy reporting via RemoteProc.
 * **Functionality**:
   - Configures `mtvec` to custom exception trap handler.
@@ -221,7 +256,7 @@ apps/
 
 ---
 
-### App 5: `testPing` (Fast Direct Shared Memory / Lite-libmetal Style)
+### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
   - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x07130000`).
@@ -238,7 +273,7 @@ sudo ./apps/testPing/linux/ping_shm -n 100000
 
 ---
 
-### App 6: `testPingRpmsg` (Standard Linux VirtIO RPMsg)
+### App 5: `testPingRpmsg` (Standard Linux VirtIO RPMsg)
 * **Purpose**: Standard Linux kernel RPMsg framework communication (`virtio_rpmsg_bus`).
 * **Functionality**:
   - RemoteProc resource table with `RSC_VDEV` (VirtIO ID 7) and 2 vrings (16 descriptors each).
@@ -255,7 +290,7 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 
 ---
 
-### App 7: `testDRAMMsg` (Hybrid SRAM SPSC Queue / DDR DRAM Payload Buffers)
+### App 6: `testDRAMMsg` (Hybrid SRAM SPSC Queue / DDR DRAM Payload Buffers)
 * **Purpose**: High-throughput message streaming moving payload buffers to DDR DRAM while keeping SPSC control structures in ultra-low-latency SRAM.
 * **Architecture**:
 ```text
@@ -314,21 +349,40 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 
 ## 5. How to Build & Deploy on Target (Cubie A5E)
 
-### Build Everything (Firmware + Linux Benchmark Tools)
+### Automated RootFS Installation During Build
+
+During a standard Buildroot build or via `push-riscv-firmware.sh`, all firmware ELFs, host benchmark binaries, and Python companion scripts are automatically packaged directly into the target root filesystem (`rootfs.ext4` / `rootfs.tar`):
+
+| Component | Target RootFS Location | Description |
+| :--- | :--- | :--- |
+| **Firmware Suite** | `/lib/firmware/*.elf` | All 8 compiled XuanTie E907 bare-metal ELFs |
+| **Default Active Firmware** | `/lib/firmware/riscv-firmware.elf` | Bootstrapped at boot by `/etc/init.d/S60riscv` |
+| **Host Python Trace Monitor** | `/usr/bin/monitor_trace.py` | RemoteProc `trace0` debugfs mixed ASCII/Binary decoder |
+| **Host Python Direct Poller** | `/usr/bin/fast_sram_telemetry.py` | Direct `/dev/mem` zero-copy physical SRAM reader (>1 kHz) |
+| **SRAM Ping Benchmark** | `/usr/bin/ping_shm` | Shared memory lock-free SPSC latency benchmark tool |
+| **RPMsg Ping Benchmark** | `/usr/bin/ping_rpmsg` | Standard Linux `/dev/rpmsg` round-trip test tool |
+| **DDR DRAM Ping Benchmark** | `/usr/bin/ping_dram` | Hybrid SRAM control / DDR payload throughput benchmark |
+
+---
+
+### Hot-Sync & Deploy Helper Script
+
+To recompile all firmware and push to rootfs-overlay, active buildroot directories, and optionally hot-deploy to a running board over SSH:
+
 ```bash
-make -C riscv-firmware
+# Sync locally to rootfs overlay and active buildroot target:
+./project-cubie-a5e/scripts/push-riscv-firmware.sh
+
+# Or hot-deploy directly over the network to the board IP:
+./project-cubie-a5e/scripts/push-riscv-firmware.sh 192.168.1.150 testStringBinaryTrace0.elf
 ```
 
-All compiled firmware ELFs are staged into `riscv-firmware/bin/` with distinct names:
-* `testBasic.elf`
-* `testBasicTrace0.elf`
-* `testStringBinaryTrace0.elf`
-* `testCrash.elf`
-* `testPing.elf`
-* `testPingRpmsg.elf`
-* `testDRAMMsg.elf`
+---
 
 ### Live Firmware Switching on Target (Cubie A5E)
+
+Once logged into the board (via serial or SSH), all tools and ELFs are in your system `$PATH`:
+
 ```bash
 # 1. Run Pure Shared SRAM Ping (testPing)
 echo stop > /sys/class/remoteproc/remoteproc0/state
@@ -347,4 +401,15 @@ echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 ping_rpmsg -n 5000
+
+# 4. Run Mixed String & Binary Telemetry (testStringBinaryTrace0)
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testStringBinaryTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# Stream and decode via standard RemoteProc debugfs trace:
+monitor_trace.py
+
+# Or high-rate zero-copy direct SRAM reader:
+fast_sram_telemetry.py
 ```

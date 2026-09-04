@@ -45,6 +45,7 @@ COMMON_SRCS_CPP ?= $(COMMON_DIR)/hal/trace.cpp \
                    $(COMMON_DIR)/hal/timer.cpp \
                    $(COMMON_DIR)/hal/crash.cpp \
                    $(COMMON_DIR)/hal/pmp.cpp \
+                   $(COMMON_DIR)/hal/msgbox.cpp \
                    $(COMMON_DIR)/hal/rpmsg.cpp
 
 

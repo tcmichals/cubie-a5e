@@ -70,7 +70,7 @@ For co-processor firmware development on the T527, developers have several clean
 
 ```bash
 # On your development host:
-scp cubie-a5e/riscv-firmware/bin/testBasicTrace0.elf root@cubie-a5e:/lib/firmware/testBasicTrace0.elf
+scp cubie-a5e/riscv-firmware/bin/testStringBinaryTrace0.elf root@cubie-a5e:/lib/firmware/testStringBinaryTrace0.elf
 ```
 
 ### Step 2: Boot the Co-Processor from Linux
@@ -79,7 +79,7 @@ scp cubie-a5e/riscv-firmware/bin/testBasicTrace0.elf root@cubie-a5e:/lib/firmwar
 # On the target (ARM Linux shell):
 
 # Point remoteproc to the firmware binary
-echo "testBasicTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo "testStringBinaryTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
 
 # Start execution
 echo start > /sys/class/remoteproc/remoteproc0/state

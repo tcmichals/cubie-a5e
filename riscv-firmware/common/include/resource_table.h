@@ -41,13 +41,6 @@ extern "C" {
 #define RPMSG_PING_EPT_ADDR            1024
 #define RPMSG_BUFFER_SIZE              512
 
-/*
- * Default Resource Table Configuration Macros (Overridable per Application)
- */
-#ifndef CONFIG_RPROC_TRACE0_DA
-#define CONFIG_RPROC_TRACE0_DA      0x48000000UL /* Reserved Memory / DDR Carveout */
-#endif
-
 #ifndef CONFIG_RPROC_TRACE0_LEN
 #define CONFIG_RPROC_TRACE0_LEN     4096UL       /* 4 KB Trace Buffer */
 #endif
@@ -55,6 +48,10 @@ extern "C" {
 #ifndef CONFIG_RPROC_TRACE0_NAME
 #define CONFIG_RPROC_TRACE0_NAME    "trace0"
 #endif
+
+extern char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
+extern char __trace_start[];
+extern char __trace_end[];
 
 /*
  * RemoteProc Resource Descriptors

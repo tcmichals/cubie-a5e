@@ -6,7 +6,7 @@
 #define SHM_PING_MAGIC      0x50494E47UL /* "PING" */
 #define SHM_PONG_MAGIC      0x504F4E47UL /* "PONG" */
 
-#define SHM_PING_SRAM_ADDR  0x07130000UL /* Dedicated MCU SRAM C base */
+#define SHM_PING_SRAM_ADDR  0x07131000UL /* Dedicated MCU SRAM C (offset past 4KB trace_buffer) */
 #define SHM_PING_SRAM_SIZE  0x1000UL     /* 4 KB */
 
 /*

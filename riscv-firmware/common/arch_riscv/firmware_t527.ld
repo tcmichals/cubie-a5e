@@ -88,6 +88,41 @@ SECTIONS
         _stack_top = .;
     } > DTCM
 
+    /* DTCM Scratchpad Memory */
+    .dtcm_scratch (NOLOAD) :
+    {
+        . = ALIGN(4);
+        __dtcm_scratch_start = .;
+        *(.dtcm_scratch)
+        *(.dtcm_scratch.*)
+        . = ALIGN(4);
+        __dtcm_scratch_end = .;
+    } > DTCM
+
+    /* RemoteProc Trace Buffer in Dedicated MCU SRAM C */
+    .trace_buffer (NOLOAD) :
+    {
+        . = ALIGN(4);
+        __trace_start = .;
+        KEEP(*(.trace_buffer))
+        KEEP(*(.trace_buffer.*))
+        . = ALIGN(4);
+        __trace_end = .;
+    } > SRAM_C
+
+    /* Dedicated MCU SRAM C Shared / Application / IPC Memory */
+    .sram_c (NOLOAD) :
+    {
+        . = ALIGN(4);
+        __sram_c_start = .;
+        *(.sram_c)
+        *(.sram_c.*)
+        *(.sram_c_loc1)
+        *(.sram_c_loc2)
+        . = ALIGN(4);
+        __sram_c_end = .;
+    } > SRAM_C
+
     /DISCARD/ :
     {
         *(.eh_frame)

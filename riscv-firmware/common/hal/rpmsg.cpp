@@ -1,4 +1,5 @@
 #include "rpmsg.hpp"
+#include "msgbox.hpp"
 #include <string.h>
 
 namespace hal {
@@ -79,6 +80,7 @@ namespace {
 }
 
 void Rpmsg::init(const struct rpmsg_resource_table *rsc) noexcept {
+    MsgBox::init();
     s_rsc = rsc;
     s_vdev_ready = false;
     s_ns_announced = false;
@@ -218,6 +220,9 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
     std::atomic_thread_fence(std::memory_order_release);
     s_rx_vq.used->idx = used_idx + 1;
     std::atomic_thread_fence(std::memory_order_seq_cst);
+
+    // Kick Linux host on MSGBOX Channel 0 (doorbell interrupt)
+    MsgBox::send(MsgBox::Channel::Channel0, 0);
 
     s_tx_count.fetch_add(1, std::memory_order_relaxed);
     return true;

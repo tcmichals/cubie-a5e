@@ -6,7 +6,7 @@
  * Demonstrates:
  * 1. Hardware Floating Point Unit (FPU) computation: single (F) and double (D) precision.
  * 2. Combining human-readable ASCII string formatting with packed binary telemetry packets.
- * 3. Streaming binary structures to shared SRAM A2 (0x00041000) for DMA/IPC ingestion.
+ * 3. Streaming binary structures to Dedicated MCU SRAM C (0x07131000) for zero-copy direct IPC/telemetry.
  * 4. Outputting rich telemetry frames to remoteproc trace0 buffer and S_UART0.
  */
 
@@ -15,7 +15,7 @@
 #include "hal/trace.hpp"
 #include "hal/timer.hpp"
 
-// Packed Binary Telemetry Frame (32 bytes)
+// Packed Binary Telemetry Frame (36 bytes)
 struct __attribute__((packed)) TelemetryPacket {
     uint32_t header_magic;  // 0x54454C4D ("TELM")
     uint32_t sequence;      // Packet sequence number
@@ -28,13 +28,16 @@ struct __attribute__((packed)) TelemetryPacket {
     uint16_t tail_magic;    // 0x55AA
 };
 
-#define SRAM_BINARY_PACKET_LOC ((volatile uint32_t *)0x07131000UL)
+// Shared binary packet placed by Linker Script in section .sram_c
+__attribute__((used, section(".sram_c"), aligned(4)))
+static volatile TelemetryPacket sram_telemetry_packet;
 
 static void write_packet_to_sram(const TelemetryPacket &pkt) {
     const uint32_t *src = reinterpret_cast<const uint32_t *>(&pkt);
+    volatile uint32_t *dst = reinterpret_cast<volatile uint32_t *>(&sram_telemetry_packet);
     size_t words = sizeof(TelemetryPacket) / sizeof(uint32_t);
     for (size_t i = 0; i < words; ++i) {
-        SRAM_BINARY_PACKET_LOC[i] = src[i];
+        dst[i] = src[i];
     }
 }
 
@@ -59,7 +62,8 @@ int main(void) {
     hal::Trace::puts("================================================================\n");
     hal::Trace::puts("  Allwinner T527 XuanTie E907 String & Binary Trace0 Test       \n");
     hal::Trace::puts("  Features: RV32IMAFDC Hardware FPU (Float & Double Precision)  \n");
-    hal::Trace::puts("  Binary Packet Size: 32 bytes (TELM frame @ SRAM 0x00041000)   \n");
+    hal::Trace::printf("  SRAM Binary Packet: %p (%u bytes in .sram_c)                  \n",
+                       (void *)&sram_telemetry_packet, (uint32_t)sizeof(TelemetryPacket));
     hal::Trace::puts("================================================================\n");
 
     TelemetryPacket pkt;
@@ -88,12 +92,21 @@ int main(void) {
         pkt.checksum     = static_cast<uint16_t>(seq ^ 0xA5A5);
         pkt.tail_magic   = 0x55AA;
 
-        // Write binary structure into Shared SRAM A2 (zero-copy IPC)
+        // 1. Mirror binary structure into Shared SRAM C (zero-copy IPC)
         write_packet_to_sram(pkt);
 
-        // Output formatted ASCII text log via hal::Trace::printf
-        hal::Trace::printf("[TELM #%u] Accel: (%.3f, %.3f, %.3f) | FPU Sin: %.4f | SRAM: 0x%08x\n",
-                           seq, ax, ay, az, static_cast<float>(s_val), SRAM_BINARY_PACKET_LOC[0]);
+        // 2. Output human-readable ASCII string frame to trace0
+        hal::Trace::printf("STRING: [TELM #%u] Accel: (%.3f, %.3f, %.3f) | FPU Sin: %.4f | SRAM: %p\n",
+                           seq, ax, ay, az, static_cast<float>(s_val), (void *)&sram_telemetry_packet);
+
+        // 3. Output raw binary packet directly into trace0 with framing tag
+        hal::Trace::puts("BINARY:");
+        hal::Trace::write(&pkt, sizeof(pkt));
+        hal::Trace::putc('\n');
+
+        // 4. Output human-readable hex dump of the binary struct into trace0
+        hal::Trace::puts("HEXDUMP:\n");
+        hal::Trace::dump_hex(&pkt, sizeof(pkt), 0);
 
         // Delay 500ms
         hal::Timer::delay_ms(500);

@@ -14,7 +14,7 @@ BIN_DIR="${FIRMWARE_DIR}/bin"
 
 # Target IP from argument or environment
 TARGET_IP="${1:-$TARGET_IP}"
-DEFAULT_FW="${2:-testBasicTrace0.elf}"
+DEFAULT_FW="${2:-testStringBinaryTrace0.elf}"
 
 echo "========================================================"
 echo "  Deploying All XuanTie E907 RISC-V Firmware ELFs"
@@ -38,42 +38,70 @@ for board in cubie_a5e; do
     cp -v "${BIN_DIR}"/*.elf "${overlay_dir}/"
     cp -v "${BIN_DIR}/${DEFAULT_FW}" "${overlay_dir}/riscv-firmware.elf"
     
-    # Copy host tools to rootfs overlay /usr/local/bin
-    tools_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/usr/local/bin"
-    mkdir -p "${tools_dir}"
-    if [ -f "${BIN_DIR}/ping_shm" ]; then
-        cp -v "${BIN_DIR}/ping_shm" "${tools_dir}/"
-    fi
-    if [ -f "${BIN_DIR}/ping_rpmsg" ]; then
-        cp -v "${BIN_DIR}/ping_rpmsg" "${tools_dir}/"
-    fi
-    if [ -f "${BIN_DIR}/ping_dram" ]; then
-        cp -v "${BIN_DIR}/ping_dram" "${tools_dir}/"
-    fi
+    # Copy host tools & python telemetry scripts to rootfs overlay /usr/bin and /usr/local/bin
+    for sub in usr/bin usr/local/bin; do
+        tools_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/${sub}"
+        mkdir -p "${tools_dir}"
+        [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${tools_dir}/"
+        [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${tools_dir}/"
+        [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${tools_dir}/"
+        if [ -f "${BIN_DIR}/monitor_trace.py" ]; then
+            cp -v "${BIN_DIR}/monitor_trace.py" "${tools_dir}/"
+            chmod +x "${tools_dir}/monitor_trace.py"
+        fi
+        if [ -f "${BIN_DIR}/fast_sram_telemetry.py" ]; then
+            cp -v "${BIN_DIR}/fast_sram_telemetry.py" "${tools_dir}/"
+            chmod +x "${tools_dir}/fast_sram_telemetry.py"
+        fi
+    done
 done
 
 # 3. Sync to active buildroot target directories if they exist
 echo "[3/4] Syncing to active buildroot targets..."
 for bld in bld.a5e; do
     target_fw="${WORKSPACE_ROOT}/${bld}/target/lib/firmware"
-    target_bin="${WORKSPACE_ROOT}/${bld}/target/usr/local/bin"
+    target_bin="${WORKSPACE_ROOT}/${bld}/target/usr/bin"
+    target_local_bin="${WORKSPACE_ROOT}/${bld}/target/usr/local/bin"
     if [ -d "${target_fw}" ]; then
         cp -v "${BIN_DIR}"/*.elf "${target_fw}/"
         cp -v "${BIN_DIR}/${DEFAULT_FW}" "${target_fw}/riscv-firmware.elf"
     fi
-    if [ -d "${target_bin}" ]; then
-        [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${target_bin}/"
-        [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${target_bin}/"
-        [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${target_bin}/"
-    fi
+    for tbin in "${target_bin}" "${target_local_bin}"; do
+        if [ -d "${tbin}" ]; then
+            [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${tbin}/"
+            [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${tbin}/"
+            [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${tbin}/"
+            if [ -f "${BIN_DIR}/monitor_trace.py" ]; then
+                cp -v "${BIN_DIR}/monitor_trace.py" "${tbin}/"
+                chmod +x "${tbin}/monitor_trace.py"
+            fi
+            if [ -f "${BIN_DIR}/fast_sram_telemetry.py" ]; then
+                cp -v "${BIN_DIR}/fast_sram_telemetry.py" "${tbin}/"
+                chmod +x "${tbin}/fast_sram_telemetry.py"
+            fi
+        fi
+    done
 done
 
 # 4. Push live to running target board via SSH/SCP if IP is supplied
 if [ -n "${TARGET_IP}" ]; then
     echo "[4/4] Deploying live to target board at ${TARGET_IP}..."
-    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${TARGET_IP}" "mkdir -p /lib/firmware /usr/local/bin"
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${TARGET_IP}" "mkdir -p /lib/firmware /usr/bin /usr/local/bin"
     scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${BIN_DIR}"/*.elf "root@${TARGET_IP}:/lib/firmware/"
-    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${BIN_DIR}/ping_shm" "${BIN_DIR}/ping_rpmsg" "${BIN_DIR}/ping_dram" "root@${TARGET_IP}:/usr/local/bin/" 2>/dev/null || true
+    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+        "${BIN_DIR}/ping_shm" \
+        "${BIN_DIR}/ping_rpmsg" \
+        "${BIN_DIR}/ping_dram" \
+        "${BIN_DIR}/monitor_trace.py" \
+        "${BIN_DIR}/fast_sram_telemetry.py" \
+        "root@${TARGET_IP}:/usr/bin/" 2>/dev/null || true
+    scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+        "${BIN_DIR}/ping_shm" \
+        "${BIN_DIR}/ping_rpmsg" \
+        "${BIN_DIR}/ping_dram" \
+        "${BIN_DIR}/monitor_trace.py" \
+        "${BIN_DIR}/fast_sram_telemetry.py" \
+        "root@${TARGET_IP}:/usr/local/bin/" 2>/dev/null || true
 
     
     echo "Restarting remoteproc on target with default firmware: ${DEFAULT_FW}..."

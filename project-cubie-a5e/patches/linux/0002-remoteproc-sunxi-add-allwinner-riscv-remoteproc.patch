@@ -2,11 +2,21 @@ From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
+Add remoteproc driver for the XuanTie E906/E907 RISC-V remote processors
+found on Allwinner A523, A527, and T527 SoCs.
+
+The driver integrates with the Common Clock Framework (CCF) and Reset
+Framework to manage co-processor clocks (bus, core, sram) and resets
+(cfg, core, sram), programs the core boot vector (STA_ADD_REG), maps
+internal TCM and dedicated SRAM windows, and connects with hardware
+mailboxes (CPUX_MSGBOX) for standard VirtIO RPMsg IPC.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   9 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 662 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 672 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 716 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 726 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -35,7 +45,7 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,662 @@
+@@ -0,0 +1,716 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -82,8 +92,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct clk *clk_parent;
 +	struct clk *clk_bus;
 +	struct clk *clk_core;
++	struct clk *clk_sram;
 +	struct reset_control *rst_cfg;
 +	struct reset_control *rst_core;
++	struct reset_control *rst_sram;
 +
 +	/* Hardware Memory Windows (TCM, Dedicated SRAM & Shared System SRAM) */
 +	void __iomem *cfg_va;
@@ -117,14 +129,16 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	bool has_reserved_mem;
 +	struct mbox_client cl;
 +	struct mbox_chan *tx_chan;
++	struct mbox_chan *rx_chan;
 +};
 +
 +static void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)
 +{
 +	struct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);
 +
-+	/* Signal remoteproc virtqueue on incoming mailbox doorbell */
++	/* Signal remoteproc virtqueues on incoming mailbox doorbell */
 +	rproc_vq_interrupt(priv->rproc, 0);
++	rproc_vq_interrupt(priv->rproc, 1);
 +}
 +
 +static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
@@ -143,12 +157,20 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	struct sunxi_rproc *priv = rproc->priv;
 +	int ret;
 +
-+	/* 1. Deassert configuration bus reset if separate from core reset */
-+	if (priv->rst_cfg && priv->rst_core) {
++	/* 1. Deassert configuration & SRAM bus resets */
++	if (priv->rst_cfg) {
 +		ret = reset_control_deassert(priv->rst_cfg);
 +		if (ret) {
 +			dev_err(priv->dev, "failed to deassert cfg reset: %d\n", ret);
 +			return ret;
++		}
++	}
++
++	if (priv->rst_sram) {
++		ret = reset_control_deassert(priv->rst_sram);
++		if (ret) {
++			dev_err(priv->dev, "failed to deassert sram reset: %d\n", ret);
++			goto err_assert_cfg;
 +		}
 +	}
 +
@@ -157,11 +179,11 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		ret = clk_prepare_enable(priv->clk_parent);
 +		if (ret) {
 +			dev_err(priv->dev, "failed to enable parent clock: %d\n", ret);
-+			goto err_assert_cfg;
++			goto err_assert_sram;
 +		}
 +	}
 +
-+	/* 3. Enable interconnect bus clock (allows host to access TCM/SRAM) */
++	/* 3. Enable interconnect bus and SRAM clocks */
 +	if (priv->clk_bus) {
 +		ret = clk_prepare_enable(priv->clk_bus);
 +		if (ret) {
@@ -170,12 +192,20 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
++	if (priv->clk_sram) {
++		ret = clk_prepare_enable(priv->clk_sram);
++		if (ret) {
++			dev_err(priv->dev, "failed to enable sram clock: %d\n", ret);
++			goto err_disable_bus;
++		}
++	}
++
 +	/* 4. Enable core clock */
 +	if (priv->clk_core) {
 +		ret = clk_prepare_enable(priv->clk_core);
 +		if (ret) {
 +			dev_err(priv->dev, "failed to enable core clock: %d\n", ret);
-+			goto err_disable_bus;
++			goto err_disable_sram_clk;
 +		}
 +	}
 +
@@ -204,14 +234,20 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	return 0;
 +
++err_disable_sram_clk:
++	if (priv->clk_sram)
++		clk_disable_unprepare(priv->clk_sram);
 +err_disable_bus:
 +	if (priv->clk_bus)
 +		clk_disable_unprepare(priv->clk_bus);
 +err_disable_parent:
 +	if (priv->clk_parent)
 +		clk_disable_unprepare(priv->clk_parent);
++err_assert_sram:
++	if (priv->rst_sram)
++		reset_control_assert(priv->rst_sram);
 +err_assert_cfg:
-+	if (priv->rst_cfg && priv->rst_core)
++	if (priv->rst_cfg)
 +		reset_control_assert(priv->rst_cfg);
 +	return ret;
 +}
@@ -223,11 +259,12 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	/* Symmetrical CCU unwinding */
 +	if (priv->rst_core)
 +		reset_control_assert(priv->rst_core);
-+	else if (priv->rst_cfg)
-+		reset_control_assert(priv->rst_cfg);
 +
 +	if (priv->clk_core)
 +		clk_disable_unprepare(priv->clk_core);
++
++	if (priv->clk_sram)
++		clk_disable_unprepare(priv->clk_sram);
 +
 +	if (priv->clk_bus)
 +		clk_disable_unprepare(priv->clk_bus);
@@ -235,7 +272,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (priv->clk_parent)
 +		clk_disable_unprepare(priv->clk_parent);
 +
-+	if (priv->rst_cfg && priv->rst_core)
++	if (priv->rst_sram)
++		reset_control_assert(priv->rst_sram);
++
++	if (priv->rst_cfg)
 +		reset_control_assert(priv->rst_cfg);
 +
 +	return 0;
@@ -277,15 +317,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		}
 +	}
 +
-+	/*
-+	 * 3. Assert core control bit 0 in CFG register (0x07130000).
-+	 * On Allwinner T527/A523 RISC-V MCU, bit 0 enables core execution.
-+	 */
-+	if (priv->cfg_va) {
-+		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
-+		writel(val | BIT(0), priv->cfg_va + E906_CTRL_REG);
-+	}
-+
 +	return 0;
 +}
 +
@@ -299,11 +330,6 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		reset_control_assert(priv->rst_core);
 +	else if (priv->rst_cfg)
 +		reset_control_assert(priv->rst_cfg);
-+
-+	if (priv->cfg_va) {
-+		u32 val = readl(priv->cfg_va + E906_CTRL_REG);
-+		writel(val & ~BIT(0), priv->cfg_va + E906_CTRL_REG);
-+	}
 +
 +	return 0;
 +}
@@ -335,7 +361,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	}
 +
 +	if (priv->r_sram_va) {
-+		if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
++		if (da >= priv->r_sram_phys &&
++		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
@@ -403,7 +430,9 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +static int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 +{
-+	int ret = rproc_elf_load_rsc_table(rproc, fw);
++	int ret;
++
++	ret = rproc_elf_load_rsc_table(rproc, fw);
 +	if (ret == -EINVAL) {
 +		dev_dbg(rproc->dev.parent, "no resource table found in ELF\n");
 +		return 0;
@@ -492,18 +521,25 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			dev_warn(dev, "failed to map 'dram' resource\n");
 +	} else if (dev->of_node) {
 +		int idx = of_property_match_string(dev->of_node, "memory-region-names", "vram");
++
 +		if (idx < 0)
 +			idx = of_property_match_string(dev->of_node, "memory-region-names", "dram");
 +		if (idx >= 0) {
-+			struct device_node *rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
++			struct device_node *rmem_np;
++
++			rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
 +			if (rmem_np) {
 +				struct resource r;
++
 +				if (of_address_to_resource(rmem_np, 0, &r) == 0) {
 +					priv->dram_phys = r.start;
 +					priv->dram_size = resource_size(&r);
-+					priv->dram_va = devm_memremap(dev, r.start, resource_size(&r), MEMREMAP_WB);
++					priv->dram_va = devm_memremap(dev, r.start,
++								      resource_size(&r),
++								      MEMREMAP_WB);
 +					if (!priv->dram_va)
-+						priv->dram_va = devm_ioremap_wc(dev, r.start, resource_size(&r));
++						priv->dram_va = devm_ioremap_wc(dev, r.start,
++										resource_size(&r));
 +					dev_info(dev, "mapped DT vram reserved-memory %pa+%zu to %p\n",
 +						 &priv->dram_phys, priv->dram_size, priv->dram_va);
 +				}
@@ -542,12 +578,16 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +		rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
 +		if (rmem_np) {
 +			struct resource r;
++
 +			if (of_address_to_resource(rmem_np, 0, &r) == 0) {
 +				priv->trace_phys = r.start;
 +				priv->trace_size = resource_size(&r);
-+				priv->trace_va = devm_memremap(dev, r.start, resource_size(&r), MEMREMAP_WB);
++				priv->trace_va = devm_memremap(dev, r.start,
++							       resource_size(&r),
++							       MEMREMAP_WB);
 +				if (!priv->trace_va)
-+					priv->trace_va = devm_ioremap_wc(dev, r.start, resource_size(&r));
++					priv->trace_va = devm_ioremap_wc(dev, r.start,
++									 resource_size(&r));
 +				dev_info(dev, "mapped DT trace reserved-memory %pa+%zu to %p\n",
 +					 &priv->trace_phys, priv->trace_size, priv->trace_va);
 +			}
@@ -583,7 +623,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	/* 1. Common Clock Framework (CCF) Clocks */
 +	priv->clk_parent = devm_clk_get_optional(dev, "parent");
 +	if (IS_ERR(priv->clk_parent))
-+		return dev_err_probe(dev, PTR_ERR(priv->clk_parent), "failed to get 'parent' clock\n");
++		return dev_err_probe(dev, PTR_ERR(priv->clk_parent),
++				     "failed to get 'parent' clock\n");
 +
 +	priv->clk_bus = devm_clk_get_optional(dev, "bus");
 +	if (IS_ERR(priv->clk_bus))
@@ -592,6 +633,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	priv->clk_core = devm_clk_get_optional(dev, "core");
 +	if (IS_ERR(priv->clk_core))
 +		return dev_err_probe(dev, PTR_ERR(priv->clk_core), "failed to get 'core' clock\n");
++
++	priv->clk_sram = devm_clk_get_optional(dev, "sram");
++	if (IS_ERR(priv->clk_sram))
++		return dev_err_probe(dev, PTR_ERR(priv->clk_sram), "failed to get 'sram' clock\n");
 +
 +	/* 2. Resets */
 +	priv->rst_core = devm_reset_control_get_optional_exclusive(dev, "core");
@@ -602,6 +647,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	if (IS_ERR(priv->rst_cfg))
 +		return dev_err_probe(dev, PTR_ERR(priv->rst_cfg), "failed to get 'cfg' reset\n");
 +
++	priv->rst_sram = devm_reset_control_get_optional_exclusive(dev, "sram");
++	if (IS_ERR(priv->rst_sram))
++		return dev_err_probe(dev, PTR_ERR(priv->rst_sram), "failed to get 'sram' reset\n");
++
 +	/* 3. Memory Windows (TCM, SRAM, CFG) */
 +	ret = sunxi_rproc_register_mem(pdev, rproc);
 +	if (ret)
@@ -609,11 +658,10 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	/* 4. Optional Reserved Memory Carveouts (for VirtIO/RPMsg DMA) */
 +	ret = of_reserved_mem_device_init(dev);
-+	if (ret == 0) {
++	if (ret == 0)
 +		priv->has_reserved_mem = true;
-+	} else {
++	else
 +		dev_dbg(dev, "no dedicated DMA pool assigned from reserved-memory (%d)\n", ret);
-+	}
 +
 +	/* 5. Optional Hardware Crash Notification IRQ */
 +	crash_irq = platform_get_irq_byname_optional(pdev, "crash");
@@ -638,8 +686,20 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +			ret = -EPROBE_DEFER;
 +			goto err_mem_release;
 +		}
-+		dev_info(dev, "no mailbox channel configured; running standalone mode\n");
++		dev_info(dev, "no tx mailbox channel configured; running standalone mode\n");
 +		priv->tx_chan = NULL;
++	}
++
++	if (priv->tx_chan) {
++		priv->rx_chan = mbox_request_channel_byname(&priv->cl, "rx");
++		if (IS_ERR(priv->rx_chan)) {
++			if (PTR_ERR(priv->rx_chan) == -EPROBE_DEFER) {
++				ret = -EPROBE_DEFER;
++				goto err_mbox_release;
++			}
++			dev_info(dev, "no rx mailbox channel configured\n");
++			priv->rx_chan = NULL;
++		}
 +	}
 +
 +	platform_set_drvdata(pdev, rproc);
@@ -654,6 +714,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +	return 0;
 +
 +err_mbox_release:
++	if (priv->rx_chan)
++		mbox_free_channel(priv->rx_chan);
 +	if (priv->tx_chan)
 +		mbox_free_channel(priv->tx_chan);
 +err_mem_release:
@@ -669,6 +731,8 @@ Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 +
 +	rproc_del(rproc);
 +
++	if (priv->rx_chan)
++		mbox_free_channel(priv->rx_chan);
 +	if (priv->tx_chan)
 +		mbox_free_channel(priv->tx_chan);
 +

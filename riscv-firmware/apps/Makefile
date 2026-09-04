@@ -1,6 +1,6 @@
 # Top-level Apps Makefile for XuanTie E907 (Allwinner T527)
 
-APPS = testBasic testBasicTrace0 testStringBinaryTrace0 testCrash testPing testPingRpmsg testDRAMMsg exampleRiscv
+APPS = testBasic testStringBinaryTrace0 testCrash testPing testPingRpmsg testDRAMMsg exampleRiscv
 HOST_APPS = testPing/linux testPingRpmsg/linux testDRAMMsg/linux
 BIN_DIR = ../bin
 
@@ -18,7 +18,7 @@ $(HOST_APPS):
 	@echo "================================================================"
 	@echo " Building Host Linux App: $@ "
 	@echo "================================================================"
-	$(MAKE) -C $@
+	$(MAKE) -C $@ $(if $(HOST_CXX),CXX="$(HOST_CXX)")
 
 stage-bin: $(APPS) host-tools
 	@mkdir -p $(BIN_DIR)
@@ -36,6 +36,14 @@ stage-bin: $(APPS) host-tools
 	fi
 	@if [ -f testDRAMMsg/linux/ping_dram ]; then \
 		cp -v testDRAMMsg/linux/ping_dram $(BIN_DIR)/; \
+	fi
+	@if [ -f testStringBinaryTrace0/monitor_trace.py ]; then \
+		cp -v testStringBinaryTrace0/monitor_trace.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/monitor_trace.py; \
+	fi
+	@if [ -f testStringBinaryTrace0/fast_sram_telemetry.py ]; then \
+		cp -v testStringBinaryTrace0/fast_sram_telemetry.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/fast_sram_telemetry.py; \
 	fi
 	@echo "================================================================"
 	@echo " All RISC-V Firmware ELFs staged in $(BIN_DIR):"

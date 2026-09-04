@@ -161,6 +161,11 @@
             reg = <0x0 0x07280000 0x0 0x40000>;
             no-map;
         };
+
+        rproc_vdev: vdev@48000000 {
+            reg = <0x0 0x48000000 0x0 0x00100000>;
+            no-map;
+        };
     };
 };
 
@@ -170,6 +175,7 @@
 
 &rproc {
     firmware-name = "riscv-firmware.elf";
+    memory-region = <&rproc_vdev>;
     status = "okay";
 };
 

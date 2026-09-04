@@ -6,6 +6,12 @@
 
 #include "include/resource_table.h"
 
+/*
+ * Trace buffer placed in .trace_buffer section (mapped to on-chip SRAM via linker script)
+ */
+__attribute__((used, section(".trace_buffer"), aligned(4)))
+char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
+
 #ifdef CONFIG_RPROC_RPMSG
 
 __attribute__((used, section(".resource_table"), aligned(4)))
@@ -19,8 +25,8 @@ const struct rpmsg_resource_table global_resource_table = {
     },
     .trace = {
         .type     = RSC_TRACE,
-        .da       = CONFIG_RPROC_TRACE0_DA,
-        .len      = CONFIG_RPROC_TRACE0_LEN,
+        .da       = (uint32_t)&g_rproc_trace_buffer[0],
+        .len      = sizeof(g_rproc_trace_buffer),
         .reserved = 0,
         .name     = CONFIG_RPROC_TRACE0_NAME,
     },
@@ -65,8 +71,8 @@ const struct standard_resource_table global_resource_table = {
     },
     .trace = {
         .type     = RSC_TRACE,
-        .da       = CONFIG_RPROC_TRACE0_DA,
-        .len      = CONFIG_RPROC_TRACE0_LEN,
+        .da       = (uint32_t)&g_rproc_trace_buffer[0],
+        .len      = sizeof(g_rproc_trace_buffer),
         .reserved = 0,
         .name     = CONFIG_RPROC_TRACE0_NAME,
     },

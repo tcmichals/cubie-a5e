@@ -270,7 +270,6 @@ Under [`riscv-firmware/apps/`](file:///home/tcmichals/projects/cubie/cubie-a5e/r
 ```text
 apps/
 ├── testBasic/               # Minimal boot, ITCM execution, and Dedicated MCU SRAM C writes
-├── testBasicTrace0/         # RemoteProc resource table, ASCII startup banner & 1s periodic trace
 ├── testStringBinaryTrace0/  # Combined ASCII text + packed binary telemetry with hardware FPU
 ├── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
 ├── testPing/                # Fast, low-jitter Direct Shared Memory (hal::SpscQueue) + Linux benchmark
@@ -284,12 +283,12 @@ apps/
 ### Application Details
 
 1. **`testBasic`**: Boots into ITCM `0x00000000` and continuously writes magic counters to Dedicated MCU SRAM C (`0x07130000`, `0x07131000`) and DTCM (`0x00081000`) for sanity testing via `devmem`.
-2. **`testBasicTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in DDR carveout (`0x48000000`) and emits 1 Hz heartbeat logs viewable via Linux debugfs.
-3. **`testStringBinaryTrace0`**: Combines double-precision hardware FPU math (sine wave computation) with a 32-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`0x07131000`) and formatted ASCII log output in `trace0`.
-4. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to MCU SRAM C (`0x07130000`).
-5. **`testPing`**: Ultra-low-latency direct shared MCU SRAM C SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
-6. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg`. Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg`.
-7. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state MCU SRAM C SPSC control queues (`0x07130000`) with a 1 MB DDR DRAM payload buffer pool (`0x48100000`) configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
+2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in Dedicated MCU SRAM C (`0x07130000`). Combines double-precision hardware FPU math (sine wave computation) with a 36-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`0x07131000`) and formatted ASCII log output in `trace0`.
+   > **Note on `epoll` & Polling**: Upstream Linux debugfs `trace0` (`drivers/remoteproc/remoteproc_debugfs.c`) and `/dev/mem` do **not** implement `.poll` or attach a wait queue; calling `epoll_ctl()` returns `EPERM`. Thus, companion scripts (`monitor_trace.py`, `fast_sram_telemetry.py`) poll in a loop. Phase 2 introduces hardware Mailbox doorbells and `/dev/rpmsg0` with full `epoll` support for 0% host CPU wait.
+3. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to MCU SRAM C (`0x07130000`).
+4. **`testPing`**: Ultra-low-latency direct shared MCU SRAM C SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
+5. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg`. Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg`.
+6. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state MCU SRAM C SPSC control queues (`0x07130000`) with a 1 MB DDR DRAM payload buffer pool (`0x48100000`) configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
 
 ---
 
@@ -323,7 +322,6 @@ make -C riscv-firmware
 
 All compiled firmware ELFs are staged into `riscv-firmware/bin/` with distinct names:
 * `testBasic.elf`
-* `testBasicTrace0.elf`
 * `testStringBinaryTrace0.elf`
 * `testCrash.elf`
 * `testPing.elf`

@@ -5,13 +5,15 @@
 #define S_UART0_THR         (*(volatile uint32_t *)(S_UART0_BASE_ADDR + 0x00))
 #define S_UART0_LSR         (*(volatile uint32_t *)(S_UART0_BASE_ADDR + 0x14))
 
+extern "C" char g_rproc_trace_buffer[];
+
 namespace hal {
 
 volatile uint32_t Trace::s_pos = 0;
 bool Trace::s_serial_mirror = true;
 
 static char *get_trace_buffer() noexcept {
-    return reinterpret_cast<char *>(static_cast<uintptr_t>(CONFIG_RPROC_TRACE0_DA));
+    return g_rproc_trace_buffer;
 }
 
 void Trace::init(bool enable_serial_mirror) noexcept {

@@ -2,16 +2,23 @@ From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
 Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 
+Add the hardware mailbox (CPUX_MSGBOX) node and the XuanTie RISC-V
+remoteproc node for Allwinner A523/A527 SoCs. Connect the remoteproc
+node to the MCU CCU clocks (bus, core, sram) and resets (cfg, core,
+sram) to support remote processor lifecycle management and RPMsg IPC.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1086,5 +1086,28 @@
+@@ -1086,5 +1086,36 @@
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
  		};
 +		msgbox: mailbox@3003000 {
 +			compatible = "allwinner,sun55i-a523-msgbox",
-+				     "allwinner,sun8i-a83t-msgbox";
++				     "allwinner,sun8i-a83t-msgbox",
++				     "allwinner,sun6i-a31-msgbox";
 +			reg = <0x03003000 0x1000>;
 +			clocks = <&ccu CLK_BUS_MSGBOX>;
 +			resets = <&ccu RST_BUS_MSGBOX>;
@@ -19,15 +26,21 @@ Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 +			#mbox-cells = <1>;
 +		};
 +
-+		rproc: remoteproc@7102000 {
++		rproc: remoteproc@7130000 {
 +			compatible = "allwinner,sun55i-a523-rproc",
-+				     "allwinner,sun55i-a527-rproc",
-+				     "allwinner,sunxi-rproc";
-+			reg = <0x02001000 0x1000>,
-+			      <0x07102000 0x1000>,
++				     "allwinner,sun55i-a527-rproc";
++			reg = <0x07130000 0x1000>,
 +			      <0x07280000 0x40000>,
 +			      <0x00020000 0x20000>;
-+			reg-names = "main_ccu", "ccu", "r_sram", "sram";
++			reg-names = "cfg", "r_sram", "sram";
++			clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
++				 <&mcu_ccu CLK_MCU_RISCV>,
++				 <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
++			clock-names = "bus", "core", "sram";
++			resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
++				 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
++				 <&mcu_ccu RST_BUS_MCU_PUBSRAM>;
++			reset-names = "cfg", "core", "sram";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
 +			status = "disabled";
