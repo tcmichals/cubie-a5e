@@ -42,8 +42,7 @@ For co-processor firmware development on the T527, developers have several clean
  │              Shared Memory & Hardware Interconnect          │
  │                                                             │
  │  • RemoteProc Trace0 Buffer (DDR Carveout @ 0x48000000, 4KB) │
- │  • Shared SRAM A2 Ring Buffers (0x00040000 - 0x00073FFF)    │
- │  • Dedicated MCU SRAM C (0x07130000, 256KB)                 │
+ │  • Dedicated MCU SRAM C Ring Buffers (0x07130000, 256KB)    │
  │  • Hardware Mailbox Doorbell IRQs (0x03003000)              │
  └─────────────────────────────┬───────────────────────────────┘
                                │
@@ -59,7 +58,7 @@ For co-processor firmware development on the T527, developers have several clean
 
 1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0` (phys `0x48000000`).
 2. **Dedicated Hardware UART (`S_UART0`)**: Low-latency, non-blocking serial console at `0x07080000` (115200 baud).
-3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Shared SRAM A2 (`0x00040000`).
+3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Dedicated MCU SRAM C (`0x07130000`).
 4. **Hardware Mailbox Doorbell IRQ & RPMsg**: Sub-microsecond inter-processor communication.
 5. **Physical Hardware JTAG Probe**: Standard JTAG header connection with external debug probes (CK-Link, J-Link, FTDI) for interactive hardware halting/stepping.
 
@@ -157,7 +156,7 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 | Stop Firmware | `echo stop > /sys/class/remoteproc/remoteproc0/state` |
 | Read RemoteProc Trace | `cat /sys/kernel/debug/remoteproc/remoteproc0/trace0` |
 | Serial Diagnostics | Dedicated `S_UART0` @ `0x07080000` (115200 baud) |
-| Shared Memory Ring | SRAM A2 (`0x00040000` - `0x00073FFF`) |
+| Shared Memory Ring | Dedicated MCU SRAM C (`0x07130000`) |
 | Doorbell IPC | Hardware Mailbox @ `0x03003000` |
 | Interactive Debugging | External JTAG probe + OpenOCD on host |
 
