@@ -27,8 +27,9 @@ This repository contains bare-metal firmware, runtime drivers, test applications
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
-|  |  - 256 KB Dedicated MCU SRAM C (0x07130000) [Zero-Wait-State Low-Latency Control]  |  |
+|  |  - 128 KB Shared PubSRAM C (0x00020000) [Default RemoteProc Firmware & Vector]    |  |
+|  |  - 256 KB Dedicated High SRAM (0x3ffc0000 Core / 0x07280000 Host) [Zero-Wait]    |  |
+|  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
 |  |  - 4 KB DDR RemoteProc Trace Carveout (0x48000000)                                |  |
 |  |  - 1 MB DDR DMA Payload Pool (0x48100000)                                         |  |
 |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
@@ -57,10 +58,9 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 
 | Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address | Size | Latency & Usage |
 | :--- | :--- | :--- | :--- | :--- |
-| **Instruction TCM (ITCM)** | **`0x07110000`** | **`0x00000000`** | **64 KB** | Zero-wait-state instruction execution (`.text`, `.vectors`) |
-| **Data TCM (DTCM)** | **`0x07120000`** | **`0x00080000`** | **64 KB** | Zero-wait-state data, stack (`.stack`), and `.resource_table` |
-| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`, `testDRAMMsg`) |
-| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / DSP scratchpad SRAM |
+| **Shared PubSRAM C** | **`0x00020000`** | **`0x00020000`** | **128 KB** | 1:1 Identity mapped; default boot memory (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`) |
+| **Dedicated MCU SRAM (R_SRAM)** | **`0x07280000`** | **`0x3ffc0000`** | **256 KB** | Zero-wait-state high-performance dedicated SRAM space 0 (3x faster execution) |
+| **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector), `0x0248` (`WORK_MODE_REG`) |
 | **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc ASCII & binary log buffer (`/sys/.../trace0`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
 
@@ -69,28 +69,31 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 > **SRAM A2 (`0x00040000`–`0x00073FFF`) is strictly reserved for Secure World / TrustZone and must NEVER be mapped or written to by RISC-V firmware or Linux RemoteProc:**
 > 1. **ARM TrustZone Secure World (TF-A / BL31 / PSCI)**: On Allwinner ARM64 SoCs, `SRAM A2` is the **Secure SRAM (CPUS SRAM)**. ARM Trusted Firmware (TF-A BL31) runs at Secure EL3 and places its secure monitor runtime data, secure stacks, and **PSCI 1.1 CPU power-management state machines** in `SRAM A2`. The hardware TrustZone Memory Adapter (TZMA) firewalls `SRAM A2` for **Secure Access Only**; any non-secure write attempt by Linux or an external core triggers an immediate **hardware Synchronous External Abort** (bus fault).
 > 2. **A733 Hardware Power Management Collision**: On the A733 SoC, `SRAM A2` is hardwired in silicon as the boot address of the Always-On E902 CPUS core running vendor **`scp.fex`**. Overwriting `0x00040000` destroys `scp.fex` and powers off system PMIC voltage rails.
-> 3. **Correct Memory for E907 IPC**: XuanTie E907 firmware and RemoteProc IPC must strictly use **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (`0x00000000`, 64 KB)**, and **DTCM (`0x00080000`, 64 KB)** in the independent MCU domain (`0x07100000`+).
+
+> [!IMPORTANT]
+> ### WHY `0x00000000` AND `0x07110000`/`0x07120000` DO NOT EXIST ON A523/T527
+> 1. **Theoretical TCM Mappings Were Inaccurate**: Legacy documentation for older chips (e.g. Allwinner D1) placed ITCM at `0x00000000` and DTCM at `0x00080000`. On Allwinner A523/T527, `0x07110000` and `0x07120000` are non-writable/reserved registers.
+> 2. **Hardware Lockup Discovery**: Setting `STA_ADD_REG` to `0x000000BA` causes an immediate bus error on instruction fetch, triggering a double-fault on `mtvec` (also `0x0`) and placing the core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
+> 3. **Verified Live Boot Addresses**: Setting `STA_ADD_REG` to **`0x00020000`** (PubSRAM C) or **`0x3ffc0000`** (Dedicated SRAM) runs cleanly without lockup (`WORK_MODE_REG = 0x00000003`, Bit 3 `BIT_LOCK_STA = 0`).
 
 ### 2.2 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
 
-| SRAM Bank | Physical Base | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E907? |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`BROM`** | `0x00000000` | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (Read-Only BootROM) |
-| **`SRAM A1`** | `0x00020000` | 32 KB | Bootloader (SPL) | Loaded by BROM for `boot0` / SPL execution and DRAM PHY training | ❌ **No** (Bootloader Only) |
-| **`SRAM A2`** | `0x00040000` | 208 KB | **Secure EL3 (TF-A) / CPUS** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug), or A733 `scp.fex` PMIC core** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
-| **`ITCM`** | `0x07110000` (E907 `0x00000000`) | 64 KB | **XuanTie E907** | **Zero-wait-state 1-cycle instruction execution (`.text`, `.vectors`)** | ✅ **YES** (Core Instruction TCM) |
-| **`DTCM`** | `0x07120000` (E907 `0x00080000`) | 64 KB | **XuanTie E907** | **Zero-wait-state 1-cycle data, stack (`.stack`), `.bss`, `.resource_table`** | ✅ **YES** (Core Data TCM) |
-| **`SRAM C`** | `0x07130000` (E907 `0x07130000`) | 256 KB | **MCU / DSP Domain** | **1:1 Identity mapped non-secure shared SRAM for lock-free SPSC IPC, crash dump, and telemetry** | ✅ **YES** (Dedicated MCU IPC SRAM) |
-| **`R_SRAM`** | `0x07280000` (E907 `0x07280000`) | 256 KB | MCU / DSP Domain | Standby / DSP scratchpad SRAM | ✅ **YES** (Scratchpad / DSP) |
-| **`trace0`** | `0x48000000` | 4 KB | Linux RemoteProc | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) | ✅ **YES** (Logging Carveout) |
-| **`dram_dma`**| `0x48100000`| 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC (`testDRAMMsg`) | ✅ **YES** (Streaming Carveout) |
+| SRAM Bank | Physical Base (Host) | Core Address (E907) | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E907? |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`BROM`** | `0x00000000` | Unmapped | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (BootROM) |
+| **`PubSRAM C`** | `0x00020000` | `0x00020000` | 128 KB | **XuanTie E907 / Linux** | **Default RemoteProc firmware window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)** | ✅ **YES (Default Boot Memory)** |
+| **`SRAM A2`** | `0x00040000` | `0x00040000` | 208 KB | **Secure EL3 (TF-A) / CPUS** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug), or A733 `scp.fex` PMIC core** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
+| **`CFG Regs`** | `0x07130000` | `0x07130000` | 4 KB | **Host & E907 Control** | Hardware version (`0x00`), Boot entry vector (`0x204`), Work Mode / Lockup status (`0x248`) | ✅ **YES (Registers Only, Not SRAM)** |
+| **`R_SRAM`** | `0x07280000` | `0x3ffc0000` | 256 KB | **XuanTie E907** | **Zero-wait-state high-performance dedicated SRAM space 0** | ✅ **YES (Zero-Wait-State SRAM)** |
+| **`trace0`** | `0x48000000` | `0x48000000` | 4 KB | Linux RemoteProc | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) | ✅ **YES (Logging Carveout)** |
+| **`dram_dma`**| `0x48100000`| `0x48100000` | 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC (`testDRAMMsg`) | ✅ **YES (Streaming Carveout)** |
 
 ### 2.3 Control, Peripheral & Inter-Core Registers
 
 | Peripheral Block | Linux Host Physical Address | E907 RISC-V Address | Description & Hardware Usage |
 | :--- | :--- | :--- | :--- |
-| **MCU CCU & Core Control** | **`0x07102000`** | **`0x07102000`** | Co-processor clock gate (`0x07102000`), reset (`0x07102004`), boot entry vector register (`0x07102204`) |
-| **Main SoC CCU** | **`0x02001000`** | **`0x02001000`** | Root DSP/Co-processor clock gate (`0x02001c70`) |
+| **MCU CCU Clocks & Resets** | **`0x07102000`** | **`0x07102000`** | Core clock gate (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE), PubSRAM clock/reset (`0x07102114`) |
+| **RISC-V CFG Controller** | **`0x07130000`** | **`0x07130000`** | Boot entry vector register (`0x07130204`), Work Mode & Lockup status register (`0x07130248`) |
 | **Hardware MSGBOX (Mailbox)** | **`0x03003000`** | **`0x03003000`** | Hardware doorbell FIFO: <br>• **Channel 0**: RISC-V $\rightarrow$ Linux (GIC SPI 147)<br>• **Channel 1**: Linux $\rightarrow$ RISC-V (PLIC IRQ 25) |
 | **Main PIO (GPIO B–K)** | **`0x02000000`** | **`0x02000000`** | 1:1 mapped GPIO pin control registers |
 | **UART0 (Debug Console)** | **`0x02500000`** | **`0x02500000`** | Shared serial console |
@@ -106,42 +109,209 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 
   LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
   ================================                  =============================
-  0x07110000 - 0x0711FFFF [  64 KB ] ─────────────> 0x00000000 - 0x0000FFFF (ITCM)
-    (Mapped via devm_ioremap_wc)                      (Vector Table & .text execution)
+  0x00020000 - 0x0003FFFF [ 128 KB ] ─────────────> 0x00020000 - 0x0003FFFF (PubSRAM C)
+    (Mapped via RemoteProc "sram")                    (Default Boot, .vectors, .text, .data, stack)
 
-  0x07120000 - 0x0712FFFF [  64 KB ] ─────────────> 0x00080000 - 0x0008FFFF (DTCM)
-    (Mapped via devm_ioremap_wc)                      (Data, Stack, .resource_table, .dtcm_scratch)
+  0x07280000 - 0x072BFFFF [ 256 KB ] ─────────────> 0x3ffc0000 - 0x3fffffff (Dedicated SRAM)
+    (Mapped via RemoteProc "r_sram")                  (Zero-wait-state High-SRAM Window)
 
-  0x07130000 - 0x07130FFF [   4 KB ] ─────────────> 0x07130000 - 0x07130FFF (.trace_buffer)
-    (RemoteProc Trace0 in on-chip SRAM)               (Direct Identity Mapped, Zero-Wait)
+  0x07130000 - 0x07130FFF [   4 KB ] ─────────────> 0x07130000 - 0x07130FFF (CFG Regs)
+    (STA_ADD_REG 0x204, WORK_MODE 0x248)              (Control & Lockup Status)
 
-  0x07131000 - 0x0716FFFF [ 252 KB ] ─────────────> 0x07131000 - 0x0716FFFF (.sram_c)
-    (MCU Dedicated SRAM / testPing SPSC)              (Direct Identity Mapped, Zero-Wait)
+  0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
+    (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
 
   0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR Carveout)
     (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Payload Buffers)
 +===================================================================================+
 ```
 
-> [!TIP]
-> **Why Trace in SRAM avoids DDR Cache Hazards:**
-> When the trace buffer is in external DDR, the E907 core buffers writes in its private L1 Data Cache (write-back). Without PMP or explicit cache cleaning (`dcache_clean_range`), writes stay dirty in L1 and do not reach physical DDR DRAM, making them invisible to the Linux host. Moving `.trace_buffer` into on-chip `SRAM_C` (`0x07130000`) completely bypasses the L1 cache writeback issue because on-chip SRAM is mapped as zero-wait-state strongly-ordered memory.
-
 ### 2.5 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
 
 When Linux RemoteProc loads a firmware ELF:
-1. **ITCM Segments (`0x00000000`–`0x0000FFFF`)**:
-   `sunxi_rproc_da_to_va()` offsets device address by `0x07110000` and copies code directly into ITCM via `memcpy_toio()`.
-2. **DTCM Segments (`0x00080000`–`0x0008FFFF`)**:
-   `sunxi_rproc_da_to_va()` offsets device address by `0x07120000` and initializes `.data` and `.resource_table` via `memcpy_toio()`.
-3. **Dedicated MCU SRAM C (`0x07130000`)**:
-   1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address. The linker script places `.trace_buffer` at `0x07130000` and `.sram_c` at `0x07131000`.
-4. **DDR Carveouts (`0x48100000`)**:
+1. **PubSRAM C Segments (`0x00020000`–`0x0003FFFF`, 128 KB)**:
+   `sunxi_rproc_da_to_va()` maps the device address 1:1 to host physical memory `0x00020000` and copies code/data directly via `memcpy_toio()`. This is supported out-of-the-box by mainline Linux without kernel modifications.
+2. **Dedicated MCU SRAM Segments (`0x3ffc0000`–`0x3fffffff`, 256 KB)**:
+   High SRAM zero-wait-state window on the E907 interconnect, mapped to host physical address `0x07280000`. Provides 3x higher throughput for tight computational loops.
+3. **RISC-V CFG Controller (`0x07130000`)**:
+   Hardware control registers (not writable SRAM). On start, the driver writes the ELF entry point (`0x00020000` or `0x3ffc0000`) to `STA_ADD_REG` (`0x07130204`). Core status and lockup can be checked at `WORK_MODE_REG` (`0x07130248`).
+4. **DDR Carveouts (`0x48000000` & `0x48100000`)**:
    Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings.
 
----
+### 2.6 ITCM & DTCM Architecture & Programmer's Implementation Guide
 
-## 3. Test Applications Suite (`apps/`)
+For embedded and hard real-time systems engineers, **ITCM (Instruction Tightly-Coupled Memory)** and **DTCM (Data Tightly-Coupled Memory)** are the most critical memory subsystems on the XuanTie E907 core.
+
+#### 1. Architectural Role & Why TCM is Needed
+The XuanTie E907 features a modified Harvard bus architecture:
+* **ITCM**: Connected directly to the core's instruction fetch pipeline. Fetches occur in **1 single clock cycle with zero wait states**, completely decoupled from the system bus and L1 instruction cache. This eliminates cache miss penalties, bus arbitration delays, and pipeline stalls.
+  - **Ideal Use Cases**: Critical interrupt handlers (e.g. Mailbox Doorbell ISR, high-rate SPI/UART DMA callbacks), trap/fault handlers, and inner real-time PID attitude estimation loops.
+* **DTCM**: Connected directly to the core's load/store execution unit. Reads and writes complete in **1 clock cycle with zero wait states**.
+  - **Ideal Use Cases**: Stack (`.stack`), fast lookup tables (LUTs), critical state machines, and circular ring buffer head/tail pointers where atomic synchronization cannot afford bus jitter.
+
+#### 2. The Hardware Challenge: Why RemoteProc Cannot Load TCM Directly
+On the Allwinner A523/T527 SoC:
+* ITCM and DTCM reside on the **private internal core bus** of the XuanTie E907.
+* Mainline Linux and the ARM Cortex-A55 cores operate over the main system AXI interconnect.
+* **Silicon Reality**: There is no active external bus bridge allowing the ARM host to write directly into the E907's private TCM while the core clock and TCM controllers are in reset. Legacy documentation suggested writing to `0x07110000` or `0x07120000`, but live hardware probing proves those registers are non-writable/reserved on A523/T527.
+* Setting the core's boot entry register (`STA_ADD_REG`) directly to `0x00000000` while TCM is uninitialized causes an immediate instruction fetch abort, resulting in **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
+
+#### 3. The Solution: Two-Stage Bootstrapping ("How to Copy to TCM")
+To utilize ITCM and DTCM on Allwinner T527 without hardware lockup, programmers use the standard embedded **LMA vs. VMA Staging Pattern**:
+1. **Host Loading (LMA - Load Memory Address)**: Linux RemoteProc loads the entire firmware ELF into accessible on-chip SRAM:
+   - **PubSRAM C (`0x00020000`, 128 KB)**, OR
+   - **Dedicated High SRAM (`0x3ffc0000`, 256 KB)**.
+2. **Core Startup**: The E907 starts executing from SRAM (`_start` in `startup.S`).
+3. **Core-Initiated Copy (VMA - Virtual/Execution Memory Address)**: Early in the startup sequence, the E907's own CPU instructions copy the designated `.itcm` functions and `.dtcm` data from SRAM (LMA) to TCM (VMA).
+4. **Instruction Synchronization (`fence.i`)**: The core executes `fence.i` to invalidate and synchronize its instruction fetch pipeline so newly copied instructions in ITCM are fetched cleanly.
+5. **Execution**: The core jumps into or calls the TCM-resident routines, running at pure 1-cycle latency!
+
+#### 4. Step-by-Step Linker Script Configuration (`.ld`)
+To stage TCM code and data, configure the GNU Linker Script with distinct Load Memory Addresses (`AT(...)`):
+
+```ld
+MEMORY
+{
+    /* Staging / Primary Executable SRAM */
+    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
+
+    /* Tightly-Coupled Memories (Local E907 Core View) */
+    ITCM (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
+    DTCM (rwx) : ORIGIN = 0x00080000, LENGTH = 64K
+}
+
+SECTIONS
+{
+    /* Primary bootstrap in SRAM */
+    .vectors : { KEEP(*(.vectors)) } > SRAM
+    .text    : { *(.text) *(.text.*) } > SRAM
+    .rodata  : { *(.rodata) *(.rodata.*) } > SRAM
+
+    /* Critical Real-Time Code: Stored in SRAM (LMA), Executed in ITCM (VMA) */
+    .itcm_text : AT(_sidata_itcm)
+    {
+        . = ALIGN(4);
+        _sitcm = .;
+        *(.itcm)
+        *(.itcm.*)
+        *(.fast_code)
+        . = ALIGN(4);
+        _eitcm = .;
+    } > ITCM
+    _sidata_itcm = LOADADDR(.itcm_text);
+
+    /* Critical Real-Time Data: Stored in SRAM (LMA), Executed in DTCM (VMA) */
+    .dtcm_data : AT(_sidata_dtcm)
+    {
+        . = ALIGN(4);
+        _sdtcm = .;
+        *(.dtcm)
+        *(.dtcm.*)
+        *(.fast_data)
+        . = ALIGN(4);
+        _edtcm = .;
+    } > DTCM
+    _sidata_dtcm = LOADADDR(.dtcm_data);
+
+    /* DTCM Uninitialized BSS */
+    .dtcm_bss (NOLOAD) :
+    {
+        . = ALIGN(4);
+        _sbss_dtcm = .;
+        *(.dtcm_bss)
+        *(.dtcm_bss.*)
+        . = ALIGN(4);
+        _ebss_dtcm = .;
+    } > DTCM
+}
+```
+
+#### 5. Assembly Startup Copy Routine (`startup.S`)
+In `startup.S`, insert the copy routine before calling C/C++ constructors or `main()`:
+
+```assembly
+    /* =============================================================
+     * 1. Copy Critical Code from SRAM (LMA) to ITCM (VMA)
+     * ============================================================= */
+    la      a0, _sitcm              /* Destination: ITCM start */
+    la      a1, _eitcm              /* Destination: ITCM end */
+    la      a2, _sidata_itcm        /* Source: LMA in SRAM */
+    beq     a0, a2, .Lcopy_itcm_done /* Skip if LMA == VMA */
+.Lcopy_itcm_loop:
+    bgeu    a0, a1, .Lcopy_itcm_done
+    lw      t0, 0(a2)
+    sw      t0, 0(a0)
+    addi    a0, a0, 4
+    addi    a2, a2, 4
+    j       .Lcopy_itcm_loop
+.Lcopy_itcm_done:
+    fence.i                         /* CRITICAL: Synchronize instruction cache & pipeline */
+
+    /* =============================================================
+     * 2. Copy Critical Data from SRAM (LMA) to DTCM (VMA)
+     * ============================================================= */
+    la      a0, _sdtcm              /* Destination: DTCM start */
+    la      a1, _edtcm              /* Destination: DTCM end */
+    la      a2, _sidata_dtcm        /* Source: LMA in SRAM */
+    beq     a0, a2, .Lcopy_dtcm_done
+.Lcopy_dtcm_loop:
+    bgeu    a0, a1, .Lcopy_dtcm_done
+    lw      t0, 0(a2)
+    sw      t0, 0(a0)
+    addi    a0, a0, 4
+    addi    a2, a2, 4
+    j       .Lcopy_dtcm_loop
+.Lcopy_dtcm_done:
+
+    /* =============================================================
+     * 3. Clear DTCM BSS (.dtcm_bss)
+     * ============================================================= */
+    la      a0, _sbss_dtcm
+    la      a1, _ebss_dtcm
+.Lzero_dtcm_loop:
+    bgeu    a0, a1, .Lzero_dtcm_done
+    sw      zero, 0(a0)
+    addi    a0, a0, 4
+    j       .Lzero_dtcm_loop
+.Lzero_dtcm_done:
+```
+
+#### 6. How Programmers Use TCM in C / C++
+Programmers define compiler macros to place critical functions and variables into TCM:
+
+```c
+#define __ITCM_TEXT __attribute__((section(".itcm"), noinline))
+#define __DTCM_DATA __attribute__((section(".dtcm")))
+#define __DTCM_BSS  __attribute__((section(".dtcm_bss")))
+
+/* Pinned in ITCM: 1-cycle execution, immune to system bus congestion */
+void __ITCM_TEXT fast_flight_loop_isr(void) {
+    // Hard real-time attitude estimation & motor PWM update
+}
+
+/* Pinned in DTCM: 1-cycle read/write, zero cache jitter */
+static volatile float __DTCM_DATA pid_gains[3] = {1.25f, 0.05f, 0.12f};
+static volatile uint32_t __DTCM_BSS fast_cycle_count;
+```
+
+#### 7. The Zero-Copy Alternative: Dedicated High SRAM (`0x3ffc0000` / `0x07280000`)
+If your application needs high-performance execution without the overhead of copying sections from LMA to VMA at boot:
+* The XuanTie E907 on T527 features **256 KB of Dedicated High SRAM** mapped at **`0x3ffc0000`** in the core's address space (physical **`0x07280000`**).
+* **Direct RemoteProc Loading**: Unlike private TCM, Dedicated High SRAM is an on-chip SRAM bank accessible to both the ARM host bus and the E907 core. Linux RemoteProc can load code and data directly into it at startup.
+* **Measured Performance**: In live hardware execution tests on the Radxa Cubie A5E, a tight counting loop ran at **~570,000 counts per 10 ms** in Dedicated High SRAM versus **~171,000 counts per 10 ms** in PubSRAM C.
+* For large real-time applications (up to 256 KB), Dedicated High SRAM provides near-TCM execution speeds with 100% zero boot-time copy overhead!
+
+#### 8. Memory Hierarchy & Determinism Comparison
+
+| Subsystem | Core Address | Host Address | Access Latency | Cache Jitter? | Direct RemoteProc ELF Load? | Typical Programmer Usage |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ITCM** | `0x00000000` | Unmapped | **1 Cycle (Zero Wait)** | **0% (Deterministic)** | ❌ No (Requires boot copy) | Time-critical ISRs, trap vectors, PID inner loops |
+| **DTCM** | `0x00080000` | Unmapped | **1 Cycle (Zero Wait)** | **0% (Deterministic)** | ❌ No (Requires boot copy) | High-speed stack, fast LUTs, atomic state |
+| **Dedicated High SRAM** | `0x3ffc0000` | `0x07280000` | **~1-2 Cycles (Fast on-chip)**| **0% (Deterministic)** | ✅ **YES (Zero Copy)** | Full 256 KB firmware, real-time RTOS, SPSC queues |
+| **PubSRAM C** | `0x00020000` | `0x00020000` | **~2-4 Cycles (Shared bus)** | **Very Low** | ✅ **YES (Default Boot)** | General firmware, bootloader, trace buffer |
+| **DDR DRAM** | `0x40000000`+ | `0x40000000`+ | **~50-100+ Cycles** | **High (L1 miss penalty)** | ✅ Yes (DMA Carveout) | Large streaming payload buffers (1 MB+) |
+
+---
 
 ## 3. Test Applications Suite (`apps/`) & Performance Roadmap
 
@@ -150,8 +320,8 @@ The firmware test suite follows a progressive **"Walk -> Run"** architecture, st
 ```text
 apps/
 ├── [PHASE 1: WALK - BOOT, TRACE & TELEMETRY]
-│   ├── testBasic/               # Minimal boot, ITCM execution, linker-mapped SRAM C & DTCM sanity
-│   ├── testStringBinaryTrace0/  # SRAM trace0 (0x07130000), Mixed ASCII text + packed binary telemetry + FPU
+│   ├── testBasic/               # Minimal boot in PubSRAM C (0x00020000) & live counter increment
+│   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, Mixed ASCII text + packed binary telemetry + FPU
 │   └── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
 │
 └── [PHASE 2: RUN - GETTING FASTER CODE & REAL-TIME IPC]
@@ -168,19 +338,19 @@ apps/
 ### App 1: `testBasic`
 * **Purpose**: Basic bring-up, memory sanity, and linker-script layout validation.
 * **Functionality**:
-  - Boots into ITCM `0x00000000`, configures stack in DTCM `0x00080000`.
-  - Maps variables into dedicated linker sections (`.sram_c_loc1`, `.sram_c_loc2`, `.dtcm_scratch`) without hardcoded pointer macros.
-  - Continuously increments counters so host Linux can verify life via `devmem 0x07131000 32` or via `trace0`.
+  - Boots into PubSRAM C `0x00020000`, configures stack in SRAM (`0x00022000`).
+  - Maps variables into dedicated linker sections (`.sram_c_loc1`, `.sram_c_loc2`) without hardcoded pointer macros.
+  - Continuously increments counters so host Linux can verify life via `devmem 0x00021000 32` or `devmem 0x00021004 32`.
 
 ---
 
 ### App 2: `testStringBinaryTrace0` (Mixed String & Binary Telemetry)
 * **Purpose**: Demonstrates structured telemetry streaming over `trace0` combining formatted ASCII strings with packed binary structures and hardware FPU computation.
 * **Functionality**:
-  - Declares `.resource_table` section exporting `trace0` buffer in Dedicated MCU SRAM C (`0x07130000`).
+  - Declares `.resource_table` section exporting `trace0` buffer in PubSRAM C (`0x00020000`).
   - Completely eliminates DDR caching issues—trace writes are immediately visible to Linux without software cache flushes.
   - Utilizes single-precision (`float`) and double-precision (`double`) hardware FPU math (sine wave computation).
-  - Populates a 36-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`.sram_c` @ `0x07131000`).
+  - Populates a 36-byte packed binary `TelemetryPacket` in SRAM (`.sram_c` @ `0x00021000`).
   - Interleaves three data streams directly into the `trace0` buffer:
     1. **ASCII String Log (`STRING:`)**: Human-readable log line with formatted float values.
     2. **Framed Binary Struct (`BINARY:`)**: Raw packed binary struct (`TelemetryPacket`) for high-speed programmatic ingestion.
@@ -198,7 +368,7 @@ Example decoded output:
 === RemoteProc Trace0 Live Monitor (T527 E907) ===
 Target: /sys/kernel/debug/remoteproc/remoteproc0/trace0 | Packet Size: 36 bytes | Poll: 50ms
 
-[ASCII]   [TELM #1] Accel: (+0.015, -0.008, +9.811) | FPU Sin: +0.0998 | SRAM: 0x07131000
+[ASCII]   [TELM #1] Accel: (+0.015, -0.008, +9.811) | FPU Sin: +0.0998 | SRAM: 0x00021000
 [STRUCT]  Seq #1     | Up: 500   ms | Accel: (+0.015, -0.008, +9.811) | FPU Sin: +0.0998 | Csum: 0xA5A4
 [HEXDUMP]
          0x00000000: 4D 4C 45 54 01 00 00 00 F4 01 00 00 7B 14 AE 3C |MLE.........{..<|
@@ -207,7 +377,7 @@ Target: /sys/kernel/debug/remoteproc/remoteproc0/trace0 | Packet Size: 36 bytes 
 ```
 
 #### Lite / Fast Direct SRAM Python Monitor (`apps/testStringBinaryTrace0/fast_sram_telemetry.py`)
-For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` memory-maps the Dedicated MCU SRAM C (`0x07131000`) directly via `/dev/mem` for zero-copy polling:
+For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` memory-maps SRAM (`0x00021000`) directly via `/dev/mem` for zero-copy polling:
 
 ```bash
 sudo python3 apps/testStringBinaryTrace0/fast_sram_telemetry.py
@@ -216,7 +386,7 @@ sudo python3 apps/testStringBinaryTrace0/fast_sram_telemetry.py
 Example high-rate output:
 ```text
 === Direct Zero-Copy SRAM Telemetry Reader (Lite/Fast) ===
-Device: /dev/mem | Physical Target: 0x07131000 | Packet Size: 36 bytes
+Device: /dev/mem | Physical Target: 0x00021000 | Packet Size: 36 bytes
 Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 
 [SRAM-DIRECT] Seq #124   | Up: 62000 ms | Accel: (+1.860, -0.992, +9.814) | FPU Sin: +0.1542 | Rate: 1042.5 Hz
@@ -237,7 +407,7 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
   - Configures `mtvec` to custom exception trap handler.
   - Emits 3 normal heartbeats before intentionally triggering an illegal instruction trap.
   - Trap handler captures `mepc`, `mcause`, `mtval`, `mstatus`, and full GPR dump (`ra`, `sp`, `gp`, `a0`..`a7`, `t0`..`t6`, `s0`..`s11`).
-  - Writes fatal signature `0xDEADF00D` to MCU SRAM C (`0x07130000`).
+  - Writes fatal signature `0xDEADF00D` to SRAM (`0x00020000`).
   - Formats an exhaustive crash autopsy and dumps it directly into `trace0`:
     ```text
     ################################################################
@@ -250,7 +420,7 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
       mstatus    : 0x00001800
 
     --- General Purpose Register (GPR) Dump ---
-      ra (x1) = 0x00000184  sp (x2) = 0x0008FFF0  gp (x3) = 0x00080800
+      ra (x1) = 0x00020184  sp (x2) = 0x00022FF0  gp (x3) = 0x00020800
       ...
     ```
 
@@ -259,7 +429,7 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 ### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x07130000`).
+  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x00020000`).
   - Memory-barrier-synchronized doorbell registers (`host_doorbell`, `riscv_doorbell`).
   - Sub-microsecond response latency (~1.5–2.5 $\mu\text{s}$ Round-Trip Time).
 * **Linux Companion Tool**: `apps/testPing/linux/ping_shm`
@@ -267,7 +437,7 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
   - Computes min, avg, max latency, jitter (standard deviation), percentiles (p50, p90, p99, p99.9), and message throughput.
 
 ```bash
-# Run 100,000 iterations over Dedicated MCU SRAM C
+# Run 100,000 iterations over Shared SRAM
 sudo ./apps/testPing/linux/ping_shm -n 100000
 ```
 
@@ -298,7 +468,7 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 |                          HYBRID MEMORY IPC ARCHITECTURE                     |
 |                                                                             |
 |   +---------------------------------------------------------------------+   |
-|   |         DEDICATED MCU SRAM C (0x07130000) - CONTROL PATH            |   |
+|   |         SHARED PUBSRAM C (0x00020000) - CONTROL PATH                |   |
 |   |  - SPSC Head & Tail Pointers (Atomic single-word updates)           |   |
 |   |  - Producer/Consumer Doorbells & Monotonic Sequence Counters        |   |
 |   |  - 16-slot TX/RX Descriptor Rings (Holds DRAM Buffer Offsets & Len) |   |
@@ -316,7 +486,7 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 +-----------------------------------------------------------------------------+
 ```
 * **Functionality**:
-  - Control block (`DramSpscControlBlock` @ `0x07130000`) in fast zero-wait-state SRAM C.
+  - Control block (`DramSpscControlBlock` @ `0x00020000`) in fast shared PubSRAM C.
   - 1 MB payload buffer pool in DDR DRAM Carveout (`0x48100000`).
   - Configures RISC-V Physical Memory Protection (PMP) and XuanTie Cache maintenance (`mhcr`, `mcor`, `dcache.iva`, `dcache.cpa`) for DMA-coherent uncached/strongly-ordered access.
 * **Linux Companion Tool**: `apps/testDRAMMsg/linux/ping_dram`
@@ -334,8 +504,8 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM C (`0x07130000`) | Lock-Free SPSC in SRAM C (`0x07130000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM C (`0x07130000`, 64B frames) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in PubSRAM C (`0x00020000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct PubSRAM C (`0x00020000`, 64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | Direct MMIO (`/dev/mem`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |

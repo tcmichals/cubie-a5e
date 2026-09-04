@@ -62,9 +62,10 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
-|  |  - 208 KB Shared SRAM A2 (0x00040000) [Zero-Wait-State Low-Latency Control & IPC]  |  |
-|  |  - 320 KB Dedicated MCU SRAM C (0x07130000)                                       |  |
+|  |  - 128 KB Shared PubSRAM C (0x00020000) [Default RemoteProc Boot & Runtime]        |  |
+|  |  - 256 KB Dedicated High SRAM (0x3ffc0000 Core / 0x07280000 Host) [Zero-Wait-State] |  |
+|  |  - 64 KB ITCM & 64 KB DTCM [Private Zero-Wait Core Memories, Stage-Loaded at Boot]  |  |
+|  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
 |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
@@ -115,8 +116,8 @@ As of the current bring-up phase, here is the functional status of the flight st
 
 * **✅ T527 RISC-V Real-Time Co-Processor (100% OPERATIONAL via `remoteproc` on Cubie A5E):**
   - **Mainline Linux RemoteProc Standard (`sunxi_rproc.c`):** Dedicated XuanTie E906/E907 co-processor managed seamlessly via `/sys/class/remoteproc/remoteproc0/state`.
-  - **Hardware Resources:** Zero-wait-state 64 KB ITCM (`0x00000000`), 64 KB DTCM (`0x00020000`), and 256 KB MCU SRAM (`0x07100000`), controlled via non-secure MMIO register `0x07102124`.
-  - **High-Throughput Diagnostics:** Live firmware telemetry exposed via debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`), dedicated serial console (`S_UART0` @ `0x07080000` / 115200 baud), and lock-free shared SRAM ring buffers in SRAM A2 (`0x00040000`).
+  - **Hardware Resources:** Shared PubSRAM C (`0x00020000`, 128 KB) default boot memory, Dedicated High SRAM (`0x3ffc0000` Core / `0x07280000` Host, 256 KB), and private 1-cycle ITCM/DTCM, controlled via MCU CCU MMIO registers (`0x07102120`, `0x07102124`).
+  - **High-Throughput Diagnostics:** Live firmware telemetry exposed via debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`), dedicated serial console (`S_UART0` @ `0x02500000` / 115200 baud), and lock-free shared SRAM ring buffers in PubSRAM C (`0x00020000`).
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 
 * **📌 Allwinner A733 / Cubie A7A & A7Z E902 Status (Dedicated to Power Management Only):**
