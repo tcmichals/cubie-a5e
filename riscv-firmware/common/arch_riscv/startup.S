@@ -88,7 +88,7 @@ _start:
     csrw mie, zero
     csrw mip, zero
 
-    /* 2. Setup Hardware Stack Pointer in DTCM (0x00080000 + 64K) */
+    /* 2. Setup Hardware Stack Pointer in SRAM */
     la sp, _stack_top
 
     /* 3. Setup Global Pointer */
@@ -97,18 +97,19 @@ _start:
     la gp, __global_pointer$
 .option pop
 
-    /* 4. Enable FPU (mstatus.FS = 0b11) for hardware float/double */
-    li t0, (3 << 13)
-    csrs mstatus, t0
-
-    /* 5. Set mtvec CSR to vector table in ITCM (0x00000000) */
+    /* 4. Set mtvec CSR to vector table in SRAM */
     la t0, _vectors
     csrw mtvec, t0
 
-    /* 6. Copy .data from ITCM (LMA) to DTCM (VMA) */
+    /* 5. Enable FPU (mstatus.FS = 0b11) for hardware float/double */
+    li t0, (3 << 13)
+    csrs mstatus, t0
+
+    /* 6. Copy .data from LMA to VMA if separate */
     la a0, _sdata
     la a1, _edata
     la a2, _sidata
+    beq a0, a2, .Lcopy_data_done
 .Lcopy_data:
     bgeu a0, a1, .Lcopy_data_done
     lw t0, 0(a2)
@@ -118,7 +119,7 @@ _start:
     j .Lcopy_data
 .Lcopy_data_done:
 
-    /* 7. Zero .bss in DTCM */
+    /* 7. Zero .bss in SRAM */
     la a0, _sbss
     la a1, _ebss
 .Lzero_bss:

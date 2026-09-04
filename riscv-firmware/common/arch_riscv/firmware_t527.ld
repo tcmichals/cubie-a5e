@@ -1,10 +1,9 @@
 /*
  * firmware_t527.ld - Unified Linker Script for Allwinner T527 / A523 XuanTie E907
  *
- * Memory Map (from RISC-V core view within 256 KB Dedicated SRAM):
- *   ITCM   (rx)  : 0x00000000 (64 KB - Reset Vectors & Program Code)
- *   DTCM   (rwx) : 0x00010000 (64 KB - Data, BSS, Stack & Resource Table)
- *   SRAM_C (rwx) : 0x00020000 (128 KB - Shared IPC, Telemetry & Buffers)
+ * Target: Allwinner XuanTie E907 / E906 RISC-V Co-Processor
+ * Memory: Shared System PubSRAM C (128 KB @ 0x00020000)
+ *         Directly addressable by both ARM Cortex-A55 and XuanTie E907 without translation.
  */
 
 OUTPUT_ARCH("riscv")
@@ -12,9 +11,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    ITCM   (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
-    DTCM   (rwx) : ORIGIN = 0x00010000, LENGTH = 64K
-    SRAM_C (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
+    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
 }
 
 SECTIONS
@@ -25,7 +22,7 @@ SECTIONS
         . = ALIGN(64);
         KEEP(*(.vectors))
         KEEP(*(.text.startup))
-    } > ITCM
+    } > SRAM
 
     .text :
     {
@@ -33,7 +30,7 @@ SECTIONS
         *(.text)
         *(.text.*)
         . = ALIGN(4);
-    } > ITCM
+    } > SRAM
 
     .rodata :
     {
@@ -41,7 +38,7 @@ SECTIONS
         *(.rodata)
         *(.rodata.*)
         . = ALIGN(4);
-    } > ITCM
+    } > SRAM
 
     /* Linux RemoteProc Resource Table (Parsed by Kernel on ELF Load) */
     .resource_table :
@@ -50,7 +47,7 @@ SECTIONS
         KEEP(*(.resource_table))
         KEEP(*(.resource_table*))
         . = ALIGN(4);
-    } > DTCM
+    } > SRAM
 
     .data :
     {
@@ -63,7 +60,7 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _edata = .;
-    } > DTCM AT > ITCM
+    } > SRAM
     _sidata = LOADADDR(.data);
 
     .bss :
@@ -77,18 +74,18 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _ebss = .;
-    } > DTCM
+    } > SRAM
 
-    /* DTCM 8KB Stack */
+    /* Execution Stack (8 KB) */
     .stack (NOLOAD) :
     {
         . = ALIGN(16);
         _stack_bottom = .;
         . += 0x2000;
         _stack_top = .;
-    } > DTCM
+    } > SRAM
 
-    /* DTCM Scratchpad Memory */
+    /* Scratchpad / DTCM Compatibility Memory */
     .dtcm_scratch (NOLOAD) :
     {
         . = ALIGN(4);
@@ -97,9 +94,9 @@ SECTIONS
         *(.dtcm_scratch.*)
         . = ALIGN(4);
         __dtcm_scratch_end = .;
-    } > DTCM
+    } > SRAM
 
-    /* RemoteProc Trace Buffer in Dedicated MCU SRAM C */
+    /* RemoteProc Trace Buffer in Shared SRAM */
     .trace_buffer (NOLOAD) :
     {
         . = ALIGN(4);
@@ -108,9 +105,9 @@ SECTIONS
         KEEP(*(.trace_buffer.*))
         . = ALIGN(4);
         __trace_end = .;
-    } > SRAM_C
+    } > SRAM
 
-    /* Dedicated MCU SRAM C Shared / Application / IPC Memory */
+    /* Shared Application / IPC Memory */
     .sram_c (NOLOAD) :
     {
         . = ALIGN(4);
@@ -121,7 +118,7 @@ SECTIONS
         *(.sram_c_loc2)
         . = ALIGN(4);
         __sram_c_end = .;
-    } > SRAM_C
+    } > SRAM
 
     /DISCARD/ :
     {

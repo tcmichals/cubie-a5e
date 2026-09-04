@@ -9,15 +9,15 @@
  * ============================================================================
  */
 
-/* Tightly-Coupled Memories (Zero-Wait-State) */
-#define ITCM_BASE                   0x00000000  /* 64 KB Instruction TCM */
-#define ITCM_SIZE                   0x00010000
-#define DTCM_BASE                   0x00010000  /* 64 KB Data TCM */
-#define DTCM_SIZE                   0x00010000
+/* Verified Hardware Memory Windows (Allwinner A523 / T527 XuanTie E907) */
+#define PUBSRAM_C_BASE              0x00020000  /* 128 KB Shared PubSRAM C (Supported out-of-box by RemoteProc) */
+#define PUBSRAM_C_SIZE              0x00020000
+#define R_SRAM_BASE                 0x3ffc0000  /* 256 KB Dedicated MCU SRAM Space 0 (Host physical 0x07280000) */
+#define R_SRAM_SIZE                 0x00040000
 
-/* Shared System SRAM C (On-Chip High-Speed Interconnect) */
-#define SRAM_C_BASE                 0x00020000  /* 128 KB Total SRAM C */
-#define SRAM_C_SIZE                 0x00020000
+/* Shared System SRAM (Current Default Firmware Window) */
+#define SRAM_C_BASE                 PUBSRAM_C_BASE
+#define SRAM_C_SIZE                 PUBSRAM_C_SIZE
 
 /* IPC & Diagnostics Memory Layout within SRAM C (0x00020000) */
 #define IPC_SHARED_MEM_BASE         0x00020000

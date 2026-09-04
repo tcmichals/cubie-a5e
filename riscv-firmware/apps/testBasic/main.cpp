@@ -1,16 +1,17 @@
 /*
  * main.cpp - testBasic: Simple Boot & SRAM Memory Probe Test
  *
- * Target: Allwinner T527 XuanTie E907 (RV32IMAFDC @ 600 MHz)
+ * Target: Allwinner T527 / A523 XuanTie E907
+ * Memory: Shared PubSRAM C (0x00020000, 128 KB)
  *
  * Demonstrates:
- * 1. Booting from ITCM (0x00000000) with DTCM stack (0x00080000).
- * 2. Writes signature magic words to multiple SRAM windows:
- *    - Shared SRAM A2 (0x00040000): Magic 0xDEADBEEF + Counter
- *    - Shared SRAM A2 (0x00050000): Magic 0x52495343 ("RISC") + Heartbeat
- *    - DTCM Scratchpad (0x00081000): Magic 0xCAFE1234
- *    - System SRAM C (0x07130000): Magic 0xAA55AA55
- * 3. Continuous incrementing loop with HAL Timer for devmem verification from Linux.
+ * 1. Booting directly from PubSRAM C (0x00020000).
+ * 2. Writes signature magic words upon entry:
+ *    - sram_c_loc1: Magic 0xDEADBEEF + Counter
+ *    - sram_c_loc2: Magic 0x52495343 ("RISC") + Counter
+ *    - dtcm_scratch: Magic 0xCAFE1234 + Counter
+ * 3. In-memory RemoteProc trace0 ring buffer logging.
+ * 4. Continuous incrementing loop for devmem verification from Linux.
  */
 
 #include <stdint.h>

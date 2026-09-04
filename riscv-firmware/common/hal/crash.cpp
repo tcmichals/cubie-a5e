@@ -1,7 +1,7 @@
 #include "crash.hpp"
 #include "trace.hpp"
 
-#define SRAM_CRASH_DUMP_LOC ((volatile uint32_t *)0x07130000UL)
+#define SRAM_CRASH_DUMP_LOC ((volatile uint32_t *)0x00020000UL)
 
 namespace hal {
 
