@@ -25,7 +25,7 @@ int main(void) {
 
     hal::Trace::puts("================================================================\n");
     hal::Trace::puts("  Allwinner T527 XuanTie E907 testPing (Lite-libmetal SHM)     \n");
-    hal::Trace::puts("  Channel: Shared SRAM A2 @ 0x00040000                         \n");
+    hal::Trace::puts("  Channel: Dedicated MCU SRAM C @ 0x07130000                  \n");
     hal::Trace::puts("  Mode   : High-Speed Sub-Microsecond Ping-Pong Echo Loop      \n");
     hal::Trace::puts("================================================================\n");
 

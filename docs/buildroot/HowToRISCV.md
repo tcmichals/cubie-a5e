@@ -23,8 +23,9 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 |  +-----------------------------------------------------------------------------------+  |
 |  |               SHARED SYSTEM INTERCONNECT & ON-CHIP SRAM BUS                       |  |
 |  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
-|  |  - 208 KB Shared SRAM A2 (0x00040000) [Zero-Wait-State Low-Latency Control & IPC]  |  |
-|  |  - 256 KB Dedicated MCU SRAM C (0x07130000)                                       |  |
+|  |  - 256 KB Dedicated MCU SRAM C (0x07130000) [Zero-Wait-State Low-Latency Control]  |  |
+|  |  - 4 KB DDR RemoteProc Trace Carveout (0x48000000)                                |  |
+|  |  - 1 MB DDR DMA Payload Pool (0x48100000)                                         |  |
 |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
@@ -53,11 +54,16 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 | :--- | :--- | :--- | :--- | :--- |
 | **Instruction TCM (ITCM)** | **`0x07110000`** | **`0x00000000`** | **64 KB** | Zero-wait-state instruction execution (`.text`, `.vectors`) |
 | **Data TCM (DTCM)** | **`0x07120000`** | **`0x00080000`** | **64 KB** | Zero-wait-state data, stack (`.stack`), and `.resource_table` |
-| **Shared System SRAM A2** | **`0x00040000`** | **`0x00040000`** | **208 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`) |
-| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; fast scratchpad / DSP / MCU shared memory |
-| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / system power-management SRAM |
+| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`, `testDRAMMsg`) |
+| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / DSP scratchpad SRAM |
 | **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc ASCII & binary log buffer (`/sys/.../trace0`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
+
+> [!IMPORTANT]
+> ### Why `SRAM A2` (`0x00040000`) is NOT used for RemoteProc:
+> 1. **ARM Trusted Firmware (TF-A / BL31 / PSCI)**: On Allwinner ARM64 SoCs, `SRAM A2` (`0x00040000`) is the **Secure SRAM (CPUS SRAM)** reserved for TF-A BL31 secure monitor runtime, CPU standby/suspend state machines, and PSCI services. Non-secure access can cause hardware TrustZone aborts or corrupt power management.
+> 2. **Allwinner A733 Hardware Collision**: On the A733, `SRAM A2` is hardwired in silicon as the boot location of the Always-On E902 CPUS core running `scp.fex` for PMIC power rail regulation.
+> 3. **Clean T527 Architecture**: On the T527, the E907 is in the independent **MCU domain (`0x07100000`+)** with its own **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (64 KB)**, and **DTCM (64 KB)**. Therefore, all shared SPSC queues, crash dumps, and IPC channels reside safely in **SRAM C (`0x07130000`)** with zero risk of collision.
 
 ### 2.2 Control, Peripheral & Inter-Core Registers
 
@@ -80,9 +86,6 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 
   LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
   ================================                  =============================
-  0x00040000 - 0x00073FFF [ 208 KB ] ─────────────> 0x00040000 - 0x00073FFF (SRAM A2)
-    (Shared System SRAM / testPing SPSC)              (Direct Identity Mapped)
-
   0x07110000 - 0x0711FFFF [  64 KB ] ─────────────> 0x00000000 - 0x0000FFFF (ITCM)
     (Mapped via devm_ioremap_wc)                      (Vector Table & .text execution)
 
@@ -90,7 +93,7 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
     (Mapped via devm_ioremap_wc)                      (Data, Stack & .resource_table)
 
   0x07130000 - 0x0716FFFF [ 256 KB ] ─────────────> 0x07130000 - 0x0716FFFF (SRAM C)
-    (MCU Dedicated SRAM)                              (Direct Identity Mapped)
+    (MCU Dedicated SRAM / testPing SPSC)              (Direct Identity Mapped)
 
   0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
     (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
@@ -107,7 +110,7 @@ When Linux RemoteProc loads a firmware ELF:
    `sunxi_rproc_da_to_va()` offsets device address by `0x07110000` and copies code directly into ITCM via `memcpy_toio()`.
 2. **DTCM Segments (`0x00080000`–`0x0008FFFF`)**:
    `sunxi_rproc_da_to_va()` offsets device address by `0x07120000` and initializes `.data` and `.resource_table` via `memcpy_toio()`.
-3. **Shared SRAM A2 (`0x00040000`) & SRAM C (`0x07130000`)**:
+3. **Dedicated MCU SRAM C (`0x07130000`)**:
    1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address.
 4. **DDR Carveouts (`0x48000000` & `0x48100000`)**:
    Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings.
@@ -118,7 +121,7 @@ When Linux RemoteProc loads a firmware ELF:
 
 ### Unified Linker Script (`riscv-firmware/common/arch_riscv/firmware_t527.ld`)
 
-The unified linker script maps execution code into zero-wait-state **ITCM (`0x00000000`)**, data/stack into **DTCM (`0x00080000`)**, and shared structures into **SRAM A2 (`0x00040000`)**:
+The unified linker script maps execution code into zero-wait-state **ITCM (`0x00000000`)**, data/stack into **DTCM (`0x00080000`)**, and shared structures into **Dedicated MCU SRAM C (`0x07130000`)**:
 
 ```ld
 OUTPUT_ARCH("riscv")
@@ -128,7 +131,6 @@ MEMORY
 {
     ITCM (rx)    : ORIGIN = 0x00000000, LENGTH = 64K
     DTCM (rwx)   : ORIGIN = 0x00080000, LENGTH = 64K
-    SRAM_A2 (rwx): ORIGIN = 0x00040000, LENGTH = 208K
     SRAM_C (rwx) : ORIGIN = 0x07130000, LENGTH = 256K
 }
 
@@ -229,7 +231,7 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
   - Interoperates cleanly with Linux kernel `virtio_rpmsg_bus` and `rpmsg_char`.
 * **`hal::SpscQueue` (`hal/spsc_queue.hpp`)**:
   - Lock-free, zero-allocation Single-Producer Single-Consumer circular ring buffer.
-  - Utilizes C++11 atomic acquire-release memory fences for synchronization between ARM64 Linux and RISC-V E907 without locking.
+  - Utilizes C++11 atomic acquire-release memory fences for synchronization between ARM64 Linux and RISC-V E907 in Dedicated MCU SRAM C without locking.
 * **`hal::Pmp` (`hal/pmp.hpp`, `hal/pmp.cpp`)**:
   - Configures XuanTie E907 Physical Memory Protection (PMP) CSRs (`pmpaddr*`, `pmpcfg*`).
   - Marks external DDR DMA payload buffers (`0x48100000`) as non-cacheable to eliminate cache invalidation/flush overhead.
@@ -238,7 +240,7 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
   - Formats telemetry, heartbeats, and sensor readings directly into the RemoteProc debugfs `trace0` buffer.
 * **`hal::Crash` (`hal/crash.hpp`)**:
   - Machine-mode exception and trap autopsy handler.
-  - Captures all 31 GPRs (`x1`–`x31`) and CSRs (`mepc`, `mcause`, `mtval`, `mstatus`) upon fatal faults, outputting structured crash logs to `trace0`.
+  - Captures all 31 GPRs (`x1`–`x31`) and CSRs (`mepc`, `mcause`, `mtval`, `mstatus`) upon fatal faults, outputting structured crash logs to `trace0` and writing `0xDEADF00D` to MCU SRAM C (`0x07130000`).
 * **`hal::Timer` (`hal/timer.hpp`)**:
   - Calibrated 64-bit microsecond counter and busy-wait delay for the 200 MHz core (`TICKS_PER_US = 200`).
 
@@ -250,7 +252,7 @@ Under [`riscv-firmware/apps/`](file:///home/tcmichals/projects/cubie/cubie-a5e/r
 
 ```text
 apps/
-├── testBasic/               # Minimal boot, ITCM execution, and multi-SRAM address writes
+├── testBasic/               # Minimal boot, ITCM execution, and Dedicated MCU SRAM C writes
 ├── testBasicTrace0/         # RemoteProc resource table, ASCII startup banner & 1s periodic trace
 ├── testStringBinaryTrace0/  # Combined ASCII text + packed binary telemetry with hardware FPU
 ├── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
@@ -264,23 +266,23 @@ apps/
 
 ### Application Details
 
-1. **`testBasic`**: Boots into ITCM `0x00000000` and continuously writes magic counters to Shared SRAM A2 (`0x00040000`), DTCM (`0x00081000`), and MCU SRAM C (`0x07130000`) for sanity testing via `devmem`.
+1. **`testBasic`**: Boots into ITCM `0x00000000` and continuously writes magic counters to Dedicated MCU SRAM C (`0x07130000`, `0x07131000`) and DTCM (`0x00081000`) for sanity testing via `devmem`.
 2. **`testBasicTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in DDR carveout (`0x48000000`) and emits 1 Hz heartbeat logs viewable via Linux debugfs.
-3. **`testStringBinaryTrace0`**: Combines double-precision hardware FPU math (sine wave computation) with a 32-byte packed binary `TelemetryPacket` in Shared SRAM A2 (`0x00041000`) and formatted ASCII log output in `trace0`.
-4. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to SRAM A2.
-5. **`testPing`**: Ultra-low-latency direct shared SRAM SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
+3. **`testStringBinaryTrace0`**: Combines double-precision hardware FPU math (sine wave computation) with a 32-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`0x07131000`) and formatted ASCII log output in `trace0`.
+4. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to MCU SRAM C (`0x07130000`).
+5. **`testPing`**: Ultra-low-latency direct shared MCU SRAM C SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
 6. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg`. Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg`.
-7. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state SRAM A2 SPSC control queues with a 1 MB DDR DRAM payload buffer pool configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
+7. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state MCU SRAM C SPSC control queues (`0x07130000`) with a 1 MB DDR DRAM payload buffer pool (`0x48100000`) configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
 
 ---
 
 ## 6. Communication Paradigm & IPC Architecture Comparison
 
-| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
+| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM A2 (`0x00040000`) | Lock-Free SPSC in SRAM A2 (`0x00040000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM A2 (`0x00040000`, 64B frames) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM C (`0x07130000`) | Lock-Free SPSC in SRAM C (`0x07130000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM C (`0x07130000`, 64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | Direct MMIO (`/dev/mem`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
@@ -326,13 +328,13 @@ The Linux RemoteProc framework allows stopping, switching, and starting firmware
 
 ```bash
 # ==============================================================================
-# 1. Run Pure Shared SRAM Ping (testPing)
+# 1. Run Pure Shared SRAM C Ping (testPing)
 # ==============================================================================
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 
-# Run high-frequency latency benchmark (e.g., 50,000 round-trips)
+# Run high-frequency latency benchmark (e.g., 50,000 round-trips over 0x07130000)
 ping_shm -n 50000
 
 # ==============================================================================
@@ -385,9 +387,9 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 3. **Verify Memory Writes with `devmem`**:
    ```bash
-   # When running testBasic, inspect magic incrementing counter in SRAM A2:
-   devmem 0x00040000 32
+   # When running testBasic, inspect magic incrementing counter in Dedicated MCU SRAM C:
+   devmem 0x07130000 32
    ```
 
 4. **Verify Exception Handling**:
-   When running `testCrash.elf`, read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to inspect the full GPR and CSR exception frame dump (`mepc`, `mcause`, `mtval`, `mstatus`, `ra`, `sp`, `gp`, etc.).
+   When running `testCrash.elf`, read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to inspect the full GPR and CSR exception frame dump (`mepc`, `mcause`, `mtval`, `mstatus`, `ra`, `sp`, `gp`, etc.) and verify `0xDEADF00D` in MCU SRAM C (`0x07130000`).

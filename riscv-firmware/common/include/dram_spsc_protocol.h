@@ -8,10 +8,10 @@
 
 /*
  * Physical Memory Mapping
- *  - Control Block in Fast Zero-Wait-State On-Chip SRAM A2
- *  - Payload Buffer Pool in DDR DRAM Carveout
+ *  - Control Block in Fast Zero-Wait-State Dedicated MCU SRAM C (0x07130000)
+ *  - Payload Buffer Pool in DDR DRAM Carveout (0x48100000)
  */
-#define DRAM_SPSC_SRAM_ADDR    0x00040000UL /* Shared SRAM A2 Base */
+#define DRAM_SPSC_SRAM_ADDR    0x07130000UL /* Dedicated MCU SRAM C Base */
 #define DRAM_SPSC_SRAM_SIZE    0x1000UL     /* 4 KB Control Window */
 
 #define DRAM_SPSC_DRAM_ADDR    0x48100000UL /* DDR Reserved Memory Carveout */
@@ -21,7 +21,7 @@
 #define DRAM_SPSC_MAX_BUF_LEN  4096UL       /* 4 KB Max Payload per Slot */
 
 /*
- * SPSC Ring Descriptor (Placed in SRAM A2)
+ * SPSC Ring Descriptor (Placed in SRAM C)
  */
 struct __attribute__((packed, aligned(4))) DramSpscDesc {
     uint32_t dram_buf_offset; // Byte offset into DRAM buffer pool (0x48100000 + offset)
@@ -33,7 +33,7 @@ struct __attribute__((packed, aligned(4))) DramSpscDesc {
 };
 
 /*
- * Bidirectional SPSC Queue Control Block (Placed in SRAM A2 @ 0x00040000)
+ * Bidirectional SPSC Queue Control Block (Placed in SRAM C @ 0x07130000)
  */
 struct __attribute__((packed, aligned(4))) DramSpscControlBlock {
     // Control block initialization signature

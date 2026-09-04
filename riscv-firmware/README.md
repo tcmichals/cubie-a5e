@@ -18,8 +18,8 @@ This repository contains bare-metal firmware, runtime drivers, test applications
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
 |  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E907 RISC-V Co-Processor  |  |  |
-|  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
-|                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
+|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|  |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  +-------------------------------------+   |  +-----------------------------------+  |  |
 |  |             NPU Engine              |   |  +-----------------------------------+  |  |
 |  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
@@ -28,8 +28,9 @@ This repository contains bare-metal firmware, runtime drivers, test applications
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
 |  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
-|  |  - 208 KB Shared SRAM A2 (0x00040000) [Zero-Wait-State Low-Latency Control & IPC]  |  |
-|  |  - 320 KB Dedicated MCU SRAM C (0x07130000)                                       |  |
+|  |  - 256 KB Dedicated MCU SRAM C (0x07130000) [Zero-Wait-State Low-Latency Control]  |  |
+|  |  - 4 KB DDR RemoteProc Trace Carveout (0x48000000)                                |  |
+|  |  - 1 MB DDR DMA Payload Pool (0x48100000)                                         |  |
 |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
@@ -58,11 +59,16 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 | :--- | :--- | :--- | :--- | :--- |
 | **Instruction TCM (ITCM)** | **`0x07110000`** | **`0x00000000`** | **64 KB** | Zero-wait-state instruction execution (`.text`, `.vectors`) |
 | **Data TCM (DTCM)** | **`0x07120000`** | **`0x00080000`** | **64 KB** | Zero-wait-state data, stack (`.stack`), and `.resource_table` |
-| **Shared System SRAM A2** | **`0x00040000`** | **`0x00040000`** | **208 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`) |
-| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; fast scratchpad / DSP / MCU shared memory |
-| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / system power-management SRAM |
+| **Dedicated MCU SRAM (SRAM C)** | **`0x07130000`** | **`0x07130000`** | **256 KB** | 1:1 Identity mapped; ultra-low-latency direct SPSC IPC (`testPing`, `testDRAMMsg`) |
+| **Reserved R_SRAM** | **`0x07280000`** | **`0x07280000`** | **256 KB** | Standby / DSP scratchpad SRAM |
 | **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc ASCII & binary log buffer (`/sys/.../trace0`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
+
+> [!IMPORTANT]
+> ### Why `SRAM A2` (`0x00040000`) is NOT used for RemoteProc:
+> 1. **ARM Trusted Firmware (TF-A / BL31 / PSCI)**: On Allwinner ARM64 SoCs, `SRAM A2` (`0x00040000`) is the **Secure SRAM (CPUS SRAM)** reserved for TF-A BL31 secure monitor runtime, CPU standby/suspend state machines, and PSCI services. Non-secure access can cause hardware TrustZone aborts or corrupt power management.
+> 2. **Allwinner A733 Hardware Collision**: On the A733, `SRAM A2` is hardwired in silicon as the boot location of the Always-On E902 CPUS core running `scp.fex` for PMIC power rail regulation.
+> 3. **Clean T527 Architecture**: On the T527, the E907 is in the independent **MCU domain (`0x07100000`+)** with its own **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (64 KB)**, and **DTCM (64 KB)**. Therefore, all shared SPSC queues, crash dumps, and IPC channels reside safely in **SRAM C (`0x07130000`)** with zero risk of collision.
 
 ### 2.2 Control, Peripheral & Inter-Core Registers
 
@@ -85,9 +91,6 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 
   LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
   ================================                  =============================
-  0x00040000 - 0x00073FFF [ 208 KB ] ─────────────> 0x00040000 - 0x00073FFF (SRAM A2)
-    (Shared System SRAM / testPing SPSC)              (Direct Identity Mapped)
-
   0x07110000 - 0x0711FFFF [  64 KB ] ─────────────> 0x00000000 - 0x0000FFFF (ITCM)
     (Mapped via devm_ioremap_wc)                      (Vector Table & .text execution)
 
@@ -95,7 +98,7 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
     (Mapped via devm_ioremap_wc)                      (Data, Stack & .resource_table)
 
   0x07130000 - 0x0716FFFF [ 256 KB ] ─────────────> 0x07130000 - 0x0716FFFF (SRAM C)
-    (MCU Dedicated SRAM)                              (Direct Identity Mapped)
+    (MCU Dedicated SRAM / testPing SPSC)              (Direct Identity Mapped)
 
   0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
     (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
@@ -112,8 +115,10 @@ When Linux RemoteProc loads a firmware ELF:
    `sunxi_rproc_da_to_va()` offsets device address by `0x07110000` and copies code directly into ITCM via `memcpy_toio()`.
 2. **DTCM Segments (`0x00080000`–`0x0008FFFF`)**:
    `sunxi_rproc_da_to_va()` offsets device address by `0x07120000` and initializes `.data` and `.resource_table` via `memcpy_toio()`.
-3. **Shared SRAM A2 (`0x00040000`) & SRAM C (`0x07130000`)**:
+3. **Dedicated MCU SRAM C (`0x07130000`)**:
    1:1 Identity mapped — both Linux and RISC-V read and write the identical physical address.
+4. **DDR Carveouts (`0x48000000` & `0x48100000`)**:
+   Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings.
 
 ---
 
@@ -121,16 +126,15 @@ When Linux RemoteProc loads a firmware ELF:
 
 Under `apps/`, seven progressive test applications validate core functionality, memory mapping, telemetry, exception handling, and three inter-processor communication paradigms:
 
-
 ```text
 apps/
-├── testBasic/               # Minimal boot, ITCM execution, and multi-SRAM address writes
+├── testBasic/               # Minimal boot, ITCM execution, and Dedicated MCU SRAM C writes
 ├── testBasicTrace0/         # RemoteProc resource table, ASCII startup banner & 1s periodic trace
 ├── testStringBinaryTrace0/  # Combined ASCII text + packed binary telemetry with hardware FPU
 ├── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
-├── testPing/                # Fast, low-jitter Direct Shared Memory (Lite-libmetal style) + Linux benchmark
+├── testPing/                # Fast, low-jitter Direct Shared Memory (hal::SpscQueue) + Linux benchmark
 │   └── linux/               # ping_shm Linux host companion benchmark tool
-├── testPingRpmsg/           # Standard Linux VirtIO RPMsg (OpenAMP) echo firmware + Linux benchmark
+├── testPingRpmsg/           # Standard Linux VirtIO RPMsg (hal::Rpmsg) echo firmware + Linux benchmark
 │   └── linux/               # ping_rpmsg Linux host companion benchmark tool
 └── testDRAMMsg/             # Hybrid SRAM SPSC Queue + DDR DRAM Payload Buffers + PMP non-cacheable
     └── linux/               # ping_dram Linux host companion benchmark tool
@@ -142,19 +146,15 @@ apps/
 * **Purpose**: Basic bring-up and memory sanity verification.
 * **Functionality**:
   - Boots into ITCM `0x00000000`, configures stack in DTCM `0x00080000`.
-  - Writes magic signatures to multiple SRAM locations:
-    - SRAM A2: `0x00040000` (`0xDEADBEEF` + counter)
-    - SRAM A2: `0x00050000` (`0x52495343` "RISC" + counter)
-    - DTCM: `0x00081000` (`0xCAFE1234` + counter)
-    - SRAM C: `0x07130000` (`0xAA55AA55` + counter)
-  - Continuously increments counters so host Linux can verify life via `devmem 0x00040000 32`.
+  - Writes magic signatures to Dedicated MCU SRAM C (`0x07130000`, `0x07131000`) and DTCM (`0x00081000`).
+  - Continuously increments counters so host Linux can verify life via `devmem 0x07130000 32`.
 
 ---
 
 ### App 2: `testBasicTrace0`
 * **Purpose**: RemoteProc resource table and debugfs trace buffer verification.
 * **Functionality**:
-  - Declares `.resource_table` section exporting `trace0` buffer.
+  - Declares `.resource_table` section exporting `trace0` buffer in DDR carveout (`0x48000000`).
   - Emits ASCII startup banner.
   - Runs a 1-second periodic loop outputting heartbeat logs:
     ```text
@@ -172,7 +172,7 @@ apps/
 * **Purpose**: Demonstrates structured telemetry combining formatted ASCII strings with packed binary structures and hardware FPU computation.
 * **Functionality**:
   - Utilizes single-precision (`float`) and double-precision (`double`) hardware FPU math (sine wave computation).
-  - Populates a 32-byte packed binary `TelemetryPacket` in Shared SRAM A2 (`0x00041000`).
+  - Populates a 32-byte packed binary `TelemetryPacket` in Dedicated MCU SRAM C (`0x07131000`).
   - Interleaves formatted ASCII telemetry with decoded float values into `trace0`:
     ```text
     [TELM #1] Accel: (0.015, -0.008, 9.811) | FPU Sin: 0.0998 | SRAM: 0x54454C4D
@@ -187,7 +187,7 @@ apps/
   - Configures `mtvec` to custom exception trap handler.
   - Emits 3 normal heartbeats before intentionally triggering an illegal instruction trap.
   - Trap handler captures `mepc`, `mcause`, `mtval`, `mstatus`, and full GPR dump (`ra`, `sp`, `gp`, `a0`..`a7`, `t0`..`t6`, `s0`..`s11`).
-  - Writes fatal signature `0xDEADF00D` to SRAM A2 (`0x00040000`).
+  - Writes fatal signature `0xDEADF00D` to MCU SRAM C (`0x07130000`).
   - Formats an exhaustive crash autopsy and dumps it directly into `trace0`:
     ```text
     ################################################################
@@ -209,7 +209,7 @@ apps/
 ### App 5: `testPing` (Fast Direct Shared Memory / Lite-libmetal Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x00040000`).
+  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x07130000`).
   - Memory-barrier-synchronized doorbell registers (`host_doorbell`, `riscv_doorbell`).
   - Sub-microsecond response latency (~1.5–2.5 $\mu\text{s}$ Round-Trip Time).
 * **Linux Companion Tool**: `apps/testPing/linux/ping_shm`
@@ -217,7 +217,7 @@ apps/
   - Computes min, avg, max latency, jitter (standard deviation), percentiles (p50, p90, p99, p99.9), and message throughput.
 
 ```bash
-# Run 100,000 iterations over shared SRAM
+# Run 100,000 iterations over Dedicated MCU SRAM C
 sudo ./apps/testPing/linux/ping_shm -n 100000
 ```
 
@@ -248,7 +248,7 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 |                          HYBRID MEMORY IPC ARCHITECTURE                     |
 |                                                                             |
 |   +---------------------------------------------------------------------+   |
-|   |         SHARED SYSTEM SRAM A2 (0x00040000) - CONTROL PATH           |   |
+|   |         DEDICATED MCU SRAM C (0x07130000) - CONTROL PATH            |   |
 |   |  - SPSC Head & Tail Pointers (Atomic single-word updates)           |   |
 |   |  - Producer/Consumer Doorbells & Monotonic Sequence Counters        |   |
 |   |  - 16-slot TX/RX Descriptor Rings (Holds DRAM Buffer Offsets & Len) |   |
@@ -266,7 +266,7 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 +-----------------------------------------------------------------------------+
 ```
 * **Functionality**:
-  - Control block (`DramSpscControlBlock` @ `0x00040000`) in fast zero-wait-state SRAM A2.
+  - Control block (`DramSpscControlBlock` @ `0x07130000`) in fast zero-wait-state SRAM C.
   - 1 MB payload buffer pool in DDR DRAM Carveout (`0x48100000`).
   - Configures RISC-V Physical Memory Protection (PMP) and XuanTie Cache maintenance (`mhcr`, `mcor`, `dcache.iva`, `dcache.cpa`) for DMA-coherent uncached/strongly-ordered access.
 * **Linux Companion Tool**: `apps/testDRAMMsg/linux/ping_dram`
@@ -277,16 +277,15 @@ sudo ./apps/testPingRpmsg/linux/ping_rpmsg -n 1000
 sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 ```
 
-
 ---
 
 ## 4. Communication Paradigm & IPC Architecture Comparison
 
-| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
+| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM A2 (`0x00040000`) | Lock-Free SPSC in SRAM A2 (`0x00040000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM A2 (`0x00040000`, 64B frames) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM C (`0x07130000`) | Lock-Free SPSC in SRAM C (`0x07130000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM C (`0x07130000`, 64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | Direct MMIO (`/dev/mem`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
@@ -298,37 +297,14 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 
 ---
 
-## 5. How to Build
+## 5. How to Build & Deploy on Target (Cubie A5E)
 
-### Build Everything (Firmware + Linux Tools)
+### Build Everything (Firmware + Linux Benchmark Tools)
 ```bash
-# From riscv-firmware directory:
-make
-
-# Or from apps directory:
-make -C apps
+make -C riscv-firmware
 ```
 
-### Build a Specific Firmware Application
-```bash
-make -C apps/testPing
-make -C apps/testDRAMMsg
-make -C apps/testPingRpmsg
-```
-
-### Build Linux Host Companion Tools
-```bash
-make -C apps/testPing/linux
-make -C apps/testDRAMMsg/linux
-make -C apps/testPingRpmsg/linux
-```
-
----
-
-## 6. How to Deploy & Run on Target (Cubie A5E)
-
-
-All compiled firmware ELF files are staged into `riscv-firmware/bin/` with distinct names:
+All compiled firmware ELFs are staged into `riscv-firmware/bin/` with distinct names:
 * `testBasic.elf`
 * `testBasicTrace0.elf`
 * `testStringBinaryTrace0.elf`
@@ -337,46 +313,23 @@ All compiled firmware ELF files are staged into `riscv-firmware/bin/` with disti
 * `testPingRpmsg.elf`
 * `testDRAMMsg.elf`
 
-
-### 1. Deploy All Firmware ELFs to Target
+### Live Firmware Switching on Target (Cubie A5E)
 ```bash
-# Push all firmware ELFs and host benchmark tools to running board:
-./project-cubie-a5e/scripts/push-riscv-firmware.sh <TARGET_IP>
-```
-Or copy manually via SCP:
-```bash
-scp riscv-firmware/bin/*.elf root@<TARGET_IP>:/lib/firmware/
-scp riscv-firmware/bin/ping_shm riscv-firmware/bin/ping_rpmsg root@<TARGET_IP>:/usr/local/bin/
-```
-
-### 2. Switch Between Firmware Images on Target
-On the Linux target shell (`root@cubie-a5e`), switch between any of the installed ELFs at runtime:
-
-```bash
-# Stop current firmware
-echo stop > /sys/class/remoteproc/remoteproc0/state
-
-# 1. Load testBasicTrace0
-echo "testBasicTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
-echo start > /sys/class/remoteproc/remoteproc0/state
-cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
-
-# 2. Switch to testPing (Direct Shared Memory)
+# 1. Run Pure Shared SRAM Ping (testPing)
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 ping_shm -n 50000
 
-# 3. Switch to testPingRpmsg (Linux RPMsg)
+# 2. Run Hybrid SRAM/DRAM SPSC Benchmark (testDRAMMsg)
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testDRAMMsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+ping_dram -n 10000 -s 1024
+
+# 3. Run Standard Linux RPMsg (testPingRpmsg)
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 ping_rpmsg -n 5000
-
-# 4. Switch to testCrash (Exception Trap Autopsy)
-echo stop > /sys/class/remoteproc/remoteproc0/state
-echo "testCrash.elf" > /sys/class/remoteproc/remoteproc0/firmware
-echo start > /sys/class/remoteproc/remoteproc0/state
-cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
-

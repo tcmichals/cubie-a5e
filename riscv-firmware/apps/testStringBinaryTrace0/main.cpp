@@ -28,7 +28,7 @@ struct __attribute__((packed)) TelemetryPacket {
     uint16_t tail_magic;    // 0x55AA
 };
 
-#define SRAM_BINARY_PACKET_LOC ((volatile uint32_t *)0x00041000UL)
+#define SRAM_BINARY_PACKET_LOC ((volatile uint32_t *)0x07131000UL)
 
 static void write_packet_to_sram(const TelemetryPacket &pkt) {
     const uint32_t *src = reinterpret_cast<const uint32_t *>(&pkt);

@@ -32,12 +32,12 @@ int main(void) {
 
     hal::Trace::puts("================================================================\n");
     hal::Trace::puts("  Allwinner T527 XuanTie E907 testDRAMMsg (Hybrid SRAM/DRAM IPC)\n");
-    hal::Trace::puts("  Control Block: Shared SRAM A2 @ 0x00040000 (Zero-Wait-State) \n");
+    hal::Trace::puts("  Control Block: Dedicated MCU SRAM C @ 0x07130000 (Zero-Wait)  \n");
     hal::Trace::puts("  Payload Pool : DDR DRAM Carveout @ 0x48100000 (1 MB Window)  \n");
     hal::Trace::puts("  PMP / Cache  : Direct Uncached / Strongly-Ordered Coherent   \n");
     hal::Trace::puts("================================================================\n");
 
-    // 3. Initialize SPSC Control Block in SRAM A2
+    // 3. Initialize SPSC Control Block in Dedicated MCU SRAM C
     SPSC_CTRL->magic             = DRAM_SPSC_MAGIC_INIT;
     SPSC_CTRL->ring_size         = DRAM_SPSC_RING_ENTRIES;
     SPSC_CTRL->dram_pool_phys    = DRAM_SPSC_DRAM_ADDR;

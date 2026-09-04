@@ -18,7 +18,7 @@
 #include "hal/timer.hpp"
 #include "hal/crash.hpp"
 
-#define SRAM_HEARTBEAT_LOC ((volatile uint32_t *)0x00040000UL)
+#define SRAM_HEARTBEAT_LOC ((volatile uint32_t *)0x07130000UL)
 
 int main(void) {
     // 1. Initialize HAL

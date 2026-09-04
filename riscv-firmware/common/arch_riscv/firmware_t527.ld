@@ -4,7 +4,6 @@
  * Memory Map:
  *   ITCM (rx)   : 0x00000000 (64 KB - Zero-Wait Instruction Memory)
  *   DTCM (rwx)  : 0x00080000 (64 KB - Zero-Wait Data Memory & Stack)
- *   SRAM_A2 (rw): 0x00040000 (208 KB - Shared System SRAM)
  *   SRAM_C (rw) : 0x07130000 (256 KB - Dedicated MCU SRAM)
  */
 
@@ -15,7 +14,6 @@ MEMORY
 {
     ITCM (rx)    : ORIGIN = 0x00000000, LENGTH = 64K
     DTCM (rwx)   : ORIGIN = 0x00080000, LENGTH = 64K
-    SRAM_A2 (rwx): ORIGIN = 0x00040000, LENGTH = 208K
     SRAM_C (rwx) : ORIGIN = 0x07130000, LENGTH = 256K
 }
 
