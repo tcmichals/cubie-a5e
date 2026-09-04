@@ -22,7 +22,7 @@ diff --git a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h b/drivers/net/w
 index b2c3d4e..f5e6d7c 100644
 --- a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h
 +++ b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_compat.h
-@@ -21,6 +21,11 @@
+@@ -21,7 +21,13 @@
  #ifndef _RWNX_COMPAT_H_
  #define _RWNX_COMPAT_H_
 
@@ -40,7 +40,7 @@ diff --git a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c b/drivers/net/wir
 index c3d4e5f..a6b7c8d 100644
 --- a/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c
 +++ b/drivers/net/wireless/aic/aic8800_fdrv/rwnx_main.c
-@@ -2824,12 +2824,22 @@ static void apm_probe_sta_work_process(struct work_struct *work)
+@@ -2824,11 +2824,21 @@ static void apm_probe_sta_work_process(struct work_struct *work)
  	if (found)
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
 +		cfg80211_probe_status(rwnx_vif->ndev, mac,

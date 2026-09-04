@@ -47,7 +47,7 @@ new file mode 100644
 index 00000000..7c5e3d7a
 --- /dev/null
 +++ b/drivers/mailbox/sunxi-mailbox-t527.c
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,261 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (c) 2026 Antigravity Team
