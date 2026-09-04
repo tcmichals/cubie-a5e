@@ -66,7 +66,23 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 > 2. **A733 Hardware Power Management Collision**: On the A733 SoC, `SRAM A2` is hardwired in silicon as the boot address of the Always-On E902 CPUS core running vendor **`scp.fex`**. Overwriting `0x00040000` destroys `scp.fex` and powers off system PMIC voltage rails.
 > 3. **Correct Memory for E907 IPC**: XuanTie E907 firmware and RemoteProc IPC must strictly use **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (`0x00000000`, 64 KB)**, and **DTCM (`0x00080000`, 64 KB)** in the independent MCU domain (`0x07100000`+).
 
-### 2.2 Control, Peripheral & Inter-Core Registers
+### 2.2 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
+
+To avoid memory corruption or bus aborts, the table below defines the hardware ownership and purpose of every on-chip SRAM bank across the Allwinner T527 architecture:
+
+| SRAM Bank | Physical Base | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E907? |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`BROM`** | `0x00000000` | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (Read-Only BootROM) |
+| **`SRAM A1`** | `0x00020000` | 32 KB | Bootloader (SPL) | Loaded by BROM for `boot0` / SPL execution and DRAM PHY training | ❌ **No** (Bootloader Only) |
+| **`SRAM A2`** | `0x00040000` | 208 KB | **Secure EL3 (TF-A) / CPUS** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug), or A733 `scp.fex` PMIC core** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
+| **`ITCM`** | `0x07110000` (E907 `0x00000000`) | 64 KB | **XuanTie E907** | **Zero-wait-state 1-cycle instruction execution (`.text`, `.vectors`)** | ✅ **YES** (Core Instruction TCM) |
+| **`DTCM`** | `0x07120000` (E907 `0x00080000`) | 64 KB | **XuanTie E907** | **Zero-wait-state 1-cycle data, stack (`.stack`), `.bss`, `.resource_table`** | ✅ **YES** (Core Data TCM) |
+| **`SRAM C`** | `0x07130000` (E907 `0x07130000`) | 256 KB | **MCU / DSP Domain** | **1:1 Identity mapped non-secure shared SRAM for lock-free SPSC IPC, crash dump, and telemetry** | ✅ **YES** (Dedicated MCU IPC SRAM) |
+| **`R_SRAM`** | `0x07280000` (E907 `0x07280000`) | 256 KB | MCU / DSP Domain | Standby / DSP scratchpad SRAM | ✅ **YES** (Scratchpad / DSP) |
+| **`trace0`** | `0x48000000` | 4 KB | Linux RemoteProc | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) | ✅ **YES** (Logging Carveout) |
+| **`dram_dma`**| `0x48100000`| 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC (`testDRAMMsg`) | ✅ **YES** (Streaming Carveout) |
+
+### 2.3 Control, Peripheral & Inter-Core Registers
 
 | Peripheral Block | Linux Host Physical Address | E907 RISC-V Address | Description & Hardware Usage |
 | :--- | :--- | :--- | :--- |
@@ -78,7 +94,7 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 | **UART2 (Co-processor Port)** | **`0x02500800`** | **`0x02500800`** | High-speed serial / RC receiver interface |
 | **SPI0 Controller** | **`0x04025000`** | **`0x04025000`** | Direct high-speed peripheral bus |
 
-### 2.3 Visual Address Translation Architecture
+### 2.4 Visual Address Translation Architecture
 
 ```
 +===================================================================================+
@@ -104,7 +120,7 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 +===================================================================================+
 ```
 
-### 2.4 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
+### 2.5 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
 
 When Linux RemoteProc loads a firmware ELF:
 1. **ITCM Segments (`0x00000000`–`0x0000FFFF`)**:
