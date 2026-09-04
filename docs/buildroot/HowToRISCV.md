@@ -59,11 +59,12 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 | **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc ASCII & binary log buffer (`/sys/.../trace0`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
 
-> [!IMPORTANT]
-> ### Why `SRAM A2` (`0x00040000`) is NOT used for RemoteProc:
-> 1. **ARM Trusted Firmware (TF-A / BL31 / PSCI)**: On Allwinner ARM64 SoCs, `SRAM A2` (`0x00040000`) is the **Secure SRAM (CPUS SRAM)** reserved for TF-A BL31 secure monitor runtime, CPU standby/suspend state machines, and PSCI services. Non-secure access can cause hardware TrustZone aborts or corrupt power management.
-> 2. **Allwinner A733 Hardware Collision**: On the A733, `SRAM A2` is hardwired in silicon as the boot location of the Always-On E902 CPUS core running `scp.fex` for PMIC power rail regulation.
-> 3. **Clean T527 Architecture**: On the T527, the E907 is in the independent **MCU domain (`0x07100000`+)** with its own **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (64 KB)**, and **DTCM (64 KB)**. Therefore, all shared SPSC queues, crash dumps, and IPC channels reside safely in **SRAM C (`0x07130000`)** with zero risk of collision.
+> [!WARNING]
+> ### CRITICAL HARDWARE & SECURITY WARNING: DO NOT USE SRAM A2 (`0x00040000`) FOR RISC-V
+> **SRAM A2 (`0x00040000`–`0x00073FFF`) is strictly reserved for Secure World / TrustZone and must NEVER be mapped or written to by RISC-V firmware or Linux RemoteProc:**
+> 1. **ARM TrustZone Secure World (TF-A / BL31 / PSCI)**: On Allwinner ARM64 SoCs, `SRAM A2` is the **Secure SRAM (CPUS SRAM)**. ARM Trusted Firmware (TF-A BL31) runs at Secure EL3 and places its secure monitor runtime data, secure stacks, and **PSCI 1.1 CPU power-management state machines** in `SRAM A2`. The hardware TrustZone Memory Adapter (TZMA) firewalls `SRAM A2` for **Secure Access Only**; any non-secure write attempt by Linux or an external core triggers an immediate **hardware Synchronous External Abort** (bus fault).
+> 2. **A733 Hardware Power Management Collision**: On the A733 SoC, `SRAM A2` is hardwired in silicon as the boot address of the Always-On E902 CPUS core running vendor **`scp.fex`**. Overwriting `0x00040000` destroys `scp.fex` and powers off system PMIC voltage rails.
+> 3. **Correct Memory for E907 IPC**: XuanTie E907 firmware and RemoteProc IPC must strictly use **Dedicated MCU SRAM C (`0x07130000`, 256 KB)**, **ITCM (`0x00000000`, 64 KB)**, and **DTCM (`0x00080000`, 64 KB)** in the independent MCU domain (`0x07100000`+).
 
 ### 2.2 Control, Peripheral & Inter-Core Registers
 
