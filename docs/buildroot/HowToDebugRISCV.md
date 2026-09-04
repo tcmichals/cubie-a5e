@@ -41,22 +41,23 @@ For co-processor firmware development on the T527, developers have several clean
  ┌─────────────────────────────────────────────────────────────┐
  │              Shared Memory & Hardware Interconnect          │
  │                                                             │
- │  • RemoteProc Trace0 Buffer (SRAM C @ 0x0007A000, 4KB)      │
+ │  • RemoteProc Trace0 Buffer (DDR Carveout @ 0x48000000, 4KB) │
  │  • Shared SRAM A2 Ring Buffers (0x00040000 - 0x00073FFF)    │
+ │  • Dedicated MCU SRAM C (0x07130000, 256KB)                 │
  │  • Hardware Mailbox Doorbell IRQs (0x03003000)              │
  └─────────────────────────────┬───────────────────────────────┘
                                │
                                ▼
  ┌─────────────────────────────────────────────────────────────┐
- │           XuanTie E906/E907 Real-Time Co-Processor          │
+ │           XuanTie E907 Real-Time Co-Processor (200 MHz)     │
  │                                                             │
  │  • Dedicated S_UART0 Serial Console (0x07080000, 115.2k)    │
- │  • 64 KB ITCM (0x00000000) + 64 KB DTCM (0x00020000)       │
+ │  • 64 KB ITCM (0x00000000) + 64 KB DTCM (0x00080000)       │
  │  • External JTAG Test Interface (Physical Probe)            │
  └─────────────────────────────────────────────────────────────┘
 ```
 
-1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0` (phys `0x48000000`).
 2. **Dedicated Hardware UART (`S_UART0`)**: Low-latency, non-blocking serial console at `0x07080000` (115200 baud).
 3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Shared SRAM A2 (`0x00040000`).
 4. **Hardware Mailbox Doorbell IRQ & RPMsg**: Sub-microsecond inter-processor communication.
@@ -70,7 +71,7 @@ For co-processor firmware development on the T527, developers have several clean
 
 ```bash
 # On your development host:
-scp cubie-a5e/riscv-firmware/firmware.elf root@cubie-a5e:/lib/firmware/riscv-firmware.elf
+scp cubie-a5e/riscv-firmware/bin/testBasicTrace0.elf root@cubie-a5e:/lib/firmware/testBasicTrace0.elf
 ```
 
 ### Step 2: Boot the Co-Processor from Linux
@@ -79,7 +80,7 @@ scp cubie-a5e/riscv-firmware/firmware.elf root@cubie-a5e:/lib/firmware/riscv-fir
 # On the target (ARM Linux shell):
 
 # Point remoteproc to the firmware binary
-echo "riscv-firmware.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo "testBasicTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
 
 # Start execution
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -91,7 +92,7 @@ cat /sys/class/remoteproc/remoteproc0/state
 
 ### Step 3: Monitor Live Firmware Output via Trace Buffer
 
-The firmware resource table declares a 4 KB trace buffer in SRAM (`0x7A000`). The Linux kernel remoteproc driver automatically exposes this to debugfs:
+The firmware resource table declares a 4 KB trace buffer in DDR carveout (`0x48000000`). The Linux kernel remoteproc driver automatically exposes this to debugfs:
 
 ```bash
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
