@@ -11,7 +11,7 @@ namespace hal {
 class Trace {
 public:
     // Initialize trace buffer in memory and optional serial console mirror
-    static void init(bool enable_serial_mirror = true) noexcept;
+    static void init(bool enable_serial_mirror = false) noexcept;
 
     // Direct character and string outputs
     static void putc(char c) noexcept;

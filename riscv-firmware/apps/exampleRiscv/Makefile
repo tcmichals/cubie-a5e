@@ -15,17 +15,17 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 
 # Target Board Selection: a7a (Allwinner A733 / E902) or a5e (Allwinner T527 / E906)
-BOARD ?= a7a
+BOARD ?= a5e
 
 ifeq ($(BOARD),a7a)
 # Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
-LDSCRIPT  ?= firmware_e902_dram.ld
 else
-# Allwinner T527: XuanTie E906 (RV32I 32 registers, hardware double float, 5-stage, up to 200 MHz)
+# Allwinner T527: XuanTie E906/E907 (RV32I 32 registers, hardware double float, 5-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32imafdc_zicsr -mabi=ilp32d -mcmodel=medany
-LDSCRIPT  ?= firmware_e906_itcm.ld
 endif
+
+LDSCRIPT  ?= ../../common/arch_riscv/firmware_t527.ld
 
 OPT_FLAGS  = -O2 -g
 

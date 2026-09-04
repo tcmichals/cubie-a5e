@@ -10,7 +10,7 @@ extern "C" char g_rproc_trace_buffer[];
 namespace hal {
 
 volatile uint32_t Trace::s_pos = 0;
-bool Trace::s_serial_mirror = true;
+bool Trace::s_serial_mirror = false;
 
 static char *get_trace_buffer() noexcept {
     return g_rproc_trace_buffer;

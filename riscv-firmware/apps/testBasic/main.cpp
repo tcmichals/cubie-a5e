@@ -28,17 +28,7 @@ __attribute__((used, section(".dtcm_scratch"), aligned(4)))
 static volatile uint32_t dtcm_scratch[2];
 
 int main(void) {
-    // 1. Initialize HAL Trace and Timer
-    hal::Trace::init();
-    hal::Timer::init();
-
-    hal::Trace::puts("================================================================\n");
-    hal::Trace::puts("  Allwinner T527 XuanTie E907 testBasic App                     \n");
-    hal::Trace::printf("  SRAM C Window : %p, %p\n", (void *)sram_c_loc1, (void *)sram_c_loc2);
-    hal::Trace::printf("  DTCM Scratch  : %p\n", (void *)dtcm_scratch);
-    hal::Trace::puts("================================================================\n");
-
-    // 2. Write Initial Magic Signatures
+    // 1. Write Initial Magic Signatures immediately upon entry
     sram_c_loc1[0]  = 0xDEADBEEF;
     sram_c_loc1[1]  = 0;
 
@@ -47,6 +37,16 @@ int main(void) {
 
     dtcm_scratch[0] = 0xCAFE1234;
     dtcm_scratch[1] = 0;
+
+    // 2. Initialize In-Memory HAL Trace (disable unmapped S_UART0 mirror) and Timer
+    hal::Trace::init(false);
+    hal::Timer::init();
+
+    hal::Trace::puts("================================================================\n");
+    hal::Trace::puts("  Allwinner T527 XuanTie E907 testBasic App                     \n");
+    hal::Trace::printf("  SRAM C Window : %p, %p\n", (void *)sram_c_loc1, (void *)sram_c_loc2);
+    hal::Trace::printf("  DTCM Scratch  : %p\n", (void *)dtcm_scratch);
+    hal::Trace::puts("================================================================\n");
 
     uint32_t count = 0;
 

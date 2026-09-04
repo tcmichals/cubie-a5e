@@ -12,15 +12,15 @@
 /* Tightly-Coupled Memories (Zero-Wait-State) */
 #define ITCM_BASE                   0x00000000  /* 64 KB Instruction TCM */
 #define ITCM_SIZE                   0x00010000
-#define DTCM_BASE                   0x00080000  /* 64 KB Data TCM */
+#define DTCM_BASE                   0x00010000  /* 64 KB Data TCM */
 #define DTCM_SIZE                   0x00010000
 
 /* Shared System SRAM C (On-Chip High-Speed Interconnect) */
-#define SRAM_C_BASE                 0x07130000  /* 320 KB Total SRAM C */
-#define SRAM_C_SIZE                 0x00050000
+#define SRAM_C_BASE                 0x00020000  /* 128 KB Total SRAM C */
+#define SRAM_C_SIZE                 0x00020000
 
-/* IPC & Diagnostics Memory Layout within SRAM C (0x07130000) */
-#define IPC_SHARED_MEM_BASE         0x07130000
+/* IPC & Diagnostics Memory Layout within SRAM C (0x00020000) */
+#define IPC_SHARED_MEM_BASE         0x00020000
 #define IPC_CRASH_DUMP_OFFSET       0x0000      /* 256 B  - Fatal Trap Dump Area */
 #define IPC_CRASH_DUMP_SIZE         0x0100
 #define IPC_TX_RING_OFFSET          0x0100      /* 16 KB  - RISC-V -> Linux Queue (128B slots) */

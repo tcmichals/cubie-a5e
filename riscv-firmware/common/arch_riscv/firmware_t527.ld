@@ -1,10 +1,10 @@
 /*
- * firmware_t527.ld - Unified Linker Script for Allwinner T527 XuanTie E907
+ * firmware_t527.ld - Unified Linker Script for Allwinner T527 / A523 XuanTie E907
  *
- * Memory Map:
- *   ITCM (rx)   : 0x00000000 (64 KB - Zero-Wait Instruction Memory)
- *   DTCM (rwx)  : 0x00080000 (64 KB - Zero-Wait Data Memory & Stack)
- *   SRAM_C (rw) : 0x07130000 (256 KB - Dedicated MCU SRAM)
+ * Memory Map (from RISC-V core view within 256 KB Dedicated SRAM):
+ *   ITCM   (rx)  : 0x00000000 (64 KB - Reset Vectors & Program Code)
+ *   DTCM   (rwx) : 0x00010000 (64 KB - Data, BSS, Stack & Resource Table)
+ *   SRAM_C (rwx) : 0x00020000 (128 KB - Shared IPC, Telemetry & Buffers)
  */
 
 OUTPUT_ARCH("riscv")
@@ -12,9 +12,9 @@ ENTRY(_start)
 
 MEMORY
 {
-    ITCM (rx)    : ORIGIN = 0x00000000, LENGTH = 64K
-    DTCM (rwx)   : ORIGIN = 0x00080000, LENGTH = 64K
-    SRAM_C (rwx) : ORIGIN = 0x07130000, LENGTH = 256K
+    ITCM   (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
+    DTCM   (rwx) : ORIGIN = 0x00010000, LENGTH = 64K
+    SRAM_C (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
 }
 
 SECTIONS
