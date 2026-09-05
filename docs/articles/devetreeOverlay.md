@@ -202,17 +202,15 @@ During the U-Boot board initialization sequence (`env_init()` and `env_relocate(
 
 ### The Spectrum of Bootloader Files: When to Use What
 
-To avoid confusion, the table below categorizes every configuration and boot file used on the platform:
+To avoid confusion, here is how each configuration and boot file is used across the platform:
 
-| File | Format | Purpose & Usability |
-| :--- | :--- | :--- |
-| **config.txt** | Plain Text | Raspberry Pi-style overlay selection (`dtoverlay=`) & kernel args. **Safely editable live with `vi`**. |
-| **armbianEnv.txt** | Plain Text | Armbian-style overlay configuration (`overlays=`, `extraargs=`). **Safely editable live with `vi`**. |
-| **boot.cmd** | Shell Script | Dynamic boot script supporting `config.txt`, `armbianEnv.txt`, and `uEnv.txt`. Editable in repo. |
-| **boot.scr** | Binary Script | Compiled boot engine executed by U-Boot (`source 0x4fc00000`). |
-| **uboot.env** | 64 KB Binary | Static firmware baseline with CRC32. **Do not edit directly**. |
-| **uboot-env.txt**| Plain Text | Default environment template compiled into `uboot.env`. |
-| **uEnv.txt** | Plain Text | Legacy fallback configuration (`overlays=`). Editable live with `vi`. |
+* **config.txt** (Plain Text): Raspberry Pi-style overlay selection (`dtoverlay=`) and kernel args. Safely editable live with `vi` or on any PC.
+* **armbianEnv.txt** (Plain Text): Armbian-style overlay configuration (`overlays=`, `extraargs=`). Safely editable live with `vi` or on any PC.
+* **boot.cmd** (Shell Script): Dynamic boot script supporting `config.txt`, `armbianEnv.txt`, and `uEnv.txt`. Editable in repository.
+* **boot.scr** (Binary Script): Compiled boot engine executed by U-Boot (`source 0x4fc00000`).
+* **uboot.env** (64 KB Binary): Static firmware baseline with CRC32. Do not edit directly.
+* **uboot-env.txt** (Plain Text): Default environment template compiled into `uboot.env`.
+* **uEnv.txt** (Plain Text): Legacy fallback configuration (`overlays=`). Editable live with `vi`.
 
 *Repository file locations:*
 * `config.txt`: [`project-cubie-a5e/board/radxa/cubie_a5e/config.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/config.txt)
@@ -227,13 +225,11 @@ To avoid confusion, the table below categorizes every configuration and boot fil
 
 To solve this usability bottleneck, we separate firmware plumbing from user configuration:
 
-| Feature | uboot.env (Firmware Baseline) | config.txt (User Configuration) |
-| :--- | :--- | :--- |
-| **Format** | 64 KB Binary Blob (4-byte CRC32) | Plain Human-Readable Text (ASCII/UTF-8) |
-| **Purpose** | Low-level U-Boot bootloader plumbing | User overlays, pinmux, and kernel cmdline |
-| **Edit with vi?** | **No** (Corrupts CRC, reverts to defaults) | **Yes** (100% safe to edit live or on PC) |
-| **Where to Edit**| Host `mkenvimage` or serial console | Target `/boot/config.txt` or PC card reader |
-| **How It Loads** | Loaded automatically by U-Boot at reset | Imported to RAM by `boot.cmd` (`env import -t`)|
+* **File Format**: `uboot.env` is a 64 KB binary blob protected by a 4-byte CRC32 header, whereas `config.txt` is pure, human-readable plain text (ASCII/UTF-8).
+* **Primary Purpose**: `uboot.env` handles low-level firmware bootstrap plumbing (baud rates, DRAM addresses, immutable `bootcmd`), whereas `config.txt` provides user runtime configuration (enabling overlays and kernel command-line options).
+* **Editing with vi**: Direct editing of `uboot.env` with `vi` or `nano` corrupts the CRC32 checksum, forcing U-Boot to revert to compiled-in defaults. In contrast, `config.txt` is 100% safe to edit live on the running board or in any text editor on a host PC.
+* **Where to Edit**: Modifying `uboot.env` requires the host `mkenvimage` utility or the U-Boot serial console, while `config.txt` can be edited directly on the target at `/boot/config.txt` or on a PC SD card reader.
+* **Ingestion Mechanism**: `uboot.env` is loaded automatically by U-Boot at reset, while `config.txt` is imported dynamically into RAM by `boot.cmd` using U-Boot's `env import -t` command.
 
 > **Armbian & Raspberry Pi Ecosystem Convergence**:
 > If you have worked with Armbian (`armbianEnv.txt`) or Raspberry Pi (`config.txt`), our bootloader engine bridges both worlds. It natively supports Raspberry Pi-style `config.txt` as well as Armbian-style `armbianEnv.txt`. For an in-depth architectural comparison between Armbian's boot model and our architecture, see [Section 5: How Armbian Does It](#how-armbian-does-it-the-armbianenvtxt-pattern--ecosystem-convergence).
@@ -440,17 +436,6 @@ U-Boot parses the text file directly into its active environment hash table in R
 
 #### 3. In-Depth Comparison: Armbian Architecture vs Our Cubie A5E Architecture
 While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it across several critical dimensions:
-
-| Architectural Dimension | Standard Armbian Distribution | Our Cubie A5E Buildroot Architecture |
-| :--- | :--- | :--- |
-| **Boot Filesystem Scheme** | Monolithic `ext4` partition (`/boot` is inside the rootfs) | Dedicated 64 MB FAT32 boot partition (`boot.vfat`) + `ext4` rootfs |
-| **Cross-Platform Host Editing** | **Difficult**: SD card cannot be read on Windows or macOS without third-party `ext4` drivers | **Instant**: FAT32 partition mounts natively as a standard flash drive on Windows, macOS, and Linux |
-| **Filesystem Failure Isolation** | If rootfs corrupts, bootloader files and kernel become unbootable and unreadable | Bootloader and kernel reside on an isolated FAT32 partition, unaffected by rootfs corruption |
-| **Configuration Naming** | `armbianEnv.txt` (`overlays=`, `extraargs=`) | Raspberry Pi-style `config.txt` (`dtoverlay=`, `cmdline=`) |
-| **Multi-Format Ingestion Engine** | Locked strictly to Armbian schema (`armbianEnv.txt`) | **Tri-Format Universal Engine**: Natively parses `config.txt`, `armbianEnv.txt`, and legacy `uEnv.txt` |
-| **Overlay Name Resolution** | Relies on `overlay_prefix` variable prefixing (e.g. `sun55i-a527-`) | Smart resolution: loads overlay directly by name or appends `.dtbo` automatically |
-| **Kernel Arguments Appending** | Appends `extraargs` to `bootargs` | Supports `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv) |
-| **Real-Time Configuration** | Standard Linux scheduler by default; manual tuning required | Automated `isolcpus=3` / `7` CPU isolation & IRQ affinity steering via `/etc/init.d/S15realtime` |
 
 * **Boot Filesystem Architecture**: Standard Armbian uses a single monolithic `ext4` root partition where `/boot` resides inside the Linux filesystem. Our architecture provides a dedicated 64 MB FAT32 boot partition (`boot.vfat`) alongside the `ext4` rootfs.
 * **Cross-Platform Host Editing**: Standard Armbian SD cards cannot be read on Windows or macOS without third-party `ext4` drivers. Our FAT32 boot partition automatically mounts as a standard flash drive on Windows, macOS, and Linux PCs out-of-the-box.
