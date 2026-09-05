@@ -261,27 +261,6 @@ sync
 reboot
 ```
 
-### Buildroot Image Assembly Fix: Staging `config.txt`
-In Buildroot, `genimage` packages the FAT partition (`boot.vfat`) by taking files strictly from `${BINARIES_DIR}`. 
-
-To guarantee that `config.txt` and `uEnv.txt` are always placed onto the SD card, [`post-image.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh) stages them before `genimage` executes:
-
-```bash
-# 1. Compile boot.cmd into boot.scr using host mkimage
-${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "$(dirname $0)/boot.cmd" "${BINARIES_DIR}/boot.scr"
-
-# 2. Compile uboot-env.txt into uboot.env binary using host mkenvimage
-${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "$(dirname $0)/uboot-env.txt"
-
-# 3. Stage plain-text runtime configuration templates into BINARIES_DIR
-cp -f "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt"
-cp -f "${BOARD_DIR}/uEnv.txt"   "${BINARIES_DIR}/uEnv.txt"
-
-# 4. Run genimage packaging pipeline
-rm -rf "${GENIMAGE_TMP}"
-genimage --config "${GENIMAGE_CFG}" --rootpath "${TARGET_DIR}" --tmppath "${GENIMAGE_TMP}" --inputpath "${BINARIES_DIR}" --outputpath "${BINARIES_DIR}"
-```
-
 ---
 
 ## 4. Anatomy of a Device Tree Overlay (`.dtso`)
@@ -532,7 +511,180 @@ The script implements smart path resolution:
 
 ---
 
-## 7. The Handoff: From U-Boot to the Linux Kernel
+## 7. Buildroot Integration: Automating the Overlay, Boot Script, and Disk Image Pipeline
+
+A key strength of this architecture is that Buildroot automates the entire compilation, staging, and disk-packaging process. Developers do not need to manually run `dtc`, `mkimage`, `mkenvimage`, or `genimage`—everything is integrated into the Buildroot external tree ([`project-cubie-a5e`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e)).
+
+### The Buildroot Workflow Pipeline
+
+```text
++---------------------------------------------------------------------------------------------------+
+|                                  BUILDROOT AUTOMATION PIPELINE                                    |
++---------------------------------------------------------------------------------------------------+
+| 1. Out-of-Tree DTS Overlays (project-cubie-a5e/dts-overlay/allwinner/*.dtso)                      |
+|    ---> Buildroot Linux package runs dtc -@ ---> ${BINARIES_DIR}/*.dtbo                           |
++---------------------------------------------------------------------------------------------------+
+| 2. RootFS Pre-Assembly & Automount (rootfs-overlay & post-build.sh)                               |
+|    ---> Copies etc/fstab (/dev/mmcblk0p1 -> /boot) into ${TARGET_DIR}                             |
+|    ---> post-build.sh ensures mkdir -p ${TARGET_DIR}/boot exists                                  |
++---------------------------------------------------------------------------------------------------+
+| 3. Post-Image Processing (post-image.sh)                                                          |
+|    ---> mkimage compiles boot.cmd ---> ${BINARIES_DIR}/boot.scr                                   |
+|    ---> mkenvimage compiles uboot-env.txt ---> ${BINARIES_DIR}/uboot.env                         |
+|    ---> Copies config.txt and uEnv.txt ---> ${BINARIES_DIR}/                                      |
++---------------------------------------------------------------------------------------------------+
+| 4. Final Partition Packaging (genimage.cfg)                                                       |
+|    ---> Stitches u-boot-sunxi-with-spl.bin, boot.vfat (with config.txt, dtbos), and rootfs.ext4   |
+|    ---> Output: ${BINARIES_DIR}/sdcard.img                                                        |
++---------------------------------------------------------------------------------------------------+
+```
+
+### 1. Compiling Out-of-Tree Overlays (`.dtso` -> `.dtbo`)
+Buildroot compiles out-of-tree Device Tree Overlays using built-in Linux kernel package hooks. In our defconfig ([`project-cubie-a5e/configs/cubie_a5e_defconfig`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/configs/cubie_a5e_defconfig)), we configure:
+
+```kconfig
+# Base in-tree Device Tree from Linux kernel source:
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="allwinner/sun55i-a527-cubie-a5e"
+
+# Path to custom out-of-tree Device Tree Overlays:
+BR2_LINUX_KERNEL_CUSTOM_DTS_DIR="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/dts-overlay"
+
+# Enable overlay compilation (-@ symbols flag):
+BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y
+```
+
+When Buildroot builds the kernel:
+1. It copies all overlay source files (`.dtso`) from `$(BR2_EXTERNAL_CUBIE_A5E_PATH)/dts-overlay/allwinner/` into the kernel build directory.
+2. It invokes the Device Tree Compiler (`dtc`) with the `-@` symbols flag to retain symbol fixups.
+3. It copies the resulting binary overlays (`cubie-a5e-flight-stack.dtbo`, `cubie-a5e-uio.dtbo`) directly into `${BINARIES_DIR}/`.
+
+### 2. Automating `/boot` Mount in the Root Filesystem (`post-build.sh` & `rootfs-overlay`)
+To ensure that `/boot` is ready for the user to edit immediately after boot without manual mount commands:
+
+1. **Rootfs Overlay ([`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab))**:
+   ```fstab
+   # /etc/fstab: static file system information.
+   /dev/root       /              ext4     rw,noatime        0      1
+   /dev/mmcblk0p1  /boot          vfat     defaults          0      2
+   proc            /proc          proc     defaults          0      0
+   sysfs           /sys           sysfs    defaults          0      0
+   ```
+   Buildroot copies this file into the target rootfs during filesystem construction.
+
+2. **Post-Build Script ([`project-cubie-a5e/board/radxa/cubie_a5e/post-build.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/post-build.sh))**:
+   ```bash
+   #!/bin/sh
+   TARGET_DIR="$1"
+
+   # Ensure /boot mount point directory exists for FAT boot partition automount
+   mkdir -p "${TARGET_DIR}/boot"
+
+   exit 0
+   ```
+   Configured via `BR2_ROOTFS_POST_BUILD_SCRIPT`, this guarantees the `/boot` mount directory physically exists in `${TARGET_DIR}` before `rootfs.ext4` is generated.
+
+### 3. Staging Boot Artifacts via Post-Image Script (`post-image.sh`)
+Once the kernel and root filesystem are built, Buildroot executes the post-image script ([`project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh)):
+
+```bash
+#!/bin/sh
+BOARD_DIR="$(dirname $0)"
+GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
+GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
+
+# 1. Compile boot.cmd into boot.scr using host mkimage (from BR2_PACKAGE_HOST_UBOOT_TOOLS)
+${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "${BOARD_DIR}/boot.cmd" "${BINARIES_DIR}/boot.scr"
+
+# 2. Compile uboot-env.txt into uboot.env binary using host mkenvimage
+${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DIR}/uboot-env.txt"
+
+# 3. Stage plain-text runtime configuration templates into BINARIES_DIR for genimage
+cp -f "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt"
+cp -f "${BOARD_DIR}/uEnv.txt"   "${BINARIES_DIR}/uEnv.txt"
+
+# 4. Run genimage packaging pipeline
+rm -rf "${GENIMAGE_TMP}"
+genimage --config "${GENIMAGE_CFG}" \
+         --rootpath "${TARGET_DIR}" \
+         --tmppath "${GENIMAGE_TMP}" \
+         --inputpath "${BINARIES_DIR}" \
+         --outputpath "${BINARIES_DIR}"
+
+exit 0
+```
+
+#### Key Elements of `post-image.sh`:
+* **Host Toolchain (`${HOST_DIR}/bin/mkimage` and `mkenvimage`)**: Provided by enabling `BR2_PACKAGE_HOST_UBOOT_TOOLS=y` in Buildroot.
+* **Staging `config.txt`**: Because `genimage` only reads files from `--inputpath "${BINARIES_DIR}"`, copying `config.txt` and `uEnv.txt` into `${BINARIES_DIR}` is required so they get included in the FAT filesystem.
+
+### 4. Assembling the Multi-Partition Disk Image (`genimage.cfg`)
+Buildroot's host `genimage` tool reads [`project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg):
+
+```cfg
+image boot.vfat {
+    vfat {
+        files = {
+            "sun55i-a527-cubie-a5e.dtb",
+            "cubie-a5e-flight-stack.dtbo",
+            "cubie-a5e-uio.dtbo",
+            "config.txt",
+            "uEnv.txt",
+            "boot.scr",
+            "Image",
+            "uboot.env"
+        }
+    }
+    size = 64M
+}
+
+image sdcard.img {
+    hdimage {}
+
+    partition u-boot {
+        in-partition-table = false
+        image = "u-boot-sunxi-with-spl.bin"
+        offset = 8K
+        size = 1016K
+    }
+
+    partition boot {
+        partition-type = 0xC
+        bootable = "true"
+        image = "boot.vfat"
+        offset = 4M
+    }
+
+    partition rootfs {
+        partition-type = 0x83
+        image = "rootfs.ext4"
+    }
+}
+```
+
+This constructs a flashable `sdcard.img` with:
+* Raw sector offset 8 KB: Mainline U-Boot with SPL (`u-boot-sunxi-with-spl.bin`).
+* Offset 4 MB: Partition 1 `boot.vfat` (64 MB FAT32 containing kernel, base DTB, overlays, `config.txt`, `boot.scr`, and `uboot.env`).
+* Partition 2: `rootfs.ext4` (Linux ext4 root filesystem).
+
+### 5. Single-Command Build & Flash
+To build the complete image:
+```bash
+# Configure Buildroot with the external tree:
+make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+
+# Compile kernel, rootfs, overlays, bootloaders, and package disk image:
+make -C bld
+```
+
+The resulting image is written to `bld/images/sdcard.img` and can be flashed directly to an SD card:
+```bash
+sudo dd if=bld/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
+```
+
+---
+
+## 8. The Handoff: From U-Boot to the Linux Kernel
 
 Once all overlays have been sequentially merged into `${fdt_addr_r}`, U-Boot initiates the boot handoff:
 
@@ -561,7 +713,7 @@ Inside the Linux kernel:
 
 ---
 
-## 8. Runtime Verification in Linux Userspace
+## 9. Runtime Verification in Linux Userspace
 
 Once Linux has booted, how do we prove that U-Boot successfully merged the overlays?
 
@@ -599,7 +751,7 @@ cat /sys/class/uio/uio0/maps/map1/name   # -> sram   (0x7131000)
 
 ---
 
-## 9. Troubleshooting & Common Pitfalls
+## 10. Troubleshooting & Common Pitfalls
 
 ### 1. Accidentally Editing `uboot.env` Directly: `*** Bad CRC ***`
 * **Symptom**: You edited `/boot/uboot.env` with `vi` or `nano`. On next reboot, U-Boot outputs:
@@ -657,10 +809,11 @@ cat /sys/class/uio/uio0/maps/map1/name   # -> sram   (0x7131000)
 
 ---
 
-## 10. Summary
+## 11. Summary
 
 By decoupling **low-level bootloader plumbing** (`uboot.env`) from **runtime user configuration** (`config.txt`), we eliminate developer friction while preserving rock-solid boot reliability:
 
 1. **`uboot.env` Stays Untouched**: Serves as the static firmware foundation, initializing serial clocks, DRAM memory maps, and launching `boot.scr`. Developers never need to struggle with binary editors or CRC calculation tools.
 2. **`config.txt` Delivers Raspberry Pi Simplicity**: A clean, plain-text configuration file located on the FAT partition. Anyone can enable peripherals, toggle UIO drivers, or isolate CPU cores using standard text editors on Linux, macOS, or Windows.
-3. **Deterministic Boot Pipeline**: U-Boot's `env import -t` dynamically bridges the configuration into memory, expands the base Device Tree with `fdt resize`, applies overlays via `fdt apply`, and passes an immutable hardware contract to Linux via ARM64 register `x0`.
+3. **Buildroot End-to-End Automation**: Buildroot handles the complete workflow out-of-the-box—compiling out-of-tree `.dtso` fragments with `-@`, staging `config.txt` into `${BINARIES_DIR}`, pre-configuring `/boot` mounts in `/etc/fstab`, and packaging a turnkey `sdcard.img` ready to flash.
+4. **Deterministic Boot Pipeline**: U-Boot's `env import -t` dynamically bridges the configuration into memory, expands the base Device Tree with `fdt resize`, applies overlays via `fdt apply`, and passes an immutable hardware contract to Linux via ARM64 register `x0`.
