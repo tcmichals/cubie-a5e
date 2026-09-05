@@ -12,4 +12,7 @@ if [ -f "${TARGET_DIR}/usr/bin/npu-smoke-test" ]; then
     chmod 0755 "${TARGET_DIR}/usr/bin/npu-smoke-test"
 fi
 
+# Ensure /boot mount point directory exists for FAT boot partition automount
+mkdir -p "${TARGET_DIR}/boot"
+
 exit 0

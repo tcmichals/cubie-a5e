@@ -10,6 +10,10 @@ ${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "${BOARD_DIR}/boot.cmd" "$
 # 2. Compile uboot-env.txt into uboot.env binary using host mkenvimage
 ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DIR}/uboot-env.txt"
 
+# Copy plain-text runtime configuration templates into BINARIES_DIR for genimage FAT packaging
+cp -f "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt"
+cp -f "${BOARD_DIR}/uEnv.txt" "${BINARIES_DIR}/uEnv.txt"
+
 # 3. Stage verified Radxa A733 16MB bootloader blob into BINARIES_DIR
 if [ -f "${BOARD_DIR}/radxa_a733_bootloader.bin" ]; then
     cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
