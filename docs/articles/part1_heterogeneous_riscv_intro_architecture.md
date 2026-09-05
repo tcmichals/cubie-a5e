@@ -1,11 +1,13 @@
-# Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 1): Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks
+# Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 1): Architecture and Memory-Mapped Debugging
 
 Heterogeneous multi-core SoCs—pairing high-performance 64-bit ARM Cortex-A application cores with low-power, deterministic auxiliary microcontrollers—have become standard in modern embedded hardware. Silicon like the **Allwinner T527 / A527** (featured on the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFDC @ 200 MHz) and a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz).
 
-Getting these co-processors online is rarely plug-and-play. Early bring-up is iterative, and teams often start with quick userspace hacks (such as poking registers via `/dev/mem` and dumping raw binaries) before hitting a wall.
+Getting these co-processors online requires establishing reliable hardware lifecycle control, clock tree synchronization, and deterministic memory placement before loading production firmware.
+
+* **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
 
 This article is **Part 1 of a series** documenting the practical bring-up of the XuanTie E907 RISC-V co-processor on Linux:
-* **Part 1 (This Article)**: Architecture, TRM memory maps, why we retired `/dev/mem` loaders, and laying the groundwork for JTAG-less on-chip debugging.
+* **Part 1 (This Article)**: Architecture, TRM memory maps, the RemoteProc driver model, and on-chip memory-mapped debugging.
 * **Part 2**: Authoring the Linux `remoteproc` kernel driver, multi-segment ELF placement, and proving hardware state with automated Python DMI scripts.
 * **Part 3**: General embedded firmware development, TCM vs DRAM memory determinism, lightweight lock-free IPC (libmetal), live GDB workflows, and an introduction to bare-metal C++ coroutines.
 * **Part 4**: Deep dive into C++20 coroutines on bare-metal RISC-V—benchmarks, memory profiles, and comparison against RTOS task switching.
@@ -43,39 +45,7 @@ sun55i Generation (Same Die IP) ┼─────────────► Al
 
 ---
 
-## 2. The Early Trap: Why Userspace `/dev/mem` Loaders Fail
-
-During initial bring-up, the most common approach is writing a small C tool or shell script (`devmem`) to:
-1. Poke the Clock Control Unit (CCU) to enable MCU bus clocks.
-2. Toggle reset bits in CCU registers.
-3. `mmap()` the physical Instruction TCM (ITCM) and copy a flat `firmware.bin` payload into memory.
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                 The Userspace Loader Trap                   │
-│                                                             │
-│  1. Kernel Security Restrictions:                           │
-│     Modern Linux enforces CONFIG_STRICT_DEVMEM, blocking    │
-│     /dev/mem access to physical RAM unless insecure         │
-│     'iomem=relaxed' bootargs are forced into U-Boot.        │
-│                                                             │
-│  2. Missing Multi-Segment Placement:                        │
-│     A raw binary dump cannot place .text in ITCM,           │
-│     .data/.bss in DTCM, and shared buffers in SRAM C        │
-│     simultaneously.                                         │
-│                                                             │
-│  3. Clock Tree Desynchronization:                           │
-│     Userspace devmem writes fight against the kernel Common │
-│     Clock Framework (CCF), causing cores to silently drop   │
-│     into reset when CPU idle or runtime PM triggers.        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-When a status check reports `HALTED (In reset)`, you are left guessing: did the core crash in CRT0, is the stack misaligned, or was the clock gated before execution even started?
-
----
-
-## 3. Deriving the Physical Memory Map from the TRM
+## 2. Deriving the Physical Memory Map from the TRM
 
 To build a reliable software foundation, we extracted the authoritative memory map from the Allwinner T527 / A523 Technical Reference Manual (TRM). On the `sun55i` architecture, the entire MCU / RISC-V subsystem resides in the physical memory window **`0x07000000 – 0x071FFFFF`**:
 
@@ -90,7 +60,7 @@ To build a reliable software foundation, we extracted the authoritative memory m
 
 ---
 
-## 4. On-Chip Memory-Mapped Debugging: No Physical JTAG Cables Required!
+## 3. On-Chip Memory-Mapped Debugging: No Physical JTAG Cables Required!
 
 One of the most powerful features of modern heterogeneous SoCs is **Direct Memory-Mapped Debug Access (DMEM)**. 
 
@@ -123,26 +93,24 @@ Because the ARM Cortex-A55 Linux host and the XuanTie E907 RISC-V core share the
 ```
 
 > **Precedent in the Open-Source Community (TI, ST, and BeagleBoard):**  
-> This on-chip debugging methodology has a proven lineage in the open-source Linux community. **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) pioneered self-hosted "soft-wire" JTAG-less debugging on platforms like the **BeaglePlay** and **BeagleBone AI-64** (TI AM62x / AM64x) by introducing the `dmem` driver into OpenOCD (`board/ti_am625_swd_native.cfg`). By mapping debug registers directly across the internal bus via `/dev/mem`, developers could debug auxiliary cores natively from Linux without external hardware probes or header soldering. STMicroelectronics and NXP implement similar memory-mapped debug interfaces on their heterogeneous SoCs.
+> This on-chip debugging methodology has a proven lineage in the open-source Linux community. **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) pioneered self-hosted "soft-wire" JTAG-less debugging on platforms like the **BeaglePlay** and **BeagleBone AI-64** (TI AM62x / AM64x) by introducing the `dmem` driver into OpenOCD (`board/ti_am625_swd_native.cfg`). By mapping debug registers directly across the internal bus via direct MMIO, developers could debug auxiliary cores natively from Linux without external hardware probes or header soldering. STMicroelectronics and NXP implement similar memory-mapped debug interfaces on their heterogeneous SoCs.
 
 The presentation that inspired this approach is well worth watching:  
 🎥 **[Debugging Heterogeneous SoC Using OpenOCD — Nishanth Menon, Texas Instruments (YouTube)](https://youtu.be/hKFvxgbHUfg?si=Mhd7lEJgq9oBp3t9)**
 
-> [!NOTE]
-> **Hardware Architecture & Future Outlook:**
+> **Hardware Architecture & Future Outlook:**  
 > While memory-mapped debug access (`dmem`) is supported on TI (AM62x/K3) and STMicroelectronics (STM32MP1) SoCs, current **Allwinner T527 silicon does not route a `dmem` bus interface** for the RISC-V Debug Module to the non-secure ARM interconnect.
 > 
 > We hope Allwinner will incorporate a memory-mapped `dmem` interface in future silicon revisions so that developers can take full advantage of native Linux-hosted OpenOCD and GDB remote debugging. On current T527 hardware, production debugging is achieved cleanly through Linux RemoteProc trace buffers (`trace0`), dedicated serial UART logging (`S_UART0`), lock-free shared SRAM ring buffers, and external JTAG hardware probes.
 
 ---
 
-## 5. Summary & What's Next in Part 2
+## 4. Summary & What's Next in Part 2
 
 In this introductory article, we established:
 1. The silicon naming relationship between **T527**, **A527**, and **`sun55i-a523`**.
-2. Why userspace `/dev/mem` loaders and `iomem=relaxed` workarounds are dead ends for reliable bring-up.
-3. The TRM physical memory layout for the XuanTie E907 MCU subsystem.
-4. The `dmem` memory-mapped debugging architecture and how current T527 firmware leverages Linux `remoteproc` trace buffers and hardware serial.
+2. The TRM physical memory layout for the XuanTie E907 MCU subsystem.
+3. The `dmem` memory-mapped debugging architecture and how current T527 firmware leverages Linux `remoteproc` trace buffers and hardware serial.
 
 In **Part 2**, we will dive straight into the implementation:
 * Authoring the **Linux 7.1 `sunxi_rproc.c` RemoteProc kernel driver**.
@@ -152,11 +120,7 @@ In **Part 2**, we will dive straight into the implementation:
 ---
 
 ### Series Navigation
-* **Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks** *(You are here)*
+* **Part 1: Architecture and Memory-Mapped Debugging** *(You are here)*
 * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](part2_building_remoteproc_and_hardware_proof.md)**
 * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
-* *Part 4: Deep Dive into Bare-Metal C++ Coroutines (Upcoming)*
-
----
-
-#EmbeddedSystems #RISCV #Linux #RemoteProc #HeterogeneousComputing #HardwareBringUp #ARM #Allwinner #OpenOCD #OpenSource
+* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**

@@ -190,10 +190,10 @@ In **Part 4**, we will dive deep into coroutine implementation details:
 ---
 
 ### Series Navigation
-* **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](part1_heterogeneous_riscv_intro_architecture.md)**
+* **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](part2_building_remoteproc_and_hardware_proof.md)**
 * **Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro** *(You are here)*
-* *Part 4: Deep Dive into Bare-Metal C++ Coroutines (Upcoming)*
+* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
 
 ---
 

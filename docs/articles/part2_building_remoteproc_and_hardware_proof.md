@@ -1,6 +1,6 @@
 # Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 2): Building the Linux `remoteproc` Driver and Proving Hardware State
 
-In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, we laid the architectural foundation for the **Allwinner T527 / A527** (`sun55i`) SoC, analyzed why early userspace `/dev/mem` loaders fail, derived the physical memory map from the Technical Reference Manual (TRM), and explored on-chip JTAG-less memory-mapped debugging over OpenOCD.
+In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, we laid the architectural foundation for the **Allwinner T527 / A527** (`sun55i`) SoC, derived the physical memory map from the Technical Reference Manual (TRM), and explored on-chip JTAG-less memory-mapped debugging over OpenOCD.
 
 In this article (**Part 2**), we get our hands dirty in the code:
 1. **Building the Linux 7.1 `sunxi_rproc.c` RemoteProc driver** to manage the XuanTie E907 co-processor lifecycle and multi-segment ELF placement.
@@ -11,7 +11,7 @@ In this article (**Part 2**), we get our hands dirty in the code:
 
 ## 1. Building the Linux `remoteproc` Driver (`sunxi_rproc.c`)
 
-The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsystem for managing auxiliary microcontrollers on heterogeneous SoCs. It eliminates insecure `/dev/mem` hacks, manages power states, parses standard ELF binaries, and configures IPC.
+The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsystem for managing auxiliary microcontrollers on heterogeneous SoCs. It provides standardized lifecycle management, coordinates clock and reset domains, parses standard ELF binaries, and configures IPC.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -329,10 +329,10 @@ In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we shift 
 ---
 
 ### Series Navigation
-* **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](part1_heterogeneous_riscv_intro_architecture.md)**
+* **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State** *(You are here)*
 * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
-* *Part 4: Deep Dive into Bare-Metal C++ Coroutines (Upcoming)*
+* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
 
 ---
 
