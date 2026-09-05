@@ -18,9 +18,12 @@ if test -z "${ramdisk_addr_r}";    then setenv ramdisk_addr_r    0x4ff00000; fi
 setenv base_dtb sun55i-a527-cubie-a5e.dtb
 setenv overlays "cubie-a5e-flight-stack"
 
-# 4. Check for Raspberry Pi-style config.txt first, then uEnv.txt
+# 4. Check for Raspberry Pi-style config.txt first, then armbianEnv.txt, then uEnv.txt
 if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
     echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
+    env import -t ${ramdisk_addr_r} ${filesize}
+elif load mmc 0:1 ${ramdisk_addr_r} armbianEnv.txt; then
+    echo ">>> Found Armbian-style armbianEnv.txt! Importing environment..."
     env import -t ${ramdisk_addr_r} ${filesize}
 elif load mmc 0:1 ${ramdisk_addr_r} uEnv.txt; then
     echo ">>> Found uEnv.txt! Importing environment..."
@@ -32,10 +35,13 @@ if test -n "${dtoverlay}"; then
     setenv overlays "${dtoverlay}"
 fi
 
-# 6. Append optional user bootargs from cmdline (Pi-style) or extra_bootargs
+# 6. Append optional user bootargs from cmdline (Pi-style), extraargs (Armbian), or extra_bootargs
 if test -n "${cmdline}"; then
     echo ">>> Appending cmdline: ${cmdline}"
     setenv bootargs "${bootargs} ${cmdline}"
+elif test -n "${extraargs}"; then
+    echo ">>> Appending extraargs: ${extraargs}"
+    setenv bootargs "${bootargs} ${extraargs}"
 elif test -n "${extra_bootargs}"; then
     echo ">>> Appending extra_bootargs: ${extra_bootargs}"
     setenv bootargs "${bootargs} ${extra_bootargs}"

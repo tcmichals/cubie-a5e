@@ -25,9 +25,12 @@ md.l 0x02003a00 1
 md.l 0x02003300 4
 md.l 0x0200335c 1
 
-# Check for Raspberry Pi-style config.txt first, then uEnv.txt
+# Check for Raspberry Pi-style config.txt first, then armbianEnv.txt, then uEnv.txt
 if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
     echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
+    env import -t ${ramdisk_addr_r} ${filesize}
+elif load mmc 0:1 ${ramdisk_addr_r} armbianEnv.txt; then
+    echo ">>> Found Armbian-style armbianEnv.txt! Importing environment..."
     env import -t ${ramdisk_addr_r} ${filesize}
 elif load mmc 0:1 ${ramdisk_addr_r} uEnv.txt; then
     echo ">>> Found uEnv.txt! Importing environment..."
@@ -41,6 +44,9 @@ fi
 if test -n "${cmdline}"; then
     echo ">>> Appending cmdline: ${cmdline}"
     setenv bootargs "${bootargs} ${cmdline}"
+elif test -n "${extraargs}"; then
+    echo ">>> Appending extraargs: ${extraargs}"
+    setenv bootargs "${bootargs} ${extraargs}"
 elif test -n "${extra_bootargs}"; then
     echo ">>> Appending extra_bootargs: ${extra_bootargs}"
     setenv bootargs "${bootargs} ${extra_bootargs}"

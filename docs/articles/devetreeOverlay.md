@@ -403,7 +403,47 @@ cmdline=
 ### Supported Configuration Directives:
 1. `dtoverlay=`: Space-separated list of overlays to apply. You can specify the file name with or without `.dtbo` (e.g., `cubie-a5e-flight-stack` or `cubie-a5e-flight-stack.dtbo`). Multiple overlays are merged sequentially in the order specified.
 2. `cmdline=`: Additional arguments to append to the Linux kernel command line. Useful for configuring CPU isolation (`isolcpus`), dynamic printk debugging (`ignore_loglevel`), or setting custom init targets.
-3. Fallback compatibility: The boot engine also supports legacy `uEnv.txt` directives (`overlays=` and `extra_bootargs=`) if `config.txt` is absent.
+3. Fallback compatibility: The boot engine also supports legacy `armbianEnv.txt` directives (`overlays=` and `extraargs=`) and `uEnv.txt` (`overlays=` and `extra_bootargs=`).
+
+---
+
+### How Armbian Does It: The `armbianEnv.txt` Pattern & Ecosystem Convergence
+
+If you have worked with Armbian on Allwinner (Sunxi), Rockchip, or Amlogic boards, this pattern will look very familiar. Armbian pioneered this exact text-import workflow to solve the same problem!
+
+#### 1. Why Armbian Abandoned Direct `uboot.env` Editing
+In early SBC distributions, modifying boot parameters required using U-Boot's `saveenv` command over a serial UART console, or running binary editing tools. Non-technical users frequently corrupted the 4-byte CRC32 header or NULL padding, leaving boards in an unbootable state. 
+
+To solve this, Armbian introduced `/boot/armbianEnv.txt`:
+```ini
+verbosity=1
+bootlogo=false
+overlay_prefix=sun55i-a527
+overlays=flight-stack uio
+rootdev=UUID=e2a4...
+rootfstype=ext4
+extraargs=isolcpus=7
+```
+Armbian's popular `armbian-config` interactive terminal utility is actually just a menu-driven frontend that writes `KEY=VALUE` strings into `/boot/armbianEnv.txt`.
+
+#### 2. How Armbian's Boot Engine Ingests Configuration
+Inside Armbian's official `boot.cmd` script, you find the exact same U-Boot primitive:
+```sh
+# Armbian boot engine ingestion snippet
+load mmc ${devnum}:${distro_bootpart} ${loadaddr} /boot/armbianEnv.txt || load mmc ${devnum}:${distro_bootpart} ${loadaddr} armbianEnv.txt
+env import -t ${loadaddr} ${filesize}
+```
+U-Boot parses the text file directly into its active environment hash table in RAM, then iterates over `${overlays}` applying each `.dtbo` via `fdt apply`.
+
+#### 3. How Our Architecture Compares: The Best of Both Worlds
+While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it in two crucial ways:
+
+| Architectural Dimension | Standard Armbian Distribution | Our Cubie A5E Buildroot Architecture |
+| :--- | :--- | :--- |
+| **Boot Filesystem** | Single large `ext4` partition (`/boot` is inside rootfs) | Dedicated 64 MB FAT32 partition (`boot.vfat`) + `ext4` rootfs |
+| **Cross-Platform Host Editing** | ❌ **Difficult**: Plugging SD card into Windows or macOS cannot read `ext4` without third-party drivers | ✅ **Instant**: FAT32 partition mounts as a standard flash drive on Windows, macOS, and Linux |
+| **Configuration Naming** | `armbianEnv.txt` (`overlays=`, `extraargs=`) | Raspberry Pi `config.txt` (`dtoverlay=`, `cmdline=`) |
+| **Ecosystem Compatibility** | Locked to Armbian schema | **Tri-Format Universal Engine**: Natively supports `config.txt`, `armbianEnv.txt`, and `uEnv.txt` |
 
 ---
 
@@ -419,7 +459,7 @@ Below is the complete, production-grade `boot.cmd` script used on the Radxa Cubi
 ```sh
 # ==============================================================================
 # Radxa Cubie A5E Dynamic Multi-Overlay Boot Script (boot.cmd -> boot.scr)
-# Supports Raspberry Pi-style config.txt & standard uEnv.txt
+# Supports Raspberry Pi-style config.txt, Armbian armbianEnv.txt, & uEnv.txt
 # ==============================================================================
 
 echo "=== Initializing Radxa Cubie A5E Dynamic Boot Sequence ==="
@@ -437,9 +477,12 @@ if test -z "${ramdisk_addr_r}";    then setenv ramdisk_addr_r    0x4ff00000; fi
 setenv base_dtb sun55i-a527-cubie-a5e.dtb
 setenv overlays "cubie-a5e-flight-stack"
 
-# 4. Check for Raspberry Pi-style config.txt first, then uEnv.txt
+# 4. Check for Raspberry Pi-style config.txt first, then armbianEnv.txt, then uEnv.txt
 if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
     echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
+    env import -t ${ramdisk_addr_r} ${filesize}
+elif load mmc 0:1 ${ramdisk_addr_r} armbianEnv.txt; then
+    echo ">>> Found Armbian-style armbianEnv.txt! Importing environment..."
     env import -t ${ramdisk_addr_r} ${filesize}
 elif load mmc 0:1 ${ramdisk_addr_r} uEnv.txt; then
     echo ">>> Found uEnv.txt! Importing environment..."
@@ -451,10 +494,13 @@ if test -n "${dtoverlay}"; then
     setenv overlays "${dtoverlay}"
 fi
 
-# 6. Append optional user bootargs from cmdline (Pi-style) or extra_bootargs
+# 6. Append optional user bootargs from cmdline (Pi-style), extraargs (Armbian), or extra_bootargs
 if test -n "${cmdline}"; then
     echo ">>> Appending cmdline: ${cmdline}"
     setenv bootargs "${bootargs} ${cmdline}"
+elif test -n "${extraargs}"; then
+    echo ">>> Appending extraargs: ${extraargs}"
+    setenv bootargs "${bootargs} ${extraargs}"
 elif test -n "${extra_bootargs}"; then
     echo ">>> Appending extra_bootargs: ${extra_bootargs}"
     setenv bootargs "${bootargs} ${extra_bootargs}"
