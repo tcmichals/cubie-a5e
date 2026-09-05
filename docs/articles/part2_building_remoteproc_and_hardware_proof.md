@@ -31,26 +31,53 @@ The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsy
 │  - sunxi_rproc_da_to_va() (Multi-segment memory translation)    │
 └────────────────────────────────┬────────────────────────────────┘
                                  │
-       ┌───────────────┬─────────┴───────┬───────────────┐
-       ▼               ▼                 ▼               ▼
-┌──────────────┐┌──────────────┐  ┌──────────────┐┌──────────────┐
-│  64 KB ITCM  ││  64 KB DTCM  │  │  PubSRAM C   ││ Dedicated    │
-│  Host:       ││  Host:       │  │  128 KB @    ││ MCU SRAM     │
-│  0x07110000  ││  0x07120000  │  │  0x00020000  ││ 256 KB @     │
-│  Core local: ││  Core local: │  │  Core local: ││ 0x07280000   │
-│  0x00000000  ││  0x00080000  │  │  0x00020000  ││ Core:3FFC0000│
-└──────────────┘└──────────────┘  └──────────────┘└──────────────┘
+       ┌─────────────────────────┼─────────────────────────┐
+       ▼                         ▼                         ▼
+┌──────────────┐          ┌──────────────┐          ┌──────────────┐
+│  PubSRAM C   │          │Dedicated SRAM│          │ DDR Trace    │
+│  128 KB @    │          │  256 KB @    │          │ Carveout     │
+│  0x00020000  │          │  0x07280000  │          │ 4 KB @       │
+│  (reg: sram) │          │(reg: r_sram) │          │ 0x48000000   │
+│  Boot Vector │          │Core:3FFC0000 │          │ (/trace0)    │
+└──────────────┘          └──────────────┘          └──────────────┘
 ```
 
 ### 1.1 Multi-Segment Memory Routing (`da_to_va`)
-On the Allwinner T527, the XuanTie E907 core accesses multiple distinct memory tiers. The Linux kernel driver translates device addresses (`da`) declared in the ELF program headers to mapped host virtual addresses (`va`) inside `sunxi_rproc_da_to_va()`:
+On the Allwinner T527, the Device Tree node (`sun55i-a523.dtsi`) registers the primary operational SRAM windows:
+- **`sram`**: Shared PubSRAM C (`0x00020000`, 128 KB) — the default boot and execution memory.
+- **`r_sram`**: Dedicated MCU SRAM (`0x07280000` Host / `0x3FFC0000` Core, 256 KB) — high-performance zero-wait-state memory.
+
+The Linux kernel driver translates device addresses (`da`) declared in the ELF program headers to mapped host virtual addresses (`va`) inside `sunxi_rproc_da_to_va()`:
 
 ```c
 static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
 {
     struct sunxi_rproc *priv = rproc->priv;
 
-    /* 1. Instruction TCM (Resource "itcm": Core 0x00000000 / Host 0x07110000, 64 KB) */
+    /* 1. Shared System PubSRAM C (Resource "sram": Identity 0x00020000, 128 KB) */
+    if (priv->sram_va) {
+        if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->sram_va + (da - priv->sram_phys);
+        }
+    }
+
+    /* 2. Dedicated MCU SRAM (Resource "r_sram": Host 0x07280000 / Core 0x3FFC0000, 256 KB) */
+    if (priv->r_sram_va) {
+        if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->r_sram_va + (da - priv->r_sram_phys);
+        }
+        if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->r_sram_va + da;
+        }
+    }
+
+    /* 3. Optional Instruction TCM (Resource "itcm": Core 0x00000000, 64 KB) */
     if (priv->itcm_va) {
         if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size)) {
             if (is_iomem)
@@ -64,7 +91,7 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
         }
     }
 
-    /* 2. Data TCM (Resource "dtcm": Core 0x00080000 / Host 0x07120000, 64 KB) */
+    /* 4. Optional Data TCM (Resource "dtcm": Core 0x00080000, 64 KB) */
     if (priv->dtcm_va) {
         if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size)) {
             if (is_iomem)
@@ -75,29 +102,6 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
             if (is_iomem)
                 *is_iomem = true;
             return priv->dtcm_va + (da - E906_DTCM_DA);
-        }
-    }
-
-    /* 3. Shared System PubSRAM C (Resource "sram": Identity 0x00020000, 128 KB) */
-    if (priv->sram_va) {
-        if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->sram_va + (da - priv->sram_phys);
-        }
-    }
-
-    /* 4. Dedicated MCU SRAM (Resource "r_sram": Host 0x07280000 / Core 0x3FFC0000, 256 KB) */
-    if (priv->r_sram_va) {
-        if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + (da - priv->r_sram_phys);
-        }
-        if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + da;
         }
     }
 

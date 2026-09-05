@@ -9,9 +9,9 @@ This directory contains long-form technical articles, multi-part engineering ser
 A comprehensive 4-part series documenting the architecture, Linux driver development, verification, and bare-metal firmware design for the **XuanTie E907 RISC-V co-processor** on the **Allwinner T527 / A527 (`sun55i`)**:
 
 1. **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
-   * **Topics**: Why use the co-processor (deterministic SRAM vs. DRAM, offloading Linux, safety), silicon taxonomy, T527 User Manual register mappings, ITCM/DTCM hardware architecture & direct RemoteProc mapping, and the JTAG-less DMEM paradigm.
+   * **Topics**: Why use the co-processor (deterministic SRAM vs. DRAM, offloading Linux, safety), silicon taxonomy, T527 User Manual register mappings, SRAM / TCM hardware architecture & RemoteProc boot mechanics, and the JTAG-less DMEM paradigm.
 2. **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
-   * **Topics**: Implementing `sunxi_rproc.c` on Linux 7.1, multi-segment `da_to_va` memory placement (ITCM, DTCM, PubSRAM C, Dedicated MCU SRAM), live trace logging via `.resource_table`, and systematically proving hardware state using the all-new `riscv-firmware/apps` verification suite (testBasic, testStringBinaryTrace0, testCrash, testPing, testPingRpmsg, testDRAMMsg).
+   * **Topics**: Implementing `sunxi_rproc.c` on Linux 7.1, memory-mapped ELF loading into PubSRAM C and Dedicated MCU SRAM, live trace logging via `.resource_table`, and systematically proving hardware state using the all-new `riscv-firmware/apps` verification suite (testBasic, testStringBinaryTrace0, testCrash, testPing, testPingRpmsg, testDRAMMsg).
 3. **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
    * **Topics**: Memory determinism (zero-wait-state 1-cycle TCM vs DDR DRAM arbitration), lightweight lock-free circular ring buffer (libmetal) + Hardware Mailbox doorbell interrupts, interactive OpenOCD/GDB debugging, and introduction to stackless C++20 coroutines.
 4. **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
