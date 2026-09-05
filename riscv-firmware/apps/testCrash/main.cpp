@@ -1,7 +1,7 @@
 /*
  * main.cpp - testCrash: Hardware Exception / Crash Reporting via RemoteProc Trace0
  *
- * Target: Allwinner T527 XuanTie E907 (RV32IMAFDC @ 600 MHz)
+ * Target: Allwinner T527 XuanTie E907 (RV32IMAFDC @ 200 MHz)
  *
  * Demonstrates:
  * 1. Global mtvec exception trap vector capturing CPU fault context into hal::CrashFrame.

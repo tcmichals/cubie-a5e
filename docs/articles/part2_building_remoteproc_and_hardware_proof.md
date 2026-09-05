@@ -201,7 +201,7 @@ riscv-firmware/apps/
 ├── testStringBinaryTrace0/  # 2. Hardware FPU & combined ASCII + packed binary telemetry
 ├── testCrash/               # 3. Hardware exception trapping (mtvec) & full register dump
 ├── testPing/                # 4. Ultra-low-latency Shared Memory SPSC + UIO Doorbell benchmark
-│   └── linux/               #    Host tools: ping_uio (C++) & ping_uio.py (Python)
+│   └── linux/               #    Host tools: ping_shm (C++ direct-poll), ping_uio (C++ event-driven UIO) & ping_uio.py (Python)
 ├── testPingRpmsg/           # 5. Standard Linux VirtIO RPMsg framework echo benchmark
 │   └── linux/               #    Host tools: ping_rpmsg (C++) & ping_rpmsg.py (Python)
 ├── testDRAMMsg/             # 6. Hybrid SRAM Control / DDR DRAM Payload buffer pool
@@ -226,8 +226,9 @@ The `testBasic` application boots into PubSRAM C (`0x00020000`), writes initial 
 ```cpp
 /* apps/testBasic/main.cpp */
 int main(void) {
-    sram_c_loc1[0] = 0xDEADBEEF;
-    sram_c_loc2[0] = 0x52495343; // "RISC"
+    sram_c_loc1[0]  = 0xDEADBEEF;
+    sram_c_loc2[0]  = 0x52495343; // "RISC"
+    dtcm_scratch[0] = 0xCAFE1234; // DTCM scratchpad verification
 
     hal::Trace::init(false);
     hal::Timer::init();
@@ -237,8 +238,12 @@ int main(void) {
     uint32_t count = 0;
     while (1) {
         count++;
-        sram_c_loc1[1] = count;
-        hal::Trace::printf("[testBasic] Loop #%u | SRAM C = 0x%08x\n", count, count);
+        sram_c_loc1[1]  = count;
+        sram_c_loc2[1]  = count;
+        dtcm_scratch[1] = count;
+        hal::Trace::printf("[testBasic] Loop #%u | SRAM C %p = 0x%08x | DTCM %p = 0x%08x\n",
+                           count, &sram_c_loc1[1], sram_c_loc1[1],
+                           &dtcm_scratch[1], dtcm_scratch[1]);
         hal::Timer::delay_ms(500);
     }
 }
@@ -299,7 +304,7 @@ When the illegal instruction executes:
    x10(a0): 0x00000003  x11(a1): 0x00021000
    ================================================================
    ```
-4. It writes fatal signature `0xDEADF00D` into memory before halting cleanly.
+4. It writes fatal signature `0xDEADF00D` into Shared SRAM A2 (`0x00040000`) before halting cleanly.
 
 ---
 
@@ -403,7 +408,7 @@ Notice that **zero `/dev/mem` or root privilege poking is used**. All hardware i
 ## 5. Summary & What's Next in Part 3
 
 With the `sunxi_rproc.c` driver and `riscv-firmware/apps` verification suite in place:
-1. The Linux host reliably loads multi-segment ELF binaries across ITCM, DTCM, PubSRAM C, and Dedicated MCU SRAM.
+1. The Linux host reliably loads multi-segment ELF binaries into PubSRAM C and Dedicated MCU SRAM. The `da_to_va` driver is fully prepared for optional ITCM/DTCM segments when the TCM extension linker script (described in Part 1, Section 4.4) is adopted.
 2. The `.resource_table` provides live trace streaming without physical serial debug cables.
 3. Every co-processor subsystem—clocks, resets, hardware FPU, exception trapping, direct shared memory, and VirtIO RPMsg—is systematically verified on live silicon.
 

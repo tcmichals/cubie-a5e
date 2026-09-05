@@ -1,7 +1,7 @@
 /*
  * main.cpp - testStringBinaryTrace0: Combined ASCII String & Binary Telemetry Logging
  *
- * Target: Allwinner T527 XuanTie E907 (RV32IMAFDC @ 600 MHz)
+ * Target: Allwinner T527 XuanTie E907 (RV32IMAFDC @ 200 MHz)
  *
  * Demonstrates:
  * 1. Hardware Floating Point Unit (FPU) computation: single (F) and double (D) precision.
