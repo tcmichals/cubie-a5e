@@ -11,6 +11,13 @@ Framework to manage co-processor clocks (bus, core, sram) and resets
 internal TCM and dedicated SRAM windows, and connects with hardware
 mailboxes (CPUX_MSGBOX) for standard VirtIO RPMsg IPC.
 
+Cc: Bjorn Andersson <andersson@kernel.org>
+Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
+Cc: Jernej Skrabec <jernej.skrabec@gmail.com>
+Cc: Samuel Holland <samuel@sholland.org>
+Cc: linux-remoteproc@vger.kernel.org
+Cc: linux-arm-kernel@lists.infradead.org
+Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   9 +
@@ -26,8 +33,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
 +config SUNXI_REMOTEPROC
 +	tristate "Allwinner XuanTie RISC-V remoteproc support"
-+	depends on (ARCH_SUNXI || COMPILE_TEST)
-+	default y
++	depends on (ARCH_SUNXI || COMPILE_TEST) && MAILBOX
 +	help
 +	  Say y or m here to support the Allwinner XuanTie E906/E907 RISC-V
 +	  co-processor on Allwinner A523, A527, and T527 SoCs via the
@@ -64,11 +70,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +#include <linux/mailbox_client.h>
 +#include <linux/module.h>
 +#include <linux/of.h>
-+#include <linux/of_device.h>
 +#include <linux/of_reserved_mem.h>
 +#include <linux/of_address.h>
 +#include <linux/platform_device.h>
-+#include <linux/pm.h>
 +#include <linux/remoteproc.h>
 +#include <linux/reset.h>
 +
@@ -136,9 +140,17 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +{
 +	struct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);
 +
-+	/* Signal remoteproc virtqueues on incoming mailbox doorbell */
-+	rproc_vq_interrupt(priv->rproc, 0);
-+	rproc_vq_interrupt(priv->rproc, 1);
++	/*
++	 * The kick path sends the vqid as a 32-bit value via the mailbox.
++	 * Use it to signal only the specific virtqueue that was notified.
++	 * Fall back to signalling both vqs if no data was provided.
++	 */
++	if (data)
++		rproc_vq_interrupt(priv->rproc, *(u32 *)data);
++	else {
++		rproc_vq_interrupt(priv->rproc, 0);
++		rproc_vq_interrupt(priv->rproc, 1);
++	}
 +}
 +
 +static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
@@ -361,12 +373,18 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +	if (priv->r_sram_va) {
++		/* Host-physical range match (ARM64 view: 0x07280000) */
 +		if (da >= priv->r_sram_phys &&
 +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
 +		}
++		/*
++		 * Core-local address match: the E907 sees Dedicated SRAM at
++		 * 0x3FFC0000 which wraps to a small offset from zero in the
++		 * core's address space. Accept size-relative offsets here.
++		 */
 +		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
 +			if (is_iomem)
 +				*is_iomem = true;
@@ -540,8 +558,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +					if (!priv->dram_va)
 +						priv->dram_va = devm_ioremap_wc(dev, r.start,
 +										resource_size(&r));
-+					dev_info(dev, "mapped DT vram reserved-memory %pa+%zu to %p\n",
-+						 &priv->dram_phys, priv->dram_size, priv->dram_va);
++					dev_info(dev, "mapped DT vram reserved-memory %pa+%zu\n",
++						 &priv->dram_phys, priv->dram_size);
 +				}
 +				of_node_put(rmem_np);
 +			}
@@ -564,8 +582,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		priv->trace_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
 +		if (!priv->trace_va)
 +			priv->trace_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		dev_info(dev, "mapped 'trace' mmio resource %pa+%zu to %p\n",
-+			 &priv->trace_phys, priv->trace_size, priv->trace_va);
++		dev_dbg(dev, "mapped 'trace' mmio resource %pa+%zu\n",
++			 &priv->trace_phys, priv->trace_size);
 +	} else if (dev->of_node) {
 +		struct device_node *rmem_np;
 +		int idx = 0;
@@ -588,8 +606,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +				if (!priv->trace_va)
 +					priv->trace_va = devm_ioremap_wc(dev, r.start,
 +									 resource_size(&r));
-+				dev_info(dev, "mapped DT trace reserved-memory %pa+%zu to %p\n",
-+					 &priv->trace_phys, priv->trace_size, priv->trace_va);
++				dev_dbg(dev, "mapped DT trace reserved-memory %pa+%zu\n",
++					 &priv->trace_phys, priv->trace_size);
 +			}
 +			of_node_put(rmem_np);
 +		}
