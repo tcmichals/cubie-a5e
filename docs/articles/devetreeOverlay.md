@@ -118,7 +118,7 @@ Your edits are completely discarded, and U-Boot falls back to hardcoded compiled
 
 ---
 
-### Inside `uboot.env`: CRC32 Checksums and Fixed Binary Structures
+### Inside `uboot.env`: Binary Architecture, CRC32 Checksums, and C Structs
 
 `uboot.env` is **not a text file**. It is a raw binary image compiled by the host tool `mkenvimage` from a text template ([`uboot-env.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt)):
 
@@ -126,35 +126,93 @@ Your edits are completely discarded, and U-Boot falls back to hardcoded compiled
 ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DIR}/uboot-env.txt"
 ```
 
-The internal binary anatomy of `uboot.env` is strictly structured:
+#### The C Structure Representation (`include/env_internal.h`)
+Inside the U-Boot source tree, the environment binary layout is defined by the following C data structure:
 
-```text
-+-------------------------------------------------------------------------+
-|                  U-BOOT BINARY ENVIRONMENT STRUCTURE                    |
-+-------------------------------------------------------------------------+
-| Offset 0x0000 - 0x0003 : 4-Byte CRC32 Checksum (uint32_t, Little-Endian)|
-| Offset 0x0004 - 0x0007 : [Optional Flags Byte for Redundant Envs]      |
-| Offset 0x0004/08 ...   : Sequence of NULL-delimited strings:            |
-|                          "bootdelay=1\0"                                |
-|                          "baudrate=115200\0"                            |
-|                          "bootcmd=load mmc 0:1 0x4fc00000 boot.scr ...\0|
-|                          "kernel_addr_r=0x40080000\0"                   |
-| ...                    : Trailing zero padding (\0)                     |
-| Offset 0x0000 - 0xFFFF : Exactly 65,536 Bytes (0x10000) Total Size      |
-+-------------------------------------------------------------------------+
+```c
+/* U-Boot standard non-redundant environment image format */
+struct env_image_single {
+    uint32_t crc;       /* 4-byte CRC32 checksum over the data array */
+    char     data[];    /* Sequential NULL-separated key=value strings */
+};
+
+/* Redundant environment format (when CONFIG_SYS_REDUNDAND_ENVIRONMENT=y) */
+struct env_image_redundant {
+    uint32_t crc;       /* 4-byte CRC32 checksum over data array + flags */
+    unsigned char flags;/* Generation counter / active buffer indicator */
+    char     data[];    /* Sequential NULL-separated key=value strings */
+};
 ```
 
-#### Why Modifying `uboot.env` with a Text Editor Fails:
-1. **CRC32 Invalidation**: The first 4 bytes (`0x00000000 - 0x00000003`) store a CRC32 checksum computed across the remaining 65,532 bytes. If you change even a single character in `vi` (such as modifying `bootdelay=1` to `bootdelay=3`), the checksum no longer matches.
-2. **Corrupted NULL Delimiters**: Standard text editors treat `\0` (ASCII NUL) bytes as file terminators or replace them with spaces and newlines (`\n`). Saving the file destroys the internal string boundary table.
-3. **Truncated Padding**: Text editors typically strip trailing NULL padding, changing the file size from exactly 65,536 bytes to a smaller size.
+On Allwinner platforms without redundant environment enabled, `struct env_image_single` is used.
 
-To safely modify `uboot.env`, a user would normally need either:
-* Access to a serial console to interrupt U-Boot and run `setenv` followed by `saveenv`.
-* Linux userspace tools (`fw_setenv` / `fw_printenv`) configured with an exact `/etc/fw_env.config` matching MMC sector offsets.
-* Running `mkenvimage` on a desktop development PC to rebuild the binary.
+#### Byte-by-Byte Hex Dump Breakdown
+If you inspect the binary `uboot.env` using `hexdump -C` or `xxd`, the byte layout is exposed:
 
-None of these options are convenient for an end user or field engineer who simply wants to enable a sensor or change an overlay!
+```text
+Offset    Hexadecimal Bytes                                 ASCII Representation
+--------  ------------------------------------------------  --------------------
+00000000  7b e2 4c 3f 62 6f 6f 74  64 65 6c 61 79 3d 31 00  |{.L?bootdelay=1.|
+00000010  62 61 75 64 72 61 74 65  3d 31 31 35 32 30 30 00  |baudrate=115200.|
+00000020  62 6f 6f 74 61 72 67 73  3d 63 6f 6e 73 6f 6c 65  |bootargs=console|
+00000030  3d 74 74 79 53 30 2c 31  31 35 32 30 30 20 65 61  |=ttyS0,115200 ea|
+...
+000001c0  72 5f 6d 6f 64 65 3d 64  65 6d 6f 00 00 00 00 00  |r_mode=demo.....|
+000001d0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+*
+00010000
+```
+
+1. **Bytes `0x00000000 - 0x00000003` (`7b e2 4c 3f`)**: The 32-bit CRC checksum stored in little-endian byte order (`0x3F4CE27B`). It is calculated over the entire remaining payload: bytes `0x00000004` through `0x0000FFFF` (65,532 bytes).
+2. **Bytes `0x00000004 - 0x0000000F` (`bootdelay=1\0`)**: The first environment variable string, terminated by a single ASCII NUL byte (`0x00`).
+3. **Subsequent Strings**: Each variable is stored as `KEY=VALUE\0`.
+4. **End of Environment Marker**: Marked by two consecutive NUL bytes (`\0\0`).
+5. **Zero Padding**: The remaining ~65 KB of the file is filled with zeroes (`0x00`) to guarantee an exact total file size of 65,536 bytes (`0x10000`).
+
+---
+
+### How `mkenvimage` Compiles the Environment
+When the Buildroot host tool `mkenvimage` executes during image assembly, it performs four strict operations:
+1. **Syntax Parsing**: It reads [`uboot-env.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt), stripping comment lines (beginning with `#`) and empty lines.
+2. **Buffer Packaging**: It replaces line feeds (`\n`) with null bytes (`\0`), sequentializing the tokens into an in-memory buffer starting at offset `0x0004`.
+3. **CRC32 Calculation**: It calculates a standard Ethernet CRC32 checksum (polynomial `0xEDB88320`) over all bytes from offset `0x0004` to `size - 1` (`0xFFFF`).
+4. **Binary Emission**: It writes the 4-byte CRC header to bytes `0x00 - 0x03`, followed by the payload, and pads the file with null bytes until exactly `0x10000` (65,536) bytes are written.
+
+---
+
+### How U-Boot Validates `uboot.env` at Boot Time
+During the U-Boot board initialization sequence (`env_init()` and `env_relocate()`):
+1. U-Boot reads the 64 KB block from the storage medium (FAT partition or raw MMC offset) into a memory buffer.
+2. It extracts the 4-byte CRC header at offset `0x0000`.
+3. It recalculates the CRC32 of the remaining 65,532 bytes.
+4. **Verification**:
+   * **If CRC matches**: The environment is marked `ENV_VALID`. U-Boot calls `himport_r()` to parse the null-separated strings into its internal hash table.
+   * **If CRC fails**: The environment is marked `ENV_INVALID`. U-Boot prints:
+     ```text
+     *** Bad CRC, using default environment ***
+     ```
+     It immediately discards the file buffer and falls back to the hardcoded default environment compiled into the U-Boot binary (`default_environment[]`).
+
+#### Why Modifying `uboot.env` with `vi` or `nano` Always Fails:
+* **Destroying CRC32**: Changing even one letter changes the checksum. Since a text editor cannot recalculate the CRC header, U-Boot flags the file as corrupt.
+* **Mangled Null Characters**: Text editors interpret `0x00` as an EOF or replace it with line endings (`\n`, `\r\n`), destroying string boundaries.
+* **Truncated Filesize**: Text editors drop trailing zeroes on save, producing a truncated file that U-Boot rejects.
+
+---
+
+### The Spectrum of Bootloader Files: When to Use What
+
+To avoid confusion, the table below categorizes every configuration and boot file used on the platform:
+
+| File | Type | Generated By | Primary Role | User Editable? |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`uboot-env.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt)** | Plain Text | Developer | Source template for default U-Boot environment | ✅ Edit in repo before build |
+| **`uboot.env`** | 64KB Binary with CRC32 | `mkenvimage` | Static firmware baseline (baud, DRAM addresses, bootcmd) | ❌ **Do not edit directly** |
+| **[`boot.cmd`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd)** | Plain Shell Script | Developer | Source script implementing dynamic overlay logic | ✅ Edit in repo before build |
+| **`boot.scr`** | Binary with 64-byte Header | `mkimage` | Compiled U-Boot script executed via `source 0x4fc00000` | ❌ Recompile via `mkimage` |
+| **[`config.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/config.txt)** | Plain Text | User / Buildroot | Runtime overlay selection (`dtoverlay=`) & kernel cmdline | ✅ **Safely editable live with `vi`** |
+| **[`uEnv.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/uEnv.txt)** | Plain Text | User / Buildroot | Legacy fallback configuration (`overlays=`) | ✅ **Safely editable live with `vi`** |
+
 
 ---
 
