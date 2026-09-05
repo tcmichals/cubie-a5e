@@ -1,29 +1,56 @@
 # Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 1): Architecture and Memory-Mapped Debugging
 
-Heterogeneous multi-core SoCs—pairing high-performance 64-bit ARM Cortex-A application cores with low-power, deterministic auxiliary microcontrollers—have become standard in modern embedded hardware. Silicon like the **Allwinner T527 / A527** (featured on the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFDC @ 200 MHz) and a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz).
+Heterogeneous multi-core SoCs—pairing high-performance 64-bit ARM Cortex-A application cores with low-power, deterministic auxiliary microcontrollers—have become the standard architecture for modern embedded systems. Silicon like the **Allwinner T527 / A527** (featured on the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFDC @ 200 MHz) and a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz).
 
 Getting these co-processors online requires establishing reliable hardware lifecycle control, clock tree synchronization, and deterministic memory placement before loading production firmware.
 
 * **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
 
 This article is **Part 1 of a series** documenting the practical bring-up of the XuanTie E907 RISC-V co-processor on Linux:
-* **Part 1 (This Article)**: Architecture, TRM memory maps, the RemoteProc driver model, and on-chip memory-mapped debugging.
-* **Part 2**: Authoring the Linux `remoteproc` kernel driver, multi-segment ELF placement, and proving hardware state with automated Python DMI scripts.
-* **Part 3**: General embedded firmware development, TCM vs DRAM memory determinism, lightweight lock-free IPC (libmetal), live GDB workflows, and an introduction to bare-metal C++ coroutines.
+* **Part 1 (This Article)**: Why use the RISC-V co-processor, TRM memory maps, ITCM/DTCM architecture and two-stage bootstrapping, the RemoteProc driver model, and on-chip memory-mapped debugging.
+* **Part 2**: Authoring the Linux `remoteproc` kernel driver, multi-segment ELF placement, and proving hardware state with automated Python DMI scripts over OpenOCD.
+* **Part 3**: General embedded firmware development, TCM vs. DRAM memory determinism, lightweight lock-free IPC (libmetal), live GDB workflows, and an introduction to bare-metal C++ coroutines.
 * **Part 4**: Deep dive into C++20 coroutines on bare-metal RISC-V—benchmarks, memory profiles, and comparison against RTOS task switching.
 
 ---
 
-## 1. A Note on Silicon Naming: `T527` vs `A527` vs `sun55i-a523`
+## 1. Why Use the XuanTie RISC-V Co-Processor?
 
-When navigating Allwinner documentation and Linux kernel sources, the naming taxonomy can be confusing:
+Modern embedded Linux platforms excel at complex workloads—networking, file systems, multimedia pipelines, computer vision, and machine learning. However, running jitter-sensitive, hard real-time control tasks directly on an application processor introduces fundamental engineering challenges.
+
+The auxiliary **XuanTie E907 RISC-V core** on the Allwinner T527 solves these challenges through asymmetric multiprocessing (AMP):
+
+### 1.1 Deterministic Timing: SRAM vs. External DRAM
+* **The DRAM Bottleneck**: The ARM Cortex-A55 cluster executes operating system workloads out of external LPDDR4/4X dynamic RAM (`0x40000000`). Even with the Linux `PREEMPT_RT` patchset, DRAM access is non-deterministic. Periodic DRAM row refreshes ($t_{\text{RFC}}$), memory controller queue arbitration among 8 CPU cores, GPU, NPU, ISP, and DMA engines, and cache-line refills introduce latency spikes ranging from hundreds of nanoseconds to several milliseconds.
+* **Zero-Wait-State SRAM Execution**: The XuanTie E907 executes out of internal fast SRAM (PubSRAM C at `0x00020000` and Dedicated MCU SRAM at `0x3FFC0000`) and private Tightly-Coupled Memory (ITCM/DTCM). On-chip SRAM delivers fixed, single-cycle, zero-wait-state memory access with zero refresh interruptions. Instruction execution times and memory latency are 100% deterministic.
+
+### 1.2 Offloading the Linux Application Cores
+* Linux is an operating system optimized for throughput, multitasking, and rich application ecosystems. Servicing ultra-high-frequency interrupts directly on the host consumes significant CPU cycles in context switching, kernel transitions, and cache thrashing.
+* Offloading continuous, high-rate real-time tasks to the co-processor frees up the octa-core Cortex-A55 cluster to focus entirely on compute-heavy tasks: running neural network models on the VIP9000 NPU, streaming high-definition video, serving web dashboards, managing ROS2 nodes, and writing black-box flight logs to NVMe or eMMC storage.
+
+### 1.3 Microsecond-Scale Hard Real-Time Control Loops (10 kHz – 50 kHz)
+* In applications such as drone flight controllers, robotic gimbal stabilization, and motor control (Field-Oriented Control / FOC), control loops must execute at strict periodic intervals (e.g., 8 kHz to 32 kHz) with sub-microsecond jitter.
+* The XuanTie E907 features a dedicated RISC-V Platform-Level Interrupt Controller (PLIC), hardware single- and double-precision floating-point units (FPU), and 32 integer registers, allowing it to service high-rate sensor interrupts (such as SPI IMU `DRDY` signals) with instantaneous, deterministic response times.
+
+### 1.4 Hardware Fault Containment and System Safety
+* The XuanTie E907 resides in an independent power, clock, and reset domain.
+* If the Linux application environment encounters an out-of-memory (OOM) panic, locks up under an extreme compute spike, or undergoes an in-field Over-the-Air (OTA) kernel update, the RISC-V co-processor continues running uninterrupted. It can maintain actuator holding currents, execute graceful emergency shutdowns, deploy recovery chutes, or signal emergency status via dedicated GPIOs and CAN-FD buses.
+
+### 1.5 Ultra-Low-Power Standby and Always-On Monitoring
+* Running eight ARM Cortex-A55 cores at 1.8 GHz consumes several watts of power. In battery-powered edge installations, the Linux application cores can enter deep sleep states while the XuanTie E907 remains clocked at low power, polling sensors or monitoring communication channels. When a designated trigger condition is met, the co-processor wakes the Linux host via an inter-core interrupt.
+
+---
+
+## 2. Silicon Architecture, Naming & Board Comparison
+
+When navigating Allwinner documentation and Linux kernel sources, naming conventions across document revisions can be confusing:
 
 ```text
-                               ┌─────────────► Allwinner T527 (Industrial SBC — Radxa Cubie A5E)
-                               │
+                                ┌─────────────► Allwinner T527 (Industrial SBC — Radxa Cubie A5E)
+                                │
 sun55i Generation (Same Die IP) ┼─────────────► Allwinner A527 (Commercial SBC)
-                               │
-                               └─────────────► Allwinner A523 (Tablet / OTT Platform)
+                                │
+                                └─────────────► Allwinner A523 (Tablet / OTT Platform)
 ```
 
 * **Same Silicon Core**: The **T527** (industrial grade) and **A527** (commercial grade) share the exact same internal silicon die, bus topology, and MCU memory map as the **A523**.
@@ -40,18 +67,33 @@ sun55i Generation (Same Die IP) ┼─────────────► Al
 | **Fast On-Chip SRAM** | 128 KB Shared PubSRAM C (`0x00020000`) + 256 KB Dedicated MCU SRAM (`0x3FFC0000` Core / `0x07280000` Host) | 208 KB Shared SRAM A2 (`0x00040000`) |
 | **Boot & Control Registers** | 4 KB E907 CFG (`0x07130000`, `STA_ADD_REG` @ `0x0204`) | PRCM `r_ccu` Reset Control (Hardwired Reset Vector @ `0x00040000`) |
 | **Hardware Mailbox** | 8-channel MSGBOX (`0x03003000`) | 8-channel MSGBOX (`0x03003000`) |
-| **Debug Module Access** | On-Chip DMI @ `0x07090000` (JTAG-less) | On-Chip DMI (JTAG-less) |
+| **Debug Module Architecture** | External JTAG / RemoteProc `trace0` (No on-chip MMIO DMI) | External JTAG / RemoteProc `trace0` (No on-chip MMIO DMI) |
 | **Linux Driver Model** | `sunxi_rproc.c` (`remoteproc`) | `sunxi_rproc.c` (`remoteproc`) |
 
 ---
 
-## 2. Deriving the Physical Memory Map from Silicon and Device Tree
+## 3. T527 Reference Manual Mapping & Silicon Reality
 
-Heterogeneous firmware execution requires an exact understanding of memory address spaces. On Allwinner SoCs, the ARM64 host application cores and the XuanTie E907 RISC-V core access shared SRAM and peripherals through the system interconnect, but certain memory windows undergo address translation between the host interconnect and the core-local bus.
+All hardware register offsets, memory windows, and control blocks referenced here are derived directly from the official **Allwinner T527 User Manual V0.92** and verified on live silicon.
 
-### Verified Hardware Memory Windows (Allwinner T527 / A523)
+### 3.1 Where to Find This Information in the T527 User Manual
+* **Chapter 2: System Address Map & Memory Mapping (Section 2.1, Table 2-1)**:
+  - Documents the top-level memory map: `PubSRAM C` (`0x00020000`, 128 KB), `Dedicated MCU SRAM / SRAM A3` (`0x07280000`, 256 KB), `Hardware MSGBOX` (`0x03003000`), `RTC` (`0x07090000`), and `DRAM` (`0x40000000`).
+  - *Silicon Confirmation*: Notice that address `0x07090000` is explicitly documented as the **RTC (Real-Time Clock)** register block. The T527 User Manual contains no memory-mapped Debug Module (DM/DMI) entry anywhere in the system bus interconnect tables.
+* **Chapter on MCU Subsystem & RISC-V Configuration (`RISCV_CFG` @ `0x07130000`)**:
+  - `0x0000` (`VER_REG`): Version Register.
+  - `0x0204` (`STA_ADD_REG`): **Start Vector / Boot Address Register**. Defines the initial program counter address fetched by the E907 core upon reset deassertion.
+  - `0x0248` (`WORK_MODE_REG`): Work Mode Register. Bit 3 (`BIT_LOCK_STA`) indicates hardware core lockup status if the processor attempts an invalid bus transaction.
+* **Chapter on MCU Clock Control Unit (`MCU_CCU` @ `0x07102000`)**:
+  - `0x07102120` (`MCU_CLK_REG`): XuanTie E907 core clock gating and divider selection.
+  - `0x07102124` (`MCU_RST_REG`): XuanTie E907 reset control (Bit 16: CFG reset, Bit 17: DBG reset, Bit 18: Core Run reset).
+  - `0x07102114` (`SRAM_CLK_REG` / `SRAM_RST_REG`): PubSRAM C clock gating and bus reset release.
+* **Chapter on Hardware Message Box (`CPUX_MSGBOX` @ `0x03003000` / `RISCV_MSGBOX` @ `0x07136000`)**:
+  - 8-channel bi-directional hardware FIFO doorbells connecting ARM64 GIC SPI 147 and RISC-V PLIC IRQ 25.
 
-The authoritative memory mapping verified on silicon and registered in the Linux RemoteProc driver (`sunxi_rproc.c` / `sun55i-a523.dtsi`) is structured as follows:
+### 3.2 Verified Hardware Memory Windows (Allwinner T527 / A523)
+
+The authoritative memory mapping registered in the Linux RemoteProc driver (`sunxi_rproc.c` / `sun55i-a523.dtsi`) is structured as follows:
 
 | Memory Region | Host ARM Physical Address | RISC-V E907 Core Address | Size | RemoteProc DTS Binding | Description & Hardware Role |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -64,7 +106,7 @@ The authoritative memory mapping verified on silicon and registered in the Linux
 | **DDR DMA Payload Pool** | **`0x48100000`** | **`0x48100000`** | **1 MB** | `memory-region` (carveout) | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC transfers. |
 | **Main Peripheral Space** | **`0x02000000`+** | **`0x02000000`+** | — | Native SoC buses | 1:1 mapped peripherals: PIO GPIO controller (`0x02000000`), UART0 debug console (`0x02500000`), UART2 navigation port (`0x02500800`), SPI0 (`0x04025000`). |
 
-### Visual Address Translation Architecture
+### 3.3 Visual Address Translation Architecture
 
 ```text
 +===================================================================================+
@@ -93,28 +135,171 @@ The authoritative memory mapping verified on silicon and registered in the Linux
 +===================================================================================+
 ```
 
-### Silicon Reality: Clarifying Theoretical TCM vs. Operational SRAM
+---
 
-Early Allwinner documentation and legacy references from older SoCs (such as the Allwinner D1) placed theoretical ITCM at `0x00000000` (host physical `0x07110000`) and DTCM at `0x00080000` (host physical `0x07120000`).
+## 4. ITCM and DTCM Memory Architecture & Programmer's Implementation Guide
 
-On actual Allwinner A523/T527 silicon:
-1. **No Operable 0x0 TCM Window**: `0x07110000` and `0x07120000` are reserved register spaces. Setting `STA_ADD_REG` (`0x07130204`) to `0x00000000` causes an immediate bus error on instruction fetch, triggering a double-fault on `mtvec` and forcing the XuanTie core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248` Bit 3 `BIT_LOCK_STA = 1`).
-2. **Operational Execution Windows**: The core boots cleanly without lockup when `STA_ADD_REG` points to either **`0x00020000`** (Shared PubSRAM C) or **`0x3FFC0000`** (Dedicated MCU SRAM), running with `BIT_LOCK_STA = 0` (`WORK_MODE_REG = 0x00000003`).
-3. **Firmware Layout**: Production firmware links `.vectors`, `.text`, `.rodata`, `.data`, `.bss`, and the stack into **PubSRAM C (`0x00020000`, 128 KB)**, while high-performance execution loops and SPSC ring buffers use **Dedicated MCU SRAM (`0x3FFC0000`, 256 KB)**.
+For embedded firmware engineers, understanding how **ITCM (Instruction Tightly-Coupled Memory)** and **DTCM (Data Tightly-Coupled Memory)** operate on the XuanTie E907 is critical for achieving deterministic, single-cycle execution.
+
+### 4.1 Architectural Role: Why TCM is Essential
+The XuanTie E907 features a modified Harvard bus architecture:
+* **ITCM (64 KB @ `0x00000000`)**: Wired directly to the core's instruction fetch pipeline. Instruction fetches complete in **1 clock cycle with zero wait states**, completely bypassing the L1 instruction cache. This eliminates cache miss penalties, bus arbitration delays, and pipeline stalls.
+  - *Ideal Use Cases*: Time-critical interrupt handlers (such as Mailbox doorbell ISRs and SPI DMA callbacks), machine-mode trap handlers (`mtvec`), and inner PID flight stabilization loops.
+* **DTCM (64 KB @ `0x00080000`)**: Wired directly to the core's load/store execution unit. Reads and writes complete in **1 clock cycle with zero wait states**, bypassing the L1 data cache.
+  - *Ideal Use Cases*: Fast call stack (`.stack`), lookup tables (LUTs), critical state machines, and circular ring buffer head/tail pointers.
+
+### 4.2 The Hardware Challenge: Why RemoteProc Cannot Load TCM Directly
+On the Allwinner A523/T527 SoC:
+1. **Private Core Bus Isolation**: ITCM and DTCM reside exclusively on the **private internal core bus** of the XuanTie E907.
+2. **No Host Slave Bridge**: There is no active external bus slave port allowing the ARM Cortex-A55 cores or the Linux RemoteProc loader to write directly into ITCM or DTCM while the co-processor is held in reset. Legacy documentation suggesting host addresses at `0x07110000` or `0x07120000` does not correspond to functional writable memory on A523/T527 silicon.
+3. **Hardware Lockup on Boot**: If you configure the boot entry register `STA_ADD_REG` (`0x07130204`) directly to `0x00000000` and deassert reset, the core attempts to fetch instructions from uninitialized TCM. This causes an immediate instruction fetch abort and forces the XuanTie core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248` Bit 3 `BIT_LOCK_STA = 1`).
+
+### 4.3 The Solution: Two-Stage Bootstrapping (LMA vs. VMA Staging)
+To utilize ITCM and DTCM on Allwinner T527 without hardware lockup, firmware uses the classic embedded **Load Memory Address (LMA) vs. Virtual/Execution Memory Address (VMA)** staging pattern:
+
+1. **Host Loading (LMA - Load Memory Address)**: Linux RemoteProc loads the compiled firmware ELF directly into accessible on-chip SRAM:
+   - **PubSRAM C (`0x00020000`, 128 KB)**, OR
+   - **Dedicated High SRAM (`0x3FFC0000`, 256 KB)**.
+2. **Core Startup**: The E907 starts executing from SRAM (`_start` in `startup.S`).
+3. **Core-Initiated Copy (VMA - Virtual/Execution Memory Address)**: Early in the startup assembly sequence, the E907's own instructions copy designated `.itcm` functions and `.dtcm` data from SRAM (LMA) into local TCM (VMA).
+4. **Instruction Pipeline Synchronization (`fence.i`)**: The core executes `fence.i` to invalidate and synchronize its instruction fetch pipeline so that newly copied instructions in ITCM are fetched cleanly.
+5. **Deterministic Execution**: The core jumps into its TCM-resident critical routines, executing with true 1-cycle latency.
+
+### 4.4 Linker Script Configuration (`firmware.ld`)
+To stage TCM code and data, configure the GNU Linker Script with distinct Load Memory Addresses using the `AT(...)` keyword:
+
+```ld
+MEMORY
+{
+    /* Staging / Primary Executable SRAM (Accessible by Linux RemoteProc) */
+    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
+
+    /* Tightly-Coupled Memories (Private Local E907 Core View) */
+    ITCM (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
+    DTCM (rwx) : ORIGIN = 0x00080000, LENGTH = 64K
+}
+
+SECTIONS
+{
+    /* Primary bootstrap vectors and startup in SRAM */
+    .vectors : { KEEP(*(.vectors)) } > SRAM
+    .text    : { *(.text) *(.text.*) } > SRAM
+    .rodata  : { *(.rodata) *(.rodata.*) } > SRAM
+
+    /* Critical Real-Time Code: Stored in SRAM (LMA), Executed in ITCM (VMA) */
+    .itcm_text : AT(_sidata_itcm)
+    {
+        . = ALIGN(4);
+        _sitcm = .;
+        *(.itcm)
+        *(.itcm.*)
+        *(.fast_code)
+        . = ALIGN(4);
+        _eitcm = .;
+    } > ITCM
+    _sidata_itcm = LOADADDR(.itcm_text);
+
+    /* Critical Real-Time Data: Stored in SRAM (LMA), Executed in DTCM (VMA) */
+    .dtcm_data : AT(_sidata_dtcm)
+    {
+        . = ALIGN(4);
+        _sdtcm = .;
+        *(.dtcm)
+        *(.dtcm.*)
+        *(.fast_data)
+        . = ALIGN(4);
+        _edtcm = .;
+    } > DTCM
+    _sidata_dtcm = LOADADDR(.dtcm_data);
+
+    /* DTCM Uninitialized BSS */
+    .dtcm_bss (NOLOAD) :
+    {
+        . = ALIGN(4);
+        _sbss_dtcm = .;
+        *(.dtcm_bss)
+        *(.dtcm_bss.*)
+        . = ALIGN(4);
+        _ebss_dtcm = .;
+    } > DTCM
+}
+```
+
+### 4.5 Assembly Startup Copy Routine (`startup.S`)
+In `startup.S`, insert the copy routine before invoking C++ constructors or jumping to `main()`:
+
+```assembly
+    /* =============================================================
+     * 1. Copy Critical Real-Time Code from SRAM (LMA) to ITCM (VMA)
+     * ============================================================= */
+    la      a0, _sitcm              /* Destination: ITCM start (0x00000000) */
+    la      a1, _eitcm              /* Destination: ITCM end */
+    la      a2, _sidata_itcm        /* Source: LMA located in PubSRAM C */
+    beq     a0, a2, .Lcopy_itcm_done
+.Lcopy_itcm_loop:
+    bgeu    a0, a1, .Lcopy_itcm_done
+    lw      t0, 0(a2)
+    sw      t0, 0(a0)
+    addi    a0, a0, 4
+    addi    a2, a2, 4
+    j       .Lcopy_itcm_loop
+.Lcopy_itcm_done:
+    fence.i                         /* Synchronize instruction pipeline & cache */
+
+    /* =============================================================
+     * 2. Copy Initialized Data from SRAM (LMA) to DTCM (VMA)
+     * ============================================================= */
+    la      a0, _sdtcm              /* Destination: DTCM start (0x00080000) */
+    la      a1, _edtcm              /* Destination: DTCM end */
+    la      a2, _sidata_dtcm        /* Source: LMA located in PubSRAM C */
+    beq     a0, a2, .Lcopy_dtcm_done
+.Lcopy_dtcm_loop:
+    bgeu    a0, a1, .Lcopy_dtcm_done
+    lw      t0, 0(a2)
+    sw      t0, 0(a0)
+    addi    a0, a0, 4
+    addi    a2, a2, 4
+    j       .Lcopy_dtcm_loop
+.Lcopy_dtcm_done:
+```
+
+### 4.6 How Programmers Use TCM in C / C++
+In application code, tag critical functions and variables with compiler section attributes:
+
+```cpp
+#define __ITCM_TEXT __attribute__((section(".itcm"), noinline))
+#define __DTCM_DATA __attribute__((section(".dtcm")))
+#define __DTCM_BSS  __attribute__((section(".dtcm_bss")))
+
+// Critical attitude estimation loop running with 1-cycle latency in ITCM
+void __ITCM_TEXT fast_flight_loop_isr(void) {
+    // Process IMU measurements and update motor outputs
+}
+
+// Critical PID parameters stored with zero wait states in DTCM
+static volatile float __DTCM_DATA pid_gains[3] = {1.25f, 0.05f, 0.12f};
+static volatile uint32_t __DTCM_BSS fast_cycle_count;
+```
+
+### 4.7 The Zero-Copy Alternative: Dedicated MCU SRAM (`0x3FFC0000` / `0x07280000`)
+If your application requires zero-wait-state performance across a large footprint without the startup overhead of copying sections from SRAM to TCM:
+* Use **Dedicated MCU SRAM (`r_sram`)**.
+* It is a **256 KB** continuous SRAM block mapped at host physical `0x07280000` and core local address **`0x3FFC0000`**.
+* Linux RemoteProc can write to `0x07280000` directly while the core is in reset, allowing firmware to boot and execute with zero wait states directly out of SRAM Space 0 with no assembly staging required.
 
 ---
 
-## 3. On-Chip Memory-Mapped Debugging: No Physical JTAG Cables Required!
+## 5. Direct Memory-Mapped Debug Access (DMEM): The Paradigm & The Hope for Future Silicon
 
-One of the most powerful features of modern heterogeneous SoCs is **Direct Memory-Mapped Debug Access (DMEM)**. 
+### 5.1 The Soft-Wire JTAG Paradigm
+In traditional microcontroller development, debugging requires:
+* Soldering 1.27mm / 2.54mm JTAG headers to the board.
+* Connecting external hardware debug probes (e.g., SEGGER J-Link, T-Head CK-Link, or FTDI adapters).
+* Managing loose jumper wires, signal integrity issues, and ground loops.
 
-Traditionally, debugging an auxiliary microcontroller requires:
-* Soldering fine-pitch 1.27mm / 2.54mm JTAG headers to the PCB.
-* Purchasing external hardware debug probes (e.g. SEGGER J-Link, T-Head CK-Link, or FTDI FT232H adapters).
-* Dealing with loose jumper wires, signal integrity issues, and ground loops.
+To solve this, modern heterogeneous SoCs—such as the **Texas Instruments AM62x / AM64x (K3)**, **STMicroelectronics STM32MP1 / STM32MP2**, and **NXP i.MX8M**—implement **Direct Memory-Mapped Debug Access (DMEM)**. 
 
-### The JTAG-less Architecture
-In heterogeneous SoCs supporting direct debug interconnect routing, the host application processor can access the auxiliary Debug Module registers over MMIO (allocated at `0x07090000` in the T527 TRM):
+In this architecture, the SoC interconnect exposes the auxiliary core's debug registers (ARM CoreSight DAP or RISC-V Debug Module Interface) directly to the application processor's internal bus:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -124,42 +309,56 @@ In heterogeneous SoCs supporting direct debug interconnect routing, the host app
                               │ GDB Remote Serial Protocol (RSP) :3333
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 OpenOCD (Running on Target)                 │
+│              OpenOCD (Running on Linux Host)                │
 │  - Translates GDB commands into RISC-V Debug Module actions │
-│  - Listens on TCP port 4444 for Telnet / Python automation  │
+│  - Communicates directly over local memory-mapped bus (dmem)│
 └─────────────────────────────┬───────────────────────────────┘
-                              │ Direct MMIO / remote_bitbang
+                              │ Physical Interconnect (MMIO)
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│          On-Chip XuanTie E907 Debug Module (DM v0.13.2)     │
-│                 (Physical Address 0x07090000)               │
-└─────────────────────────────┴───────────────────────────────┘
+│       Memory-Mapped RISC-V Debug Module Interface (DMI)     │
+│       (Directly mapped into host physical address space)    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-> **Precedent in the Open-Source Community (TI, ST, and BeagleBoard):**  
-> This on-chip debugging methodology has a proven lineage in the open-source Linux community. **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) pioneered self-hosted "soft-wire" JTAG-less debugging on platforms like the **BeaglePlay** and **BeagleBone AI-64** (TI AM62x / AM64x) by introducing the `dmem` driver into OpenOCD (`board/ti_am625_swd_native.cfg`). By mapping debug registers directly across the internal bus via direct MMIO, developers could debug auxiliary cores natively from Linux without external hardware probes or header soldering. STMicroelectronics and NXP implement similar memory-mapped debug interfaces on their heterogeneous SoCs.
+> **The Open-Source Community Lineage:**  
+> This on-chip debugging methodology was pioneered by **Nishanth Menon** (Texas Instruments) and **Jason Kridner** (BeagleBoard.org Foundation) on platforms like the **BeaglePlay** and **BeagleBone AI-64** by introducing the `dmem` adapter driver into upstream OpenOCD (`board/ti_am625_swd_native.cfg`). By routing debug registers across the internal bus, developers can set breakpoints, single-step co-processor firmware, and inspect registers natively over SSH without soldering a single header wire.
 
-The presentation that inspired this approach is well worth watching:  
+The presentation documenting this breakthrough is essential viewing:  
 🎥 **[Debugging Heterogeneous SoC Using OpenOCD — Nishanth Menon, Texas Instruments (YouTube)](https://youtu.be/hKFvxgbHUfg?si=Mhd7lEJgq9oBp3t9)**
 
-> **Hardware Architecture & Future Outlook:**  
-> While memory-mapped debug access (`dmem`) is supported on TI (AM62x/K3) and STMicroelectronics (STM32MP1) SoCs, current **Allwinner T527 silicon does not route a `dmem` bus interface** for the RISC-V Debug Module to the non-secure ARM interconnect.
-> 
-> We hope Allwinner will incorporate a memory-mapped `dmem` interface in future silicon revisions so that developers can take full advantage of native Linux-hosted OpenOCD and GDB remote debugging. On current T527 hardware, production debugging is achieved cleanly through Linux RemoteProc trace buffers (`trace0`), dedicated serial UART logging (`S_UART0`), lock-free shared SRAM ring buffers, and external JTAG hardware probes.
+### 5.2 Current Allwinner T527 Silicon Reality: No DM or DMI Register Mapping
+On current **Allwinner T527 silicon (Radxa Cubie A5E)**:
+* **There is NO memory-mapped Debug Module (DM) or Debug Module Interface (DMI) register block on the system interconnect.**
+* The physical address `0x07090000` often speculated about in early community discussions is actually the **RTC (Real-Time Clock)** register block in the official Allwinner T527 User Manual.
+* Because the XuanTie RISC-V Debug Module is not routed into the non-secure ARM bus interconnect, target-hosted OpenOCD cannot attach to the co-processor directly over the internal bus.
+
+### 5.3 The Hope for Future Allwinner Silicon
+The entire purpose of examining this JTAG-less architecture is to **advocate and express our hope that Allwinner will incorporate a memory-mapped DMI interface in future SoC revisions**.
+
+Adding an MMIO window to the RISC-V Debug Module Interface (DMI) on future Allwinner silicon would allow the open-source Linux community to utilize native, target-hosted OpenOCD and GDB remote debugging out of the box—matching the development experience on TI Sitara and STMicroelectronics platforms.
+
+### 5.4 Practical Debugging Workflows on Current T527 Hardware
+For engineers developing XuanTie E907 firmware on current T527 silicon today, reliable diagnostics are achieved using:
+1. **Linux RemoteProc Trace Buffers (`trace0`)**: Continuous, zero-overhead circular log streaming via the debugfs entry `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+2. **Dedicated Hardware UART (`S_UART0`)**: Independent serial console output mapped to `0x07080000` (115200 baud), providing immediate low-level boot diagnostics.
+3. **Lock-Free Shared SRAM Ring Buffers**: High-speed Single Producer Single Consumer (SPSC) telemetry buffers in Shared PubSRAM C (`0x00020000`) or Dedicated MCU SRAM (`0x3FFC0000`), synchronized with hardware mailbox doorbells.
+4. **External Hardware JTAG Probes**: Connecting an external debug probe (e.g., T-Head CK-Link or SEGGER J-Link) to the physical JTAG test pads on the board when instruction-level single-stepping or hardware watchpoints are required.
 
 ---
 
-## 4. Summary & What's Next in Part 2
+## 6. Summary & What's Next in Part 2
 
 In this introductory article, we established:
-1. The silicon naming relationship between **T527**, **A527**, and **`sun55i-a523`**.
-2. The verified physical memory layout and RemoteProc bindings for the XuanTie E907 MCU subsystem.
-3. The `dmem` memory-mapped debugging architecture and how current T527 firmware leverages Linux `remoteproc` trace buffers and hardware serial.
+1. **Why we want to use the RISC-V co-processor**: Deterministic SRAM execution (bypassing DRAM refresh jitter), offloading Linux CPU cycles, executing 10–50 kHz hard real-time control loops, and maintaining fault isolation.
+2. **Silicon architecture & TRM mapping**: Navigating `sun55i-a523` naming, board differences between Cubie A5E and A7A, and exact register locations in the *Allwinner T527 User Manual V0.92*.
+3. **ITCM and DTCM memory architecture**: Why RemoteProc cannot load TCM directly, and how the two-stage LMA vs. VMA bootstrapping pattern (`startup.S` copy loop and `fence.i`) enables deterministic 1-cycle execution.
+4. **The DMEM debugging paradigm**: Clarifying that current T527 silicon does not route a memory-mapped DMI block, explaining why we advocate for Allwinner to adopt this in future silicon, and outlining current production debugging options.
 
-In **Part 2**, we will dive straight into the implementation:
+In **Part 2**, we move from architecture to software implementation:
 * Authoring the **Linux 7.1 `sunxi_rproc.c` RemoteProc kernel driver**.
 * Configuring multi-segment ELF placement (PubSRAM C, Dedicated MCU SRAM, and DDR carveouts) and built-in debugfs trace logging.
-* Implementing low-latency IPC doorbells and shared memory communication.
+* Proving hardware state transitions using automated Python test tooling over OpenOCD.
 
 ---
 

@@ -178,7 +178,7 @@ We execute a **3-Step Hardware Proof**:
 ```
 
 ### Test 1: The `dmstatus` Signature Verification (Read Proof)
-Per the **RISC-V External Debug Specification (v0.13.2)**, reading `dmstatus` (DMI `0x11` / MMIO `0x07090000`) returns a strict bitfield:
+Per the **RISC-V External Debug Specification (v0.13.2)**, reading `dmstatus` (DMI register `0x11`) via OpenOCD returns a strict bitfield:
 * `version` (Bits [3:0]) == `2` (denoting v0.13.2 compliance).
 * `authenticated` (Bit 7) == `1` (debug interface unlocked).
 * `allrunning` (Bit 11) == `1` or `allhalted` (Bit 9) == `1`.

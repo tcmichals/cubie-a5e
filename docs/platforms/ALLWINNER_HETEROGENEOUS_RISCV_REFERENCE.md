@@ -111,7 +111,7 @@ E906 HALT / STOP SEQUENCE:
 * **Bit 0** (`CLK_RISCV`): Core Clock Gate (`1` = Clock Enabled)
 * **Bit 1** (`CLK_RISCV_CFG`): Bus Interconnect Clock Gate (`1` = Bus Clock Enabled)
 * **Bit 16** (`RST_BUS_RISCV_CFG`): Core Reset (`1` = Out of Reset / Running, `0` = Held in Reset)
-* **Status**: Verified in hardware via `devmem 0x0701021c 32` -> `0x00010003` (Clocked & running).
+* **Status**: Verified in hardware via early boot register inspection: `0x0701021c` -> `0x00010003` (Clocked & running).
 * **Reset Vector**: Hardwired in silicon to fetch its first instruction from **`0x00040000`** (Base of SRAM A2). No MMIO boot address register is used.
 
 ---

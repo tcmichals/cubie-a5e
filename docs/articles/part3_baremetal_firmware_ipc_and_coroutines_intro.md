@@ -1,6 +1,6 @@
 # Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 3): Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro
 
-In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)** and **[Part 2](part2_building_remoteproc_and_hardware_proof.md)**, we built the Linux `remoteproc` foundation for the **Allwinner T527 / A527** (`sun55i`) and verified on-chip Debug Module access using our automated Python DMI test harness.
+In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)** and **[Part 2](part2_building_remoteproc_and_hardware_proof.md)**, we established the heterogeneous architecture, built the Linux `remoteproc` driver for the **Allwinner T527 / A527** (`sun55i`), mapped out the on-chip SRAM memory windows, and verified hardware execution states.
 
 With the hardware debugged and the lifecycle managed, we turn our attention to the auxiliary core itself: **How do we write clean, deterministic, high-performance bare-metal firmware on the XuanTie E907 RISC-V core?**
 

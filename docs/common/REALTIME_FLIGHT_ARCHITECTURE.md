@@ -59,13 +59,13 @@ Communication between the Linux ARM host and the XuanTie RISC-V co-processor use
 │ Daemon (Core 7)         │                     │ Flight Loop (ITCM)      │
 └────────────┬────────────┘                     └────────────▲────────────┘
              │                                               │
-             │ Write SPSC Ringbuffer (SRAM C: 0x07130000)     │
+             │ Write SPSC Ringbuffer (PubSRAM C: 0x00020000) │
              ├───────────────────────────────────────────────┤
              │                                               │
              ▼                                               │
 ┌─────────────────────────┐  Hardware Doorbell  ┌────────────┴────────────┐
 │ Mailbox Register        │ ──────────────────> │ Mailbox ISR Doorbell    │
-│ (0x07090000)            │                     │ Wake Coroutine Event    │
+│ (0x03003000)            │                     │ Wake Coroutine Event    │
 └─────────────────────────┘                     └─────────────────────────┘
 ```
 

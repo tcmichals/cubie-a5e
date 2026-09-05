@@ -602,11 +602,13 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
    # Expected output: running
    ```
 
-3. **Verify Memory Writes with `devmem`**:
+3. **Verify Execution via RemoteProc Trace Log**:
    ```bash
-   # When running testBasic, inspect magic incrementing counter in PubSRAM C:
-   devmem 0x00021000 32
-   devmem 0x00021004 32
+   # When running testBasic, inspect the live incrementing counter loop output:
+   cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+
+   # Or verify shared SRAM IPC with the event-driven UIO benchmark:
+   ping_uio -n 1000
    ```
 
 4. **Verify Exception Handling**:

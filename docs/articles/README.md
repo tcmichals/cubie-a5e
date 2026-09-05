@@ -9,7 +9,7 @@ This directory contains long-form technical articles, multi-part engineering ser
 A comprehensive 4-part series documenting the architecture, Linux driver development, verification, and bare-metal firmware design for the **XuanTie E907 RISC-V co-processor** on the **Allwinner T527 / A527 (`sun55i`)**:
 
 1. **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
-   * **Topics**: Heterogeneous SoC landscape, silicon naming taxonomy (`T527` vs `A527` vs `sun55i-a523`), RemoteProc architectural model, TRM physical memory maps (`0x07000000 - 0x071FFFFF`), and on-chip JTAG-less memory-mapped debugging over OpenOCD.
+   * **Topics**: Why use the co-processor (deterministic SRAM vs. DRAM, offloading Linux, safety), silicon taxonomy, T527 User Manual register mappings, ITCM/DTCM architecture & two-stage LMA/VMA bootstrapping, and the JTAG-less DMEM paradigm.
 2. **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](part2_building_remoteproc_and_hardware_proof.md)**
    * **Topics**: Implementing `sunxi_rproc.c` on Linux 7.1, surgical `da_to_va` multi-segment ELF placement (ITCM, DTCM, SRAM C), live trace logging via `.resource_table`, purging `iomem=relaxed`, and the 3-step hardware proof with automated Python socket tooling (`dmi_test.py`).
 3. **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
