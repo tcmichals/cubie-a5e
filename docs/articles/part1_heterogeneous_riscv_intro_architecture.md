@@ -105,8 +105,8 @@ The authoritative memory mapping registered in the Linux RemoteProc driver (`sun
 | **Instruction TCM (ITCM)** | Internal | **`0x00000000`** | **64 KB** | Private E907 Bus | Single-cycle zero-wait-state instruction execution. Directly connected to the E907 fetch pipeline; populated via startup LMA-to-VMA staging from SRAM. |
 | **Data TCM (DTCM)** | Internal | **`0x00080000`** | **64 KB** | Private E907 Bus | Single-cycle zero-wait-state data memory. Directly connected to the E907 load/store pipeline; populated via startup LMA-to-VMA staging from SRAM. |
 | **RemoteProc Trace Buffer (`trace0`)** | **`0x00020000`+** / `0x48000000` | **`0x00020000`+** / `0x48000000` | **4 KB** | `resource_table` / `memory-region` | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`). Mapped inside PubSRAM C by default (`.trace_buffer`), or allocated via DDR carveout (`0x48000000`). |
-| **DDR DMA Payload Pool** | **`0x48100000`** | **`0x48100000`** | **1 MB** | `memory-region` (carveout) | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC transfers. |
-| **Main Peripheral Space** | **`0x02000000`+** | **`0x02000000`+** | — | Native SoC buses | 1:1 mapped peripherals: PIO GPIO controller (`0x02000000`), UART0 debug console (`0x02500000`), UART2 navigation port (`0x02500800`), SPI0 (`0x04025000`). |
+| **Main AP Peripheral Space** | **`0x02000000`+** | **`0x02000000`+** | — | Native SoC buses | 1:1 mapped application peripherals: PIO GPIO controller (`0x02000000`), Linux UART0 debug console (`0x02500000`), UART2 navigation port (`0x02500800`), SPI0 (`0x04025000`). |
+| **CPUS / Always-On Peripheral Space** | **`0x07000000`+** | **`0x07000000`+** | — | Always-On Bus | 1:1 mapped co-processor peripherals: dedicated `S_UART0` serial console (`0x07080000`, 115200 baud), `R_PIO` GPIO (`0x07022000`), `R_TIMER`, `R_PWM`. Completely independent of AP Linux console UART0 (`0x02500000`). |
 
 ### 3.3 Visual Address Translation Architecture
 
@@ -179,8 +179,9 @@ On the Allwinner T527, Linux RemoteProc and the XuanTie E907 co-processor commun
    - `sunxi_rproc_start()` retrieves the ELF entry point (`rproc->bootaddr`), which is **`0x00020000`** (`_start`).
    - The driver programs this address into the hardware boot vector register `STA_ADD_REG` (`0x07130204`):
      ```c
-     writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
+     writel((u32)rproc->bootaddr, priv->cfg_va + MCU_STA_ADD_REG);
      ```
+     *(Note: In vendor BSP headers, this register is often defined with the legacy macro name `E906_STA_ADD_REG`, inherited from earlier D1/F133 chips; on the T527/A523, it directly configures the boot entry vector for the XuanTie E907).*
    - The driver deasserts the core run reset (`rst_core`, bit 18 in `MCU_RST_REG 0x07102124`).
    - The XuanTie E907 begins execution immediately from `0x00020000` in PubSRAM C.
    - All 7 progressive test apps in `riscv-firmware/apps/` (`testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPing`, `testPingRpmsg`, `testDRAMMsg`, `exampleRiscv`) boot and run reliably using this direct SRAM architecture.
@@ -227,6 +228,15 @@ SECTIONS
     .text    : { *(.text) *(.text.*) } > SRAM
     .rodata  : { *(.rodata) *(.rodata.*) } > SRAM
 
+    /* Linux RemoteProc Resource Table in Shared SRAM (Anchored Early) */
+    .resource_table :
+    {
+        . = ALIGN(4);
+        KEEP(*(.resource_table))
+        KEEP(*(.resource_table*))
+        . = ALIGN(4);
+    } > SRAM
+
     /* Critical Real-Time Code: Stored in SRAM (LMA), Executed in ITCM (VMA) */
     .itcm_text : AT(_sidata_itcm)
     {
@@ -263,15 +273,15 @@ SECTIONS
         . = ALIGN(4);
         _ebss_dtcm = .;
     } > DTCM
-
-    /* Linux RemoteProc Resource Table in Shared SRAM */
-    .resource_table :
-    {
-        . = ALIGN(4);
-        KEEP(*(.resource_table))
-    } > SRAM
 }
 ```
+
+> [!TIP]
+> **Keep the `.resource_table` Anchored Early in SRAM**
+>
+> In Linux RemoteProc, the kernel ELF loader (`rproc_elf_load_rsc_table()`) parses the `.resource_table` section header from the ELF file *before* downloading segments into memory to discover requested trace buffers, carveouts, and vrings.
+>
+> If you place `.resource_table` at the dynamic tail of the linker script after `.text` and `.data`, large code additions can push the table's address unexpectedly or shift it past the mapped SRAM window, breaking kernel parsing before boot. Placing `.resource_table` immediately after `.rodata` (as done in both `firmware_t527.ld` and `firmware_tcm_staging.ld`) keeps its offset stable and well within the first few kilobytes of mapped PubSRAM C.
 
 #### 2. Assembly Startup Staging Routine — TCM Copy Extension
 
@@ -323,6 +333,13 @@ SECTIONS
     j       .Lzero_dtcm_loop
 .Lzero_dtcm_done:
 ```
+
+> [!NOTE]
+> **Pipeline Synchronization & Compiler Flags for XuanTie Cores**
+>
+> While the standard RISC-V `fence.i` instruction invalidates the local instruction cache and flushes the prefetch buffer, deeply pipelined XuanTie core implementations or aggressive GCC optimization levels require two engineering precautions:
+> 1. **Instruction Serialization**: The `fence.i` instruction guarantees that stores to ITCM become visible to instruction fetches before subsequent instructions are fetched.
+> 2. **Compiler Optimization Safeguards**: When compiling bare-metal firmware with `-march=rv32imafdc -mabi=ilp32d`, ensure flags like `-mno-shorten-memrefs` (or `-fno-tree-loop-distribute-patterns`) are enabled if writing high-level C copy loops. This prevents GCC from replacing raw 32-bit word copy loops with unaligned `memcpy` runtime helper calls before the C runtime environment is fully ready.
 
 #### 3. Pinning Functions and Data in C/C++
 ```c
@@ -379,7 +396,7 @@ For XuanTie E907 firmware development on current T527 hardware, these four strat
    ```
    Zero-overhead, no extra hardware required. Used by all `riscv-firmware/apps` test applications.
 
-2. **Dedicated Hardware UART (`S_UART0` @ `0x07080000`)**: A RISC-V-owned independent serial port at 115200 baud. Provides immediate low-level boot diagnostics completely separate from the Linux console UART.
+2. **Dedicated Hardware UART (`S_UART0` @ `0x07080000`)**: A RISC-V-owned independent serial port in the CPUS Always-On domain at 115200 baud. Provides immediate low-level boot diagnostics completely separate from the Linux console UART (`UART0` @ `0x02500000`).
 
 3. **Lock-Free Shared SRAM Ring Buffers**: High-speed SPSC telemetry buffers in PubSRAM C (`0x00020000`) or Dedicated MCU SRAM (`0x3FFC0000`), read from Linux via `/dev/mem` or UIO. Covered in depth in **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**.
 
