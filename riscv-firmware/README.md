@@ -426,18 +426,23 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 
 ---
 
-### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal Style)
+### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal UIO Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x00020000`).
-  - Memory-barrier-synchronized doorbell registers (`host_doorbell`, `riscv_doorbell`).
-  - Sub-microsecond response latency (~1.5–2.5 $\mu\text{s}$ Round-Trip Time).
-* **Linux Companion Tool**: `apps/testPing/linux/ping_shm`
-  - High-precision latency benchmarking using `clock_gettime(CLOCK_MONOTONIC_RAW)`.
+  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x07131000` in dedicated MCU SRAM C).
+  - Dual operational modes:
+    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E907 pulses GIC SPI 147 interrupt to wake host.
+    2. **Raw Memory Polling Baseline**: Maps SRAM directly via `/dev/mem` and spins on memory flags for theoretical raw bus latency measurements.
+* **Linux Companion Tools**:
+  - **`apps/testPing/linux/ping_uio.py`**: Event-driven Python Lite-libmetal client using `select.epoll()`. Maps `map0` (Mailbox MMIO) and `map1` (MCU SRAM C) directly from `/dev/uio0` (**no `/dev/mem` or root privileges required**).
+  - **`apps/testPing/linux/ping_shm`**: C++ high-precision latency benchmarking tool using `clock_gettime(CLOCK_MONOTONIC_RAW)`.
   - Computes min, avg, max latency, jitter (standard deviation), percentiles (p50, p90, p99, p99.9), and message throughput.
 
 ```bash
-# Run 100,000 iterations over Shared SRAM
+# Mode 1: Event-driven UIO Doorbell (0% idle CPU burn via epoll)
+python3 apps/testPing/linux/ping_uio.py -n 50000
+
+# Mode 2: Direct Shared SRAM memory-polling baseline
 sudo ./apps/testPing/linux/ping_shm -n 100000
 ```
 
@@ -501,13 +506,13 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 
 ## 4. Communication Paradigm & IPC Architecture Comparison
 
-| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
+| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Dedicated MCU SRAM + UIO (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in PubSRAM C (`0x00020000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct PubSRAM C (`0x00020000`, 64B frames) |
-| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | Direct MMIO (`/dev/mem`) |
-| **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in MCU SRAM C (`0x07131000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU Dedicated SRAM C (`0x07131000`, 64B frames) |
+| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | `uio_pdrv_genirq` (`/dev/uio0`) or direct `/dev/mem` |
+| **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Event-driven `ping_uio.py` (`select.epoll()`) / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
 | **Typical RTT Latency** | **~60 – 160 $\mu\text{s}$** | **~50 – 90 $\mu\text{s}$** | **~3.0 – 6.0 $\mu\text{s}$** (DDR bus latency) | **~1.5 – 2.5 $\mu\text{s}$** (Zero-wait-state SRAM) |
 | **Jitter (StdDev)**     | Moderate (Kernel context switches) | Moderate (Kernel context switches) | **Ultra-Low (<0.5 $\mu\text{s}$)** | **Ultra-Low (<0.2 $\mu\text{s}$)** |
@@ -529,8 +534,10 @@ During a standard Buildroot build or via `push-riscv-firmware.sh`, all firmware 
 | **Default Active Firmware** | `/lib/firmware/riscv-firmware.elf` | Bootstrapped at boot by `/etc/init.d/S60riscv` |
 | **Host Python Trace Monitor** | `/usr/bin/monitor_trace.py` | RemoteProc `trace0` debugfs mixed ASCII/Binary decoder |
 | **Host Python Direct Poller** | `/usr/bin/fast_sram_telemetry.py` | Direct `/dev/mem` zero-copy physical SRAM reader (>1 kHz) |
+| **Event-Driven UIO Client** | `/usr/bin/ping_uio.py` | Lite-libmetal Python client using `select.epoll()` on `/dev/uio0` (0% CPU) |
 | **SRAM Ping Benchmark** | `/usr/bin/ping_shm` | Shared memory lock-free SPSC latency benchmark tool |
-| **RPMsg Ping Benchmark** | `/usr/bin/ping_rpmsg` | Standard Linux `/dev/rpmsg` round-trip test tool |
+| **Python RPMsg Benchmark** | `/usr/bin/ping_rpmsg.py` | Event-driven Python RPMsg round-trip test tool |
+| **RPMsg Ping Benchmark** | `/usr/bin/ping_rpmsg` | Standard Linux `/dev/rpmsg` round-trip test tool (C++) |
 | **DDR DRAM Ping Benchmark** | `/usr/bin/ping_dram` | Hybrid SRAM control / DDR payload throughput benchmark |
 
 ---
@@ -549,15 +556,46 @@ To recompile all firmware and push to rootfs-overlay, active buildroot directori
 
 ---
 
+### Dynamic IPC Paradigm Selection via `/boot/config.txt` (Raspberry Pi Style)
+
+On the Cubie A5E and Cubie A7A, you do not need to rebuild monolithic device trees or compile U-Boot scripts to change peripheral and IPC bindings. Edit `/boot/config.txt` directly on the target or by mounting the SD card on your development workstation:
+
+```ini
+# /boot/config.txt - Hardware & IPC Overlay Configuration
+
+# ------------------------------------------------------------------------------
+# Paradigm A: Standard Linux VirtIO RPMsg (testPingRpmsg)
+# ------------------------------------------------------------------------------
+dtoverlay=cubie-a5e-flight-stack
+
+# ------------------------------------------------------------------------------
+# Paradigm B: Hard Real-Time Lite-libmetal UIO Doorbell (testPing / ping_uio.py)
+# ------------------------------------------------------------------------------
+# dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+
+# Optional: Real-time CPU core isolation (removes OS jitter on CPU 7):
+extra_bootargs=isolcpus=7 nohz_full=7 rcu_nocbs=7
+```
+
+U-Boot automatically loads `/boot/config.txt`, parses `dtoverlay`, resolves `.dtbo` extensions, expands the FDT buffer (`fdt resize 65536`), and sequentially applies each overlay dynamically.
+
+---
+
 ### Live Firmware Switching on Target (Cubie A5E)
 
 Once logged into the board (via serial or SSH), all tools and ELFs are in your system `$PATH`:
 
 ```bash
-# 1. Run Pure Shared SRAM Ping (testPing)
+# 1. Run Lite-libmetal Shared SRAM Ping (testPing)
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
+
+# Mode A: Event-driven UIO Doorbell (0% idle CPU burn via epoll on /dev/uio0)
+# (Requires 'cubie-a5e-uio' overlay in /boot/config.txt)
+ping_uio.py -n 50000
+
+# Mode B: Direct Shared SRAM memory-polling baseline (/dev/mem)
 ping_shm -n 50000
 
 # 2. Run Hybrid SRAM/DRAM SPSC Benchmark (testDRAMMsg)
@@ -567,9 +605,12 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 ping_dram -n 10000 -s 1024
 
 # 3. Run Standard Linux RPMsg (testPingRpmsg)
+# (Requires standard RPMsg mailbox binding in /boot/config.txt)
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
+ping_rpmsg.py -n 5000
+# Or C++ tool:
 ping_rpmsg -n 5000
 
 # 4. Run Mixed String & Binary Telemetry (testStringBinaryTrace0)

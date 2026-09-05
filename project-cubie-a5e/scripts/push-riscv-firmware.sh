@@ -43,7 +43,10 @@ for board in cubie_a5e; do
         tools_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/${sub}"
         mkdir -p "${tools_dir}"
         [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${tools_dir}/"
+        [ -f "${BIN_DIR}/ping_uio" ] && cp -v "${BIN_DIR}/ping_uio" "${tools_dir}/"
+        [ -f "${BIN_DIR}/ping_uio.py" ] && cp -v "${BIN_DIR}/ping_uio.py" "${tools_dir}/" && chmod +x "${tools_dir}/ping_uio.py"
         [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${tools_dir}/"
+        [ -f "${BIN_DIR}/ping_rpmsg.py" ] && cp -v "${BIN_DIR}/ping_rpmsg.py" "${tools_dir}/" && chmod +x "${tools_dir}/ping_rpmsg.py"
         [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${tools_dir}/"
         if [ -f "${BIN_DIR}/monitor_trace.py" ]; then
             cp -v "${BIN_DIR}/monitor_trace.py" "${tools_dir}/"
@@ -69,7 +72,10 @@ for bld in bld.a5e; do
     for tbin in "${target_bin}" "${target_local_bin}"; do
         if [ -d "${tbin}" ]; then
             [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${tbin}/"
+            [ -f "${BIN_DIR}/ping_uio" ] && cp -v "${BIN_DIR}/ping_uio" "${tbin}/"
+            [ -f "${BIN_DIR}/ping_uio.py" ] && cp -v "${BIN_DIR}/ping_uio.py" "${tbin}/" && chmod +x "${tbin}/ping_uio.py"
             [ -f "${BIN_DIR}/ping_rpmsg" ] && cp -v "${BIN_DIR}/ping_rpmsg" "${tbin}/"
+            [ -f "${BIN_DIR}/ping_rpmsg.py" ] && cp -v "${BIN_DIR}/ping_rpmsg.py" "${tbin}/" && chmod +x "${tbin}/ping_rpmsg.py"
             [ -f "${BIN_DIR}/ping_dram" ] && cp -v "${BIN_DIR}/ping_dram" "${tbin}/"
             if [ -f "${BIN_DIR}/monitor_trace.py" ]; then
                 cp -v "${BIN_DIR}/monitor_trace.py" "${tbin}/"
@@ -90,14 +96,20 @@ if [ -n "${TARGET_IP}" ]; then
     scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${BIN_DIR}"/*.elf "root@${TARGET_IP}:/lib/firmware/"
     scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
         "${BIN_DIR}/ping_shm" \
+        "${BIN_DIR}/ping_uio" \
+        "${BIN_DIR}/ping_uio.py" \
         "${BIN_DIR}/ping_rpmsg" \
+        "${BIN_DIR}/ping_rpmsg.py" \
         "${BIN_DIR}/ping_dram" \
         "${BIN_DIR}/monitor_trace.py" \
         "${BIN_DIR}/fast_sram_telemetry.py" \
         "root@${TARGET_IP}:/usr/bin/" 2>/dev/null || true
     scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
         "${BIN_DIR}/ping_shm" \
+        "${BIN_DIR}/ping_uio" \
+        "${BIN_DIR}/ping_uio.py" \
         "${BIN_DIR}/ping_rpmsg" \
+        "${BIN_DIR}/ping_rpmsg.py" \
         "${BIN_DIR}/ping_dram" \
         "${BIN_DIR}/monitor_trace.py" \
         "${BIN_DIR}/fast_sram_telemetry.py" \

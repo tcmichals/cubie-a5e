@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *               RADXA CUBIE A7A — LITE-LIBMETAL UIO DOORBELL OVERLAY
+ * ============================================================================
+ * Converts the Allwinner A733 hardware message box into a generic Userspace
+ * I/O (UIO) device using uio_pdrv_genirq.
+ *
+ * Memory Maps exposed under /sys/class/uio/uio0/maps/:
+ *   map0: Allwinner MSGBOX MMIO @ 0x03004000 (4 KB) - For Host Doorbell TX
+ *   map1: Dedicated SRAM C      @ 0x07131000 (4 KB) - For Shared Ringbuffer / Ping
+ * ============================================================================
+ */
+
+&msgbox {
+    compatible = "generic-uio";
+    reg = <0x03004000 0x1000>,
+          <0x07131000 0x1000>;
+    reg-names = "msgbox", "sram";
+    status = "okay";
+};

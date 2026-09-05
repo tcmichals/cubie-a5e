@@ -1,0 +1,15 @@
+# /boot/config.txt - Radxa Cubie A7A Hardware & Overlay Configuration
+# (Raspberry Pi style configuration for Allwinner A733)
+
+# ==============================================================================
+# 1. Device Tree Overlays (dtoverlay)
+# ==============================================================================
+dtoverlay=cubie-a7a-flight-stack
+
+# To enable Lite-libmetal UIO Doorbell mode:
+# dtoverlay=cubie-a7a-flight-stack cubie-a7a-uio
+
+# ==============================================================================
+# 2. Kernel Command-Line Arguments (cmdline)
+# ==============================================================================
+cmdline=

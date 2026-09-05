@@ -1,0 +1,12 @@
+# /boot/uEnv.txt - Radxa Cubie A7A Runtime Configuration
+# Edit this file to add or remove device tree overlays without rebuilding boot.scr
+
+# Active overlays (space-separated list of .dtbo files in /boot)
+# Default: Flight stack (pin muxing, sensors, dedicated RISC-V peripherals)
+overlays=cubie-a7a-flight-stack.dtbo
+
+# To enable Lite-libmetal UIO Doorbell mode, uncomment:
+# overlays=cubie-a7a-flight-stack.dtbo cubie-a7a-uio.dtbo
+
+# Optional extra kernel arguments:
+extra_bootargs=

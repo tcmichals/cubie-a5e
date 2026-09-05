@@ -1,0 +1,12 @@
+# /boot/uEnv.txt - Radxa Cubie A5E Runtime Configuration
+# Edit this file to add or remove device tree overlays without rebuilding boot.scr
+
+# Active overlays (space-separated list of .dtbo files in /boot)
+# Default: Flight stack (pin muxing, sensors, dedicated RISC-V peripherals)
+overlays=cubie-a5e-flight-stack.dtbo
+
+# To enable Lite-libmetal UIO Doorbell mode instead of kernel VirtIO RPMsg, uncomment:
+# overlays=cubie-a5e-flight-stack.dtbo cubie-a5e-uio.dtbo
+
+# Optional extra kernel arguments (e.g. CPU isolation for hard real-time):
+extra_bootargs=

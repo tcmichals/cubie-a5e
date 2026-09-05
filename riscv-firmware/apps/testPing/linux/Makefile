@@ -1,17 +1,20 @@
-# Makefile for Linux Host ping_shm benchmark
+# Makefile for Linux Host testPing benchmarks (ping_shm and ping_uio)
 
 CXX ?= g++
 CXXFLAGS ?= -O3 -Wall -Wextra -std=c++17 -pthread
-TARGET = ping_shm
+INCLUDES = -I../../../common -I../../../common/include
 
-SRCS = ping_shm.cpp
+TARGETS = ping_shm ping_uio
 
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): $(SRCS)
-	$(CXX) $(CXXFLAGS) -I../../../common -I../../../common/include $< -o $@ -lm
+ping_shm: ping_shm.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ -lm
+
+ping_uio: ping_uio.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ -lm
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGETS)
 
 .PHONY: all clean

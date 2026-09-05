@@ -31,8 +31,19 @@ stage-bin: $(APPS) host-tools
 	@if [ -f testPing/linux/ping_shm ]; then \
 		cp -v testPing/linux/ping_shm $(BIN_DIR)/; \
 	fi
+	@if [ -f testPing/linux/ping_uio ]; then \
+		cp -v testPing/linux/ping_uio $(BIN_DIR)/; \
+	fi
+	@if [ -f testPing/linux/ping_uio.py ]; then \
+		cp -v testPing/linux/ping_uio.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/ping_uio.py; \
+	fi
 	@if [ -f testPingRpmsg/linux/ping_rpmsg ]; then \
 		cp -v testPingRpmsg/linux/ping_rpmsg $(BIN_DIR)/; \
+	fi
+	@if [ -f testPingRpmsg/linux/ping_rpmsg.py ]; then \
+		cp -v testPingRpmsg/linux/ping_rpmsg.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/ping_rpmsg.py; \
 	fi
 	@if [ -f testDRAMMsg/linux/ping_dram ]; then \
 		cp -v testDRAMMsg/linux/ping_dram $(BIN_DIR)/; \

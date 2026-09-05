@@ -1,6 +1,6 @@
 # Technical Articles & Engineering Publications
 
-This directory contains long-form technical articles, multi-part engineering series, and case studies derived from the active bring-up of the Radxa Cubie A5E and Cubie A7A hardware platforms.
+This directory contains long-form technical articles, multi-part engineering series, and case studies derived from the active bring-up of the Radxa Cubie A5E and Cubie A7A hardware platforms in the [cubie-a5e GitHub repository](https://github.com/tcmichals/cubie-a5e).
 
 ---
 
@@ -26,3 +26,9 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
 
 * **[Open-Source NPU Migration Case Study](../buildroot/FOSS_NPU_Migration_Article.md)**
   * **Topics**: Migrating from proprietary vendor NPU binary blobs to upstream Linux `etnaviv` DRM driver and Mesa Teflon TFLite delegate.
+
+* **[Mastering Dynamic Device Tree Overlays & UIO](devetreeOverlay.md)**
+  * **Topics**: Multi-overlay boot chains in U-Boot (`boot.cmd`/`uEnv.txt`), converting Allwinner MSGBOX to generic UIO (`uio_pdrv_genirq`), dual MMIO mapping, and 0% CPU event-driven Python IPC with `select.epoll()`.
+
+* **[Introduction to the Radxa Cubie A5E](introToCubieA5E.md)**
+  * **Topics**: Comprehensive overview of the Radxa Cubie A5E SBC, Allwinner T527/A527 octa-core Cortex-A55 silicon, XuanTie E907 RISC-V co-processor, HiFi4 DSP, 2.0 TOPS VIP9000 NPU, and upstream mainline Linux ecosystem.

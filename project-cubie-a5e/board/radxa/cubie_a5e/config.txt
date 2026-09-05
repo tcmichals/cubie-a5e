@@ -1,0 +1,25 @@
+# /boot/config.txt - Radxa Cubie A5E Hardware & Overlay Configuration
+# (Raspberry Pi style configuration for Allwinner T527 / A527)
+#
+# Edit this file directly on your SD card or via Linux to enable peripherals
+# and switch Inter-Processor Communication (IPC) modes without rebuilding.
+
+# ==============================================================================
+# 1. Device Tree Overlays (dtoverlay)
+# ==============================================================================
+# Space-separated list of overlays. You can omit the '.dtbo' extension.
+#
+# Default: Flight stack (dedicated RISC-V UART2/SPI0, sensors, pin muxing)
+dtoverlay=cubie-a5e-flight-stack
+
+# To switch from Linux kernel VirtIO RPMsg to Lite-libmetal UIO Doorbell mode,
+# simply add 'cubie-a5e-uio' to the list:
+# dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+
+# ==============================================================================
+# 2. Kernel Command-Line Arguments (cmdline)
+# ==============================================================================
+# Optional extra bootargs appended to the kernel command line.
+# Example: Isolate CPU 7 for hard real-time execution with zero OS jitter:
+# cmdline=isolcpus=7 nohz_full=7 rcu_nocbs=7
+cmdline=

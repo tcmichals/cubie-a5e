@@ -20,6 +20,7 @@ boot.scr
 ping_shm
 ping_rpmsg
 ping_dram
+ping_uio
 riscv-firmware/bin/
 
 # Whitelist board vendor firmware tools

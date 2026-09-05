@@ -1,0 +1,141 @@
+# Radxa Cubie A5E Hardware Overview & Specifications
+
+The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) powered by the Allwinner T527 / A527 SoC (`sun55i-a523`). Designed for space-, weight-, and power-constrained (SWaP) edge computing, the board packages an octa-core 64-bit ARM CPU, a dedicated real-time XuanTie E907 RISC-V co-processor, a Cadence HiFi4 audio DSP, and a 2.0 TOPS NPU into a low-power (<7.5W) form factor suitable for robotics, drone avionics, smart camera vision, and industrial automation.
+
+* **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
+
+---
+
+## 1. System Overview
+
+* **Form Factor**: Compact single-board computer (credit-card format, 85 mm × 56 mm).
+* **SoC**: Allwinner T527 (commercial) / A527 (industrial/automotive), 22nm FinFET.
+* **Primary CPU**: Octa-Core ARM Cortex-A55 @ up to 1.80 GHz (Armv8.2-A, 64-bit).
+* **Co-Processor**: T-Head XuanTie E907 RISC-V (RV32IMAFDC) @ 200 MHz (up to 600 MHz).
+* **DSP**: Cadence Tensilica HiFi4 Audio DSP @ 600 MHz.
+* **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8).
+* **GPU**: ARM Mali-G57 MC1 (Valhall architecture).
+* **RAM**: 2 GiB or 4 GiB LPDDR4 / LPDDR4X.
+* **Power Budget**: ~1.8W typical idle, <7.5W full load (5V / 3A DC input via USB-C).
+
+---
+
+## 2. Hardware Specifications
+
+### Compute & Acceleration
+* **Application Processor**: Allwinner T527 / A527 (`sun55i-a523`), 8× ARM Cortex-A55 @ 1.80 GHz (32 KB I/D L1 per core, 512 KB unified DSU L3 cache)
+* **Co-Processor**: T-Head XuanTie E907 RISC-V (RV32IMAFDC) @ 200–600 MHz with double-precision FPU, DSP extensions, 64 KB ITCM, and 64 KB DTCM
+* **Audio DSP**: Cadence Tensilica HiFi4 @ 600 MHz
+* **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8), supported upstream via Linux `etnaviv`
+* **GPU**: ARM Mali-G57 MC1 (Vulkan 1.3, OpenGL ES 3.2, OpenCL 2.0)
+
+### Memory & Storage
+* **System RAM**: 2 GiB or 4 GiB 32-bit LPDDR4 / LPDDR4X (auto-detected by U-Boot)
+* **Storage Footprint**: MicroSD card slot, onboard eMMC 5.1 footprint (HS400), and SPI NOR flash support
+
+### Multimedia & Display
+* **Video Decoding**: 4K @ 60 fps (H.265, H.264, AV1, VP9, MPEG-2)
+* **Video Encoding**: 4K @ 30 fps (H.265, H.264)
+* **Display Interfaces**: HDMI 2.0 (up to 4K @ 60 fps), 4-lane MIPI DSI (up to 1080p @ 60 fps), eDP
+* **Camera Inputs**: 4-lane MIPI CSI-2 with Allwinner Gen-4 VIN hardware ISP
+
+### Connectivity & Peripheral IO
+* **Ethernet**: 1× Gigabit Ethernet (10/100/1000 Mbps) via Realtek RTL8211F RGMII
+* **Wireless**: Wi-Fi 6 (802.11ax) + Bluetooth 5.2 via AIC8800 (SDIO 3.0 / UART)
+* **USB Ports**: 1× USB 3.0 Type-A Host, 1× USB 2.0 Type-A Host, 1× USB Type-C (5V/3A Power & OTG)
+* **Expansion**: 40-pin GPIO header (2.54mm pitch) with UART, SPI, I2C, PWM, GPIO, and CAN bus
+* **Interrupt Controller**: ARM GIC-600 (GICv3) with 256 SPIs (MSGBOX on SPI 147)
+* **Power Supply**: 5V / 3A DC via USB-C (typical idle: ~1.8W, full load: <7.5W)
+* **Dimensions**: 85 mm × 56 mm (standard credit-card SBC format)
+
+---
+
+## 3. Software Architecture & Upstream Support
+
+* **Bootloader (SPL + U-Boot)**: Upstream mainline U-Boot (`BR2_TARGET_UBOOT=y`, 2026.01). Parses `/boot/config.txt` and dynamically applies `.dtbo` overlays.
+* **Firmware (TF-A)**: Mainline ARM Trusted Firmware BL31 (`PLAT=sun55i_a523`).
+* **Linux Kernel**: Upstream mainline Linux 7.1 (`sun55i-a523.dtsi` / `sun55i-a527-cubie-a5e.dts`).
+* **Real-Time Patch**: `PREEMPT_RT` patchset applied to kernel 7.1.
+* **RemoteProc**: `sunxi_rproc.c` handles lifecycle and ELF loading for the XuanTie E907 core.
+* **IPC**:
+  * VirtIO RPMsg via `virtio_rpmsg_bus` (`/dev/rpmsg0`).
+  * Lite-libmetal UIO Doorbell via `uio_pdrv_genirq` (`/dev/uio0`).
+  * Direct SRAM / DRAM zero-copy memory channels.
+* **NPU Driver**: Open-source `etnaviv` DRM kernel driver with Mesa Teflon delegate for TensorFlow Lite.
+
+---
+
+## 4. Out-of-Tree Buildroot Architecture
+
+The platform firmware and operating system are built using Buildroot's external tree mechanism (`BR2_EXTERNAL`) combined with out-of-tree output directory builds (`O=`). This architecture separates the upstream build engine from board-specific configurations.
+
+### Directory Structure
+
+```text
+├── buildroot/          # Upstream Buildroot source tree (unmodified submodule)
+├── project-cubie-a5e/  # BR2_EXTERNAL tree (board support, custom packages, patches)
+│   ├── Config.in       # Custom package menu entries
+│   ├── external.desc   # External tree identifier (CUBIE_A5E)
+│   ├── external.mk     # Makefile includes for external packages
+│   ├── board/          # Genimage configurations, rootfs overlays, U-Boot scripts
+│   ├── configs/        # cubie_a5e_defconfig and cubie_a7a_defconfig
+│   ├── dts-overlay/    # Device Tree overlay sources (.dtso)
+│   ├── package/        # Custom packages (AIC8800 Wi-Fi driver, RISC-V firmware)
+│   └── patches/        # Upstream kernel and U-Boot patches
+└── bld/                # Out-of-tree build artifact directory (generated by O=)
+    ├── images/         # Bootable disk output (sdcard.img)
+    └── target/         # Root filesystem staging directory
+```
+
+### Key Advantages
+
+* **Upstream Isolation**: Upstream Buildroot remains completely unmodified. Updates to newer Buildroot releases do not conflict with board-specific modifications.
+* **Hermetic Board Packaging**: All kernel patches, defconfigs, bootloader scripts, and proprietary/custom drivers live entirely within `project-cubie-a5e/`.
+* **Clean Build Artifacts**: Directing compilation output to `bld/` keeps the source repository clean and allows parallel builds or full rebuilds by deleting the output folder.
+
+### Host Requirements (Ubuntu)
+
+The build requires an **Ubuntu 22.04 LTS or 24.04 LTS** (x86_64) host with standard build utilities installed:
+
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    build-essential git libncurses-dev libssl-dev bison flex \
+    bc rsync file wget cpio unzip python3
+```
+
+### Git Checkout & Setup
+
+Clone the project repository and the upstream Buildroot source tree side-by-side:
+
+```bash
+# 1. Clone this project repository and navigate into it
+git clone https://github.com/tcmichals/cubie-a5e.git
+cd cubie-a5e
+
+# 2. Clone the upstream Buildroot tree
+git clone https://github.com/buildroot/buildroot.git
+```
+
+### Build Invocation
+
+```bash
+# 1. Configure the target board using the external tree
+make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
+
+# 2. Build the complete bootable disk image
+make -C bld
+```
+
+The resulting `bld/images/sdcard.img` contains the multi-stage bootloader (U-Boot SPL, TF-A BL31, U-Boot proper), device tree overlays, kernel with `PREEMPT_RT`, and an Ext4 root filesystem.
+
+---
+
+## 5. Technical Article Series
+
+This high-level overview serves as the entry point for a dedicated series of engineering articles:
+
+1. **Introduction to Device Trees and U-Boot**: [Device Tree Overlays & U-Boot In-Memory Merging](devetreeOverlay.md) — parsing `/boot/config.txt`, applying `.dtbo` fragments dynamically via U-Boot scripts, and binding UIO devices without kernel rebuilds.
+2. **Using the XuanTie E907 RISC-V Co-Processor (and Why)**: [Heterogeneous RISC-V Architecture Series](part1_heterogeneous_riscv_intro_architecture.md) — rationale for offloading deterministic hard real-time tasks (sub-microsecond control loops, PWM generation, high-rate sensor polling) from Linux SMP cores, zero-wait-state TCM execution, and low-latency IPC.
+
+All associated Buildroot defconfigs, Device Tree overlays, U-Boot boot scripts, and RISC-V firmware applications are maintained in the project repository: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e).
+
