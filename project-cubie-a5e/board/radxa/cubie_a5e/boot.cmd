@@ -1,6 +1,6 @@
 # ==============================================================================
 # Radxa Cubie A5E Dynamic Multi-Overlay Boot Script (boot.cmd -> boot.scr)
-# Supports Raspberry Pi-style config.txt & standard uEnv.txt
+# Supports Raspberry Pi-style config.txt, Armbian armbianEnv.txt, & uEnv.txt
 # ==============================================================================
 
 echo "=== Initializing Radxa Cubie A5E Dynamic Boot Sequence ==="

@@ -573,7 +573,7 @@ fi
 The U-Boot `env import -t <addr> <size>` command parses text files containing `KEY=VALUE` pairs separated by newlines. 
 * When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot sets `${dtoverlay}` in active RAM.
 * When it contains `cmdline=isolcpus=7`, U-Boot sets `${cmdline}` in active RAM.
-* The script checks for `config.txt` first, and gracefully falls back to legacy `uEnv.txt` if not present.
+* The script checks for `config.txt` first, then gracefully falls back to `armbianEnv.txt` (Armbian migration compatibility), and finally to legacy `uEnv.txt` if neither is present.
 
 #### 3. Why `fdt resize` is Strictly Mandatory
 ```sh
