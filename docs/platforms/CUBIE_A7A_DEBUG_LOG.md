@@ -227,7 +227,7 @@ Starting kernel ...
 
 ## 6. Forensic Discoveries & Silicon Register Realignment (Datasheet V0.93)
 
-During kernel initialization on hardware, the system experienced intermittent stalls at `clk: Disabling unused clocks` and `Waiting for root device /dev/mmcblk0p2`. Forensic comparison between the decompiled vendor tree ([`vendor-a733-reference/`](file:///home/tcmichals/projects/cubie/vendor-a733-reference/)) and the **Allwinner A733 Datasheet V0.93** revealed crucial base address and interrupt mismatches in early mainline patches:
+During kernel initialization on hardware, the system experienced intermittent stalls at `clk: Disabling unused clocks` and `Waiting for root device /dev/mmcblk0p2`. Forensic comparison between the decompiled vendor tree ([`vendor-a733-reference/`](../../../vendor-a733-reference/)) and the **Allwinner A733 Datasheet V0.93** revealed crucial base address and interrupt mismatches in early mainline patches:
 
 ### Key Hardware Realignment Findings:
 1. **Main CCU Base Shift**:

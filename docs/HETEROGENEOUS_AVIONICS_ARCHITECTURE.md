@@ -100,7 +100,7 @@ flowchart TB
 ## 5. Mainline Linux Remoteproc (`sunxi_rproc`)
 
 ### Upstream Submission Checklist
-* **Driver Location:** [`drivers/remoteproc/sunxi_rproc.c`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)
+* **Driver Location:** [`drivers/remoteproc/sunxi_rproc.c`](../project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)
 * **Patch File:** `patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`
 * **Compatible Strings:**
   * `allwinner,sun55i-a523-rproc` (A523)

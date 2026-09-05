@@ -1,8 +1,8 @@
 # 🚀 Platform Guide: Radxa Cubie A7A (Allwinner A733 / `sun60iw2`)
 
 > [!NOTE]
-> **Active Bring-Up Debug Log**: For complete step-by-step forensic traces, serial output logs, and hardware discoveries, see [`CUBIE_A7A_DEBUG_LOG.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
-> **Hardware Reference Library**: Full vendor kernel DTBs, firmware binaries, and the official datasheet are archived in [`vendor-a733-reference/`](file:///home/tcmichals/projects/cubie/vendor-a733-reference/) (Datasheet PDF: [`A733_Datasheet_V0.93.pdf`](file:///home/tcmichals/projects/cubie/vendor-a733-reference/A733_Datasheet_V0.93.pdf)).
+> **Active Bring-Up Debug Log**: For complete step-by-step forensic traces, serial output logs, and hardware discoveries, see [`CUBIE_A7A_DEBUG_LOG.md`](../../docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
+> **Hardware Reference Library**: Full vendor kernel DTBs, firmware binaries, and the official datasheet are archived in [`vendor-a733-reference/`](../../../vendor-a733-reference/) (Datasheet PDF: [`A733_Datasheet_V0.93.pdf`](../../../vendor-a733-reference/A733_Datasheet_V0.93.pdf)).
 
 This document is the authoritative hardware, bootloader, firmware provenance, and bring-up specification for the **Radxa Cubie A7A** flight controller. It details the SoC architecture, the 2-stage hybrid boot architecture, firmware provenance (TF-A, U-Boot, Boot0, Linux), storage geometry, memory map, GICv3 interrupt controller configuration, and verified physical hardware registers.
 
@@ -219,11 +219,11 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 ### Full Build & Flash Commands
 ```bash
 # Build complete image in bld.a7a
-make -C /home/tcmichals/projects/cubie/bld.a7a
+make -C $PWD/bld.a7a
 
 # Automated image audit verification
 python3 project-cubie-a5e/board/radxa/cubie_a7a/tools/verify_sdcard_image.py bld.a7a/images/sdcard.img
 
 # Flash to MicroSD card
-sudo dd if=/home/tcmichals/projects/cubie/bld.a7a/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
+sudo dd if=$PWD/bld.a7a/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
 ```

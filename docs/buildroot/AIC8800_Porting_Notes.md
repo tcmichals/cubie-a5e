@@ -27,10 +27,10 @@ We have aggressively refactored this repository to adhere to **Mainline Linux St
 This section documents the exact operational model of the reference Radxa vendor driver (`aic8800-radxa-working-backup.tar.gz`) for `AIC8800D80` / `D81` chips.
 
 ### Reference Documentation
-- **Radxa Ground-Truth Boot Trace**: Saved to [Radxa_Trace_Reference.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/Radxa_Trace_Reference.md).
+- **Radxa Ground-Truth Boot Trace**: Saved to [Radxa_Trace_Reference.md](../../docs/buildroot/Radxa_Trace_Reference.md).
 - **Upstream Linux Kernel RFC Submission**: LWN.net Article 1084468 (`[RFC PATCH wireless-next v2 0/4] wifi: aic: add AIC8800 SDIO FullMAC driver`).
-- **Upstream Linux Kernel Analysis**: Detailed in [Upstream_Kernel_Analysis.md](file:///home/tcmichals/.gemini/antigravity-ide/brain/6893bdf1-5dcb-40f3-926b-f3c09b35412e/Upstream_Kernel_Analysis.md).
-- **Porting Action Plan**: Tracked in [AIC8800_Porting_Action_Plan.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/AIC8800_Porting_Action_Plan.md).
+- **Upstream Linux Kernel Analysis**: Detailed in [Upstream_Kernel_Analysis.md](Upstream_Kernel_Analysis.md).
+- **Porting Action Plan**: Tracked in [AIC8800_Porting_Action_Plan.md](../../docs/buildroot/AIC8800_Porting_Action_Plan.md).
 
 
 ### 1. Complete Probe & Initialization Flow Sequence
@@ -181,14 +181,14 @@ Even after compiling against Linux 7.1 and successfully probing the SDIO bus, th
 Before embarking on the major architectural HAL refactoring, we created a snapshot of the fully patched and functional driver source tree.
 
 **Backup Location:**
-`/home/tcmichals/projects/cubie/cubie-a5e/aic8800-radxa-working-backup.tar.gz`
+`$PWD/aic8800-radxa-working-backup.tar.gz`
 
 **To Restore:**
 If the HAL refactoring breaks the driver and we need to revert to this perfectly functioning snapshot, run:
 ```bash
-cd /home/tcmichals/projects/cubie/bld/build/aic8800-radxa-main/src/SDIO/driver_fw/driver
+cd $PWD/bld/build/aic8800-radxa-main/src/SDIO/driver_fw/driver
 rm -rf aic8800
-tar -xzvf /home/tcmichals/projects/cubie/cubie-a5e/aic8800-radxa-working-backup.tar.gz
+tar -xzvf $PWD/aic8800-radxa-working-backup.tar.gz
 ```
 
 ## 6. Walkthrough: Driver Modernization and KUnit Validation
@@ -866,7 +866,7 @@ We need **concrete, measurable proof** at each stage. Without these, we are gues
 
 ## 🚀 Next Session Starting Point [2026-07-26]
 
-- **Current Active Image**: `/home/tcmichals/projects/cubie/bld/images/sdcard.img` containing **`2026-07-26_BUILD_114_SDIO_RX_DIAG`** (building).
+- **Current Active Image**: `$PWD/bld/images/sdcard.img` containing **`2026-07-26_BUILD_114_SDIO_RX_DIAG`** (building).
 - **BUILD_114 adds diagnostic prints** to answer:
   1. Does `aicwf_sdio_oob_irq_thread()` ever fire? (`aicsdio: OOB IRQ fired! count=N`)
   2. What does `misc_int_status_reg` read in the V3 handler? (`aicsdio: V3 IRQ handler: intstatus=0xNN`)
@@ -1109,8 +1109,8 @@ dmesg | grep -E "\[aic8800\]|cmd_mgr|err_lmac"
 ## 🚀 Session Starting Point [2026-07-27]
 
 - **Current Build**: `2026-07-27_BUILD_116_CMD_POLL_FIX`
-- **Build Command**: `cd /home/tcmichals/projects/cubie/bld && make aic8800-driver-rebuild && make`
-- **Image**: `/home/tcmichals/projects/cubie/bld/images/sdcard.img`
+- **Build Command**: `cd $PWD/bld && make aic8800-driver-rebuild && make`
+- **Image**: `$PWD/bld/images/sdcard.img`
 - **Action**: Flash → boot → capture dmesg → grep `[aic8800]` → follow Outcome A/B/C above
 
 ### Files Modified in BUILD_116
@@ -1186,7 +1186,7 @@ Two real options. One must be chosen and executed without further planning.
 
 **What it takes**:
 ```bash
-cd /home/tcmichals/projects/cubie/bld
+cd $PWD/bld
 make aic8800-driver-rebuild && make
 # Flash images/sdcard.img → boot → dmesg | grep "\[aic8800\]"
 ```
@@ -1300,8 +1300,8 @@ make aic8800-driver-rebuild && make
 ## 🌙 Session End Summary & Next Steps [2026-07-28 Night]
 
 - **Current Build Tag**: `2026-08-04_BUILD_175_MCU_APP_START_TRIGGER`
-- **Rebuild Command**: `rm -rf /home/tcmichals/projects/cubie/bld/build/aic8800-driver && make aic8800-driver-rebuild && make`
-- **Target Image File**: `/home/tcmichals/projects/cubie/bld/images/sdcard.img`
+- **Rebuild Command**: `rm -rf $PWD/bld/build/aic8800-driver && make aic8800-driver-rebuild && make`
+- **Target Image File**: `$PWD/bld/images/sdcard.img`
 
 ### Major Breakthroughs Accomplished Tonight:
 1. **Option A Root-Cause Fix (BUILD_170)**:
@@ -1325,7 +1325,7 @@ make aic8800-driver-rebuild && make
 ---
 
 ### Immediate Action Item for Tomorrow Morning:
-Flash `/home/tcmichals/projects/cubie/bld/images/sdcard.img` (BUILD_130) to the physical board and boot!
+Flash `$PWD/bld/images/sdcard.img` (BUILD_130) to the physical board and boot!
 ```bash
 dmesg | grep -E "aicsdio|\[aic8800|\[aic8800_rx\]|wlan"
 ```

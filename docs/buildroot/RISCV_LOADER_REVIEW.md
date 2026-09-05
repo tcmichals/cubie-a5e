@@ -171,7 +171,7 @@ endef
 ### Step 1: Rebuild the package
 From the host workspace:
 ```bash
-cd /home/tcmichals/projects/cubie-test
+cd $WORKSPACE
 make -C bld.a5e riscv-firmware-dirclean
 make -C bld.a5e riscv-firmware
 ```

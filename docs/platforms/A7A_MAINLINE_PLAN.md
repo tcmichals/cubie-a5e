@@ -2,8 +2,8 @@
 
 > [!NOTE]
 > **Authoritative Technical Documents**:
-> - Detailed Platform Architecture: [`CUBIE_A7A_PLATFORM_GUIDE.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)
-> - Live Hardware Bring-Up Debug Log: [`CUBIE_A7A_DEBUG_LOG.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A7A_DEBUG_LOG.md)
+> - Detailed Platform Architecture: [`CUBIE_A7A_PLATFORM_GUIDE.md`](../../docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)
+> - Live Hardware Bring-Up Debug Log: [`CUBIE_A7A_DEBUG_LOG.md`](../../docs/platforms/CUBIE_A7A_DEBUG_LOG.md)
 
 This plan tracks the end-to-end integration and verification of **100% Mainline Linux 7.1 PREEMPT_RT and Upstream U-Boot 2026.01** on the **Radxa Cubie A7A (Allwinner A733 / `sun60iw2`)**.
 

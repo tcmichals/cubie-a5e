@@ -193,7 +193,7 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ## 3. The All-New `riscv-firmware/apps` Verification Suite
 
-Under [`riscv-firmware/apps/`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/apps/), seven progressive test applications validate core boot, memory mapping, telemetry, exception handling, and inter-processor communication paradigms:
+Under [`riscv-firmware/apps/`](../../riscv-firmware/apps/), seven progressive test applications validate core boot, memory mapping, telemetry, exception handling, and inter-processor communication paradigms:
 
 ```text
 riscv-firmware/apps/

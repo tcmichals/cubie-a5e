@@ -89,7 +89,7 @@ To understand how hardware-accelerated machine learning functions without propri
 ### Step 1: Device Tree Integration
 Since the NPU is an internal system bus block (unlike headers or buses that map to external physical pins), it does not require board-level pin configuration inside a custom device tree overlay (`.dtso`). 
 
-Instead, the NPU node is defined at the SoC level in the mainline kernel DTS tree ([sun55i-a523.dtsi](file:///home/tcmichals/projects/cubie/bld/build/linux-7.1/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi#L1078-L1088)):
+Instead, the NPU node is defined at the SoC level in the mainline kernel DTS tree (`sun55i-a523.dtsi`):
 ```dts
 npu: npu@7122000 {
     compatible = "vivante,gc";
@@ -106,7 +106,7 @@ npu: npu@7122000 {
 The mainline kernel's `etnaviv` driver binds directly to the `"vivante,gc"` compatible string automatically.
 
 ### Step 2: Kernel Driver Configuration
-We enabled the mainline `etnaviv` DRM driver fragment in our kernel config [linux.config](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/linux.config):
+We enabled the mainline `etnaviv` DRM driver fragment in our kernel config [linux.config](../../project-cubie-a5e/board/radxa/cubie_a5e/linux.config):
 ```ini
 CONFIG_DRM=y
 CONFIG_DRM_ETNAVIV=y
@@ -115,7 +115,7 @@ CONFIG_DRM_ETNAVIV=y
 ### Step 3: Upgrading Buildroot Mesa3D Package
 To compile the Teflon delegate userspace library (`libteflon.so`), we extended Buildroot's standard `mesa3d` package:
 
-1. **Config option added** to [Config.in](file:///home/tcmichals/projects/cubie/buildroot/package/mesa3d/Config.in):
+1. **Config option added** to [Config.in](../../buildroot/package/mesa3d/Config.in):
    ```config
    config BR2_PACKAGE_MESA3D_TEFLON
        bool "Teflon TensorFlow Lite delegate"
@@ -124,7 +124,7 @@ To compile the Teflon delegate userspace library (`libteflon.so`), we extended B
          Enable the Teflon TensorFlow Lite delegate frontend for
          Vivante/Etnaviv NPU compute cores.
    ```
-2. **Meson flag mapped** in [mesa3d.mk](file:///home/tcmichals/projects/cubie/buildroot/package/mesa3d/mesa3d.mk):
+2. **Meson flag mapped** in [mesa3d.mk](../../buildroot/package/mesa3d/mesa3d.mk):
    ```makefile
    ifeq ($(BR2_PACKAGE_MESA3D_TEFLON),y)
    MESA3D_CONF_OPTS += -Dteflon=true
@@ -134,7 +134,7 @@ To compile the Teflon delegate userspace library (`libteflon.so`), we extended B
    ```
 
 ### Step 4: Disabling Legacy Packages
-In our Buildroot defconfig [cubie_a5e_defconfig](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/configs/cubie_a5e_defconfig), we stripped the vendor stubs and enabled the open-source packages:
+In our Buildroot defconfig [cubie_a5e_defconfig](../../project-cubie-a5e/configs/cubie_a5e_defconfig), we stripped the vendor stubs and enabled the open-source packages:
 ```diff
 -BR2_PACKAGE_SUNXI_GALCORE=y
 -BR2_PACKAGE_TIMVX_DELEGATE=y

@@ -51,9 +51,9 @@ for (poll_cnt = 0; poll_cnt < 100; poll_cnt++) {
 4. **Strict MAC/PHY Decoupling**: The MAC layer data path (`rwnx_tx.c`, `aicwf_txrxif.c`) must NEVER contain hardware-specific conditionals like `#ifdef AICWF_SDIO_SUPPORT`. Always rely on the `bus_if->ops` HAL abstraction.
 
 ## Resources for the AI Assistant
-- **Target Source Code**: `/home/tcmichals/projects/cubie/cubie-a5e/aic8800-driver-src/`
+- **Target Source Code**: `$PWD/aic8800-driver-src/`
 - **Known-Good Radxa Reference**: Extracted to `/tmp/radxa_ref/` (originally from `aic8800-radxa-working-backup.tar.gz`).
-- **Target Image (For Flashing)**: `/home/tcmichals/projects/cubie/bld/images/sdcard.img`
+- **Target Image (For Flashing)**: `$PWD/bld/images/sdcard.img`
 
 ## Actionable Line-by-Line Plan (Post-BUILD_130)
 *Depending on the `dmesg` output from the physical board test, the AI must follow these exact steps:*
@@ -77,7 +77,7 @@ for (poll_cnt = 0; poll_cnt < 100; poll_cnt++) {
 ## Generating Patches and Commits
 To compare our target code against the Radxa reference, the AI should use:
 ```bash
-diff -u /tmp/radxa_ref/aic8800/aic8800_fdrv/FILE_NAME.c /home/tcmichals/projects/cubie/cubie-a5e/aic8800-driver-src/drivers/aic8800/aic8800_fdrv/FILE_NAME.c > /tmp/port_diff.patch
+diff -u /tmp/radxa_ref/aic8800/aic8800_fdrv/FILE_NAME.c $PWD/aic8800-driver-src/drivers/aic8800/aic8800_fdrv/FILE_NAME.c > /tmp/port_diff.patch
 ```
 When creating commits for these fixes, use the following template:
 ```text

@@ -164,6 +164,6 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 
 ## Related Documentation
 
-- [ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
-- [RISCV_REMOTEPROC_GUIDE.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/common/RISCV_REMOTEPROC_GUIDE.md)
-- [OpenOCD_DMEM_RISCV_Architecture.md](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md)
+- [ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](../../docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
+- [RISCV_REMOTEPROC_GUIDE.md](../../docs/common/RISCV_REMOTEPROC_GUIDE.md)
+- [OpenOCD_DMEM_RISCV_Architecture.md](../../docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md)

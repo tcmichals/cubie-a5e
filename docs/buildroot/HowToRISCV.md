@@ -442,7 +442,7 @@ SECTIONS
 
 ## 4. Modern Zero-Allocation C++ HAL Modules (`common/hal/`)
 
-The firmware architecture uses a modular, zero-allocation C++ HAL suite located under [`riscv-firmware/common/hal/`](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/riscv-firmware/common/hal/):
+The firmware architecture uses a modular, zero-allocation C++ HAL suite located under [`riscv-firmware/common/hal/`](../../riscv-firmware/common/hal/):
 
 * **`hal::Rpmsg` (`hal/rpmsg.hpp`, `hal/rpmsg.cpp`)**:
   - Zero-allocation VirtIO vring and OpenAMP RPMsg driver.
@@ -467,7 +467,7 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
 
 ## 5. Test Applications Suite (`apps/`)
 
-Under [`riscv-firmware/apps/`](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/riscv-firmware/apps/), seven progressive test applications validate core functionality, memory mapping, telemetry, exception handling, and three inter-processor communication paradigms:
+Under [`riscv-firmware/apps/`](../../riscv-firmware/apps/), seven progressive test applications validate core functionality, memory mapping, telemetry, exception handling, and three inter-processor communication paradigms:
 
 ```text
 apps/

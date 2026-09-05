@@ -55,7 +55,7 @@ The Cubie A5E communicates with the FPGA over **dual high-speed SPI channels** o
 * **Typical Project Layout:** 
   The AbstractX repository is expected to reside as a sibling to this buildroot repository:
   ```text
-  /home/tcmichals/projects/
+  /path/to/projects/
   ├── cubie-a5e/      <-- This Buildroot repository
   └── AbstractX/      <-- AbstractX framework repository
   ```
@@ -87,7 +87,7 @@ Because Linux is not a hard real-time operating system, communication between th
 ## 4. Hardware Interfaces & Device Tree Mapping
 
 To enable these hardware communication channels, the Buildroot build compiles and applies a custom Device Tree Overlay:
-* **DTS Overlay Source:** [`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso`](file:///home/tcmichals/projects/cubie-a5e/project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso)
+* **DTS Overlay Source:** [`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso`](../../project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-flight-stack.dtso)
 * **Boot Time Loading:** During startup, U-Boot loads the compiled `.dtbo` overlay, applies it using `fdt apply` to merge it with the base device tree, and boots the Linux kernel. The kernel then exposes these buses as standard character device nodes in `/dev/`.
 
 ### A. Physical 40-Pin GPIO Header Mapping
