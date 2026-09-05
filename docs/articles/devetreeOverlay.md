@@ -36,16 +36,16 @@ The industry standard solution separates the architecture into:
   |      Parses: dtoverlay=cubie-a5e-flight-stack uio
   |
   +-> 2. Load Base DTB into RAM @ ${fdt_addr_r}
-  |      sun55i-a527-cubie-a5e.dtb
+  |      sun55i-a527-cubie-a5e.dtb (compiled with -@ symbols)
   |
   +-> 3. Expand in-memory Device Tree buffer
-  |      fdt resize 65536
+  |      fdt resize 0x10000 (adds 64 KB padding headroom)
   |
   +-> 4. Apply Overlays sequentially into RAM
   |      - load cubie-a5e-flight-stack.dtbo -> fdt apply
   |      - load cubie-a5e-uio.dtbo          -> fdt apply
   |
-  +-> 5. Load Kernel Image @ ${kernel_addr_r}
+  +-> 5. Load Kernel Image @ ${kernel_addr_r} (0x40200000: 2MB aligned)
   |
   +-> 6. Execute booti ${kernel_addr_r} - ${fdt_addr_r}
          ARM64 Register x0 = Physical RAM Address of FDT
@@ -107,7 +107,7 @@ drwxr-xr-x   18 root     root          4096 Sep  5 09:40 ..
 If you try to inspect `uboot.env` using `more` or edit it with `vi`:
 ```bash
 # more /boot/uboot.env
---More-- (2% of 65536 bytes) loglevel=8bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000kernel_addr_r=0x40080000kernel_comp_addr_r=0x4400)
+--More-- (2% of 65536 bytes) loglevel=8bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000kernel_addr_r=0x40200000kernel_comp_addr_r=0x4400)
 ```
 The screen fills with control codes and unreadable binary characters. And if you attempt to edit `uboot.env` with `vi` and save, U-Boot greets you on the next boot with:
 
@@ -320,12 +320,47 @@ reboot
 
 Before analyzing the bootloader script, we must understand how Device Tree Overlays are structured and compiled.
 
-### Base Device Tree Compilation (`-@` Flag)
+### Base Device Tree Compilation (`-@` Flag) & Symbol Resolution
+
 For a base device tree to accept overlays, it **must** be compiled by the Device Tree Compiler (`dtc`) with the symbols flag (`-@`):
 ```bash
 dtc -@ -I dts -O dtb -o base.dtb base.dts
 ```
-The `-@` flag instructs `dtc` to generate a special `__symbols__` node containing a lookup table of every label defined in the tree (e.g., `uart0 = "/soc/serial@2500000"`). Without `__symbols__`, U-Boot cannot resolve phandle references made by overlays.
+
+> [!IMPORTANT]
+> **The Missing `__symbols__` Trap (`FDT_ERR_NOTFOUND`)**
+> 
+> Under normal compilation without `-@`, `dtc` converts all human-readable node labels (e.g. `uart0: serial@2500000`, `msgbox: mailbox@3003000`, `&i2c1`) into anonymous integer phandles and completely strips the string label names to minimize binary size.
+>
+> When `-@` is passed, `dtc` retains every label by generating a dedicated top-level node named `__symbols__`:
+> ```dts
+> __symbols__ {
+>     uart0 = "/soc/serial@2500000";
+>     msgbox = "/soc/mailbox@3003000";
+>     i2c1 = "/soc/i2c@2502400";
+>     ccu = "/soc/clock-controller@2001000";
+> };
+> ```
+> 
+> When overlays (`.dtbo`) are compiled with `/plugin/;`, their external label references (e.g., `&msgbox`, `&i2c1`) cannot be assigned fixed phandles at compile time; instead, `dtc` records them in a `__fixups__` table. 
+> 
+> At boot time, U-Boot's `fdt apply` command cross-references the overlay's `__fixups__` table against the base tree's `__symbols__` node to resolve and patch the integer phandle values.
+> 
+> **If the base DTB was compiled without `-@`, the `__symbols__` node does not exist!** U-Boot has no way to map labels, causing `fdt apply` to immediately fail with the cryptic error:
+> ```text
+> libfdt fdt_apply_overlay(): FDT_ERR_NOTFOUND (-1)
+> ```
+> 
+> **How to ensure `-@` is enabled in your build system:**
+> * **Buildroot**: Enable `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` in your board defconfig. Buildroot automatically appends `-@` to all `dtc` invocations.
+> * **Kernel Makefile**: If building the kernel standalone, pass `DTC_FLAGS="-@"` during DTB compilation:
+>   ```bash
+>   make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- DTC_FLAGS="-@" dtbs
+>   ```
+> * **Verification**: You can verify whether a base DTB has symbols using `fdtdump` or `fdtgrep`:
+>   ```bash
+>   fdtdump sun55i-a527-cubie-a5e.dtb | grep -A 5 __symbols__
+>   ```
 
 ### Overlay Source Format (`/plugin/`)
 An overlay source file (`.dtso`) declares `/plugin/;` at the top. Instead of defining a complete hardware tree, it references target nodes in the base tree using either:
@@ -465,7 +500,8 @@ echo "=== Initializing Radxa Cubie A5E Dynamic Boot Sequence ==="
 setenv bootargs "console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8"
 
 # 2. Standard Memory Map Addresses (Allwinner 64-bit DRAM base 0x40000000)
-if test -z "${kernel_addr_r}";     then setenv kernel_addr_r     0x40080000; fi
+# kernel_addr_r strictly placed at 2MB boundary (0x40200000) per ARM64 boot constraints
+if test -z "${kernel_addr_r}";     then setenv kernel_addr_r     0x40200000; fi
 if test -z "${fdt_addr_r}";        then setenv fdt_addr_r        0x4fa00000; fi
 if test -z "${fdtoverlay_addr_r}"; then setenv fdtoverlay_addr_r 0x4fe00000; fi
 if test -z "${ramdisk_addr_r}";    then setenv ramdisk_addr_r    0x4ff00000; fi
@@ -507,8 +543,8 @@ fi
 echo ">>> Loading Base Device Tree: ${base_dtb}..."
 if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
     fdt addr ${fdt_addr_r}
-    # Expand FDT buffer by 64 KB to accommodate multiple overlays
-    fdt resize 65536
+    # Expand FDT buffer by 64 KB (0x10000) to accommodate multiple overlays
+    fdt resize 0x10000
 else
     echo "ERROR: Failed to load base DTB ${base_dtb}!"
     reset
@@ -554,37 +590,71 @@ fi
 
 ### Step-by-Step Execution Analysis
 
-#### 1. Memory Map Allocation & Address Safety
+#### 1. Memory Map Allocation & Address Safety (The `kernel_addr_r` 2MB Alignment Trap)
 In Allwinner 64-bit systems, system DRAM begins at physical address `0x40000000`. To prevent memory corruption when loading uncompressed kernel images, base device trees, and overlays simultaneously, distinct address slots are allocated:
 
-* **`${kernel_addr_r}` (`0x40080000`)**: Staging buffer for the uncompressed ARM64 kernel Image (~30 MB allocation headroom).
+* **`${kernel_addr_r}` (`0x40200000`)**: Staging buffer for the uncompressed ARM64 kernel Image.
 * **`${fdt_addr_r}` (`0x4fa00000`)**: Base Device Tree Blob (`sun55i-a527-cubie-a5e.dtb`), expanded in-place by `fdt resize`.
 * **`${fdtoverlay_addr_r}` (`0x4fe00000`)**: Staging buffer for loading `.dtbo` overlay fragments (reused sequentially).
 * **`${ramdisk_addr_r}` (`0x4ff00000`)**: Scratchpad buffer for `config.txt` text parsing via `env import -t`.
-Each buffer has several megabytes of clearance, eliminating any risk of `kernel` data overwriting the `fdt` or vice versa.
 
-#### 2. Parsing the Configuration File (`env import -t`)
+> [!WARNING]
+> **The `kernel_addr_r` Alignment Trap: Why `0x40080000` Can Fail**
+>
+> You will often see legacy boot scripts define `kernel_addr_r=0x40080000` (512 KB offset from DRAM base). **On 64-bit ARM architectures (ARM64), this can cause alignment faults or boot hangs.**
+>
+> According to the official Linux kernel ARM64 boot protocol ([`Documentation/arch/arm64/booting.rst`](https://www.kernel.org/doc/Documentation/arch/arm64/booting.rst)):
+> * The uncompressed kernel binary `Image` must be placed at a **2MB-aligned** base address within physical DRAM (e.g. `0x40200000` when DRAM starts at `0x40000000`).
+> * While U-Boot's `booti` command can often relocate compressed images unpacked via `kernel_comp_addr_r`, loading an uncompressed raw `Image` directly to `0x40080000` violates the 2MB boundary (512 KB is not 2MB aligned).
+> * Depending on the kernel's `CONFIG_ARM64_VA_BITS`, page size (4KB vs 64KB), and MMU configuration, executing from an unaligned address forces `booti` to perform an emergency in-memory copy, or can trigger early MMU translation faults and silent boot loops.
+>
+> Setting `kernel_addr_r=0x40200000` satisfies the 2MB boundary precisely while leaving 2MB of headroom at `0x40000000` for firmware reserved memory (ARM Trusted Firmware / ATF and OP-TEE).
+
+#### 2. The `config.txt` Parsing Gap: Bridging Mainline U-Boot and Raspberry Pi Workflows
 ```sh
 if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
     echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
     env import -t ${ramdisk_addr_r} ${filesize}
 fi
 ```
-The U-Boot `env import -t <addr> <size>` command parses text files containing `KEY=VALUE` pairs separated by newlines. 
-* When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot sets `${dtoverlay}` in active RAM.
-* When it contains `cmdline=isolcpus=7`, U-Boot sets `${cmdline}` in active RAM.
-* The script checks for `config.txt` first, then gracefully falls back to `armbianEnv.txt` (Armbian migration compatibility), and finally to legacy `uEnv.txt` if neither is present.
 
-#### 3. Why `fdt resize` is Strictly Mandatory
+> [!NOTE]
+> **Why Mainline SBCs Need `boot.scr` to Parse `config.txt`**
+>
+> On a Raspberry Pi, `config.txt` is parsed natively by the proprietary VideoCore GPU firmware *before* the ARM core ever executes. The GPU firmware reads overlays, applies them in GPU memory, and hands a pre-flattened DTB to U-Boot or the kernel.
+>
+> Mainline Allwinner SBCs have **no native `config.txt` parser** in U-Boot or ROM. Mainline U-Boot natively understands compiled binary environment files (`uboot.env`), not arbitrary text files.
+>
+> Our production `boot.scr` bridges this gap completely:
+> 1. It uses `load mmc 0:1 ${ramdisk_addr_r} config.txt` to read the plain-text file from FAT into scratchpad RAM.
+> 2. It invokes U-Boot's `env import -t ${ramdisk_addr_r} ${filesize}` to parse the newline-separated `key=value` text entries directly into active U-Boot runtime variables.
+> 3. When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot dynamically assigns `${dtoverlay}`, which our script seamlessly maps to `${overlays}` to drive the subsequent `fdt apply` loop.
+> 4. When `config.txt` contains `cmdline=isolcpus=7`, U-Boot dynamically sets `${cmdline}`, which our script automatically appends to `${bootargs}`.
+>
+> The script also includes fallback support for Armbian-style `armbianEnv.txt` and legacy `uEnv.txt`.
+
+#### 3. Why `fdt resize 0x10000` is Strictly Mandatory (and the Hex Padding Rule)
 ```sh
 fdt addr ${fdt_addr_r}
-fdt resize 65536
+fdt resize 0x10000
 ```
 This is the single most common point of failure in embedded overlay implementations!
+
 * A compiled base DTB is generated with a fixed header field `totalsize` matching its exact byte length (e.g., 62,914 bytes).
 * When U-Boot executes `fdt apply`, `libfdt` attempts to insert new nodes, properties, and strings into the tree.
 * **If the buffer is not resized, `libfdt` returns `-FDT_ERR_NOSPACE` (`-3`) and the overlay fails.**
-* `fdt resize 65536` expands the active device tree buffer by 64 KB, allocating extra headroom for strings and node descriptors.
+
+> [!IMPORTANT]
+> **U-Boot `fdt resize [extrasize]` Syntax & Hex Rules**
+>
+> In U-Boot, the syntax is:
+> ```text
+> fdt resize [extrasize]
+> ```
+> * **Calling `fdt resize` without arguments**: U-Boot calculates the current tree size and adjusts `totalsize` to fit the current tree plus minimal standard padding (typically 4 KB / 1 memory page).
+> * **Calling `fdt resize <extrasize>`**: U-Boot adds `<extrasize>` bytes of additional padding headroom to the existing tree.
+> * **Hex vs Decimal Trap**: In the U-Boot command line, **numeric arguments are interpreted in hexadecimal by default**. Writing decimal `65536` can be misinterpreted by U-Boot's parser as `0x65536` (~415 KB) or cause parsing errors on strict builds.
+> * Always specify hex padding explicitly: `fdt resize 0x10000` grants exactly **64 KB (`0x10000` bytes)** of extra padding headroom, providing ample capacity for multiple complex overlays and string tables.
 
 #### 4. The Multi-Overlay Application Loop with Smart Extension Resolution
 ```sh
@@ -804,7 +874,7 @@ Under the ARM64 Linux kernel boot protocol (`Documentation/arm64/booting.rst`), 
 When `booti` executes:
 1. U-Boot flushes the data cache across the modified Device Tree region (`0x4fa00000 - 0x4fb00000`) so the kernel's initial uncached memory reads see the merged data.
 2. It loads physical address `0x4fa00000` into core CPU register `x0`.
-3. It branches directly to `${kernel_addr_r}` (`0x40080000`).
+3. It branches directly to `${kernel_addr_r}` (`0x40200000`), respecting the 2MB ARM64 alignment boundary.
 
 ### Early Kernel Ingestion
 Inside the Linux kernel:
@@ -891,17 +961,19 @@ cat /sys/class/uio/uio0/maps/map1/name   # -> sram   (0x7131000)
 ### 4. `fdt apply` Fails with Error `-3` (`-FDT_ERR_NOSPACE`)
 * **Symptom**: Overlay fails to apply with return code `-3`.
 * **Root Cause**: The base DTB buffer in RAM was not expanded before applying overlays.
-* **Fix**: Execute `fdt resize 65536` immediately after `fdt addr ${fdt_addr_r}` to allocate buffer headroom.
+* **Fix**: Execute `fdt resize 0x10000` immediately after `fdt addr ${fdt_addr_r}` to allocate 64 KB of buffer padding headroom.
 
-### 5. `fdt apply` Fails with Error `-13` (`-FDT_ERR_NOTFOUND`)
-* **Symptom**: Overlay fails to find target nodes with return code `-13`.
-* **Root Cause**: The base DTB was compiled without `-@` (symbols), preventing phandle resolution.
-* **Fix**: Ensure `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` is enabled in your Buildroot defconfig so `dtc` runs with the `-@` flag.
+### 5. `fdt apply` Fails with Error `-1` or `-13` (`-FDT_ERR_NOTFOUND`)
+* **Symptom**: Overlay fails to find target nodes with return code `-1` or `-13`.
+* **Root Cause**: The base DTB was compiled without `-@` (symbols), omitting the `__symbols__` lookup table required for phandle resolution.
+* **Fix**: Ensure `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` is enabled in your Buildroot defconfig, or build kernel device trees with `make DTC_FLAGS="-@" dtbs`.
 
-### 6. Kernel Panics with `FDT: bad magic` During `booti`
-* **Symptom**: Kernel halts immediately during early boot with corrupt FDT magic.
-* **Root Cause**: Memory addresses overlap (e.g., kernel uncompression overwrote the FDT buffer).
-* **Fix**: Verify memory spacing. Ensure `${fdt_addr_r}` (`0x4fa00000`) is located well above the kernel memory footprint (`0x40080000`).
+### 6. Kernel Panics with `FDT: bad magic` or Alignment Fault During `booti`
+* **Symptom**: Kernel halts immediately during early boot with corrupt FDT magic or early fault.
+* **Root Cause**: Memory addresses overlap, or `kernel_addr_r` violates ARM64 2MB alignment.
+* **Fix**: Verify memory spacing and alignment:
+  - Ensure `kernel_addr_r` is placed at a 2MB-aligned address (`0x40200000`), not an unaligned offset like `0x40080000`.
+  - Ensure `${fdt_addr_r}` (`0x4fa00000`) is located well above the kernel memory footprint.
 
 ### 7. Changes in `config.txt` Have No Effect (DOS Line Endings)
 * **Symptom**: Overlays listed in `config.txt` are ignored by U-Boot.
@@ -917,4 +989,4 @@ By decoupling **low-level bootloader plumbing** (`uboot.env`) from **runtime use
 1. **`uboot.env` Stays Untouched**: Serves as the static firmware foundation, initializing serial clocks, DRAM memory maps, and launching `boot.scr`. Developers never need to struggle with binary editors or CRC calculation tools.
 2. **`config.txt` Delivers Raspberry Pi Simplicity**: A clean, plain-text configuration file located on the FAT partition. Anyone can enable peripherals, toggle UIO drivers, or isolate CPU cores using standard text editors on Linux, macOS, or Windows.
 3. **Buildroot End-to-End Automation**: Buildroot handles the complete workflow out-of-the-box—compiling out-of-tree `.dtso` fragments with `-@`, staging `config.txt` into `${BINARIES_DIR}`, pre-configuring `/boot` mounts in `/etc/fstab`, and packaging a turnkey `sdcard.img` ready to flash.
-4. **Deterministic Boot Pipeline**: U-Boot's `env import -t` dynamically bridges the configuration into memory, expands the base Device Tree with `fdt resize`, applies overlays via `fdt apply`, and passes an immutable hardware contract to Linux via ARM64 register `x0`.
+4. **Deterministic Boot Pipeline**: U-Boot's `env import -t` dynamically bridges the configuration into memory, expands the base Device Tree with `fdt resize 0x10000`, applies overlays via `fdt apply`, and passes an immutable hardware contract to Linux via ARM64 register `x0` at 2MB-aligned `0x40200000`.

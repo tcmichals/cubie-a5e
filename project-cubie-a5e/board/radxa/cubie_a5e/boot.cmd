@@ -9,7 +9,8 @@ echo "=== Initializing Radxa Cubie A5E Dynamic Boot Sequence ==="
 setenv bootargs "console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8"
 
 # 2. Standard Memory Map Addresses (Allwinner 64-bit DRAM base 0x40000000)
-if test -z "${kernel_addr_r}";     then setenv kernel_addr_r     0x40080000; fi
+# kernel_addr_r strictly placed at 2MB boundary (0x40200000) per ARM64 boot constraints
+if test -z "${kernel_addr_r}";     then setenv kernel_addr_r     0x40200000; fi
 if test -z "${fdt_addr_r}";        then setenv fdt_addr_r        0x4fa00000; fi
 if test -z "${fdtoverlay_addr_r}"; then setenv fdtoverlay_addr_r 0x4fe00000; fi
 if test -z "${ramdisk_addr_r}";    then setenv ramdisk_addr_r    0x4ff00000; fi
@@ -51,8 +52,8 @@ fi
 echo ">>> Loading Base Device Tree: ${base_dtb}..."
 if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
     fdt addr ${fdt_addr_r}
-    # Expand FDT buffer by 64 KB to accommodate multiple overlays
-    fdt resize 65536
+    # Expand FDT buffer by 64 KB (0x10000) to accommodate multiple overlays
+    fdt resize 0x10000
 else
     echo "ERROR: Failed to load base DTB ${base_dtb}!"
     reset

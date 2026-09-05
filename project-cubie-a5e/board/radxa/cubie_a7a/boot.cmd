@@ -56,7 +56,8 @@ fi
 echo ">>> Loading Base Device Tree: ${base_dtb}..."
 if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
     fdt addr ${fdt_addr_r}
-    fdt resize 65536
+    # Expand FDT buffer by 64 KB (0x10000) to accommodate multiple overlays
+    fdt resize 0x10000
 else
     echo "ERROR: Failed to load base DTB ${base_dtb}!"
     reset
