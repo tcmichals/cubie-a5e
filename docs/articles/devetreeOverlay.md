@@ -258,32 +258,28 @@ The U-Boot `env import -t <address> <size>` command parses plain text `KEY=VALUE
 
 ## 3. Accessing and Modifying the Boot Partition on the Target Board
 
-To edit `config.txt` or `armbianEnv.txt` directly on a running Radxa Cubie A5E board, you must know how the SD card storage is organized and mounted.
+To edit `config.txt` directly on a running Radxa Cubie A5E board, you must know how the SD card storage is organized and mounted.
 
 ### Storage Partition Architecture
 The system SD card is partitioned into two distinct filesystems:
 
-| Disk Region | Filesystem & Mount | Purpose & Contents |
+| Partition / Sector | Filesystem | Role & Contents |
 | :--- | :--- | :--- |
-| **Sectors 0 - 32767** | Raw Flash Blocks (No filesystem) | Bootloader Carveout: SPL, ATF BL31, and Mainline U-Boot |
-| **Partition 1 (`p1`)** | FAT32 (`/boot`, 64 MB) | Kernel (`Image`), Base DTB, Overlays (`.dtbo`), `config.txt`, `armbianEnv.txt` |
-| **Partition 2 (`p2`)** | ext4 (`/`, Root Filesystem) | Linux root filesystem containing userspace, applications, and drivers |
+| **Sector 0 - 32767** | Raw Flash Blocks | Bootloader Carveout (SPL, ATF BL31, Mainline U-Boot) |
+| **Partition 1** | FAT32 Boot Partition (`/dev/mmcblk0p1`) - 64 MB | Bootloader, kernel, device tree, overlays, and config |
+| **Partition 2** | Linux Root Filesystem (`/dev/mmcblk0p2`) - ext4 | Mounted as root directory (`/`) |
 
-**Files Residing on Partition 1 (`/boot`):**
-* `Image`: ARM64 uncompressed Linux kernel
-* `sun55i-a527-cubie-a5e.dtb`: Base Allwinner T527 Device Tree Blob
-* `boot.scr`: Compiled boot engine script executed by U-Boot
-* `config.txt`: Human-readable user configuration (`dtoverlay=`, `cmdline=`)
-* `armbianEnv.txt`: Armbian-compatible user configuration (`overlays=`, `extraargs=`)
-* `cubie-a5e-flight-stack.dtbo`: Flight stack overlay (UART2, SPI0, IMU sensors)
-* `cubie-a5e-uio.dtbo`: Userspace UIO doorbell interrupt overlay
-* `uboot.env`: 64 KB static firmware environment with CRC32
-
-> **Pro Tip for Windows, macOS, and Linux Users**:
-> Because Partition 1 is a standard FAT32 filesystem, you can remove the microSD card from your Cubie A5E, insert it into a standard PC or laptop USB card reader, and edit `config.txt` or `armbianEnv.txt` using any standard text editor (Notepad, VS Code, TextEdit) without needing third-party ext4 drivers.
+Partition 1 files:
+* `Image` (ARM64 Kernel)
+* `sun55i-a527-cubie-a5e.dtb` (Base DTB)
+* `boot.scr` (Compiled boot engine)
+* `config.txt` (Human-readable user configuration)
+* `cubie-a5e-flight-stack.dtbo` (Flight stack overlay)
+* `cubie-a5e-uio.dtbo` (Userspace UIO doorbell overlay)
+* `uboot.env` (Static U-Boot plumbing environment)
 
 ### Automatic Mount via `/etc/fstab`
-In our Buildroot root filesystem overlay ([fstab](/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab)), we declare:
+In our Buildroot root filesystem overlay ([`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab`](/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab)), we declare:
 
 ```text
 # /etc/fstab: static file system information.
@@ -298,10 +294,10 @@ tmpfs           /run           tmpfs    mode=0755,nosuid,nodev 0 0
 sysfs           /sys           sysfs    defaults          0      0
 ```
 
-Because `/dev/mmcblk0p1` is configured to mount at `/boot`, all bootloader files—including `config.txt` and `armbianEnv.txt`—are directly accessible immediately upon system login.
+Because `/dev/mmcblk0p1` is configured to mount at `/boot`, all bootloader files—including `config.txt`—are directly accessible immediately upon system login.
 
 ### Manual Mount Procedure
-If you are running on a minimal or rescue rootfs where `/boot` is not automatically mounted, you can mount it manually:
+If you are running on a minimal or rescue rootfs where `/boot` is not automatically mounted:
 
 ```bash
 # 1. Create the mount directory if it doesn't already exist:
@@ -310,21 +306,21 @@ mkdir -p /boot
 # 2. Mount the FAT32 boot partition:
 mount -t vfat /dev/mmcblk0p1 /boot
 
-# 3. Verify that the configuration files are present:
-ls -l /boot/config.txt /boot/armbianEnv.txt
+# 3. Verify that the files are present:
+ls -l /boot/config.txt
 ```
 
 ### Live On-Board Editing Workflow
-With `/boot` mounted, configuring hardware overlays and kernel arguments is effortless:
+With `/boot` mounted, configuring the board is effortless:
 
 ```bash
-# 1. Open config.txt with vi or nano:
+# Open config.txt with vi:
 vi /boot/config.txt
 
-# 2. Flush dirty filesystem buffers to SD card:
+# Flush dirty filesystem buffers to SD card:
 sync
 
-# 3. Reboot into the new hardware configuration:
+# Reboot into the new hardware configuration:
 reboot
 ```
 
