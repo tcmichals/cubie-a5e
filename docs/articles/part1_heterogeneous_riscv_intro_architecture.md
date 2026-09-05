@@ -206,14 +206,16 @@ While PubSRAM C provides excellent zero-wait-state performance for general firmw
 Because ITCM and DTCM reside on the private internal bus of the XuanTie E907 core, the co-processor does not boot from `0x00000000` directly. Instead, embedded developers use the standard **LMA (Load Memory Address) vs. VMA (Virtual/Execution Memory Address) staging pattern**:
 1. **Host Loading (LMA)**: Linux RemoteProc loads the entire firmware binary into accessible on-chip SRAM (PubSRAM C at `0x00020000` or Dedicated MCU SRAM at `0x3FFC0000`).
 2. **Core Startup**: The E907 starts executing from SRAM (`_start` at `0x00020000`).
-3. **Core-Initiated Copy (VMA)**: Early in the startup assembly sequence (`startup.S`), the E907's own CPU instructions copy designated `.itcm` functions and `.dtcm` data from SRAM (LMA) to TCM (VMA).
+3. **Core-Initiated Copy (VMA)**: Early in the startup assembly sequence, the E907's own CPU instructions copy designated `.itcm` functions and `.dtcm` data from SRAM (LMA) to TCM (VMA).
 4. **Instruction Synchronization (`fence.i`)**: The core executes `fence.i` to invalidate and synchronize its instruction fetch pipeline so newly copied instructions in ITCM are fetched cleanly.
 5. **Execution**: The core branches into or calls the TCM-resident routines, running at pure 1-cycle latency!
 
-### 4.4 Step-by-Step Staging Implementation
-Here is how to configure firmware for dual SRAM/TCM execution:
+> **Current Repository Baseline**: The working firmware in this repository ([`riscv-firmware/common/arch_riscv/firmware_t527.ld`](../../riscv-firmware/common/arch_riscv/firmware_t527.ld)) uses a **pure SRAM-only** linker script — all sections (`.vectors`, `.text`, `.rodata`, `.data`, `.bss`, `.stack`, `.resource_table`) are placed in PubSRAM C (`0x00020000`). This is a reliable, zero-complexity baseline that runs all 7 firmware apps successfully. The TCM staging pattern described in Section 4.4 below is the **production extension pattern** for deploying latency-critical ISRs and real-time data into ITCM/DTCM — it can be layered on top of the existing `firmware_t527.ld` baseline when sub-microsecond ISR jitter becomes a hard requirement.
 
-#### 1. GNU Linker Script (`firmware_staging.ld`)
+### 4.4 Step-by-Step Staging Implementation (Production TCM Extension Pattern)
+The following shows how to extend the baseline linker script and startup code to add ITCM/DTCM staging for latency-critical real-time sections:
+
+#### 1. GNU Linker Script (`firmware_tcm_staging.ld`) — Extends `firmware_t527.ld` with ITCM/DTCM regions
 ```ld
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
@@ -281,7 +283,10 @@ SECTIONS
 }
 ```
 
-#### 2. Assembly Startup Staging Routine (`startup.S`)
+#### 2. Assembly Startup Staging Routine — TCM Copy Extension
+
+> **Note**: The current [`riscv-firmware/common/arch_riscv/startup.S`](../../riscv-firmware/common/arch_riscv/startup.S) performs `.data` copy and `.bss` zero-initialization within SRAM only. The assembly below shows the additional ITCM/DTCM staging loops to insert when TCM sections are added to the linker script.
+
 ```assembly
     /* =============================================================
      * 1. Copy Critical Code from SRAM (LMA) to ITCM (VMA)
