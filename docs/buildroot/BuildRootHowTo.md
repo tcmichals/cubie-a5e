@@ -136,7 +136,7 @@ Related pieces:
 - `mesa3d` (compiled with the Gallium `etnaviv` driver and `-Dteflon=true` for userspace delegate)
 - `CONFIG_DRM_ETNAVIV` (mainline Linux DRM kernel driver)
 
-For details, see [HowToNPU.md](../../docs/buildroot/HowToNPU.md).
+For details, see [HowToNPU.md](HowToNPU.md).
 
 ### Boot and trusted firmware (`BL31`, often said as "AT31")
 
@@ -258,7 +258,7 @@ sync
 
 We use the open-source **Etnaviv** kernel DRM driver combined with **Mesa Teflon** userspace delegate (`libteflon.so`) for hardware-accelerated TinyML. 
 
-No proprietary binary blobs or out-of-tree bundle folders are required. See [HowToNPU.md](../../docs/buildroot/HowToNPU.md) for full configuration and validation details.
+No proprietary binary blobs or out-of-tree bundle folders are required. See [HowToNPU.md](HowToNPU.md) for full configuration and validation details.
 
 ## 10) Board references
 

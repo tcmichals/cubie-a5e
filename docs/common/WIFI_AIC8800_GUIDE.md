@@ -17,7 +17,7 @@ The AIC8800D80 wireless chipset is integrated across both boards in the family, 
 
 ## 2. Unified Driver Design (`aic8800-upstream`)
 
-Rather than maintaining separate, fragmented vendor driver repositories, the workspace maintains a single, unified codebase in [`aic8800-upstream/`](../../aic8800-upstream/):
+Rather than maintaining separate, fragmented vendor driver repositories, the workspace maintains a single, unified codebase in [`aic8800-upstream/`](/aic8800-upstream/):
 
 1. **Transport Abstraction Layer**:
    - `aicwf_sdio.c` / `aicwf_sdiov3.c`: Handles SDIO block transfers, CCCR interrupt enable, sleep/wakeup registers, and `aic8800_bsp` registration.

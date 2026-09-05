@@ -161,7 +161,7 @@ APPEND root=/dev/mmcblk0p2 rootwait isolcpus=7 nohz_full=7 rcu_nocbs=7
 * **`rcu_nocbs=7`:** Relocates Read-Copy Update (RCU) callback threads away from CPU 7.
 
 > [!NOTE]
-> This boot command is automated in this repository via the U-Boot boot command script [`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](../../project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd).
+> This boot command is automated in this repository via the U-Boot boot command script [`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd).
 
 ### B. Pinning the CPU Governor to Max Performance
 
@@ -189,7 +189,7 @@ done
 ```
 
 > [!TIP]
-> Both the Performance Governor lock and the Interrupt Steering are automated at startup in this repository via the system init script [`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime`](../../project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime).
+> Both the Performance Governor lock and the Interrupt Steering are automated at startup in this repository via the system init script [`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime`](/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime).
 
 ---
 

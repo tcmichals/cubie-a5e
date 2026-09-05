@@ -1,8 +1,8 @@
 # 🚀 Platform Guide: Radxa Cubie A7A (Allwinner A733 / `sun60iw2`)
 
 > [!NOTE]
-> **Active Bring-Up Debug Log**: For complete step-by-step forensic traces, serial output logs, and hardware discoveries, see [`CUBIE_A7A_DEBUG_LOG.md`](../../docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
-> **Hardware Reference Library**: Full vendor kernel DTBs, firmware binaries, and the official datasheet are archived in [`vendor-a733-reference/`](../../../vendor-a733-reference/) (Datasheet PDF: [`A733_Datasheet_V0.93.pdf`](../../../vendor-a733-reference/A733_Datasheet_V0.93.pdf)).
+> **Active Bring-Up Debug Log**: For complete step-by-step forensic traces, serial output logs, and hardware discoveries, see [`docs/platforms/CUBIE_A7A_DEBUG_LOG.md`](/docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
+> **Hardware Reference Library**: Full vendor kernel DTBs, firmware binaries, and the official datasheet are archived in [`vendor-a733-reference/`](/vendor-a733-reference/) (Datasheet PDF: [`vendor-a733-reference/A733_Datasheet_V0.93.pdf`](/vendor-a733-reference/A733_Datasheet_V0.93.pdf)).
 
 This document is the authoritative hardware, bootloader, firmware provenance, and bring-up specification for the **Radxa Cubie A7A** flight controller. It details the SoC architecture, the 2-stage hybrid boot architecture, firmware provenance (TF-A, U-Boot, Boot0, Linux), storage geometry, memory map, GICv3 interrupt controller configuration, and verified physical hardware registers.
 

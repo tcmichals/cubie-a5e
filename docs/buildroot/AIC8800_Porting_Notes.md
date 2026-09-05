@@ -27,10 +27,10 @@ We have aggressively refactored this repository to adhere to **Mainline Linux St
 This section documents the exact operational model of the reference Radxa vendor driver (`aic8800-radxa-working-backup.tar.gz`) for `AIC8800D80` / `D81` chips.
 
 ### Reference Documentation
-- **Radxa Ground-Truth Boot Trace**: Saved to [Radxa_Trace_Reference.md](../../docs/buildroot/Radxa_Trace_Reference.md).
+- **Radxa Ground-Truth Boot Trace**: Saved to [Radxa_Trace_Reference.md](Radxa_Trace_Reference.md).
 - **Upstream Linux Kernel RFC Submission**: LWN.net Article 1084468 (`[RFC PATCH wireless-next v2 0/4] wifi: aic: add AIC8800 SDIO FullMAC driver`).
 - **Upstream Linux Kernel Analysis**: Detailed in [Upstream_Kernel_Analysis.md](Upstream_Kernel_Analysis.md).
-- **Porting Action Plan**: Tracked in [AIC8800_Porting_Action_Plan.md](../../docs/buildroot/AIC8800_Porting_Action_Plan.md).
+- **Porting Action Plan**: Tracked in [AIC8800_Porting_Action_Plan.md](AIC8800_Porting_Action_Plan.md).
 
 
 ### 1. Complete Probe & Initialization Flow Sequence

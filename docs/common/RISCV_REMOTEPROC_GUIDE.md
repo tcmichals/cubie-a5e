@@ -1,6 +1,6 @@
 # ⚡ Common Subsystem Guide: XuanTie RISC-V Co-Processor & Linux RemoteProc
 
-This document details the **XuanTie E907 / E906 RISC-V Co-Processor Subsystem**, memory routing, lifecycle management via the mainline Linux `remoteproc` framework ([`sunxi_rproc.c`](../../project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)), and inter-processor communication.
+This document details the **XuanTie E907 / E906 RISC-V Co-Processor Subsystem**, memory routing, lifecycle management via the mainline Linux `remoteproc` framework ([`project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)), and inter-processor communication.
 
 ---
 

@@ -98,7 +98,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ### Issue 5: XuanTie E907 RISC-V Co-Processor Lifecycle Management
 - **Symptom**: Legacy userspace register and memory pokers (`riscv-load`) caused memory corruption and failed under strict physical memory protections (`CONFIG_STRICT_DEVMEM`).
-- **Fix**: Ported a clean kernel-level `sunxi_rproc.c` remoteproc driver ([`patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](../../project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)) supporting:
+- **Fix**: Ported a clean kernel-level `sunxi_rproc.c` remoteproc driver ([`project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)) supporting:
   - Automatic ELF parsing into PubSRAM C (`0x00020000`) and Dedicated MCU SRAM (`0x3FFC0000`).
   - Kernel CCF clock gating and reset assertions.
   - Standard `/sys/class/remoteproc/remoteproc0/state` lifecycle control.
@@ -108,7 +108,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ### Issue 6: AIC8800 Wi-Fi Bus Mismatch (USB on A7A vs SDIO on A5E)
 - **Symptom**: Upstream `wireless-next` RFC v2 patch for AIC8800 was SDIO-only. On the Cubie A7A, the AIC8800 is wired to USB (`0xA69C:0x8800`), causing probe failures.
-- **Fix**: Unified the driver codebase into [`aic8800-upstream`](../../aic8800-upstream/):
+- **Fix**: Unified the driver codebase into [`aic8800-upstream/`](/aic8800-upstream/):
   - Added clean USB transport (`aicwf_usb.c`, `usb_host.c`) with asynchronous URBs.
   - Built `bld.a7a` with `CONFIG_USB_SUPPORT=y` (generating standalone `aic8800_fdrv.ko`).
   - Built `bld.a5e` with `CONFIG_SDIO_SUPPORT=y` (generating `aic8800_bsp.ko` + `aic8800_fdrv.ko`).

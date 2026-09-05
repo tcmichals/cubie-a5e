@@ -164,6 +164,6 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 
 ## Related Documentation
 
-- [ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](../../docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
-- [RISCV_REMOTEPROC_GUIDE.md](../../docs/common/RISCV_REMOTEPROC_GUIDE.md)
-- [OpenOCD_DMEM_RISCV_Architecture.md](../../docs/buildroot/OpenOCD_DMEM_RISCV_Architecture.md)
+- [docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](/docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
+- [docs/common/RISCV_REMOTEPROC_GUIDE.md](/docs/common/RISCV_REMOTEPROC_GUIDE.md)
+- [OpenOCD_DMEM_RISCV_Architecture.md](OpenOCD_DMEM_RISCV_Architecture.md)
