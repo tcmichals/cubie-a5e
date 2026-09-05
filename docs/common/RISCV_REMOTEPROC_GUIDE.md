@@ -78,4 +78,4 @@ openocd -f interface/ftdi/jtag-lock-pick_tiny_2.cfg -f target/xuantie_e906.cfg
   > riscv.cpu mdw 0x07110000 8
   ```
 
-> *Note*: Current T527 silicon does not expose a memory-mapped `dmem` bus interface for on-chip OpenOCD over `/dev/mem` (unlike TI AM62x or STM32MP1). We hope future Allwinner SoC revisions will support `dmem` for self-hosted debugging. For on-chip diagnostics today, use the `trace0` debugfs node above.
+> *Note*: Current T527 silicon does not expose a memory-mapped `dmem` bus interface for native on-chip OpenOCD (unlike TI AM62x or STM32MP1). We hope future Allwinner SoC revisions will support `dmem` for self-hosted debugging. For on-chip diagnostics today, use the `trace0` debugfs node above.

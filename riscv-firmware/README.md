@@ -377,7 +377,7 @@ Target: /sys/kernel/debug/remoteproc/remoteproc0/trace0 | Packet Size: 36 bytes 
 ```
 
 #### Lite / Fast Direct SRAM Python Monitor (`apps/testStringBinaryTrace0/fast_sram_telemetry.py`)
-For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` memory-maps SRAM (`0x00021000`) directly via `/dev/mem` for zero-copy polling:
+For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` reads SRAM (`0x00021000`) directly for zero-copy polling:
 
 ```bash
 sudo python3 apps/testStringBinaryTrace0/fast_sram_telemetry.py
@@ -386,7 +386,7 @@ sudo python3 apps/testStringBinaryTrace0/fast_sram_telemetry.py
 Example high-rate output:
 ```text
 === Direct Zero-Copy SRAM Telemetry Reader (Lite/Fast) ===
-Device: /dev/mem | Physical Target: 0x00021000 | Packet Size: 36 bytes
+Physical Target: 0x00021000 | Packet Size: 36 bytes
 Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 
 [SRAM-DIRECT] Seq #124   | Up: 62000 ms | Accel: (+1.860, -0.992, +9.814) | FPU Sin: +0.1542 | Rate: 1042.5 Hz
@@ -394,10 +394,10 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 ```
 
 > [!NOTE]
-> **Why `epoll` Cannot Be Used on `trace0` or `/dev/mem` (The Polling Trade-Off)**:
-> In the Linux kernel RemoteProc subsystem (`drivers/remoteproc/remoteproc_debugfs.c`), `trace0` is a simple debugfs file implementing only `.read`, `.open`, and `.llseek`. It has **no `.poll` method and no wait-queue**; attempting to register it with `epoll_ctl()` immediately returns `EPERM` (*Operation not permitted*). Likewise, direct SRAM mapping via `/dev/mem` provides raw physical memory with no event notification.
+> **Why `epoll` Cannot Be Used on `trace0` (The Polling Trade-Off)**:
+> In the Linux kernel RemoteProc subsystem (`drivers/remoteproc/remoteproc_debugfs.c`), `trace0` is a simple debugfs file implementing only `.read`, `.open`, and `.llseek`. It has **no `.poll` method and no wait-queue**; attempting to register it with `epoll_ctl()` immediately returns `EPERM` (*Operation not permitted*).
 >
-> Consequently, both `monitor_trace.py` and `fast_sram_telemetry.py` must **poll** in user-space, consuming host CPU cycles. This is the baseline in Phase 1 ("Walk"). Phase 2 ("Run") introduces hardware Mailbox doorbells and `/dev/rpmsg0` where the kernel's `virtio_rpmsg_bus` implements `.poll`, enabling true event-driven `epoll` with **0% idle CPU utilization**.
+> Consequently, `monitor_trace.py` must **poll** in user-space, consuming host CPU cycles. This is the baseline in Phase 1 ("Walk"). Phase 2 ("Run") introduces hardware Mailbox doorbells and `/dev/rpmsg0` where the kernel's `virtio_rpmsg_bus` implements `.poll`, enabling true event-driven `epoll` with **0% idle CPU utilization**.
 
 ---
 
@@ -429,12 +429,12 @@ Mode: Direct physical mmap (bypasses debugfs / kernel filesystem layers)
 ### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal UIO Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` @ `0x07131000` in dedicated MCU SRAM C).
+  - Direct lock-free shared SRAM channel (`ShmPingChannel` in PubSRAM C / dedicated MCU SRAM).
   - Dual operational modes:
     1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E907 pulses GIC SPI 147 interrupt to wake host.
-    2. **Raw Memory Polling Baseline**: Maps SRAM directly via `/dev/mem` and spins on memory flags for theoretical raw bus latency measurements.
+    2. **Direct Memory Polling Baseline**: Reads SRAM directly via kernel UIO mapping and polls on memory flags for theoretical raw bus latency measurements.
 * **Linux Companion Tools**:
-  - **`apps/testPing/linux/ping_uio.py`**: Event-driven Python Lite-libmetal client using `select.epoll()`. Maps `map0` (Mailbox MMIO) and `map1` (MCU SRAM C) directly from `/dev/uio0` (**no `/dev/mem` or root privileges required**).
+  - **`apps/testPing/linux/ping_uio.py`**: Event-driven Python Lite-libmetal client using `select.epoll()`. Maps `map0` (Mailbox MMIO) and `map1` (MCU SRAM) directly from `/dev/uio0` (no root privileges required).
   - **`apps/testPing/linux/ping_shm`**: C++ high-precision latency benchmarking tool using `clock_gettime(CLOCK_MONOTONIC_RAW)`.
   - Computes min, avg, max latency, jitter (standard deviation), percentiles (p50, p90, p99, p99.9), and message throughput.
 
@@ -509,9 +509,9 @@ sudo ./apps/testDRAMMsg/linux/ping_dram -n 10000 -s 1024
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Dedicated MCU SRAM + UIO (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in MCU SRAM C (`0x07131000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU Dedicated SRAM C (`0x07131000`, 64B frames) |
-| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Direct MMIO (`/dev/mem`) + PMP coherent | `uio_pdrv_genirq` (`/dev/uio0`) or direct `/dev/mem` |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in Dedicated MCU SRAM |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU Dedicated SRAM (64B frames) |
+| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | `uio_pdrv_genirq` (`/dev/uio0`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Event-driven `ping_uio.py` (`select.epoll()`) / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
 | **Typical RTT Latency** | **~60 – 160 $\mu\text{s}$** | **~50 – 90 $\mu\text{s}$** | **~3.0 – 6.0 $\mu\text{s}$** (DDR bus latency) | **~1.5 – 2.5 $\mu\text{s}$** (Zero-wait-state SRAM) |
@@ -533,7 +533,7 @@ During a standard Buildroot build or via `push-riscv-firmware.sh`, all firmware 
 | **Firmware Suite** | `/lib/firmware/*.elf` | All 8 compiled XuanTie E907 bare-metal ELFs |
 | **Default Active Firmware** | `/lib/firmware/riscv-firmware.elf` | Bootstrapped at boot by `/etc/init.d/S60riscv` |
 | **Host Python Trace Monitor** | `/usr/bin/monitor_trace.py` | RemoteProc `trace0` debugfs mixed ASCII/Binary decoder |
-| **Host Python Direct Poller** | `/usr/bin/fast_sram_telemetry.py` | Direct `/dev/mem` zero-copy physical SRAM reader (>1 kHz) |
+| **Host Python Direct Poller** | `/usr/bin/fast_sram_telemetry.py` | Direct zero-copy physical SRAM reader (>1 kHz) |
 | **Event-Driven UIO Client** | `/usr/bin/ping_uio.py` | Lite-libmetal Python client using `select.epoll()` on `/dev/uio0` (0% CPU) |
 | **SRAM Ping Benchmark** | `/usr/bin/ping_shm` | Shared memory lock-free SPSC latency benchmark tool |
 | **Python RPMsg Benchmark** | `/usr/bin/ping_rpmsg.py` | Event-driven Python RPMsg round-trip test tool |
@@ -595,7 +595,7 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 # (Requires 'cubie-a5e-uio' overlay in /boot/config.txt)
 ping_uio.py -n 50000
 
-# Mode B: Direct Shared SRAM memory-polling baseline (/dev/mem)
+# Mode B: Direct Shared SRAM memory-polling baseline
 ping_shm -n 50000
 
 # 2. Run Hybrid SRAM/DRAM SPSC Benchmark (testDRAMMsg)

@@ -13,7 +13,7 @@ Linux host **without any external JTAG hardware**.
 
 The correct approach is the **ARM MMIO bridge**:
 - The ARM Cortex-A55 is a master on the same AHB bus the E907 debug module sits on
-- The ARM can directly read/write the RISC-V Debug Module registers via `mmap(/dev/mem)`
+- Direct MMIO access to the RISC-V Debug Module registers
 - A userspace daemon (`rbb_server`) translates OpenOCD's TCP `remote_bitbang` protocol
   to direct AHB register writes — no JTAG wires, no GPIO pins, no external probe
 
@@ -113,7 +113,7 @@ Typical XuanTie E907 IDCODE pattern: `0x0XXXXX01`
 │  - Intercepts DMI DR scans                     │
 │  - Translates to direct AHB register access    │
 └──────────────────────┬──────────────────────────┘
-                       │ mmap(/dev/mem, DEBUG_BASE)
+                       │ MMIO access (DEBUG_BASE)
 ┌──────────────────────▼──────────────────────────┐
 │  RISC-V Debug Module (AHB-mapped on MCU bus)   │
 │  DEBUG_BASE + 0x00: IDCODE                     │
@@ -186,7 +186,7 @@ File: `project-cubie-a5e/package/rbb-server/rbb_server.c`
 
 The program:
 1. Takes debug module base address as CLI arg (from probe script output)
-2. Opens `/dev/mem` and mmaps 4KB at that address
+2. Maps the 4KB MMIO window at that address
 3. Listens on TCP :3335
 4. Implements OpenOCD `remote_bitbang` protocol:
    - Maintains JTAG TAP state machine (software)

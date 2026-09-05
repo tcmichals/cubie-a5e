@@ -17,7 +17,7 @@
 #   # Pass the found address to rbb_server:
 #   rbb_server <found_address> &
 #
-# Requires: devmem (from busybox), /dev/mem access
+# Requires: devmem utility
 
 set -e
 

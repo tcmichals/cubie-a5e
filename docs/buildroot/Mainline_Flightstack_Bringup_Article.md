@@ -62,7 +62,7 @@ Instead of introducing heavy, unpredictable frameworks like RPMsg or OpenAMP:
 To provide robust visibility into co-processor operations:
 * **Kernel Trace Buffer Mapping:** The co-processor firmware declares a high-throughput circular trace buffer in SRAM (`0x7A000`) inside its resource table. The Linux `remoteproc` subsystem automatically binds this buffer and exposes it directly to `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
 * **Dedicated Serial Diagnostics:** The XuanTie core is routed to a dedicated hardware serial console (`S_UART0` @ `0x07080000`), providing completely independent 115200 baud serial telemetry without interfering with the ARM64 Linux system console.
-* **Direct Memory Debug (`dmem`) Architecture:** While TI and STMicroelectronics devices provide a memory-mapped `dmem` interface allowing target-hosted OpenOCD over `/dev/mem`, current Allwinner silicon uses RemoteProc trace buffers and dedicated UARTs. We look forward to future Allwinner silicon revisions adding native `dmem` support for self-hosted OpenOCD/GDB workflows.
+* **Direct Memory Debug (`dmem`) Architecture:** While TI and STMicroelectronics devices provide a memory-mapped `dmem` interface allowing target-hosted OpenOCD, current Allwinner silicon does not route a non-secure `dmem` bus interface, relying instead on RemoteProc trace buffers and dedicated UARTs. We look forward to future Allwinner silicon revisions adding native `dmem` support for self-hosted OpenOCD/GDB workflows.
 
 
 ---

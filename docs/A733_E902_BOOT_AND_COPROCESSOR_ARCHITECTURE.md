@@ -32,8 +32,8 @@ Unlike the Allwinner T527 (sun60iw1) and A523 (sun55iw3) which integrate a high-
 
 ### A. Register Protection at `0x07032204`
 The start address register `0x07032204` defines the instruction fetch address of the E902 core upon reset.
-* In hardware readback, `devmem 0x07032204 32` reads **`0x40014000`**.
-* Direct MMIO writes (`writel()` or `/dev/mem`) from Non-Secure Linux EL1 are filtered out by the ARM TrustZone bus firewall. The register remains `0x40014000`.
+* In hardware readback, register inspection reads **`0x40014000`**.
+* Direct kernel MMIO writes (`writel()`) from Non-Secure Linux EL1 are filtered out by the ARM TrustZone bus firewall. The register remains `0x40014000`.
 * Calling ARM SMCCC (`0x8000ff06` `ARM_SVC_WRITE_SEC_REG`) returns `0xffffffffffffffff` (`SMCCC_RET_NOT_SUPPORTED`), proving that the factory ARM Trusted Firmware (BL31) deliberately locks `0x07032204` and disallows modifying the entry vector at runtime.
 
 ### B. The Meaning of `0x40014000`

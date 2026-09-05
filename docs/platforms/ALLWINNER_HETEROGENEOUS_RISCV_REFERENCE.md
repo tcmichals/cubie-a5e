@@ -216,7 +216,7 @@ The full firmware workspace is located at:
 
 ## 6. Co-Processor Debug Architecture: Direct Memory Debug (`dmem`) Comparison
 
-Unlike TI Sitara (AM62x/AM64x), STM32MP1, and NXP i.MX SoCs which implement a memory-mapped `dmem` interface exposing auxiliary core debug registers directly to the non-secure ARM interconnect (enabling self-hosted OpenOCD/GDB debugging via Linux `/dev/mem`), the current **Allwinner T527 silicon does not route a `dmem` bus interface** for the XuanTie RISC-V Debug Module (DM) into Linux userspace.
+Unlike TI Sitara (AM62x/AM64x), STM32MP1, and NXP i.MX SoCs which implement a memory-mapped `dmem` interface exposing auxiliary core debug registers directly to the non-secure ARM interconnect (enabling self-hosted OpenOCD/GDB debugging natively without external probes), current **Allwinner T527 silicon does not route a `dmem` bus interface** for the XuanTie RISC-V Debug Module (DM) into Linux userspace.
 
 ### Debugging Capabilities on Current T527 Silicon:
 1. **RemoteProc Trace Buffer**: High-throughput circular telemetry (`/sys/kernel/debug/remoteproc/remoteproc0/trace0` via `rproc_trace` carveout).

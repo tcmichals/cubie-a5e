@@ -5,7 +5,7 @@ config BR2_PACKAGE_RBB_SERVER
 	  On-Chip Direct MMIO Debug Access Daemon for XuanTie E907 RISC-V co-processor
 	  debugging via ARM MMIO bridge.
 
-	  Maps the RISC-V hardware debug module (DM) registers directly via /dev/mem
+	  Maps the RISC-V hardware debug module (DM) registers directly via MMIO
 	  and connects OpenOCD to GDB over TCP.
 
 	  No external JTAG probe required — the ARM Cortex-A55 accesses the

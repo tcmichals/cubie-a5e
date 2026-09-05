@@ -34,7 +34,7 @@ graph TD
 
 ### B. XuanTie E907 RISC-V Core (Real-Time Bridge)
 * **Zero-Cost C++ Firmware:** Runs completely bare-metal without OS overhead. Employs zero-cost C++ `volatile struct` hardware abstractions for strict type safety.
-* **Lock-Free IPC:** Communicates with the ARM Linux core via a lock-free Single-Producer/Single-Consumer (SPSC) ring buffer residing in shared memory (`/dev/mem`).
+* **Lock-Free IPC:** Communicates with the ARM Linux core via a lock-free Single-Producer/Single-Consumer (SPSC) ring buffer residing in shared on-chip SRAM (PubSRAM C @ `0x00020000`).
 * **Hardware Doorbell:** Uses the Mailbox peripheral to instantly fire a hardware interrupt to the ARM core when packets are ready, eliminating CPU polling.
 
 ### C. FPGA (Deterministic Hardware Domain)

@@ -9,7 +9,7 @@
 
 ## 1. System Architecture & Memory Mapping
 
-The XuanTie E907 co-processor is managed from Linux on the ARM64 host by manipulating Clock Control Unit (CCU) registers and mapping SRAM/TCM via `/dev/mem` (`mmap`).
+The XuanTie E907 co-processor is managed from Linux on the ARM64 host via the Linux RemoteProc driver (`sunxi_rproc.c`), having superseded early userspace MMIO and direct physical memory manipulation attempts.
 
 ### Register & Memory Map
 

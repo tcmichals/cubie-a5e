@@ -38,13 +38,13 @@ flowchart TD
 ## Active & Upcoming Phases
 
 ### Phase 1: Remoteproc Lifecycle & Hardware Debug Validation ✅ (Completed / Standardized)
-- [x] Standardized on Linux Mainline `remoteproc` framework via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md), eliminating userspace `/dev/mem` permissions issues and memory mapping bugs.
+- [x] Standardized on Linux Mainline `remoteproc` framework via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md), ensuring robust in-kernel lifecycle management.
 - [x] Implemented automated Python DMI verification test harness (`tools/dmi_test.py`) to query RISC-V Debug Module status (`dmstatus` at DMI `0x11`) over OpenOCD.
 - [x] Documented complete root-cause autopsy of legacy userspace loader in [`docs/buildroot/DebugLog.md`](DebugLog.md) (Case Study 6).
 
 ### Phase 2: Firmware Execution & Telemetry (Active Milestone)
 - [ ] Deploy `firmware.elf` via remoteproc sysfs (`/sys/class/remoteproc/remoteproc0/state`).
-- [ ] Verify execution of vector table and CRT0 in ITCM (`0x00000000`) / DTCM (`0x00080000`) / SRAM C (`0x07130000`).
+- [ ] Verify execution of vector table and CRT0 in PubSRAM C (`0x00020000`) / Dedicated MCU SRAM (`0x3FFC0000`).
 - [ ] Verify live trace log streaming via debugfs (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
 
 ### Phase 3: Shared SRAM Ring Buffer & Mailbox IPC

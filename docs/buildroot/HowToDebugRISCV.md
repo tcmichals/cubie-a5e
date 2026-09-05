@@ -13,13 +13,13 @@
 In modern heterogeneous SoCs from Texas Instruments (AM62x / AM64x / K3), STMicroelectronics (STM32MP1 / STM32MP2), and NXP (i.MX), the hardware debug module (ARM CoreSight or RISC-V Debug Module) is routed directly onto the main system bus as a memory-mapped `dmem` interface.
 
 This architecture enables **self-hosted, JTAG-less on-chip debugging**:
-- OpenOCD running natively on the Linux host accesses debug registers via `/dev/mem` using the OpenOCD `dmem` driver (`adapter driver dmem`).
+- OpenOCD running natively on the Linux host accesses debug registers directly using the OpenOCD `dmem` driver (`adapter driver dmem`).
 - Developers can run interactive GDB sessions with hardware breakpoints and register inspection directly over SSH, without requiring an external physical USB-JTAG debug probe.
 
 ### Current Allwinner T527 Silicon Reality
-Current **Allwinner T527 silicon does not implement a memory-mapped `dmem` bus interface** for the XuanTie RISC-V Debug Module (DM) into the non-secure ARM interconnect. 
+Current **Allwinner T527 silicon does not implement a memory-mapped `dmem` bus interface** for the XuanTie RISC-V Debug Module (DM) into the non-secure ARM interconnect.
 
-Because the debug module registers are not exposed to the ARM system bus, target-side OpenOCD over `/dev/mem` is not supported on this revision. We hope that Allwinner will support a memory-mapped `dmem` interface in future SoC revisions so that developers can take full advantage of native Linux-hosted OpenOCD and GDB remote debugging.
+Because the debug module registers are not exposed to the ARM system bus, target-side OpenOCD over a memory-mapped bus is not supported on this revision. We hope that Allwinner will support a memory-mapped `dmem` interface in future SoC revisions so that developers can take full advantage of native Linux-hosted OpenOCD and GDB remote debugging.
 
 ---
 
@@ -42,7 +42,7 @@ For co-processor firmware development on the T527, developers have several clean
  │              Shared Memory & Hardware Interconnect          │
  │                                                             │
  │  • RemoteProc Trace0 Buffer (DDR Carveout @ 0x48000000, 4KB) │
- │  • Dedicated MCU SRAM C Ring Buffers (0x07130000, 256KB)    │
+ │  • Dedicated MCU SRAM Ring Buffers (0x07280000/0x3FFC0000)  │
  │  • Hardware Mailbox Doorbell IRQs (0x03003000)              │
  └─────────────────────────────┬───────────────────────────────┘
                                │
@@ -51,14 +51,14 @@ For co-processor firmware development on the T527, developers have several clean
  │           XuanTie E907 Real-Time Co-Processor (200 MHz)     │
  │                                                             │
  │  • Dedicated S_UART0 Serial Console (0x07080000, 115.2k)    │
- │  • 64 KB ITCM (0x00000000) + 64 KB DTCM (0x00080000)       │
+ │  • 128 KB PubSRAM C (0x00020000) + 256 KB Dedicated R_SRAM  │
  │  • External JTAG Test Interface (Physical Probe)            │
  └─────────────────────────────────────────────────────────────┘
 ```
 
 1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0` (phys `0x48000000`).
 2. **Dedicated Hardware UART (`S_UART0`)**: Low-latency, non-blocking serial console at `0x07080000` (115200 baud).
-3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Dedicated MCU SRAM C (`0x07130000`).
+3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Dedicated MCU SRAM (`0x3FFC0000` Core / `0x07280000` Host) or PubSRAM C (`0x00020000`).
 4. **Hardware Mailbox Doorbell IRQ & RPMsg**: Sub-microsecond inter-processor communication.
 5. **Physical Hardware JTAG Probe**: Standard JTAG header connection with external debug probes (CK-Link, J-Link, FTDI) for interactive hardware halting/stepping.
 
@@ -156,7 +156,7 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 | Stop Firmware | `echo stop > /sys/class/remoteproc/remoteproc0/state` |
 | Read RemoteProc Trace | `cat /sys/kernel/debug/remoteproc/remoteproc0/trace0` |
 | Serial Diagnostics | Dedicated `S_UART0` @ `0x07080000` (115200 baud) |
-| Shared Memory Ring | Dedicated MCU SRAM C (`0x07130000`) |
+| Shared Memory Ring | Dedicated MCU SRAM (`0x3FFC0000`/`0x07280000`) / PubSRAM C (`0x00020000`) |
 | Doorbell IPC | Hardware Mailbox @ `0x03003000` |
 | Interactive Debugging | External JTAG probe + OpenOCD on host |
 

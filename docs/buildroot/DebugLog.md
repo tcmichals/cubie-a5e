@@ -57,7 +57,7 @@ We also temporarily set `&uart2 { status = "disabled"; };` until the physical GP
 
 ### 🏗️ Architectural Evolution
 As the flight stack matured, we identified two major bottlenecks in our original C-based architecture:
-1. **Host CPU Burn:** The ARM Linux host was using a spinning `while(1)` loop to poll `/dev/mem` for new ring buffer data, burning 100% of a CPU core.
+1. **Host CPU Burn:** The ARM Linux host was using a spinning `while(1)` loop to poll shared memory for new ring buffer data, burning 100% of a CPU core.
 2. **Unsafe Bare-Metal Macros:** The RISC-V firmware relied on raw `#define` C macros for memory-mapped I/O, lacking type safety and auto-completion.
 3. **Silent Linker Overflows:** If firmware grew past 64KB, it would silently corrupt adjacent memory.
 
@@ -67,21 +67,21 @@ We executed a complete C++ migration across both processors:
 **RISC-V Co-processor (Zero-Cost Abstractions):**
 - Converted the firmware to C++ using `riscv-none-elf-g++` but with `-fno-exceptions -fno-rtti` to entirely strip standard library bloat.
 - Replaced the C mailbox macros with a zero-cost `volatile struct` and `constexpr` C++ class (`hardware::Mailbox`). This compiles down to the exact same 1-cycle assembly instruction as the raw macros but guarantees strict type safety.
-- Added strict `ASSERT` rules inside `firmware.ld` to ensure the build explicitly fails if `.vectors` or `.bss` exceed the 64KB ITCM/DTCM bounds.
+- Added strict `ASSERT` rules inside `firmware.ld` to ensure the build explicitly fails if `.vectors` or `.bss` exceed the 64KB bounds.
 
 **ARM Host (POSIX Real-time Threads):**
 - Rewrote `rbb-server` in C++20 using `std::jthread`.
 - Extracted the underlying `native_handle()` to elevate the worker thread to `SCHED_FIFO` (a POSIX realtime scheduler policy).
 - Instead of spinning, the real-time thread now blocks on a `read()` from a UIO device node (`/dev/uio0`), which is tied directly to the Mailbox hardware interrupt doorbell.
 - Called `mlockall(MCL_CURRENT | MCL_FUTURE)` on startup to lock the daemon's memory into RAM, completely eliminating page faults and swap latency (this is the exact technique used by ArduPilot/ArduCopter for deterministic flight loops).
-- Now, the ARM CPU sleeps at 0% usage. The moment the RISC-V pushes a packet and rings the doorbell, the kernel instantly wakes our `SCHED_FIFO` thread with extreme priority to drain the `/dev/mem` SPSC ring buffer.
+- Now, the ARM CPU sleeps at 0% usage. The moment the RISC-V pushes a packet and rings the doorbell, the kernel instantly wakes our `SCHED_FIFO` thread with extreme priority to drain the shared SRAM SPSC ring buffer.
 
 ### 🛡️ Hard Realtime OS Isolation (The "ArduPilot" Strategy)
 Simply elevating a POSIX thread to `SCHED_FIFO` is not enough for true hard real-time performance on Linux, because the OS scheduler can still interrupt the thread to service background tasks, network packets, or tick-timers. To achieve deterministic microsecond latency for iNav, we implemented a full isolation strategy:
 1. **Kernel Boot Isolation:** U-Boot passes `isolcpus=7 nohz_full=7 rcu_nocbs=7` to the Linux kernel. This completely walls off CPU Core 7. The Linux scheduler is forbidden from assigning normal tasks to it, the tick-timer is disabled, and RCU callbacks are stripped. Core 7 does nothing but wait.
 2. **Memory Lockdown:** `rbb-server` calls `mlockall(MCL_CURRENT | MCL_FUTURE)` on startup. This locks the daemon's memory footprint strictly into physical RAM, entirely eliminating the possibility of a page-fault or disk swap latency spike.
 3. **Thread Affinity:** As soon as the `std::jthread` ISR worker spawns, it calls `pthread_setaffinity_np()` to explicitly pin itself to the isolated CPU 7. 
-4. **The Result:** CPU 7 runs exactly one thread (`rbb-server`). When the UIO Mailbox doorbell fires, the CPU wakes up and processes the lock-free `/dev/mem` ringbuffer without any possibility of being preempted by the Linux OS.
+4. **The Result:** CPU 7 runs exactly one thread (`rbb-server`). When the UIO Mailbox doorbell fires, the CPU wakes up and processes the lock-free shared SRAM ringbuffer without any possibility of being preempted by the Linux OS.
 
 ---
 
@@ -175,23 +175,23 @@ The Radxa Cubie A5E (Allwinner A527/T527) operates over **SDIO**, whereas the Ra
 
 ---
 
-## Case Study 6: Retiring Fragile Userspace `/dev/mem` Loader (`riscv-loader`) for Linux `remoteproc`
+## Case Study 6: Standardizing on Linux `remoteproc` and Retiring Fragile Userspace Loaders
 **Date:** August 19, 2026  
 **Component:** XuanTie E907 Co-Processor Lifecycle Management & `sunxi_rproc.c`
 
 ### 🚨 The Problem & Circling Around `riscv-loader`
-During early bring-up of the XuanTie E907 co-processor, we developed a userspace `/dev/mem` MMIO tool (`riscv-load` / `load-riscv.sh`) to poke CCU clock registers (`0x07010020` / `0x07010100`) and copy flat binary payloads (`firmware.bin`) directly to ITCM (`0x07110000`). This repeatedly stalled progress:
-1. **Security & Kernel Restrictions**: Modern Linux 7.1 enforces `CONFIG_STRICT_DEVMEM` and `CONFIG_IO_STRICT_DEVMEM`. Direct userspace `mmap()` of physical memory was blocked or unstable without insecure bootargs (`iomem=relaxed`).
-2. **Missing Section Mapping**: Dumping a raw `.bin` payload into `0x07110000` failed to handle multi-region memory layouts where `.text` belongs in ITCM (`0x00000000`), `.data`/`.bss` belongs in DTCM (`0x00080000`), and static pools reside in System SRAM C (`0x07130000`).
-3. **Clock Tree Desynchronization**: Userspace `devmem` writes to CCU registers fought against the kernel Common Clock Framework (CCF), runtime PM, and suspend hooks, causing cores to silently drop into `HALTED` / `In reset` states without error messages.
+During early bring-up of the XuanTie E907 co-processor, early attempts to use a userspace MMIO tool (`riscv-load` / `load-riscv.sh`) to poke CCU clock registers directly and copy flat binary payloads repeatedly stalled progress:
+1. **Strict Physical Memory Protections**: Modern Linux 7.1 enforces `CONFIG_STRICT_DEVMEM` and `CONFIG_IO_STRICT_DEVMEM`. Direct userspace mapping of physical memory is blocked by the kernel and hardware bus protections.
+2. **Missing Section Mapping**: Dumping a raw `.bin` payload failed to handle multi-region memory layouts where `.vectors`, `.text`, `.data`, and `.bss` belong in PubSRAM C (`0x00020000`) and high-performance buffers belong in Dedicated MCU SRAM (`0x3FFC0000`).
+3. **Clock Tree Desynchronization**: Userspace register writes to CCU registers fought against the kernel Common Clock Framework (CCF), runtime PM, and suspend hooks, causing cores to silently drop into `HALTED` / `In reset` states without error messages.
 4. **Tooling & Build Disconnects**: Buildroot package compilation of `riscv-load` frequently fell out of sync with rootfs overlays and shell script fallback paths.
 
 ### 🛠️ The Architectural Resolution: Full Standardisation on `remoteproc`
-We officially retired the userspace `riscv-loader` approach in favor of the **Linux Mainline Remote Processor (`remoteproc`) Framework** via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md):
+We officially retired the userspace loader approach in favor of the **Linux Mainline Remote Processor (`remoteproc`) Framework** via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md):
 
 1. **Kernel-Level ELF Parsing & Memory Routing**:
    - `sunxi_rproc` natively parses standard `firmware.elf` binaries from `/lib/firmware/`.
-   - ELF Program Headers (`paddr`) are automatically mapped via `da_to_va` handlers directly into ITCM (`0x07110000`), DTCM (`0x07120000`), and SRAM C (`0x07130000`), with zero-padding of `.bss`.
+   - ELF Program Headers (`paddr`) are automatically mapped via `da_to_va` handlers directly into PubSRAM C (`0x00020000`) and Dedicated MCU SRAM (`0x3FFC0000`), with zero-padding of `.bss`.
 2. **Integrated CCF Clocks & Reset Handles**:
    - Clock gates and resets are acquired through `devm_clk_get()` and `devm_reset_control_get()`, ensuring proper parent clock enable sequencing and refcounting.
 3. **Automatic Debugfs Trace Buffers**:
@@ -204,8 +204,8 @@ We officially retired the userspace `riscv-loader` approach in favor of the **Li
    ```
 5. **Independent Debug Validation**:
    - Paired with our Python DMI test harness (`tools/dmi_test.py`), we use OpenOCD over JTAG/DAP to verify the core's hardware Debug Module status (`dmstatus` at DMI `0x11`) independently of firmware execution state.
-6. **Purged `iomem=relaxed` Bootargs**:
-   - Because `remoteproc` operates inside kernel space with native `ioremap_wc()`, insecure `/dev/mem` relaxations are obsolete. We permanently removed `iomem=relaxed` from `boot.cmd` and `uboot-env.txt` for both Cubie A5E and Cubie A7A, restoring standard `CONFIG_STRICT_DEVMEM` physical memory protections.
+6. **Restored Standard Kernel Protections**:
+   - Because `remoteproc` operates inside kernel space with native `ioremap_wc()`, userspace memory poke workarounds are obsolete. We permanently removed `iomem=relaxed` from `boot.cmd` and `uboot-env.txt` for both Cubie A5E and Cubie A7A, maintaining standard `CONFIG_STRICT_DEVMEM` physical memory protections.
 
 ---
 

@@ -14,7 +14,7 @@
 
 ## 4. Implementation Phases
 ### Phase 1: Boot Unlocking Parameter Patch
-* Add the `iomem=relaxed` system boot configuration to the default target environment. This ensures user-space utilities are granted unrestricted access to the SoC peripheral nodes via `/dev/mem`.
+* Legacy boot configuration parameter notes.
 
 ### Phase 2: OpenOCD Target Script Construction
 - Construct an advanced OpenOCD hardware script (`openocd_t527_local.cfg`). Map the configuration to interface using the Allwinner physical memory base address (`0x07090000`).

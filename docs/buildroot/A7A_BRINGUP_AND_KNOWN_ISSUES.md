@@ -97,10 +97,10 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 ---
 
 ### Issue 5: XuanTie E907 RISC-V Co-Processor Lifecycle Management
-- **Symptom**: Userspace `/dev/mem` memory pokers (`riscv-load`) caused memory corruption, violated Linux 7.1 `CONFIG_STRICT_DEVMEM`, and required insecure `iomem=relaxed` boot arguments.
+- **Symptom**: Legacy userspace register and memory pokers (`riscv-load`) caused memory corruption and failed under strict physical memory protections (`CONFIG_STRICT_DEVMEM`).
 - **Fix**: Ported a clean kernel-level `sunxi_rproc.c` remoteproc driver ([`patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)) supporting:
-  - Automatic ELF parsing into ITCM (`0x07110000`), DTCM (`0x07120000`), and SRAM C (`0x07130000`).
-  - Kernel CCF clock gating and reset assertions (`0x07010020` / `0x07010100`).
+  - Automatic ELF parsing into PubSRAM C (`0x00020000`) and Dedicated MCU SRAM (`0x3FFC0000`).
+  - Kernel CCF clock gating and reset assertions.
   - Standard `/sys/class/remoteproc/remoteproc0/state` lifecycle control.
   - Purged `iomem=relaxed` from bootargs, restoring hardware memory safety.
 

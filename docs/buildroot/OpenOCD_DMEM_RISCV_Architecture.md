@@ -27,10 +27,10 @@ In SoCs with native `dmem` support (e.g. TI AM62x / AM64x / K3, STMicroelectroni
                               ▼
   ┌────────────────────────────────────────────────────────┐
   │              OpenOCD (Running on Linux Target)         │
-  │        (adapter driver dmem / devmem transport)        │
+  │              (adapter driver dmem transport)           │
   └───────────────────────────┬────────────────────────────┘
                               │ 
-                              │  Physical System Bus Access (/dev/mem)
+                              │  Physical System Bus Access
                               ▼
   ┌────────────────────────────────────────────────────────┐
   │       Memory-Mapped Debug Module Interface (DM / DMI)  │
@@ -40,17 +40,17 @@ In SoCs with native `dmem` support (e.g. TI AM62x / AM64x / K3, STMicroelectroni
 
 ### The Soft-Wire JTAG Paradigm
 - **Pioneering Work**: Demonstrated by Texas Instruments (Nishanth Menon) and the BeagleBoard.org Foundation (Jason Kridner) on platforms like the BeaglePlay and BeagleBone AI-64.
-- **Mechanism**: The Linux host opens `/dev/mem` and maps the auxiliary core debug registers directly into virtual address space via `mmap()`. OpenOCD reads and writes debug run-control registers (`dmcontrol`, `dmstatus`, CoreSight DP/AP) using standard 32-bit load/store instructions.
+- **Mechanism**: In SoCs supporting this model, the host maps the auxiliary core debug registers directly into virtual address space. OpenOCD reads and writes debug run-control registers (`dmcontrol`, `dmstatus`, CoreSight DP/AP) using standard 32-bit load/store instructions.
 - **Benefit**: Fully self-hosted debugging over SSH. Developers can set breakpoints, single-step co-processor firmware, and inspect registers without soldering JTAG headers or purchasing external debug probes.
 
 ---
 
 ## 2. Allwinner T527 Silicon Reality
 
-On the current **Allwinner T527 silicon (Radxa Cubie A5E)**:
-- The XuanTie E906/E907 co-processor is fully functional for real-time applications with dedicated clocks (`mcu_ccu`), 64KB ITCM, 64KB DTCM, 256KB MCU SRAM, and open non-secure MMIO reset control at `0x07102124`.
+On current **Allwinner T527 silicon (Radxa Cubie A5E)**:
+- The XuanTie E907 co-processor is fully functional for real-time applications with dedicated clocks (`mcu_ccu`), 128KB PubSRAM C, 256KB Dedicated MCU SRAM, and open non-secure MMIO reset control at `0x07102124`.
 - However, **Allwinner does not route a memory-mapped `dmem` interface** for the XuanTie RISC-V Debug Module (DM) into the non-secure ARM bus interconnect.
-- Because the debug module is not memory-mapped to the ARM interconnect, target-side OpenOCD cannot attach to the core via `/dev/mem`.
+- Because the debug module is not memory-mapped to the ARM interconnect, target-side OpenOCD cannot attach directly over the bus without external hardware debug probes.
 
 ### Future Silicon Outlook
 We hope that Allwinner will incorporate a standard memory-mapped `dmem` bus interface in future SoC revisions. Adding a non-secure MMIO window to the RISC-V Debug Module Interface (DMI) will allow the Linux open-source community to use native OpenOCD and GDB workflows directly on Allwinner SoCs, matching the experience on TI and ST platforms.
@@ -96,9 +96,9 @@ The T527 provides clean, non-secure MMIO register control for the RISC-V MCU sub
    - Bit 17: `RST_BUS_MCU_RISCV_DEBUG` (Debug module reset release)
    - Bit 18: `RST_BUS_MCU_RISCV_CORE` (Core execution reset release)
 
-2. **Hardwired ITCM Reset Vector (`0x00000000`)**:
-   - The XuanTie E907 boots directly from ITCM base `0x00000000` when bit 18 is released.
-   - The mainline `sunxi_rproc` driver handles loading the ELF vectors into ITCM, un-gating clocks, and releasing reset cleanly.
+2. **Boot Entry Vector (`STA_ADD_REG` @ `0x07130204`)**:
+   - The XuanTie E907 boots from the address programmed into `STA_ADD_REG` (e.g. `0x00020000` PubSRAM C).
+   - The mainline `sunxi_rproc` driver handles loading the ELF into SRAM, un-gating clocks, setting `STA_ADD_REG`, and releasing reset cleanly.
 
 ---
 
@@ -106,7 +106,7 @@ The T527 provides clean, non-secure MMIO register control for the RISC-V MCU sub
 
 1. **"Debugging Heterogeneous SoC Using OpenOCD"**
    - **Author**: Nishanth Menon (Texas Instruments Inc.)
-   - **Summary**: Technical presentation detailing self-hosted OpenOCD debugging over `/dev/mem` (`--enable-dmem`) on TI AM62x/AM64x SoCs.
+   - **Summary**: Technical presentation detailing self-hosted OpenOCD debugging (`--enable-dmem`) on TI AM62x/AM64x SoCs.
 
 2. **OpenOCD `dmem` Driver**:
    - `src/jtag/drivers/dmem.c` in upstream OpenOCD tree.

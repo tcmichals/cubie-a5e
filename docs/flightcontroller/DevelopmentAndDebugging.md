@@ -243,7 +243,7 @@ void isr_worker(std::stop_token stoken) {
         
         if (bytes == sizeof(irq_count)) {
             // Doorbell rang! Safely execute the hard real-time loop payload here.
-            // e.g., Read from lock-free shared memory /dev/mem or SPI.
+            // e.g., Read from lock-free shared SRAM ring buffer or SPI.
             
             // Re-enable the UIO interrupt for the next doorbell
             uint32_t enable = 1;

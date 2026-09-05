@@ -127,8 +127,8 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **Future Roadmap:** If co-processor offloading or custom auxiliary functions are needed on the A733 in the future, we will use the standard U-Boot/SCP loading model and extend `scp.fex` with custom API calls / firmware service handlers rather than attempting to hijack the core via Linux remoteproc.
 
 * **🔍 Direct Memory Debug (`dmem`) / OpenOCD Architecture:**
-  - **Comparison with Other SoCs:** SoCs from Texas Instruments (AM62x / AM64x / K3) and STMicroelectronics (STM32MP1 / STM32MP2) implement a memory-mapped `dmem` bus interface that exposes core debug registers directly to the system interconnect, enabling native, JTAG-less OpenOCD and GDB remote debugging via Linux `/dev/mem`.
-  - **Allwinner T527 Reality:** Current Allwinner T527 silicon does not route a memory-mapped `dmem` bus interface for the XuanTie RISC-V Debug Module to the non-secure ARM interconnect.
+  - **Comparison with Other SoCs:** SoCs from Texas Instruments (AM62x / AM64x / K3) and STMicroelectronics (STM32MP1 / STM32MP2) implement a memory-mapped `dmem` bus interface that exposes core debug registers directly to the system interconnect, enabling native, JTAG-less OpenOCD and GDB remote debugging.
+  - **Allwinner T527 Reality:** Current Allwinner T527 silicon does not route a memory-mapped `dmem` bus interface for the XuanTie RISC-V Debug Module to the non-secure ARM interconnect, and direct userspace physical memory access is strictly disallowed by the kernel.
   - **Future Silicon Hope:** We hope Allwinner will incorporate a memory-mapped `dmem` bus interface in future SoC revisions so the open-source Linux community can run self-hosted OpenOCD and GDB directly on Allwinner targets.
   - **Active T527 Debugging:** Diagnostics on current T527 silicon rely on Linux RemoteProc trace buffers (`trace0`), dedicated serial console (`S_UART0`), lock-free shared SRAM ring buffers, and external physical JTAG debug probes.
 
@@ -138,7 +138,7 @@ As of the current bring-up phase, here is the functional status of the flight st
 ## Architectural Documentation & Technical Articles
 
 1. **[Bringing Up Heterogeneous RISC-V on Allwinner SoCs (4-Part Technical Series)](docs/articles/README.md)**:
-   * **[Part 1: Architecture, Memory-Mapped Debugging, and Why We Ditched `/dev/mem` Hacks](docs/articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`A733`/`sun55i`), TRM memory maps, and JTAG-less on-chip debugging over OpenOCD.
+   * **[Part 1: Architecture and Memory-Mapped Debugging](docs/articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`A733`/`sun55i`), TRM memory maps, and JTAG-less on-chip debugging over OpenOCD.
    * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](docs/articles/part2_building_remoteproc_and_hardware_proof.md)** — `sunxi_rproc.c` driver, surgical ELF mapping, debugfs trace logs, and automated Python DMI hardware verification.
    * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](docs/articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)** — Zero-wait TCM determinism, lightweight lock-free shared SRAM ring buffers + Mailbox interrupts, and live GDB workflows.
    * **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](docs/articles/part4_deep_dive_baremetal_cpp_coroutines.md)** — Deploying AbstractX on bare-metal RISC-V, HALO compiler optimizations (0 cycles / 0 bytes), benchmarks vs FreeRTOS (19x speedup), and non-blocking hardware awaiters.
