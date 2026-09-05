@@ -206,8 +206,9 @@ To avoid confusion, the table below categorizes every configuration and boot fil
 
 | File | Format | Purpose & Usability |
 | :--- | :--- | :--- |
-| **config.txt** | Plain Text | User overlay selection & kernel args. **Safely editable live with `vi`**. |
-| **boot.cmd** | Shell Script | Dynamic overlay discovery logic. Editable in git repo before build. |
+| **config.txt** | Plain Text | Raspberry Pi-style overlay selection (`dtoverlay=`) & kernel args. **Safely editable live with `vi`**. |
+| **armbianEnv.txt** | Plain Text | Armbian-style overlay configuration (`overlays=`, `extraargs=`). **Safely editable live with `vi`**. |
+| **boot.cmd** | Shell Script | Dynamic boot script supporting `config.txt`, `armbianEnv.txt`, and `uEnv.txt`. Editable in repo. |
 | **boot.scr** | Binary Script | Compiled boot engine executed by U-Boot (`source 0x4fc00000`). |
 | **uboot.env** | 64 KB Binary | Static firmware baseline with CRC32. **Do not edit directly**. |
 | **uboot-env.txt**| Plain Text | Default environment template compiled into `uboot.env`. |
@@ -444,12 +445,17 @@ U-Boot parses the text file directly into its active environment hash table in R
 #### 3. How Our Architecture Compares: The Best of Both Worlds
 While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it in two crucial ways:
 
-| Dimension | Standard Armbian | Our Cubie A5E Architecture |
+| Dimension | Standard Armbian Distribution | Our Cubie A5E Buildroot Architecture |
 | :--- | :--- | :--- |
-| **Boot Partition** | Monolithic `ext4` (`/boot` inside rootfs) | Dedicated 64 MB FAT32 boot partition (`boot.vfat`) |
-| **PC Card Reader** | Needs 3rd-party drivers for Windows/Mac | Mounts natively on Windows, macOS, and Linux |
-| **Config File** | `armbianEnv.txt` (`overlays=`, `extraargs=`) | Raspberry Pi-style `config.txt` (`dtoverlay=`, `cmdline=`) |
-| **Compatibility** | Armbian-only syntax | Universal: supports `config.txt`, `armbianEnv.txt`, and `uEnv.txt` |
+| **Boot Filesystem** | Monolithic `ext4` partition (`/boot` is inside rootfs) | Dedicated 64 MB FAT32 boot partition (`boot.vfat`) + `ext4` rootfs |
+| **Cross-Platform Host Editing** | **Difficult**: SD card cannot be read on Windows or macOS without third-party `ext4` drivers | **Instant**: FAT32 partition mounts as a standard flash drive on Windows, macOS, and Linux |
+| **Configuration Naming** | `armbianEnv.txt` (`overlays=`, `extraargs=`) | Raspberry Pi-style `config.txt` (`dtoverlay=`, `cmdline=`) |
+| **Ecosystem Compatibility** | Locked strictly to Armbian schema | **Tri-Format Universal Engine**: Natively supports `config.txt`, `armbianEnv.txt`, and `uEnv.txt` |
+
+* **Boot Filesystem Architecture**: Standard Armbian uses a single monolithic `ext4` root partition where `/boot` resides inside the Linux filesystem. Our architecture provides a dedicated 64 MB FAT32 boot partition (`boot.vfat`) alongside the `ext4` rootfs.
+* **Cross-Platform Host Editing**: Standard Armbian SD cards cannot be read on Windows or macOS without third-party `ext4` drivers. Our FAT32 boot partition automatically mounts as a standard flash drive on Windows, macOS, and Linux PCs out-of-the-box.
+* **Configuration Syntax**: Armbian uses proprietary `armbianEnv.txt` variables (`overlays=`, `extraargs=`). Our architecture adopts the familiar Raspberry Pi `config.txt` convention (`dtoverlay=`, `cmdline=`).
+* **Ecosystem Compatibility**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` seamlessly parses Raspberry Pi `config.txt`, Armbian `armbianEnv.txt`, and legacy `uEnv.txt` within a single unified boot script.
 
 ---
 
