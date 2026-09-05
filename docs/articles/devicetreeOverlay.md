@@ -472,7 +472,7 @@ While our design adopts the proven `env import -t` engine popularized by Armbian
 * **Cross-Platform Host Editing**: Standard Armbian SD cards cannot be read on Windows or macOS without third-party `ext4` drivers. Our FAT32 boot partition automatically mounts as a standard flash drive on Windows, macOS, and Linux PCs out-of-the-box.
 * **Filesystem Failure Isolation**: In a monolithic setup, if a sudden power cut corrupts the `ext4` filesystem during flight or field operation, the boot files and kernel become inaccessible. With our dedicated FAT32 boot partition, the kernel (`Image`), base device tree (`.dtb`), overlays (`.dtbo`), and configuration (`config.txt`) are physically isolated on partition 1, allowing the system to boot or be recovered easily.
 * **Configuration Syntax**: Armbian uses proprietary `armbianEnv.txt` variables (`overlays=`, `extraargs=`). Our architecture adopts the familiar Raspberry Pi `config.txt` convention (`dtoverlay=`, `cmdline=`).
-* **Ecosystem Compatibility & Multi-Format Ingestion**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` seamlessly parses Raspberry Pi `config.txt`, Armbian `armbianEnv.txt`, and legacy `uEnv.txt` within a single unified boot script. Developers migrating from Armbian can literally copy their existing `armbianEnv.txt` onto the SD card without changing variable names!
+* **Ecosystem Compatibility & Multi-Format Ingestion**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` integrates an ordered priority chain: it checks for and imports `config.txt` first, falls back to `armbianEnv.txt` if absent, and finally tries legacy `uEnv.txt`. Rather than attempting to merge multiple disjoint files, it prioritizes and imports the first configuration file it encounters. Developers migrating from Armbian can simply drop their existing `armbianEnv.txt` onto the partition, and the script will automatically import and apply its variables without requiring translation!
 * **Overlay Name Resolution**: Armbian requires rigid board-specific prefixing via `overlay_prefix` (e.g. looking strictly for `${overlay_prefix}-${overlay}.dtbo`), which causes custom overlays to fail if naming doesn't follow strict upstream conventions. Our engine uses smart resolution: if the user specifies `flight-stack` or `cubie-a5e-flight-stack`, it searches directly for the exact file or automatically appends `.dtbo`.
 * **Kernel Arguments Appending**: Armbian only appends `extraargs`. Our engine unifies community conventions by checking `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv), appending whichever is defined to `bootargs`.
 * **Real-Time & Flight-Critical Tuning**: Armbian focuses on general-purpose server/desktop workloads where low-latency CPU isolation must be manually configured. Our Buildroot architecture integrates an automated real-time init daemon (`/etc/init.d/S15realtime`) that isolates high-performance cores (`isolcpus=3` or `7`), sets RCU affinity, and steers hardware IRQs to low cores automatically when real-time flight overlays are active.
@@ -632,6 +632,11 @@ fi
 > 4. When `config.txt` contains `cmdline=isolcpus=7`, U-Boot dynamically sets `${cmdline}`, which our script automatically appends to `${bootargs}`.
 >
 > The script also includes fallback support for Armbian-style `armbianEnv.txt` and legacy `uEnv.txt`.
+
+> [!TIP]
+> **The `env import -t` Trailing Newline Requirement**
+>
+> U-Boot's `env import -t` parser expects text files to be delimited strictly by standard Unix newlines (`\n`). If a variable definition on the final line of `config.txt` lacks a terminating newline (i.e. the user didn't press <kbd>Enter</kbd> at EOF), certain U-Boot parser implementations will silently drop that last line. Always ensure your configuration files end with an empty blank line.
 
 #### 3. Why `fdt resize 0x10000` is Strictly Mandatory (and the Hex Padding Rule)
 ```sh
@@ -975,10 +980,14 @@ cat /sys/class/uio/uio0/maps/map1/name   # -> sram   (0x7131000)
   - Ensure `kernel_addr_r` is placed at a 2MB-aligned address (`0x40200000`), not an unaligned offset like `0x40080000`.
   - Ensure `${fdt_addr_r}` (`0x4fa00000`) is located well above the kernel memory footprint.
 
-### 7. Changes in `config.txt` Have No Effect (DOS Line Endings)
-* **Symptom**: Overlays listed in `config.txt` are ignored by U-Boot.
-* **Root Cause**: The file was saved on Windows with DOS carriage returns (`\r\n`), corrupting variable names when imported.
-* **Fix**: Save `config.txt` with standard UNIX line endings (`\n`). You can run `dos2unix /boot/config.txt` if needed.
+### 7. Changes in `config.txt` Have No Effect (DOS Line Endings & Missing Trailing Newline)
+* **Symptom**: Overlays or boot arguments defined in `config.txt` are ignored by U-Boot.
+* **Root Cause 1 (CRLF Line Endings on Windows)**: When editing `config.txt` directly on a Windows host PC by inserting the SD card into a card reader (as supported by our FAT32 boot partition), standard Windows text editors like basic Notepad historically save files with DOS/Windows carriage returns (`\r\n`). In U-Boot's `env import -t` parser, the trailing `\r` remains attached to variable values (e.g., `cubie-a5e-uio\r`), causing file load commands to fail looking for non-existent filenames.
+* **Root Cause 2 (Missing Trailing Newline)**: If the final line in `config.txt` lacks a terminating newline character, older U-Boot `env import -t` parsers silently discard that final variable.
+* **Fix**: 
+  - When editing on Windows, use an editor like VS Code, Notepad++, or Sublime Text configured to save with **LF (Unix) line endings** instead of CRLF.
+  - Always press <kbd>Enter</kbd> after your final line so the file ends with a clean trailing newline.
+  - If troubleshooting on target, convert line endings with `dos2unix /boot/config.txt`.
 
 ---
 

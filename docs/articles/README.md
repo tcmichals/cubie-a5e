@@ -27,7 +27,7 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
 * **[Open-Source NPU Migration Case Study](../buildroot/FOSS_NPU_Migration_Article.md)**
   * **Topics**: Migrating from proprietary vendor NPU binary blobs to upstream Linux `etnaviv` DRM driver and Mesa Teflon TFLite delegate.
 
-* **[Mastering Dynamic Device Tree Overlays & UIO](devetreeOverlay.md)**
+* **[Mastering Dynamic Device Tree Overlays & UIO](devicetreeOverlay.md)**
   * **Topics**: Multi-overlay boot chains in U-Boot (`boot.cmd`/`uEnv.txt`), converting Allwinner MSGBOX to generic UIO (`uio_pdrv_genirq`), dual MMIO mapping, and 0% CPU event-driven Python IPC with `select.epoll()`.
 
 * **[Introduction to the Radxa Cubie A5E](introToCubieA5E.md)**

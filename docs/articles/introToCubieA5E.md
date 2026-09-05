@@ -134,7 +134,7 @@ The resulting `bld/images/sdcard.img` contains the multi-stage bootloader (U-Boo
 
 This high-level overview serves as the entry point for a dedicated series of engineering articles:
 
-1. **Introduction to Device Trees and U-Boot**: [Device Tree Overlays & U-Boot In-Memory Merging](devetreeOverlay.md) — parsing `/boot/config.txt`, applying `.dtbo` fragments dynamically via U-Boot scripts, and binding UIO devices without kernel rebuilds.
+1. **Introduction to Device Trees and U-Boot**: [Device Tree Overlays & U-Boot In-Memory Merging](devicetreeOverlay.md) — parsing `/boot/config.txt`, applying `.dtbo` fragments dynamically via U-Boot scripts, and binding UIO devices without kernel rebuilds.
 2. **Using the XuanTie E907 RISC-V Co-Processor (and Why)**: [Heterogeneous RISC-V Architecture Series](part1_heterogeneous_riscv_intro_architecture.md) — rationale for offloading deterministic hard real-time tasks (sub-microsecond control loops, PWM generation, high-rate sensor polling) from Linux SMP cores, zero-wait-state TCM execution, and low-latency IPC.
 
 All associated Buildroot defconfigs, Device Tree overlays, U-Boot boot scripts, and RISC-V firmware applications are maintained in the project repository: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e).
