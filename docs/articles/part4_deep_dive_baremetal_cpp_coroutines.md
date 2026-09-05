@@ -271,7 +271,7 @@ Across this 4-part series, we walked through the complete stack for heterogeneou
 
 ### Series Complete Navigation
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
-* **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](part2_building_remoteproc_and_hardware_proof.md)**
+* **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
 * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
 * **Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907** *(You are here)*
 
