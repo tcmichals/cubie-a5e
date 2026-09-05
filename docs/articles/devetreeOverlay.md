@@ -205,8 +205,7 @@ During the U-Boot board initialization sequence (`env_init()` and `env_relocate(
 To avoid confusion, here is how each configuration and boot file is used across the platform:
 
 * **config.txt** (Plain Text): Raspberry Pi-style overlay selection (`dtoverlay=`) and kernel args. Safely editable live with `vi` or on any PC.
-* **armbianEnv.txt** (Plain Text): Armbian-style overlay configuration (`overlays=`, `extraargs=`). Safely editable live with `vi` or on any PC.
-* **boot.cmd** (Shell Script): Dynamic boot script supporting `config.txt`, `armbianEnv.txt`, and `uEnv.txt`. Editable in repository.
+* **boot.cmd** (Shell Script): Dynamic boot script implementing overlay loading logic (`config.txt`). Editable in repository.
 * **boot.scr** (Binary Script): Compiled boot engine executed by U-Boot (`source 0x4fc00000`).
 * **uboot.env** (64 KB Binary): Static firmware baseline with CRC32. Do not edit directly.
 * **uboot-env.txt** (Plain Text): Default environment template compiled into `uboot.env`.
@@ -230,9 +229,6 @@ To solve this usability bottleneck, we separate firmware plumbing from user conf
 * **Editing with vi**: Direct editing of `uboot.env` with `vi` or `nano` corrupts the CRC32 checksum, forcing U-Boot to revert to compiled-in defaults. In contrast, `config.txt` is 100% safe to edit live on the running board or in any text editor on a host PC.
 * **Where to Edit**: Modifying `uboot.env` requires the host `mkenvimage` utility or the U-Boot serial console, while `config.txt` can be edited directly on the target at `/boot/config.txt` or on a PC SD card reader.
 * **Ingestion Mechanism**: `uboot.env` is loaded automatically by U-Boot at reset, while `config.txt` is imported dynamically into RAM by `boot.cmd` using U-Boot's `env import -t` command.
-
-> **Armbian & Raspberry Pi Ecosystem Convergence**:
-> If you have worked with Armbian (`armbianEnv.txt`) or Raspberry Pi (`config.txt`), our bootloader engine bridges both worlds. It natively supports Raspberry Pi-style `config.txt` as well as Armbian-style `armbianEnv.txt`. For an in-depth architectural comparison between Armbian's boot model and our architecture, see [Section 5: How Armbian Does It](#how-armbian-does-it-the-armbianenvtxt-pattern--ecosystem-convergence).
 
 #### How `boot.cmd` Bridges the Two Worlds
 Instead of requiring users to touch `uboot.env`, `uboot.env` provides one critical, immutable baseline command:
@@ -402,13 +398,13 @@ cmdline=
 ### Supported Configuration Directives:
 1. `dtoverlay=`: Space-separated list of overlays to apply. You can specify the file name with or without `.dtbo` (e.g., `cubie-a5e-flight-stack` or `cubie-a5e-flight-stack.dtbo`). Multiple overlays are merged sequentially in the order specified.
 2. `cmdline=`: Additional arguments to append to the Linux kernel command line. Useful for configuring CPU isolation (`isolcpus`), dynamic printk debugging (`ignore_loglevel`), or setting custom init targets.
-3. Fallback compatibility: The boot engine also supports legacy `armbianEnv.txt` directives (`overlays=` and `extraargs=`) and `uEnv.txt` (`overlays=` and `extra_bootargs=`).
+3. Fallback compatibility: The boot engine also supports legacy `uEnv.txt` directives (`overlays=` and `extra_bootargs=`).
 
 ---
 
-### How Armbian Does It: The `armbianEnv.txt` Pattern & Ecosystem Convergence
+### Architectural Comparison: How Armbian Does It
 
-If you have worked with Armbian on Allwinner (Sunxi), Rockchip, or Amlogic boards, this pattern will look very familiar. Armbian pioneered this exact text-import workflow to solve the same problem!
+If you have worked with Armbian on Allwinner (Sunxi), Rockchip, or Amlogic boards, this pattern will look very familiar. Armbian pioneered this text-import workflow to solve the same usability problem.
 
 #### 1. Why Armbian Abandoned Direct `uboot.env` Editing
 In early SBC distributions, modifying boot parameters required using U-Boot's `saveenv` command over a serial UART console, or running binary editing tools. Non-technical users frequently corrupted the 4-byte CRC32 header or NULL padding, leaving boards in an unbootable state. 
@@ -445,22 +441,6 @@ While our design adopts the proven `env import -t` engine popularized by Armbian
 * **Overlay Name Resolution**: Armbian requires rigid board-specific prefixing via `overlay_prefix` (e.g. looking strictly for `${overlay_prefix}-${overlay}.dtbo`), which causes custom overlays to fail if naming doesn't follow strict upstream conventions. Our engine uses smart resolution: if the user specifies `flight-stack` or `cubie-a5e-flight-stack`, it searches directly for the exact file or automatically appends `.dtbo`.
 * **Kernel Arguments Appending**: Armbian only appends `extraargs`. Our engine unifies community conventions by checking `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv), appending whichever is defined to `bootargs`.
 * **Real-Time & Flight-Critical Tuning**: Armbian focuses on general-purpose server/desktop workloads where low-latency CPU isolation must be manually configured. Our Buildroot architecture integrates an automated real-time init daemon (`/etc/init.d/S15realtime`) that isolates high-performance cores (`isolcpus=3` or `7`), sets RCU affinity, and steers hardware IRQs to low cores automatically when real-time flight overlays are active.
-
-#### 4. Armbian Migration Guide: Zero Code Changes Required
-If you already have automated deployment scripts or user habits built around Armbian, you do not need to rewrite anything. You can place an `armbianEnv.txt` directly on partition 1:
-
-```ini
-# /boot/armbianEnv.txt - Direct Armbian Drop-In Compatibility
-overlays=cubie-a5e-flight-stack cubie-a5e-uio
-extraargs=isolcpus=7 nohz_full=7
-```
-
-When the board powers on:
-1. `boot.cmd` detects `armbianEnv.txt` and executes `env import -t ${ramdisk_addr_r} ${filesize}`.
-2. The variables `overlays` and `extraargs` enter U-Boot's active memory table.
-3. The overlay loop loads `cubie-a5e-flight-stack.dtbo` and `cubie-a5e-uio.dtbo`, merging them into the base device tree.
-4. `extraargs` is appended to the kernel command line.
-5. The kernel boots into your configured real-time environment seamlessly.
 
 ---
 
@@ -592,9 +572,8 @@ fi
 ```
 The U-Boot `env import -t <addr> <size>` command parses text files containing `KEY=VALUE` pairs separated by newlines. 
 * When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot sets `${dtoverlay}` in active RAM.
-* When `armbianEnv.txt` contains `overlays=cubie-a5e-flight-stack cubie-a5e-uio` and `extraargs=isolcpus=7`, U-Boot sets `${overlays}` and `${extraargs}` in active RAM.
 * When it contains `cmdline=isolcpus=7`, U-Boot sets `${cmdline}` in active RAM.
-* The script checks for `config.txt` first, `armbianEnv.txt` second, and gracefully falls back to legacy `uEnv.txt` if neither is present.
+* The script checks for `config.txt` first, and gracefully falls back to legacy `uEnv.txt` if not present.
 
 #### 3. Why `fdt resize` is Strictly Mandatory
 ```sh
