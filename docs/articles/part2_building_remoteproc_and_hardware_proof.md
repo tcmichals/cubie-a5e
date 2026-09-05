@@ -146,44 +146,59 @@ Because this driver executes inside kernel space with native `ioremap_wc()`, **w
 
 One of the biggest friction points during co-processor bring-up is having to solder USB-to-UART adapters to physical pins just to read serial `printf` output.
 
-`remoteproc` solves this natively through the **Resource Table (`.resource_table`)**. By declaring a `RSC_TRACE` entry in the firmware source:
+The actual resource table in [`riscv-firmware/common/arch_riscv/resource_table.c`](../../riscv-firmware/common/arch_riscv/resource_table.c) uses a compile-time macro to select between trace-only mode and full RPMsg + trace mode:
 
 ```c
-/* In RISC-V firmware: resource_table.c */
-#include <stddef.h>
-#include <stdint.h>
+/* Trace buffer in .trace_buffer section (mapped to on-chip SRAM by linker script) */
+__attribute__((used, section(".trace_buffer"), aligned(4)))
+char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
 
-#define RSC_TRACE 3
-#define TRACE_BUF_SIZE 2048
-
-static char trace_buffer[TRACE_BUF_SIZE] __attribute__((section(".resource_table")));
-
-struct resource_table {
-    uint32_t ver;
-    uint32_t num;
-    uint32_t reserved[2];
-    uint32_t offset[1];
-    struct {
-        uint32_t type;
-        uint32_t da;
-        uint32_t len;
-        uint32_t reserved;
-        char name[32];
-    } trace;
-} __attribute__((packed)) resources = {
-    .ver = 1,
-    .num = 1,
-    .offset = { offsetof(struct resource_table, trace) },
+#ifdef CONFIG_RPROC_RPMSG
+/* Full Resource Table: RSC_TRACE + VirtIO VDev (for /dev/rpmsg0) */
+__attribute__((used, section(".resource_table"), aligned(4)))
+const struct rpmsg_resource_table global_resource_table = {
+    .ver = 1, .num = 2,
+    .offset = {
+        offsetof(struct rpmsg_resource_table, trace),
+        offsetof(struct rpmsg_resource_table, vdev),
+    },
     .trace = {
         .type = RSC_TRACE,
-        .da = (uint32_t)&trace_buffer,
-        .len = TRACE_BUF_SIZE,
-        .name = "trace0",
+        .da   = (uint32_t)&g_rproc_trace_buffer[0],
+        .len  = sizeof(g_rproc_trace_buffer),
+        .name = CONFIG_RPROC_TRACE0_NAME,  /* "trace0" */
+    },
+    .vdev = {
+        .type          = RSC_VDEV,
+        .id            = VIRTIO_ID_RPMSG,
+        .num_of_vrings = 2,
+        /* da = 0: Linux kernel allocates the vring buffers dynamically */
+        .vring = { {.da=0,.align=VRING_ALIGN,.num=VRING_NUM_DESCS},
+                   {.da=0,.align=VRING_ALIGN,.num=VRING_NUM_DESCS} },
     },
 };
+#else
+/* Trace-Only Resource Table (default: no RPMsg overhead) */
+__attribute__((used, section(".resource_table"), aligned(4)))
+const struct standard_resource_table global_resource_table = {
+    .ver = 1, .num = 1,
+    .offset = { offsetof(struct standard_resource_table, trace) },
+    .trace = {
+        .type = RSC_TRACE,
+        .da   = (uint32_t)&g_rproc_trace_buffer[0],
+        .len  = sizeof(g_rproc_trace_buffer),
+        .name = CONFIG_RPROC_TRACE0_NAME,
+    },
+};
+#endif
 ```
 
-When Linux loads the ELF, the kernel driver parses this table and exposes a live debugfs interface on the ARM host:
+Key points:
+- The trace buffer lives in a dedicated `.trace_buffer` linker section — not inside the `.resource_table` struct itself. This keeps the struct compact and the buffer optimally placed by the linker.
+- `da = 0` on the vring entries means **Linux allocates the VirtIO ring buffers dynamically** at load time. The `da_to_va` callback in `sunxi_rproc.c` maps them into DDR via `remoteproc_alloc_vring()`.
+- When `CONFIG_RPROC_RPMSG` is not set (all apps except `testPingRpmsg`), only a single `RSC_TRACE` entry is declared — zero VirtIO overhead.
+
+When Linux loads the ELF, it parses the resource table and exposes a live debugfs interface on the ARM host:
 ```bash
 # Read live diagnostic logs directly from the running RISC-V core:
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
@@ -422,8 +437,7 @@ In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive d
 ### Series Navigation
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite** *(You are here)*
-* **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
-* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
+* **[Part 3: Inter-Processor Communication (IPC) Deep Dive](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
 
 ---
 
