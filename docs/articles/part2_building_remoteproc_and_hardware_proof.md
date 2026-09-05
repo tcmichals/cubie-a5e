@@ -412,11 +412,10 @@ With the `sunxi_rproc.c` driver and `riscv-firmware/apps` verification suite in 
 2. The `.resource_table` provides live trace streaming without physical serial debug cables.
 3. Every co-processor subsystem—clocks, resets, hardware FPU, exception trapping, direct shared memory, and VirtIO RPMsg—is systematically verified on live silicon.
 
-In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive deep into bare-metal firmware design:
-* Memory determinism: Zero-wait-state TCM vs DDR DRAM arbitration.
-* Building a lightweight, lock-free circular ring buffer (libmetal / shared SRAM window + Mailbox doorbell) vs heavyweight RPMsg.
-* Live interactive debugging workflows with `riscv-none-elf-gdb` and OpenOCD.
-* An introduction to **Bare-Metal C++ Coroutines** as a lightweight, allocation-free multitasking alternative to heavy RTOS kernels.
+In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive deep into all three IPC paradigms:
+* **Lock-free Shared SRAM + Hardware Mailbox** (`testPing`): How `ShmPingChannel`, `hal::SpscQueue`, and event-driven UIO epoll deliver 1.5–2.5 µs round-trip latency.
+* **VirtIO RPMsg** (`testPingRpmsg`): Standard `/dev/rpmsg0` integration via `hal::Rpmsg`.
+* **Hybrid SRAM/DDR** (`testDRAMMsg`): `DramSpscControlBlock` descriptor rings in fast SRAM with a 1 MB DDR carveout for > 100 MB/s bulk streaming.
 
 ---
 

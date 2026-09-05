@@ -9,7 +9,7 @@ Getting these co-processors online requires establishing reliable hardware lifec
 This article is **Part 1 of a series** documenting the practical bring-up of the XuanTie E907 RISC-V co-processor on Linux:
 * **Part 1 (This Article)**: Why use the RISC-V co-processor, TRM memory maps, SRAM / TCM hardware architecture & RemoteProc boot mechanics, and the on-chip memory-mapped debugging paradigm.
 * **Part 2**: Authoring the Linux `remoteproc` kernel driver, memory-mapped ELF loading into PubSRAM C and Dedicated MCU SRAM, and systematically proving hardware state with the `riscv-firmware/apps` suite.
-* **Part 3**: General embedded firmware development, TCM vs. DRAM memory determinism, lightweight lock-free IPC (libmetal), live GDB workflows, and an introduction to bare-metal C++ coroutines.
+* **Part 3**: Inter-processor communication (IPC) deep dive — lock-free shared SRAM + hardware mailbox doorbell, VirtIO RPMsg, and hybrid SRAM/DDR bulk streaming.
 * **Part 4**: Deep dive into C++20 coroutines on bare-metal RISC-V—benchmarks, memory profiles, and comparison against RTOS task switching.
 
 ---
