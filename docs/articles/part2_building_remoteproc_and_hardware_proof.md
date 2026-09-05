@@ -34,14 +34,14 @@ The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsy
             ┌──────────────────┴──────────────────┐
             ▼                                     ▼
 ┌──────────────────────────────┐    ┌──────────────────────────────┐
-│     Instruction TCM (ITCM)   │    │       Data TCM (DTCM)        │
-│   64 KB @ physical 0x07110000│    │   64 KB @ physical 0x07120000│
-│   Core local @ 0x00000000    │    │   Core local @ 0x00080000    │
+│     Shared PubSRAM C         │    │     Dedicated MCU SRAM       │
+│  128 KB @ physical 0x00020000│    │  256 KB @ physical 0x07280000│
+│  Core local @ 0x00020000     │    │  Core local @ 0x3FFC0000     │
 └──────────────────────────────┘    └──────────────────────────────┘
 ```
 
 ### A. Surgical Memory Routing (`da_to_va`)
-The XuanTie E907 core views its Instruction TCM (ITCM) at local address `0x00000000` and Data TCM (DTCM) at local address `0x00080000`. However, the ARM Cortex-A55 Linux host views these blocks at physical addresses `0x07110000` and `0x07120000`.
+On Allwinner T527 / A523, the XuanTie E907 core executes out of **Shared PubSRAM C** (`0x00020000`, 128 KB) and **Dedicated MCU SRAM** (`0x3FFC0000` Core / `0x07280000` Host physical, 256 KB). The ARM Cortex-A55 Linux host views PubSRAM C at the identical address `0x00020000`, while the dedicated MCU SRAM window undergoes address translation.
 
 The `da_to_va` (Device Address to Virtual Address) handler in `sunxi_rproc.c` handles this translation seamlessly when parsing ELF Program Headers:
 
@@ -50,26 +50,38 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
 {
     struct sunxi_rproc *priv = rproc->priv;
 
-    if (is_iomem)
-        *is_iomem = true;
+    /* 1. Shared System PubSRAM C (Resource "sram": 0x00020000, 128 KB) */
+    if (priv->sram_va) {
+        if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->sram_va + (da - priv->sram_phys);
+        }
+    }
 
-    /* ITCM: physical 0x07110000 or core local 0x00000000 */
-    if (da >= ITCM_PHYS_BASE && (da + len) <= (ITCM_PHYS_BASE + ITCM_SIZE))
-        return priv->itcm_va + (da - ITCM_PHYS_BASE);
-    if (da >= CORE_ITCM_BASE && (da + len) <= (CORE_ITCM_BASE + ITCM_SIZE))
-        return priv->itcm_va + (da - CORE_ITCM_BASE);
+    /* 2. Dedicated MCU SRAM (Resource "r_sram": 0x07280000 Host / 0x3FFC0000 Core, 256 KB) */
+    if (priv->r_sram_va) {
+        if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->r_sram_va + (da - priv->r_sram_phys);
+        }
+        if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
+            if (is_iomem)
+                *is_iomem = true;
+            return priv->r_sram_va + da;
+        }
+    }
 
-    /* DTCM: physical 0x07120000 or core local 0x00080000 */
-    if (da >= DTCM_PHYS_BASE && (da + len) <= (DTCM_PHYS_BASE + DTCM_SIZE))
-        return priv->dtcm_va + (da - DTCM_PHYS_BASE);
-    if (da >= CORE_DTCM_BASE && (da + len) <= (CORE_DTCM_BASE + DTCM_SIZE))
-        return priv->dtcm_va + (da - CORE_DTCM_BASE);
+    /* 3. RemoteProc Trace Carveout (Resource "trace": 0x48000000) */
+    if (priv->trace_va) {
+        if (da >= priv->trace_phys && (da + len) <= (priv->trace_phys + priv->trace_size)) {
+            if (is_iomem)
+                *is_iomem = false;
+            return priv->trace_va + (da - priv->trace_phys);
+        }
+    }
 
-    /* System SRAM C: physical 0x07130000 (320 KB) */
-    if (priv->sram_va && da >= SRAM_PHYS_BASE && (da + len) <= (SRAM_PHYS_BASE + SRAM_SIZE))
-        return priv->sram_va + (da - SRAM_PHYS_BASE);
-
-    dev_warn(priv->dev, "da_to_va: unmapped device address 0x%llx (len %zu)\n", da, len);
     return NULL;
 }
 ```

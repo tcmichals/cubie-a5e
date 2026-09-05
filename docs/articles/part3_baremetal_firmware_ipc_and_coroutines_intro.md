@@ -34,23 +34,20 @@ While the RISC-V core *can* access the SoC's main system DDR RAM (mapped above `
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### The Solution: Tightly Coupled Memory (TCM)
-To eliminate bus contention and guarantee 100% deterministic execution, the firmware payload is split across dedicated internal SRAM blocks:
+### The Solution: Fast Dedicated On-Chip SRAM
+To eliminate bus contention and guarantee deterministic execution, the firmware payload runs directly out of high-speed on-chip SRAM:
 
-* **Instruction TCM (ITCM, 64 KB @ `0x0000_0000`)**: Zero-wait-state (1 clock cycle latency). Hosts the interrupt vector table, CRT0 bootstrap, and latency-critical ISRs.
-* **Data TCM (DTCM, 64 KB @ `0x0008_0000`)**: Zero-wait-state memory hosting stack frames, local variables, and fast scratchpad pools.
-* **System SRAM C (320 KB @ `0x0713_0000`)**: High-speed on-chip SRAM hosting the main application body, lookup tables, and telemetry buffers.
+* **Shared PubSRAM C (128 KB @ `0x0002_0000`)**: Identity-mapped fast execution window hosting the exception vector table, CRT0 bootstrap, application runtime, and stack.
+* **Dedicated MCU SRAM (256 KB @ `0x3FFC_0000` Core / `0x0728_0000` Host)**: Zero-wait-state dedicated SRAM window for high-rate control loops and lock-free IPC ring buffers.
 
 ```ld
-/* Linker Script: firmware.ld */
+/* Linker Script: firmware_t527.ld */
 MEMORY {
-    ITCM (rx)   : ORIGIN = 0x00000000, LENGTH = 64K
-    SRAM (rx)   : ORIGIN = 0x07130000, LENGTH = 320K
-    DTCM (rwx)  : ORIGIN = 0x00080000, LENGTH = 64K
+    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
 }
 ```
 
-By tagging critical functions with `__attribute__((section(".text.fastcode")))`, the compiler places them strictly into ITCM, guaranteeing cycle-accurate execution regardless of what the Linux OS is doing on the ARM cores.
+By linking critical interrupt service routines and state machines directly into on-chip SRAM, the firmware guarantees cycle-accurate execution completely isolated from Linux DDR bus traffic.
 
 ---
 
@@ -63,7 +60,7 @@ The standard Linux RemoteProc framework includes **RPMsg (Remote Processor Messa
 
 ### The Lightweight Alternative: Lock-Free Shared SRAM + Hardware Mailbox
 
-For high-frequency telemetry and sensor acquisition, a **lock-free single-producer single-consumer (SPSC) circular queue** in shared SRAM C coupled with the **Allwinner Hardware Message Box (`0x03003000`)** provides microsecond latency with zero memory allocations:
+For high-frequency telemetry and sensor acquisition, a **lock-free single-producer single-consumer (SPSC) circular queue** in shared PubSRAM C coupled with the **Allwinner Hardware Message Box (`0x03003000`)** provides microsecond latency with zero memory allocations:
 
 ```text
 ┌──────────────────────────────┐        ┌──────────────────────────────┐
@@ -74,7 +71,7 @@ For high-frequency telemetry and sensor acquisition, a **lock-free single-produc
                │ 1. Write Packet (Zero Copy)           │ 3. Read Packet
                ▼                                       │
 ┌──────────────────────────────────────────────────────┴───────────────┐
-│           Shared SRAM C Window (32 KB @ 0x07130000)                  │
+│           Shared PubSRAM C Window (32 KB @ 0x00020000)               │
 │   [ Head Pointer ] ──► [ Lock-Free Circular Buffer ] ◄── [ Tail Ptr ]│
 └──────────────────────────────────────┬───────────────────────────────┘
                                        │
