@@ -263,11 +263,9 @@ To edit `config.txt` directly on a running Radxa Cubie A5E board, you must know 
 ### Storage Partition Architecture
 The system SD card is partitioned into two distinct filesystems:
 
-| Partition / Sector | Filesystem | Role & Contents |
-| :--- | :--- | :--- |
-| **Sector 0 - 32767** | Raw Flash Blocks | Bootloader Carveout (SPL, ATF BL31, Mainline U-Boot) |
-| **Partition 1** | FAT32 Boot Partition (`/dev/mmcblk0p1`) - 64 MB | Bootloader, kernel, device tree, overlays, and config |
-| **Partition 2** | Linux Root Filesystem (`/dev/mmcblk0p2`) - ext4 | Mounted as root directory (`/`) |
+* **Sector 0 - 32767** (Raw Flash Blocks): Bootloader Carveout (SPL, ATF BL31, Mainline U-Boot)
+* **Partition 1** (FAT32 Boot Partition, `/dev/mmcblk0p1` - 64 MB): Bootloader, kernel, device tree, overlays, and config
+* **Partition 2** (Linux Root Filesystem, `/dev/mmcblk0p2` - ext4): Mounted as root directory (`/`)
 
 Partition 1 files:
 * `Image` (ARM64 Kernel)
