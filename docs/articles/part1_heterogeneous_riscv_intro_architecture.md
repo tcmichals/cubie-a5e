@@ -110,11 +110,11 @@ The authoritative memory mapping registered in the Linux RemoteProc driver (`sun
 | **Shared PubSRAM C** | **`0x00020000`** | **`0x00020000`** | **128 KB** | `reg-names = "sram"` | **Primary boot and execution window** (`.vectors`, `.text`, `.data`, `.stack`, `.resource_table`). 1:1 identity mapped across host and core. |
 | **Dedicated MCU SRAM (`r_sram`)** | **`0x07280000`** | **`0x3FFC0000`** | **256 KB** | `reg-names = "r_sram"` | Zero-wait-state dedicated MCU SRAM space 0. High-performance memory for real-time control loops and SPSC ring buffers. |
 | **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | `reg-names = "cfg"` | Hardware MMIO registers: Version (`0x0000`), Boot Entry Vector `STA_ADD_REG` (`0x0204`, set to `0x00020000`), and Work Mode / Lockup Status `WORK_MODE_REG` (`0x0248`). Not general SRAM. |
-| **MCU CCU Clocks & Resets** | **`0x07102000`** / `0x07010000` | **`0x07102000`** / `0x07010000` | **64 KB** | `clocks = <&mcu_ccu ...>` | Clock gate (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE), and PubSRAM clock/reset (`0x07102114`). |
+| **MCU CCU Clocks & Resets** | **`0x07102000`** | **`0x07102000`** | **4 KB** | `clocks = <&mcu_ccu ...>` | Clock gate (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE), and PubSRAM clock/reset (`0x07102114`). |
 | **Hardware MSGBOX** | **`0x03003000`** | **`0x03003000`** | **4 KB** | `mboxes = <&msgbox 0>, <&msgbox 1>` | 8-channel bi-directional doorbell FIFO. Channel 0: RISC-V to Linux (GIC SPI 147); Channel 1: Linux to RISC-V (PLIC IRQ 25). |
 | **Instruction TCM (ITCM)** | Internal | **`0x00000000`** | **64 KB** | Private E907 Bus | Single-cycle zero-wait-state instruction execution. Directly connected to the E907 fetch pipeline; populated via startup LMA-to-VMA staging from SRAM. |
 | **Data TCM (DTCM)** | Internal | **`0x00080000`** | **64 KB** | Private E907 Bus | Single-cycle zero-wait-state data memory. Directly connected to the E907 load/store pipeline; populated via startup LMA-to-VMA staging from SRAM. |
-| **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | `memory-region` (carveout) | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`). |
+| **RemoteProc Trace Buffer (`trace0`)** | **`0x00020000`+** / `0x48000000` | **`0x00020000`+** / `0x48000000` | **4 KB** | `resource_table` / `memory-region` | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`). Mapped inside PubSRAM C by default (`.trace_buffer`), or allocated via DDR carveout (`0x48000000`). |
 | **DDR DMA Payload Pool** | **`0x48100000`** | **`0x48100000`** | **1 MB** | `memory-region` (carveout) | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC transfers. |
 | **Main Peripheral Space** | **`0x02000000`+** | **`0x02000000`+** | — | Native SoC buses | 1:1 mapped peripherals: PIO GPIO controller (`0x02000000`), UART0 debug console (`0x02500000`), UART2 navigation port (`0x02500800`), SPI0 (`0x04025000`). |
 
@@ -315,6 +315,18 @@ SECTIONS
     addi    a2, a2, 4
     j       .Lcopy_dtcm_loop
 .Lcopy_dtcm_done:
+
+    /* =============================================================
+     * 3. Zero DTCM Uninitialized BSS (.dtcm_bss)
+     * ============================================================= */
+    la      a0, _sbss_dtcm
+    la      a1, _ebss_dtcm
+.Lzero_dtcm_loop:
+    bgeu    a0, a1, .Lzero_dtcm_done
+    sw      zero, 0(a0)
+    addi    a0, a0, 4
+    j       .Lzero_dtcm_loop
+.Lzero_dtcm_done:
 ```
 
 #### 3. Pinning Functions and Data in C/C++
