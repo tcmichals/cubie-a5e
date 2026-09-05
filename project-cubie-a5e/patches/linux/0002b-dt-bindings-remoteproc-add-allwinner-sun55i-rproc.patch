@@ -22,13 +22,13 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- .../remoteproc/allwinner,sun55i-rproc.yaml    | 118 ++++++++++++++++++
- 1 file changed, 118 insertions(+)
+ .../remoteproc/allwinner,sun55i-rproc.yaml    | 156 ++++++++++++++++++
+ 1 file changed, 156 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
 
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,156 @@
 +# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 +%YAML 1.2
 +---
@@ -117,7 +117,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +    items:
 +      - const: rx
 +      - const: tx
-
++
 +  firmware-name:
 +    $ref: /schemas/types.yaml#/definitions/string
 +    description:
@@ -134,19 +134,19 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +    description:
 +      Names corresponding to the memory-region phandle list entries.
 +      Recognized values are "vram", "dram", and "trace".
-
++
 +  interrupts:
 +    maxItems: 1
 +    description:
 +      Optional hardware crash-notification interrupt. When present the
 +      driver calls rproc_report_crash() on assertion.
-
++
 +  interrupt-names:
 +    items:
 +      - const: crash
-
++
 +  status: true
-
++
 +required:
 +  - compatible
 +  - reg
@@ -157,9 +157,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +  - reset-names
 +  - mboxes
 +  - mbox-names
-
++
 +additionalProperties: false
-
++
 +examples:
 +  - |
 +    #include <dt-bindings/clock/sun55i-a523-ccu.h>

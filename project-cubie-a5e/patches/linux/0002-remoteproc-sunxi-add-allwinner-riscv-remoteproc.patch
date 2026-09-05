@@ -20,15 +20,15 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/remoteproc/Kconfig       |   9 +
+ drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 716 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 726 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 728 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 737 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
-@@ -381,5 +381,14 @@ config XLNX_R5_REMOTEPROC
+@@ -381,5 +381,13 @@ config XLNX_R5_REMOTEPROC
  	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
@@ -51,7 +51,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,716 @@
+@@ -0,0 +1,728 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
