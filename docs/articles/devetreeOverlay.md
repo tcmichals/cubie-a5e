@@ -235,6 +235,9 @@ To solve this usability bottleneck, we separate firmware plumbing from user conf
 | **Where to Edit**| Host `mkenvimage` or serial console | Target `/boot/config.txt` or PC card reader |
 | **How It Loads** | Loaded automatically by U-Boot at reset | Imported to RAM by `boot.cmd` (`env import -t`)|
 
+> **Armbian & Raspberry Pi Ecosystem Convergence**:
+> If you have worked with Armbian (`armbianEnv.txt`) or Raspberry Pi (`config.txt`), our bootloader engine bridges both worlds. It natively supports Raspberry Pi-style `config.txt` as well as Armbian-style `armbianEnv.txt`. For an in-depth architectural comparison between Armbian's boot model and our architecture, see [Section 5: How Armbian Does It](#how-armbian-does-it-the-armbianenvtxt-pattern--ecosystem-convergence).
+
 #### How `boot.cmd` Bridges the Two Worlds
 Instead of requiring users to touch `uboot.env`, `uboot.env` provides one critical, immutable baseline command:
 ```text
@@ -442,20 +445,44 @@ env import -t ${loadaddr} ${filesize}
 ```
 U-Boot parses the text file directly into its active environment hash table in RAM, then iterates over `${overlays}` applying each `.dtbo` via `fdt apply`.
 
-#### 3. How Our Architecture Compares: The Best of Both Worlds
-While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it in two crucial ways:
+#### 3. In-Depth Comparison: Armbian Architecture vs Our Cubie A5E Architecture
+While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it across several critical dimensions:
 
-| Dimension | Standard Armbian Distribution | Our Cubie A5E Buildroot Architecture |
+| Architectural Dimension | Standard Armbian Distribution | Our Cubie A5E Buildroot Architecture |
 | :--- | :--- | :--- |
-| **Boot Filesystem** | Monolithic `ext4` partition (`/boot` is inside rootfs) | Dedicated 64 MB FAT32 boot partition (`boot.vfat`) + `ext4` rootfs |
-| **Cross-Platform Host Editing** | **Difficult**: SD card cannot be read on Windows or macOS without third-party `ext4` drivers | **Instant**: FAT32 partition mounts as a standard flash drive on Windows, macOS, and Linux |
+| **Boot Filesystem Scheme** | Monolithic `ext4` partition (`/boot` is inside the rootfs) | Dedicated 64 MB FAT32 boot partition (`boot.vfat`) + `ext4` rootfs |
+| **Cross-Platform Host Editing** | **Difficult**: SD card cannot be read on Windows or macOS without third-party `ext4` drivers | **Instant**: FAT32 partition mounts natively as a standard flash drive on Windows, macOS, and Linux |
+| **Filesystem Failure Isolation** | If rootfs corrupts, bootloader files and kernel become unbootable and unreadable | Bootloader and kernel reside on an isolated FAT32 partition, unaffected by rootfs corruption |
 | **Configuration Naming** | `armbianEnv.txt` (`overlays=`, `extraargs=`) | Raspberry Pi-style `config.txt` (`dtoverlay=`, `cmdline=`) |
-| **Ecosystem Compatibility** | Locked strictly to Armbian schema | **Tri-Format Universal Engine**: Natively supports `config.txt`, `armbianEnv.txt`, and `uEnv.txt` |
+| **Multi-Format Ingestion Engine** | Locked strictly to Armbian schema (`armbianEnv.txt`) | **Tri-Format Universal Engine**: Natively parses `config.txt`, `armbianEnv.txt`, and legacy `uEnv.txt` |
+| **Overlay Name Resolution** | Relies on `overlay_prefix` variable prefixing (e.g. `sun55i-a527-`) | Smart resolution: loads overlay directly by name or appends `.dtbo` automatically |
+| **Kernel Arguments Appending** | Appends `extraargs` to `bootargs` | Supports `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv) |
+| **Real-Time Configuration** | Standard Linux scheduler by default; manual tuning required | Automated `isolcpus=3` / `7` CPU isolation & IRQ affinity steering via `/etc/init.d/S15realtime` |
 
 * **Boot Filesystem Architecture**: Standard Armbian uses a single monolithic `ext4` root partition where `/boot` resides inside the Linux filesystem. Our architecture provides a dedicated 64 MB FAT32 boot partition (`boot.vfat`) alongside the `ext4` rootfs.
 * **Cross-Platform Host Editing**: Standard Armbian SD cards cannot be read on Windows or macOS without third-party `ext4` drivers. Our FAT32 boot partition automatically mounts as a standard flash drive on Windows, macOS, and Linux PCs out-of-the-box.
+* **Filesystem Failure Isolation**: In a monolithic setup, if a sudden power cut corrupts the `ext4` filesystem during flight or field operation, the boot files and kernel become inaccessible. With our dedicated FAT32 boot partition, the kernel (`Image`), base device tree (`.dtb`), overlays (`.dtbo`), and configuration (`config.txt`) are physically isolated on partition 1, allowing the system to boot or be recovered easily.
 * **Configuration Syntax**: Armbian uses proprietary `armbianEnv.txt` variables (`overlays=`, `extraargs=`). Our architecture adopts the familiar Raspberry Pi `config.txt` convention (`dtoverlay=`, `cmdline=`).
-* **Ecosystem Compatibility**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` seamlessly parses Raspberry Pi `config.txt`, Armbian `armbianEnv.txt`, and legacy `uEnv.txt` within a single unified boot script.
+* **Ecosystem Compatibility & Multi-Format Ingestion**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` seamlessly parses Raspberry Pi `config.txt`, Armbian `armbianEnv.txt`, and legacy `uEnv.txt` within a single unified boot script. Developers migrating from Armbian can literally copy their existing `armbianEnv.txt` onto the SD card without changing variable names!
+* **Overlay Name Resolution**: Armbian requires rigid board-specific prefixing via `overlay_prefix` (e.g. looking strictly for `${overlay_prefix}-${overlay}.dtbo`), which causes custom overlays to fail if naming doesn't follow strict upstream conventions. Our engine uses smart resolution: if the user specifies `flight-stack` or `cubie-a5e-flight-stack`, it searches directly for the exact file or automatically appends `.dtbo`.
+* **Kernel Arguments Appending**: Armbian only appends `extraargs`. Our engine unifies community conventions by checking `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv), appending whichever is defined to `bootargs`.
+* **Real-Time & Flight-Critical Tuning**: Armbian focuses on general-purpose server/desktop workloads where low-latency CPU isolation must be manually configured. Our Buildroot architecture integrates an automated real-time init daemon (`/etc/init.d/S15realtime`) that isolates high-performance cores (`isolcpus=3` or `7`), sets RCU affinity, and steers hardware IRQs to low cores automatically when real-time flight overlays are active.
+
+#### 4. Armbian Migration Guide: Zero Code Changes Required
+If you already have automated deployment scripts or user habits built around Armbian, you do not need to rewrite anything. You can place an `armbianEnv.txt` directly on partition 1:
+
+```ini
+# /boot/armbianEnv.txt - Direct Armbian Drop-In Compatibility
+overlays=cubie-a5e-flight-stack cubie-a5e-uio
+extraargs=isolcpus=7 nohz_full=7
+```
+
+When the board powers on:
+1. `boot.cmd` detects `armbianEnv.txt` and executes `env import -t ${ramdisk_addr_r} ${filesize}`.
+2. The variables `overlays` and `extraargs` enter U-Boot's active memory table.
+3. The overlay loop loads `cubie-a5e-flight-stack.dtbo` and `cubie-a5e-uio.dtbo`, merging them into the base device tree.
+4. `extraargs` is appended to the kernel command line.
+5. The kernel boots into your configured real-time environment seamlessly.
 
 ---
 
@@ -587,8 +614,9 @@ fi
 ```
 The U-Boot `env import -t <addr> <size>` command parses text files containing `KEY=VALUE` pairs separated by newlines. 
 * When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot sets `${dtoverlay}` in active RAM.
+* When `armbianEnv.txt` contains `overlays=cubie-a5e-flight-stack cubie-a5e-uio` and `extraargs=isolcpus=7`, U-Boot sets `${overlays}` and `${extraargs}` in active RAM.
 * When it contains `cmdline=isolcpus=7`, U-Boot sets `${cmdline}` in active RAM.
-* The script checks for `config.txt` first, and gracefully falls back to legacy `uEnv.txt` if not present.
+* The script checks for `config.txt` first, `armbianEnv.txt` second, and gracefully falls back to legacy `uEnv.txt` if neither is present.
 
 #### 3. Why `fdt resize` is Strictly Mandatory
 ```sh
