@@ -7,14 +7,33 @@ remoteproc node for Allwinner A523/A527 SoCs. Connect the remoteproc
 node to the MCU CCU clocks (bus, core, sram) and resets (cfg, core,
 sram) to support remote processor lifecycle management and RPMsg IPC.
 
+Cc: Bjorn Andersson <andersson@kernel.org>
+Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
+Cc: Jernej Skrabec <jernej.skrabec@gmail.com>
+Cc: Samuel Holland <samuel@sholland.org>
+Cc: Andre Przywara <andre.przywara@arm.com>
+Cc: Chen-Yu Tsai <wens@csie.org>
+Cc: Rob Herring <robh@kernel.org>
+Cc: Krzysztof Kozlowski <krzk+dt@kernel.org>
+Cc: linux-remoteproc@vger.kernel.org
+Cc: devicetree@vger.kernel.org
+Cc: linux-arm-kernel@lists.infradead.org
+Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 31 ++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+index 1234567..89abcdef 100644
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1086,5 +1086,35 @@
+@@ -1085,6 +1085,37 @@ npu: npu@7122000 {
+ 			clock-names = "bus", "core", "reg";
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
  		};
++
 +		msgbox: mailbox@3003000 {
 +			compatible = "allwinner,sun55i-a523-msgbox",
 +				     "allwinner,sun8i-a83t-msgbox",

@@ -22,8 +22,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 728 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 737 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 709 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 718 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -51,7 +51,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,728 @@
+@@ -0,0 +1,709 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -140,17 +140,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +{
 +	struct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);
 +
-+	/*
-+	 * The kick path sends the vqid as a 32-bit value via the mailbox.
-+	 * Use it to signal only the specific virtqueue that was notified.
-+	 * Fall back to signalling both vqs if no data was provided.
-+	 */
-+	if (data)
-+		rproc_vq_interrupt(priv->rproc, *(u32 *)data);
-+	else {
-+		rproc_vq_interrupt(priv->rproc, 0);
-+		rproc_vq_interrupt(priv->rproc, 1);
-+	}
++	/* Signal remoteproc virtqueues on incoming mailbox doorbell */
++	rproc_vq_interrupt(priv->rproc, 0);
++	rproc_vq_interrupt(priv->rproc, 1);
 +}
 +
 +static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
@@ -373,22 +365,11 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +	if (priv->r_sram_va) {
-+		/* Host-physical range match (ARM64 view: 0x07280000) */
 +		if (da >= priv->r_sram_phys &&
 +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
-+		}
-+		/*
-+		 * Core-local address match: the E907 sees Dedicated SRAM at
-+		 * 0x3FFC0000 which wraps to a small offset from zero in the
-+		 * core's address space. Accept size-relative offsets here.
-+		 */
-+		if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
-+			if (is_iomem)
-+				*is_iomem = true;
-+			return priv->r_sram_va + da;
 +		}
 +	}
 +
@@ -582,7 +563,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		priv->trace_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
 +		if (!priv->trace_va)
 +			priv->trace_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		dev_dbg(dev, "mapped 'trace' mmio resource %pa+%zu\n",
++		dev_info(dev, "mapped 'trace' mmio resource %pa+%zu\n",
 +			 &priv->trace_phys, priv->trace_size);
 +	} else if (dev->of_node) {
 +		struct device_node *rmem_np;
@@ -606,7 +587,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +				if (!priv->trace_va)
 +					priv->trace_va = devm_ioremap_wc(dev, r.start,
 +									 resource_size(&r));
-+				dev_dbg(dev, "mapped DT trace reserved-memory %pa+%zu\n",
++				dev_info(dev, "mapped DT trace reserved-memory %pa+%zu\n",
 +					 &priv->trace_phys, priv->trace_size);
 +			}
 +			of_node_put(rmem_np);

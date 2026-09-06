@@ -1,0 +1,58 @@
+(kicad_sch
+	(version 20231120)
+	(generator "Antigravity Open Flight EDA")
+	(generator_version "8.0")
+	(uuid "9734e567-9c98-4d51-8728-6622329384c3")
+	(paper "A4")
+	(title_block
+		(title "Radxa Cubie A5E + Tang Primer 25K Avionics Carrier")
+		(date "2026-09-06")
+		(rev "v1.0")
+		(company "Antigravity Open Flight Stack")
+		(comment 1 "XuanTie E907 Hard Real-Time I/O + Gowin GW5A-LV25 FPGA Companion")
+		(comment 2 "Turnkey SMT Assembly with In-Stock JLCPCB/LCSC Parts")
+	)
+	(lib_symbols
+	)
+	(junction (at 45.0 50.0) (diameter 0.8) (color 0 0 0 0) (uuid "j1-5v-junction"))
+	(junction (at 45.0 65.0) (diameter 0.8) (color 0 0 0 0) (uuid "j2-gnd-junction"))
+	(junction (at 60.0 50.0) (diameter 0.8) (color 0 0 0 0) (uuid "j3-3v3-junction"))
+	(wire (pts (xy 30.0 50.0) (xy 45.0 50.0))
+		(stroke (width 0) (type default))
+		(uuid "w-5v-in")
+	)
+	(wire (pts (xy 45.0 50.0) (xy 80.0 50.0))
+		(stroke (width 0) (type default))
+		(uuid "w-5v-clean")
+	)
+	(text "Radxa Cubie A5E Stacking Header (J1: 2x20 Receptacle)"
+		(at 30.0 30.0 0)
+		(effects (font (size 2.0 2.0) bold))
+		(uuid "txt-a5e-hdr")
+	)
+	(text "Sipeed Tang Primer 25K Dual 60P BTB Sockets (J2, J3: 14mm Spacing)"
+		(at 120.0 30.0 0)
+		(effects (font (size 2.0 2.0) bold))
+		(uuid "txt-tang-btb")
+	)
+	(text "Soft-Mounted IMU Gel-Pad Solder Breakout (J4: SPI0-CS1 + DRDY)"
+		(at 30.0 90.0 0)
+		(effects (font (size 2.0 2.0) bold))
+		(uuid "txt-imu-pad")
+	)
+	(text "GPS/Compass (J5), RC Receiver (J6), Linux Console (J7), 8x Motors (J8)"
+		(at 120.0 90.0 0)
+		(effects (font (size 2.0 2.0) bold))
+		(uuid "txt-periph")
+	)
+	(text "Power Subsystem: 5V BEC Input (J9) -> SMBJ6.0A TVS -> LC Filter -> Clean 5V + SGM2036 3.3V LDO"
+		(at 30.0 150.0 0)
+		(effects (font (size 2.0 2.0) bold))
+		(uuid "txt-pwr")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

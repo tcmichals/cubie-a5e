@@ -1,20 +1,21 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Mon, 24 Aug 2026 12:00:00 +0000
-Subject: [PATCH] phy: allwinner: sun4i-usb: add A733 and A523 support with shared reset control
+Subject: [PATCH] phy: allwinner: sun4i-usb: add A733 and A523 support with shared reset control and SIDDQ clear
 
 Modern Allwinner SoCs (A733 / A523) gate both the analog PHY transceiver
 and the Host Controller DMA engine via master bus reset lines. Using
 exclusive devm_reset_control_get() prevents host controllers from probing
 with -EBUSY and causes multi-PHY probe to terminate prematurely on -ENOENT.
 Use devm_reset_control_get_shared() to enable clean reset sharing, add
-compatible strings for sun60i-a733-usb-phy and sun55i-a523-usb-phy, and
-guard against missing optional secondary PHY pointers.
+dedicated config sun60i_a733_cfg with full hci_phy_ctl_clear to take PHY1
+out of SIDDQ power-down, add compatible strings for sun60i-a733-usb-phy and
+sun55i-a523-usb-phy, and guard against missing optional secondary PHY pointers.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/phy/allwinner/phy-sun4i-usb.c | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ drivers/phy/allwinner/phy-sun4i-usb.c | 18 +++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/phy/allwinner/phy-sun4i-usb.c b/drivers/phy/allwinner/phy-sun4i-usb.c
 index a1b2c3d..e4f5a6b 100644
@@ -40,7 +41,7 @@ index a1b2c3d..e4f5a6b 100644
  		struct sun4i_usb_phy *phy2 = &data->phys[2];
  
  		clk_disable_unprepare(phy2->clk);
-@@ -787,7 +787,7 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
+@@ -787,7 +789,7 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
  			continue;
  
  		snprintf(name, sizeof(name), "usb%d_reset", i);
@@ -49,12 +50,28 @@ index a1b2c3d..e4f5a6b 100644
  		if (IS_ERR(phy->reset)) {
  			if (PTR_ERR(phy->reset) == -ENOENT)
  				break;
-@@ -1027,6 +1027,8 @@ static const struct of_device_id sun4i_usb_phy_of_match[] = {
+@@ -988,6 +990,15 @@ static const struct sun4i_usb_phy_cfg sun20i_d1_cfg = {
+ 	.siddq_in_base = true,
+ };
+ 
++static const struct sun4i_usb_phy_cfg sun60i_a733_cfg = {
++	.disc_thresh = 3,
++	.phyctl_offset = REG_PHYCTL_A33,
++	.dedicated_clocks = true,
++	.hci_phy_ctl_clear = PHY_CTL_SIDDQ | PHY_CTL_H3_SIDDQ,
++	.phy0_dual_route = true,
++	.siddq_in_base = true,
++};
++
+ static const struct sun4i_usb_phy_cfg sun50i_a64_cfg = {
+ 	.disc_thresh = 3,
+ 	.phyctl_offset = REG_PHYCTL_A33,
+@@ -1027,6 +1037,8 @@ static const struct of_device_id sun4i_usb_phy_of_match[] = {
  	{ .compatible = "allwinner,sun8i-r40-usb-phy", .data = &sun8i_r40_cfg },
  	{ .compatible = "allwinner,sun8i-v3s-usb-phy", .data = &sun8i_v3s_cfg },
  	{ .compatible = "allwinner,sun20i-d1-usb-phy", .data = &sun20i_d1_cfg },
 +	{ .compatible = "allwinner,sun55i-a523-usb-phy", .data = &sun20i_d1_cfg },
-+	{ .compatible = "allwinner,sun60i-a733-usb-phy", .data = &sun20i_d1_cfg },
++	{ .compatible = "allwinner,sun60i-a733-usb-phy", .data = &sun60i_a733_cfg },
  	{ .compatible = "allwinner,sun50i-a64-usb-phy",
  	  .data = &sun50i_a64_cfg},
  	{ .compatible = "allwinner,sun50i-h6-usb-phy", .data = &sun50i_h6_cfg },

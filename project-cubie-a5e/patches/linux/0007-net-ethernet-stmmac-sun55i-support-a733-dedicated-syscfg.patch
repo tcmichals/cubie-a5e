@@ -7,12 +7,13 @@ rather than the global system control syscon block (0x03000034).
 
 When no 'syscon' property is present, look up the dedicated 'syscfg' (or secondary)
 MMIO resource and program the RGMII interface mode, delay chain, and internal clock gates
-(syscfg + 0x80) via init/exit callbacks. Also set MDC clk_csr = 4 and implement fix_soc_reset.
+(syscfg + 0x80) via init/exit callbacks. Also set MDC clk_csr = 4, implement fix_soc_reset,
+and use devm_clk_get_optional_enabled for the MBUS clock.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 117 ++++++++++++++++++----
- 1 file changed, 100 insertions(+), 17 deletions(-)
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c | 119 ++++++++++++++++++----
+ 1 file changed, 102 insertions(+), 17 deletions(-)
 
 --- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun55i.c
@@ -176,7 +177,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	struct device *dev = &pdev->dev;
  	struct clk *clk;
  	int ret;
-@@ -118,11 +199,26 @@
+@@ -118,15 +199,30 @@
  	if (IS_ERR(plat_dat))
  		return PTR_ERR(plat_dat);
  
@@ -204,6 +205,11 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	if (ret)
  		return ret;
  
+-	clk = devm_clk_get_enabled(dev, "mbus");
++	clk = devm_clk_get_optional_enabled(dev, "mbus");
+ 	if (IS_ERR(clk))
+ 		return dev_err_probe(dev, PTR_ERR(clk),
+ 				     "Failed to get or enable MBUS clock\n");
 @@ -140,6 +236,8 @@
  
  static const struct of_device_id sun55i_gmac200_match[] = {
@@ -213,5 +219,3 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	{ }
  };
  MODULE_DEVICE_TABLE(of, sun55i_gmac200_match);
--- 
-2.34.1

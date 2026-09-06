@@ -1,6 +1,6 @@
-# Cubie A5E & Cubie A7A Flight Controller
+# Allwinner T527 & A733 Flight Controller Stack (Cubie A5E, Avaota A1, Cubie A7A, Cubie A7Z)
 
-This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E** (Allwinner A527/T527) and **Radxa Cubie A7A** (Allwinner A733) single-board computers and run the flight controller application stack.
+This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E**, **Yuzuki / Pine64 Avaota A1** (Allwinner A527/T527), and **Radxa Cubie A7A / A7Z** (Allwinner A733) single-board computers and run the flight controller application stack.
 
 > **Active A7A restart checklist**: [`TODO.md`](TODO.md). The chronological hardware evidence is in [`docs/platforms/CUBIE_A7A_DEBUG_LOG.md`](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
 
@@ -23,23 +23,22 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 
 ## Supported Boards & Hardware Comparison
 
-| Hardware Feature | Radxa Cubie A5E | Radxa Cubie A7A | Radxa Cubie A7Z |
-| :--- | :--- | :--- | :--- |
-| **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | **Ultra-Compact Zero (65×30 mm)** |
-| **System on Chip (SoC)** | Allwinner **A527 / T527** (`sun55i-a527`) | Allwinner **A733** (`sun60i-a733`) | Allwinner **A733** (`sun60i-a733`) |
-| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 + 6× Cortex-A55 | 2× Arm Cortex-A76 + 6× Cortex-A55 |
-| **Real-Time Co-Processor** | XuanTie E906/E907 RISC-V (Linux `remoteproc`) | XuanTie E902 RISC-V (U-Boot `scp.fex` Power Only) | XuanTie E902 RISC-V (U-Boot `scp.fex` Power Only) |
-| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
-| **Video Engine (VPU)** | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) |
-| **GPU Core** | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 | Imagination BXM-4-64 MC1 |
-| **System RAM** | LPDDR4 / LPDDR4X | LPDDR5 (Auto-Trained) | LPDDR5 (Auto-Trained) |
-| **Ethernet** | Gigabit RJ45 | Dual Gigabit RJ45 (`GMAC0`/`GMAC1`) | *None (Wi-Fi 6 / USB Ethernet)* |
-| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO** Bus) | AicSemi AIC8800 (**USB / SDIO**) | AicSemi AIC8800 (**SDIO** Bus) |
-| **Video Out** | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Micro-HDMI + MIPI DSI |
-| **Camera Port** | 2-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 (15-pin FPC) |
-| **Storage Interfaces** | MicroSD / eMMC Module / SPI NOR | MicroSD / eMMC Module / UFS / SPI NOR | MicroSD / eMMC Module / SPI NOR |
-| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
-| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
+| Hardware Feature | Radxa Cubie A5E | Yuzuki Avaota A1 | Radxa Cubie A7A | Radxa Cubie A7Z |
+| :--- | :--- | :--- | :--- | :--- |
+| **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | **Ultra-Compact Zero (65×30 mm)** |
+| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 + 6× Cortex-A55 | 2× Arm Cortex-A76 + 6× Cortex-A55 |
+| **Real-Time Co-Processor** | XuanTie E906/E907 RISC-V (`remoteproc`) | XuanTie E906/E907 RISC-V (`remoteproc`) | XuanTie E902 RISC-V (Dual-Mode: `scp.fex` / `remoteproc`) | XuanTie E902 RISC-V (Dual-Mode: `scp.fex` / `remoteproc`) |
+| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite) | 2.0 TOPS (Teflon / TFLite) | 3.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
+| **Video Engine (VPU)** | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) |
+| **GPU Core** | Arm Mali-G57 MC1 | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 | Imagination BXM-4-64 MC1 |
+| **System RAM** | LPDDR4 / LPDDR4X | LPDDR4 / LPDDR4X | LPDDR5 (Auto-Trained) | LPDDR5 (Auto-Trained) |
+| **Ethernet** | Gigabit RJ45 | Dual Gigabit RJ45 | Dual Gigabit RJ45 (`GMAC0`/`GMAC1`) | *None (Wi-Fi 6 / USB Ethernet)* |
+| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO**) | Wi-Fi 6 + BT 5.4 | AicSemi AIC8800 (**USB / SDIO**) | AicSemi AIC8800 (**SDIO** Bus) |
+| **Video Out** | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Micro-HDMI + MIPI DSI |
+| **Camera Port** | 2-Lane MIPI CSI-2 | 2-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 (15-pin FPC) |
+| **Storage Interfaces** | MicroSD / eMMC / SPI NOR | MicroSD / eMMC / SPI NOR | MicroSD / eMMC Module / UFS / SPI NOR | MicroSD / eMMC Module / SPI NOR |
+| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
+| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun55i-t527-avaota-a1.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
 
 ```text
 +-----------------------------------------------------------------------------------------+
@@ -53,7 +52,7 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
 |  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
-|  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
 |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  +-------------------------------------+   |  +-----------------------------------+  |  |
 |  |             NPU Engine              |   |  +-----------------------------------+  |  |
@@ -120,11 +119,10 @@ As of the current bring-up phase, here is the functional status of the flight st
   - **High-Throughput Diagnostics:** Live firmware telemetry exposed via debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`), dedicated serial console (`S_UART0` @ `0x02500000` / 115200 baud), and lock-free shared SRAM ring buffers in PubSRAM C (`0x00020000`).
   - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
 
-* **📌 Allwinner A733 / Cubie A7A & A7Z E902 Status (Dedicated to Power Management Only):**
-  - **Decision — No Linux RemoteProc on A733:** We have stopped all Linux `remoteproc` usage on the A733/A7A/A7Z platforms.
-  - **Root Cause & Hardware Dependency:** The embedded XuanTie E902 core on the A733 is architecturally part of the CPUS / Always-On power subsystem. It runs `scp.fex`, communicating with the AXP8191 PMIC over RSB (`r_rsb` @ `0x07083000`) to regulate power rails such as `DCDC1` (which supplies `VCC_3V3_USB20HUB` for the FE1.1S USB hub and AIC8800 Wi-Fi 6). De-coupling the E902 for Linux remoteproc disabled `DCDC1`, leaving onboard USB ports and Wi-Fi unpowered.
-  - **Current Implementation:** The E902 is strictly dedicated to bootloader/U-Boot power management (`scp.fex`), packaged natively in `radxa_a733_bootloader.bin`. RemoteProc nodes have been removed from the A7A/A7Z device trees and kernel configs.
-  - **Future Roadmap:** If co-processor offloading or custom auxiliary functions are needed on the A733 in the future, we will use the standard U-Boot/SCP loading model and extend `scp.fex` with custom API calls / firmware service handlers rather than attempting to hijack the core via Linux remoteproc.
+* **📌 Allwinner A733 / Cubie A7A & A7Z E902 Architecture (Dual-Mode Support):**
+  - **Mode 1 (Standard Power Management / Suspend & Resume):** E902 runs `scp.fex` packaged in TOC1, driving AXP8191 PMIC power sequencing over RSB (`r_rsb`) and handling S3 deep sleep via BL31 SCPI PSCI handlers.
+  - **Mode 2 (Real-Time Control / Linux RemoteProc):** When suspend/resume is unneeded (24/7 industrial/embedded control), TF-A BL31 unlocks `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`) to Non-Secure world, allowing Linux `sunxi_rproc.c` to load bare-metal RV32EMC firmware into System SRAM A2 (`0x00040000`, 208 KB) or DRAM carveout (`0x4E000000`), with U-Boot powering PMIC `DCDC1`/`ALDO1` directly over RSB.
+  - **Reference Documentation:** Complete dual-mode specification is documented in [`docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md`](docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md).
 
 * **🔍 Direct Memory Debug (`dmem`) / OpenOCD Architecture:**
   - **Comparison with Other SoCs:** SoCs from Texas Instruments (AM62x / AM64x / K3) and STMicroelectronics (STM32MP1 / STM32MP2) implement a memory-mapped `dmem` bus interface that exposes core debug registers directly to the system interconnect, enabling native, JTAG-less OpenOCD and GDB remote debugging.
@@ -156,10 +154,16 @@ As of the current bring-up phase, here is the functional status of the flight st
    Exhaustive analysis of the A733 BROM 128 KB search offset, multi-stage bootloader staging, and 16 MB partition alignment.
 
 6. **[Buildroot OS Documentation](docs/buildroot/)**:
-   How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`).
+   How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`). Includes the **[Avaota A1 Build & Bring-Up Guide](docs/buildroot/AvaotaA1HowTo.md)**.
 
 7. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
    High-level flight logic, rate PID dynamics, TinyML/NPU models, and real-time FPGA co-processor communication over SPI.
+
+8. **[Flight Controller Carrier & 40-Pin Hardware Pinouts](docs/flightcontroller_pinouts/README.md)**:
+   Hardware-level schematic and PCB layout specifications for custom carrier boards ([Cubie A5E](docs/flightcontroller_pinouts/A5E_FLIGHT_CONTROLLER_PINOUT.md) and [Cubie A7A](docs/flightcontroller_pinouts/A7A_FLIGHT_CONTROLLER_PINOUT.md)).
+
+9. **[Avaota A1 Platform Guide](docs/platforms/AVAOTA_A1_PLATFORM_GUIDE.md)**:
+   Hardware architecture, memory map, and XuanTie E907 coprocessor configuration for the Yuzuki / Pine64 Avaota A1.
 
 ---
 
@@ -213,6 +217,13 @@ PATH=$PWD/bld/bin:$PATH make -C bld
 ```bash
 mkdir -p bld
 PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
+PATH=$PWD/bld/bin:$PATH make -C bld
+```
+
+#### Option C: Yuzuki / Pine64 Avaota A1 (Allwinner T527 — Dual GbE)
+```bash
+mkdir -p bld
+PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e avaota_a1_defconfig
 PATH=$PWD/bld/bin:$PATH make -C bld
 ```
 

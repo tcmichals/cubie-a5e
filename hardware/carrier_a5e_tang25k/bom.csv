@@ -1,0 +1,20 @@
+Comment,Designator,Footprint,LCSC Part #,Description,Type
+100nF (0.1uF) 50V X7R,"C1, C2, C3, C4, C5, C6, C7",C_0402_1005Metric,C1525,Capacitor 100nF 50V X7R 0402,Basic Part
+10uF 16V X5R,"C8, C9, C10",C_0603_1608Metric,C19702,Capacitor 10uF 16V X5R 0603,Basic Part
+47uF 16V X5R,"C11, C12",C_0805_2012Metric,C23746,Capacitor 47uF 16V X5R 0805 Low-ESR,Basic Part
+33R 1% 1/16W,"R1, R2, R3, R4, R5",R_0402_1005Metric,C25114,Resistor 33 Ohm 1% 0402 (SPI Damping),Basic Part
+2.2k 1% 1/16W,"R6, R7",R_0402_1005Metric,C25879,Resistor 2.2k Ohm 1% 0402 (I2C Pull-Up),Basic Part
+10k 1% 1/16W,"R8, R9, R10, R11",R_0402_1005Metric,C25744,Resistor 10k Ohm 1% 0402 (CS/IRQ Pull-Up/Down),Basic Part
+1k 1% 1/16W,"R12, R13",R_0402_1005Metric,C11702,Resistor 1k Ohm 1% 0402 (LED Current Limiting),Basic Part
+LED Green 0603,"D1, D2",LED_0603_1608Metric,C72043,LED Green 0603 5V/3V3 Power Indicators,Basic Part
+SMBJ6.0A 600W TVS,D3,D_SMB,C96495,TVS Diode 6.0V 600W Unidirectional SMB,Basic Part
+USBLC6-2SC6 SOT-23-6,"U1, U2",SOT-23-6,C7519,TVS Diode Array ESD Protection,Basic Part
+Power Ferrite Bead 3A 0805,FB1,L_0805_2012Metric,C1017,Ferrite Bead 220 Ohm @ 100MHz 3A 0805,Basic Part
+SGM2036-3.3YN5G Ultra-Low-Noise LDO,U3,SOT-23-5,C160538,300mA Ultra-Low Noise High-PSRR LDO 3.3V SOT-23-5,Basic Part
+60-Pin BTB Receptacle 0.4mm (Tang 25K),"J2, J3",Connector_BTB_60P_0.4mm_Pitch,C2895646,60-Pin 0.4mm Pitch Board-to-Board Socket (Mating with Tang 25K),Extended Part
+JST-GH 6-Pin SMT,"J4, J5",JST_GH_SM06B-GHS-TB_1x06-1MP_P1.25mm_Horizontal,C383675,JST-GH 1.25mm 6-Pin Locking Connector SMT,Extended Part
+JST-GH 4-Pin SMT,J6,JST_GH_SM04B-GHS-TB_1x04-1MP_P1.25mm_Horizontal,C383674,JST-GH 1.25mm 4-Pin Locking Connector SMT,Extended Part
+Pin Header 1x03 2.54mm,J7,PinHeader_1x03_P2.54mm_Vertical,C37854,2.54mm 3-Pin Header (Linux Debug Console),Basic Part
+Pin Header 2x08 2.54mm,J8,PinHeader_2x08_P2.54mm_Vertical,C2895601,2.54mm 2x8 Pin Header (8x Motor ESC DShot Outputs),Basic Part
+XT30PW-M 2-Pin SMT / Solder Pad,J9,TerminalBlock_XT30_2Pin,C2932822,XT30 High-Current Power Input Connector (5V BEC),Extended Part
+2x20 Female Header 2.54mm (Cubie A5E),J1,PinSocket_2x20_P2.54mm_Vertical,C22557,40-Pin 2.54mm Dual-Row Female Stacking Socket (Cubie A5E Stacking),Extended Part

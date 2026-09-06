@@ -482,9 +482,44 @@ The table below documents the full line-by-line cross-reference comparing the ve
   * **Stop Rule**: `mod_rst` (`RST_BUS_RV`) must be asserted BEFORE gating `mod_clk` (`CLK_BUS_RV`). Gating the clock on an active core mid-burst freezes the bus transaction and deadlocks the SoC bus.
   * **A733 Contrast**: The `0x07130000` block does not exist on A733 silicon. The A733 E902 is clocked and reset purely via `r_ccu` (`0x07010000`), executing directly from SRAM A2 (`0x00040000`) with no `0x0204` register needed.
 
+### USB Host 1, FE1.1S Hub, PHY Power Sequencing & Nick Alilovic Comparative Analysis (Sep 6, 2026)
+- **Problem Statement**:
+  - On the Radxa Cubie A7A (Allwinner A733 / `sun60iw2`), USB 2.0 Host 1 (`ehci1`), the onboard FE1.1S 4-port USB hub (`U6`), and the AIC8800 Wi-Fi 6 module (`U3`) failed to enumerate and communicate under mainline Linux 7.1.
+  - A comparative audit was performed against Nick Alilovic's Armbian build tree (`github.com/NickAlilovic/build`, branch: `Radxa-A7A`) to verify register strides, clock gating masks, PHY configurations, and power sequencing.
 
+- **Hardware & Schematic Topology Analysis (Radxa Cubie A7A V1.10 Schematic)**:
+  - **Upstream Connection**: Driven by SoC `USB2-DP` / `USB2-DM`, wired to Host Controller 1 (`ehci1@4200000` / `ohci1@4200400`) and `phy@4100400` (PHY1).
+  - **FE1.1S Hub Reset (`U6`)**: Pin 16 `XRSTJ` is controlled entirely by an analog RC delay circuit (`R60` 10k pull-up to `VCC_3V3_USB20HUB`, `C155` 100nF to GND, ~1ms delay). There is **no SoC reset GPIO line**. Any DT property declaring `reset-gpios` on the hub was erroneous.
+  - **Hub Downstream VBUS (`VCC5V0_USB20`)**: Switched by `U5` (SGM2576 power switch). Enable pin `EN` (pin 4) is driven by **`PM5` (`USB_HOST_EN`)**, active-high.
+  - **AIC8800 Wi-Fi 6 Module (`U3`)**:
+    - Connected over **USB 2.0** on hub downstream port 4 (`USB4_DP` / `USB4_DM`), **not SDIO**.
+    - Power supply `WIFI_3V3` is switched by P-channel MOSFET `Q8` (WPM2015), driven by NPN transistor `Q9` from **`PM0` (`USB_WIFI_PWR`)**, active-high.
+    - Chip enable `WL-REG-EN` is driven directly by **`PM1` (`WL-REG-ON`)**, active-high.
+  - **R-PIO Bank Power Dependency**:
+    - SoC `VCC-PL` and `VCC-PM` I/O banks require 3.3V supplied by **`ALDO1`** from the **AXP8191 PMIC** over `r_rsb` (`0x07083000`). If `ALDO1` is unpowered, all PM-bank GPIO outputs (`PM0`, `PM1`, `PM5`) float, leaving VBUS switches and Wi-Fi power unasserted.
 
+- **Comparative Findings vs. Nick Alilovic's Tree**:
+  1. **Tree Architecture**: Nick's tree is a vendor Allwinner BSP build (kernel 6.6/5.15) carrying monolithic vendor drivers (`ccu-sun60iw2.c`, vendor PHY, vendor AIC8800 hooks), whereas our tree is targeting upstream/mainline Linux 7.1.
+  2. **Vendor DTS VBUS Mapping Bug**: In Nick's / vendor device tree (`0012-Add-Allwinner-Device-a733-*.patch`), `ehci1` was incorrectly bound to `reg_usb0_vbus` (`PL2`) instead of `reg_usb1_vbus` (`PM5`). `PM5` was only referenced under `usbc2` (`xhci2` / DWC3). If DWC3 was idle or suspended, downstream VBUS for the hub was left powered down!
+  3. **Main PIO 0x80 Stride Confirmation**: Verified our mainline pinctrl driver using `HW_TYPE_10` (`0x80` byte memory stride per bank, `pull_regs_offset = 0x30`, `dlevel_field_width = 4`, and Bank 0 PA dummy offset `0x80`) is mathematically correct for A733. Heartbeat/power LEDs (`PJ26`/`PJ27`), SD card (`PF`), and GMAC (`PH`) all function with this stride.
 
+- **Mainline Implementation & Fixes**:
+  1. **CCU Bus Clock Gating (`0003-clk-sunxi-ng-add-allwinner-a733-ccu-and-prcm.patch`)**:
+     - In registers `0x1304` (`USB0_HCI_CFG`) and `0x130c` (`USB1_HCI_CFG`), Bit 0 is the OHCI bus clock and Bit 4 is the EHCI DMA engine clock.
+     - Previously, `bus_usb0_clk` and `bus_usb1_clk` only gated `BIT(0)`.
+     - Updated both clocks to mask `BIT(4) | BIT(0)`, ensuring the EHCI DMA engine is clocked when host drivers load.
+  2. **USB PHY SIDDQ Deassertion (`0006-phy-allwinner-sun4i-usb-use-shared-reset-control.patch`)**:
+     - Modern sunxi SoCs gate PHY1 power via the PMU register at offset `0x10` (`0x04200810`).
+     - Added dedicated `sun60i_a733_cfg` with `.disc_thresh = 3`, `.dedicated_clocks = true`, `.phy0_dual_route = true`, `.siddq_in_base = true`, and `.hci_phy_ctl_clear = PHY_CTL_SIDDQ | PHY_CTL_H3_SIDDQ`.
+     - Bound `"allwinner,sun60i-a733-usb-phy"` to `sun60i_a733_cfg`.
+     - Used `devm_reset_control_get_shared()` to prevent reset conflicts between PHY and HCI drivers.
+  3. **Device Tree Synchronization & Attribution (`0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`)**:
+     - Credited Nick Alilovic via `Suggested-by: Nick Alilovic <nickalilovic@gmail.com>`.
+     - Declared `reg_usb1_vbus` (`PM5`, `USB_HOST_EN`) with `regulator-always-on` and `regulator-boot-on` for both Cubie A7A and Cubie A7Z.
+     - Bound `usb0_vbus-supply` and `usb1_vbus-supply` to `usbphy`, with dedicated clock/reset bindings (`CLK_USB_PHY0/1`, `RST_USB_PHY0/1`).
+     - Verified Wi-Fi power regulators (`PM0` / `PM1`) are enabled with `regulator-boot-on`.
 
+- **Verification**:
+  - Executed `git apply --check` across `0001`, `0003`, and `0006` against the Linux 7.1 kernel source tree; all patches verified and cleanly apply with 0 errors.
 
 

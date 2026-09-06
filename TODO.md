@@ -35,22 +35,29 @@ See `docs/buildroot/A7A_KERNEL_PATCH_VALIDATION.md`.
 
 See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
 
-## Remoteproc: A733 Decommissioned (Power Management Only)
+## USB and Power: Verification Phase (Active)
 
-- [x] **Silicon Architectural Discovery**: On the Allwinner A733 (`sun60iw2`), the XuanTie E902 core is embedded inside the CPUS / Always-On (`R_`) power management domain and initialized by `boot0` / U-Boot with `scp.fex` for PMIC power rail sequencing (AXP8191 over RSB) and sleep/standby control.
-- [x] **Remoteproc Decommissioned for A7A/A7Z**: Removed Linux `remoteproc` node and trace memory from `sun60i-a733-cubie-a7a.dts` and `sun60i-a733-cubie-a7z.dts`.
-- [x] **SCP Bootloader Restored**: `post-image.sh` retains `scp.fex` inside `radxa_a733_bootloader.bin` so U-Boot / `boot0` controls power and PMIC `DCDC1` (supplying USB hub and AIC8800 Wi-Fi).
-- [x] **Linux Remoteproc Targeted to T527**: Cleaned `sunxi_rproc.c` driver to focus strictly on T527 / A527 / A523 where the E906/E907 is a dedicated real-time coprocessor with ITCM, DTCM, and MCU CCU.
+- [x] **Schematic & Power Sequencing**: Decoded V1.10 schematic. Port 0 VBUS (`PL2`), Port 1 / Hub VBUS (`PM5`), Wi-Fi Power (`PM0`), and Wi-Fi Chip Enable (`PM1`) configured as `regulator-always-on` and `regulator-boot-on`.
+- [x] **CCU Interconnect & HCI Clocks**: Un-gated `0x05C0` (`AHB_GATE_SW_CFG` bit 9) in CCU probe. Updated `bus_usb0_clk` and `bus_usb1_clk` to mask `BIT(4) | BIT(0)` (`0x1304`/`0x130c`), clocking both EHCI DMA engines and OHCI.
+- [x] **PHY SIDDQ & Shared Resets**: Added `sun60i_a733_cfg` in `phy-sun4i-usb.c` clearing `PHY_CTL_SIDDQ | PHY_CTL_H3_SIDDQ` on PMU1, with `devm_reset_control_get_shared()` to prevent `-EBUSY` collisions.
+- [ ] **Target Validation**: Boot newly assembled image on Radxa Cubie A7A hardware:
+  - Verify EHCI0/1 and OHCI0/1 probe without `-EBUSY`.
+  - Verify FE1.1S USB 2.0 hub enumeration on Host 1 (`ehci1`).
+  - Verify AIC8800 Wi-Fi 6 device enumeration on hub port 4 (`0xA69C:0x8800`).
 
-## USB and power: hold
+## Remoteproc & Real-Time Control: A733 Dual-Mode Architecture
 
-- [x] Archive full schematic as `docs/extracted_vendor/radxa_cubie_a7a_v1.10_schematic.txt`.
-- [x] Keep USB PHY, EHCI, OHCI, and DWC3 disabled.
-- [x] Keep VBUS enable GPIO regulators PL2 / PM5 non-`always-on` while USB consumers remain disabled.
-- [x] Audit confirms USB0/USB1 critical PHY clocks, controller resets, MSI-Lite2 interconnect gate, and PL2/PM5 VBUS control are represented. This is not currently the same incomplete-resource failure identified for GMAC.
-- [ ] Before enabling USB later, change DWC3 `ref` from duplicate `CLK_BUS_USB2` to `CLK_USB_REF`; retain `CLK_BUS_USB2` as `bus_early`.
-- [ ] Do not enable USB until Ethernet and remoteproc test cycles complete.
+- [x] **Silicon & Security Discovery**: Confirmed A733 coprocessor is **XuanTie E902** (RV32EMC, 200 MHz, no FPU, no TCMs, 208 KB System SRAM A2). Stock BL31 write-protects `0x07032204` for factory `scp.fex`.
+- [x] **Dual-Mode Architecture Defined**: Detailed in `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md`:
+  - **Mode 1 (Suspend/Resume)**: Stock TOC1 with `scp.fex` for consumer S3 deep sleep.
+  - **Mode 2 (Real-Time Control / Linux RemoteProc)**: 24/7 industrial/embedded control without suspend/resume.
+- [ ] **Post-USB Execution Plan for Mode 2**:
+  1. **TF-A (BL31)**: Configure `sunxi_security.c` to unlock `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`) so Non-Secure Linux EL1 can access `0x07032000` and System SRAM A2 (`0x00040000`).
+  2. **U-Boot**: Ensure U-Boot RSB driver powers PMIC `DCDC1` and `ALDO1` when `scp.fex` is omitted from TOC1.
+  3. **Device Tree**: Add `cubie-a7a-rproc.dtso` overlay defining `&rproc` and `0x4E000000` DMA pool.
+  4. **Kernel Driver**: Update `sunxi_rproc.c` with `"allwinner,sun60i-a733-rproc"` to map SRAM A2 (`0x00040000`, 208 KB) and manage E902 lifecycle.
 
 ## Engineering record
 
 Update `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` after every target test and when any TODO item changes state. Detailed task history is also maintained at `docs/platforms/CUBIE_A7A_BRINGUP_TODO.md`.
+

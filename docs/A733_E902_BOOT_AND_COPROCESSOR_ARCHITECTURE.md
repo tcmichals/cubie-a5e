@@ -1,90 +1,216 @@
 # Allwinner A733 (sun60iw2) XuanTie E902 Boot & Coprocessor Architecture
 
-**Document Version:** 1.0  
-**Date:** September 3, 2026  
-**Target SoC:** Allwinner A733 / sun60iw2 (Radxa Cubie A7A & Cubie A7Z)  
-**Author / Integration:** Flight Controller & Heterogeneous Compute Team  
+**Document Version:** 2.0  
+**Date:** September 6, 2026  
+**Target SoCs / Boards:** Allwinner A733 / sun60iw2 (Radxa Cubie A7A, Banana Pi A733, Radxa Cubie A7Z)  
+**Author / Integration:** Embedded Real-Time & Heterogeneous Compute Team  
 
 ---
 
 ## 1. Executive Summary
 
-This document describes the silicon topology, hardware memory layout, TrustZone security boundaries, and boot sequence of the embedded **T-Head XuanTie E902 32-bit RISC-V core** on the Allwinner A733 (sun60iw2) SoC. It clarifies the role of the legacy Allwinner System Control Processor (`scp.fex`) versus modern Linux `remoteproc` execution for high-speed avionics and real-time flight control loops.
+This document provides the complete hardware, security, and boot architecture for the embedded **T-Head XuanTie E902 32-bit RISC-V core** on the Allwinner A733 (sun60iw2) SoC. It specifies how to target the platform for two distinct operational models:
+
+1. **Mode 1: Standard Power Management (Suspend/Resume / `scp.fex`)**
+   - Traditional consumer battery/tablet profile requiring S3 deep sleep (Suspend-to-RAM).
+   - E902 runs Allwinner's `scp.fex` firmware loaded at boot time by `boot0` into DRAM at `0x40014000`.
+2. **Mode 2: Real-Time Embedded Control (Linux `remoteproc`)**
+   - Industrial automation, robotics, deterministic I/O, and real-time control where suspend/resume is disabled.
+   - E902 is repurposed as an on-chip real-time coprocessor managed dynamically by the Linux `remoteproc` framework (`sunxi_rproc.c`) or loaded via custom boot firmware.
 
 ---
 
-## 2. Silicon Topology & Domain Differences
+## 2. Silicon Topology & Domain Architecture
 
-Unlike the Allwinner T527 (sun60iw1) and A523 (sun55iw3) which integrate a high-performance XuanTie E906/E907 core with dedicated ITCM/DTCM inside an open MCU/DSP peripheral domain (`0x07100000+`), the **A733 integrates a XuanTie E902 (RV32EMC) core inside the CPUS / Always-On (`R_`) power management subsystem**:
+Unlike the Allwinner T527 / A523 which features a high-performance XuanTie E906/E907 core with dedicated hardware FPU and ITCM/DTCM inside an open MCU domain (`0x07100000+`), the **A733 integrates a XuanTie E902 core inside the CPUS / Always-On (`R_`) power management subsystem**:
 
-| Feature | Allwinner T527 / A523 | Allwinner A733 (sun60iw2) |
+| Silicon Feature | Allwinner T527 / A523 (Cubie A5E) | Allwinner A733 (Cubie A7A & Banana Pi A733) |
 | :--- | :--- | :--- |
-| **RISC-V Core IP** | XuanTie E906 / E907 (RV32IMAFDC + FPU) | XuanTie E902 (RV32EMC, 16 registers) |
-| **Subsystem Domain** | MCU / DSP Subsystem (`0x07100000+`) | CPUS / `R_` Always-On Domain (`0x07000000+`) |
-| **Control / Config Base** | `0x07130000` (MCU CFG) | `0x07032000` (`E902_CFG_BASE`) |
-| **Boot Address Register** | `0x07130204` (`STA_ADD`) | `0x07032204` (`STA_ADD`) |
-| **TrustZone Protection** | **Non-Secure (Open)**: Writable directly from Linux EL1. | **Secure-Gated**: Interconnect write-protects register against Non-Secure EL1. |
-| **Memory Available** | 64 KB ITCM, 64 KB DTCM, Shared SRAM | System SRAM A2 (`0x00040000`), DRAM Carveout |
+| **RISC-V Core IP** | XuanTie E906 / E907 (RV32IMAFDC + FPU) | **XuanTie E902 (RV32EMC, 16 GPRs, Integer only)** |
+| **Subsystem Domain** | MCU / DSP Domain (`0x07100000+`) | **CPUS / Always-On (`R_`) Domain (`0x07000000+`)** |
+| **Max Clock Rate** | 200 MHz | 200 MHz |
+| **Registers** | 32 General Purpose Registers (`x0`–`x31`) | **16 General Purpose Registers (`x0`–`x15`)** |
+| **Tightly Coupled Memory** | 64 KB ITCM (`0x00000000`), 64 KB DTCM (`0x00080000`)| **NO TCMs** (Executes out of SRAM A2 or DRAM) |
+| **On-Chip SRAM** | 256 KB Dedicated MCU SRAM (`0x07280000`) | **208 KB System SRAM A2 (`0x00040000`–`0x00073FFF`)** |
+| **CFG Register Base** | `0x07130000` (`MCU_CFG`) | **`0x07032000` (`E902_CFG`)** |
+| **Start Vector Register**| `0x07130204` (`STA_ADD`) | **`0x07032204` (`STA_ADD`)** |
+| **TrustZone Firewall** | **Open Non-Secure** (Directly writable in EL1) | **Secure-Gated by default** in factory BL31 |
 
 ---
 
-## 3. The TrustZone Security Boundary & Hardware Readback
+## 3. TrustZone Security Boundary & Hardware Readback
 
-### A. Register Protection at `0x07032204`
-The start address register `0x07032204` defines the instruction fetch address of the E902 core upon reset.
-* In hardware readback, register inspection reads **`0x40014000`**.
-* Direct kernel MMIO writes (`writel()`) from Non-Secure Linux EL1 are filtered out by the ARM TrustZone bus firewall. The register remains `0x40014000`.
-* Calling ARM SMCCC (`0x8000ff06` `ARM_SVC_WRITE_SEC_REG`) returns `0xffffffffffffffff` (`SMCCC_RET_NOT_SUPPORTED`), proving that the factory ARM Trusted Firmware (BL31) deliberately locks `0x07032204` and disallows modifying the entry vector at runtime.
+### A. The Start Address Register (`0x07032204`)
+The start address register `0x07032204` defines the instruction fetch entry point of the E902 upon reset:
+* **Hardware Readback**: In stock bootloader configurations, reading `0x07032204` returns **`0x40014000`**.
+* **DRAM Offset**: In Allwinner SPL architecture (`sun60iw2p1.h`), `SCP_CODE_DRAM_OFFSET` is `0x14000`. With DRAM mapped at `0x40000000`, this equals `0x40014000`.
+* **Default BL31 Lockout**: In factory ARM Trusted Firmware (BL31), `0x07032000` is mapped in the Secure World. Writes from Non-Secure Linux EL1 are filtered by the interconnect firewall unless BL31 is unlocked (see §5).
 
-### B. The Meaning of `0x40014000`
-In Allwinner's SPL architecture (`spl-pub/include/configs/sun60iw2p1.h`):
-```c
-#define SCP_CODE_DRAM_OFFSET    (0x14000)
+---
+
+## 4. Dual-Mode Architecture: Suspend/Resume vs. Real-Time Control
+
 ```
-With DRAM physically mapped at `0x40000000`, offset `0x14000` equals **`0x40014000`**.
-This proves that early boot code (`sboot`) programs the E902 to boot directly from DRAM at `0x40014000`.
++───────────────────────────────────────────────────────────────────────────────────────────────────+
+| ALLWINNER A733 DUAL-MODE SELECTION BLUEPRINT                                                      |
++───────────────────────────────────────────────────────────────────────────────────────────────────+
+
+                                     [ Power-On / boot0 (SPL) ]
+                                                 │
+                                                 ▼
+                                     [ U-Boot / TOC1 Package ]
+                                                 │
+                   ┌─────────────────────────────┴─────────────────────────────┐
+                   ▼                                                           ▼
+       [ MODE 1: Suspend / Resume ]                                [ MODE 2: Real-Time RemoteProc ]
+  ┌─────────────────────────────────────┐                     ┌─────────────────────────────────────┐
+  │ • TOC1 contains scp.fex             │                     │ • TOC1 omits scp.fex                │
+  │ • Loads to 0x40014000 at power-on   │                     │ • E902 held in reset at boot        │
+  │ • E902 manages AXP8191 PMIC over RSB│                     │ • U-Boot initializes AXP8191 PMIC   │
+  │ • BL31 installs SCPI PSCI handlers  │                     │ • BL31 unlocks R_SPC & TZMA to NS   │
+  │ • Linux reserves 0x40014000 (no-map)│                     │ • Linux sunxi_rproc loads firmware  │
+  │ • remoteproc node disabled in DTS   │                     │ • remoteproc node enabled in DTS    │
+  └─────────────────────────────────────┘                     └─────────────────────────────────────┘
+```
 
 ---
 
-## 4. Allwinner Legacy `scp.fex` vs. Flight Controller Remoteproc
+## 5. E902 as a Dedicated I/O Processor (Offloading Linux)
 
-### A. Factory Purpose (`scp.fex`)
-Allwinner developed the E902 firmware (`scp.fex`, also known as `arisc`) for consumer battery-operated devices (tablets and OTT boxes):
-1. **Suspend-to-RAM (Deep Sleep)**: When the host Cortex-A55 cores enter S3 sleep (`echo mem > /sys/power/state`), the ARM cores power down. The E902 stays alive on a 32 kHz crystal to monitor power buttons, RTC alarms, or IR remotes.
-2. **Power Sequencing**: Helping the PMIC shut down power rails during battery cutoff.
-3. **Idle State**: During standard awake Linux execution, `scp.fex` executes a low-power `wfi` (Wait For Interrupt) polling loop and performs zero active tasks.
+In Mode 2, the XuanTie E902 is repurposed as a **high-speed I/O Front-End and Hardware Serializer**. Instead of burdening the Linux ARM host with thousands of individual hardware interrupts per second, the E902 handles all time-critical peripheral transactions directly:
 
-### B. Flight Controller / Real-Time Avionics Role
-In an unmanned aerial vehicle (UAV) or high-reliability robotics controller:
-* **The system never sleeps**: Suspend-to-RAM is completely disabled; deep sleep in mid-flight would cause an unrecoverable loss of control.
-* **Deterministic Core**: The E902 is repurposed as a dedicated hard-real-time processor handling 1 kHz IMU filtering, motor PWM generation, and telemetry without Linux scheduler jitter.
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        XUANTIE E902 I/O FRONT-END PROCESSOR                            │
+├─────────────────────────┬────────────────────────────┬─────────────────────────────────┤
+│    PERIPHERAL BUS       │      HARDWARE TARGET       │        REAL-TIME TASK           │
+├─────────────────────────┼────────────────────────────┼─────────────────────────────────┤
+│ • High-Speed SPI        │ IMU (ICM-42688 / BMI270)   │ 1 kHz - 8 kHz burst sampling   │
+│ • PIO Edge Interrupts   │ IMU DRDY, Encoders, PPS    │ Microsecond-accurate ISR capture│
+│ • I2C (TWI Bus)         │ Barometer, Compass         │ Background telemetry polling   │
+│ • Serial UART           │ GPS (NMEA / UBX Protocol)  │ Hardware FIFO drain & parsing   │
+└─────────────────────────┴─────────────┬──────────────┴─────────────────────────────────┘
+                                        │
+                                        │  Batched binary frames + 64-bit timestamps
+                                        ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               LOCK-FREE SPSC RINGBUFFER IN SYSTEM SRAM A2 (0x00040000)                 │
+└───────────────────────────────────────┬────────────────────────────────────────────────┘
+                                        │
+                                        │  Mailbox Doorbell Interrupt (msgbox0)
+                                        ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        LINUX ARM HOST (PREEMPT_RT EL1)                                 │
+│ • 0% CPU cycles wasted on high-frequency per-byte / per-sample IRQ thrashing            │
+│ • Wakes only to consume pre-validated, timestamped sensor batches in user space         │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Advantages of the I/O Offload Model:
+1. **Zero Linux IRQ Jitter**: Servicing high-speed UART bytes (e.g. 460800 baud GPS streams) and 8 kHz IMU DRDY lines inside Linux causes frequent context switches and cache thrashing. The E902 absorbs 100% of these interrupts.
+2. **Microsecond Hardware Timestamping**: Sensor frames and GPS PPS pulses are timestamped in hardware by the E902 at the exact moment of arrival before any OS scheduling delay occurs.
+3. **Fail-Safe Operation**: If the Linux host temporarily spikes in load or performs an update, the E902 continues to capture sensor history and maintain actuator holding states without missing a single byte.
 
 ---
 
-## 5. Architectural Decision: E902 Dedicated to Bootloader Power Management
+## 6. Mode 2 Implementation Blueprint (Linux RemoteProc & Real-Time Control)
 
-Because the E902 on the Allwinner A733 (sun60iw2) is fundamentally integrated into the CPUS / Always-On (`R_`) power management domain and initialized by `boot0` / U-Boot with `scp.fex`:
-1. **Remoteproc Decommissioned for A733**: Linux `remoteproc` is completely disabled on the A733 / Cubie A7A & A7Z. The E902 is not used as a Linux coprocessor.
-2. **`scp.fex` Power Management Retained**: The bootloader (`radxa_a733_bootloader.bin`) retains `scp.fex` inside the TOC1 container. `scp.fex` initializes the AXP8191 PMIC over RSB (`r_rsb: rsb@7083000`), turns on `DCDC1` (3.3V system power for the FE1.1S USB hub and AIC8800 Wi-Fi), and handles low-power standby sequencing.
-3. **DRAM Protection**: In `sun60i-a733-cubie-a7a.dts`, `0x40014000` is reserved via `scp_dram: scp@40014000` with `no-map` so Linux never overwrites active SCP firmware.
+When building embedded control systems, robotics, or industrial automation platforms that run 24/7 without suspend/resume, follow this blueprint across all firmware and kernel layers:
+
+### A. ARM Trusted Firmware (TF-A / BL31) Changes
+To allow Linux `remoteproc` to write `0x07032204` and load code into System SRAM A2 without bus aborts:
+
+1. **Un-gate R_SPC and R_TZMA in `plat/allwinner/common/sunxi_security.c`**:
+   ```c
+   void sunxi_security_setup(void)
+   {
+       /* Configure R_SPC to grant Non-Secure access to CPUS / PRCM / R_PIO */
+       mmio_write_32(SUNXI_R_SPC_BASE + 0x04, 0xffffffff);
+       mmio_write_32(SUNXI_R_SPC_BASE + 0x14, 0xffffffff);
+       mmio_write_32(SUNXI_R_SPC_BASE + 0x24, 0xffffffff);
+       mmio_write_32(SUNXI_R_SPC_BASE + 0x34, 0xffffffff);
+
+       /* Open System SRAM A2 (0x00040000 - 0x00078000) to Non-Secure world */
+       mmio_write_32(SUNXI_R_TZMA_BASE + 0, 0);
+       mmio_write_32(SUNXI_R_TZMA_BASE + 4, 0);
+       mmio_write_32(SUNXI_R_TZMA_BASE + 8, 0);
+   }
+   ```
+2. **Native Power Management Fallback**:
+   When `scp.fex` is absent, TF-A detects that SCPI is unavailable and falls back to `sunxi_native_pm.c` (direct watchdog reset and CPU power gating without requiring SCP).
 
 ---
 
-## 6. Remoteproc Status & Comparison: A733 vs. T527
+### B. U-Boot & TOC1 Packaging Changes
+1. **Packaging**: Generate a TOC1 container without `scp.fex` (e.g. `radxa_a733_bootloader_rt.bin`).
+2. **PMIC Standalone Initialization**:
+   Ensure U-Boot initializes the **AXP8191 PMIC** over RSB (`0x07083000`):
+   - Enable `DCDC1` (3.3V system power for USB hub, Wi-Fi, Ethernet).
+   - Enable `ALDO1` (3.3V for `VCC-PL` and `VCC-PM` I/O banks).
+3. **Core Reset**: Leave the E902 held in reset in `r_ccu` at boot.
 
-| Feature / Architecture | Allwinner A733 (Cubie A7A / A7Z) | Allwinner T527 / A523 (Cubie A5E) |
+---
+
+### C. Linux Kernel Driver & Device Tree Changes
+1. **Device Tree Overlay (`cubie-a7a-rproc.dtso`)**:
+   ```dts
+   /dts-v1/;
+   /plugin/;
+
+   / {
+       compatible = "radxa,cubie-a7a", "allwinner,sun60i-a733";
+
+       fragment@0 {
+           target = <&rproc>;
+           __overlay__ {
+               status = "okay";
+               memory-region = <&rproc_carveout>;
+           };
+       };
+
+       fragment@1 {
+           target-path = "/reserved-memory";
+           __overlay__ {
+               #address-cells = <2>;
+               #size-cells = <2>;
+
+               rproc_carveout: rproc@4e000000 {
+                   compatible = "shared-dma-pool";
+                   reg = <0x00 0x4e000000 0x00 0x01000000>; /* 16 MB pool */
+                   no-map;
+               };
+           };
+       };
+   };
+   ```
+
+2. **Driver (`sunxi_rproc.c`)**:
+   - Register `"allwinner,sun60i-a733-rproc"`.
+   - Map **SRAM A2 (`0x00040000`–`0x00073FFF`, 208 KB)** as the primary fast execution window via `devm_ioremap_wc()` with `is_iomem = true`.
+   - Write entry address to `priv->cfg_va + 0x0204` (`E902_STA_ADD_REG`) during `sunxi_rproc_start()`.
+   - Control core execution via `r_ccu` reset bits.
+
+---
+
+### D. RISC-V Firmware Compiler & ABI Contract
+Because the E902 is RV32E, firmware applications must be built targeting:
+```bash
+-march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
+```
+- **Registers**: Uses only `x0`–`x15`. Compiling with standard `ilp32` (32 registers) or float instructions will trigger illegal instruction hardware faults.
+- **Linker Address**: Link firmware to `ORIGIN = 0x00044000` (System SRAM A2) or `ORIGIN = 0x4E000000` (DRAM Carveout).
+
+---
+
+## 7. Comparison Matrix: Mode 1 vs. Mode 2
+
+| Feature / Subsystem | Mode 1: Suspend/Resume (`scp.fex`) | Mode 2: Linux RemoteProc (Real-Time Control) |
 | :--- | :--- | :--- |
-| **Coprocessor IP** | XuanTie E902 (RV32EMC) | **XuanTie E906 / E907** (RV32IMAFDC + FPU) |
-| **Role in Silicon** | **Dedicated Power Management (CPUS)** | **Dedicated MCU / Real-Time DSP Core** |
-| **Firmware Execution** | **`scp.fex` loaded by U-Boot / boot0** | **Linux `remoteproc` (`sunxi_rproc.c`)** |
-| **Power Management Role** | **Yes** (PMIC AXP8191 RSB control) | **NO!** (T527 uses separate AR100 core for PM) |
-| **TrustZone Protection** | Locked (`0x07032204` entry vector) | **None** (`0x07130204` is open Non-Secure MMIO) |
-| **Fast Memories** | None (Runs out of DRAM @ `0x40014000`) | **64 KB ITCM, 64 KB DTCM, 256 KB MCU SRAM** |
-| **Clock / Reset Control**| Shared CPUS `r_ccu` | **Dedicated `mcu_ccu` (`0x07102000`)** |
-| **Linux Remoteproc** | **Disabled (Power-only E902)** | **Fully Supported & Active (`sunxi_rproc`)** |
-
-### Key Takeaway:
-* **A733 / Cubie A7A**: E902 is for **power management only** via U-Boot `scp.fex`. No Linux `remoteproc`.
-* **T527 / Cubie A5E**: XuanTie E906/E907 has full, native Linux `remoteproc` support with complete CCU clocking, TCMs, and mailbox IPC.
-
-
+| **Primary Use Case** | Consumer Battery Devices (S3 Sleep) | **24/7 Embedded Control, Robotics, Real-Time I/O** |
+| **TOC1 Container** | Contains `scp.fex` | **Omits `scp.fex`** |
+| **E902 Boot Time** | Starts at power-on (`boot0`) | **Starts dynamically from Linux (`remoteproc`)** |
+| **PMIC Control** | Handled by `scp.fex` over RSB | **Handled directly by U-Boot / Linux PMIC driver** |
+| **BL31 Security** | `0x07032204` locked in Secure World | **`R_SPC` & `R_TZMA` unlocked for Non-Secure EL1** |
+| **DRAM Map** | `0x40014000` reserved (`no-map`) | **`0x4E000000` DMA pool / SRAM A2 (`0x00040000`)** |
+| **Linux RemoteProc** | Disabled (`status = "disabled"`) | **Enabled (`sunxi_rproc.c`)** |
+| **Firmware Toolchain**| Vendor binary | **Bare-metal C++ (`-march=rv32emc_zicsr -mabi=ilp32e`)** |

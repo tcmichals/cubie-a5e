@@ -331,9 +331,9 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(bus_gmac0_clk, "bus-gmac0", ahb_hws,  0x141c, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(bus_gmac1_clk, "bus-gmac1", ahb_hws,  0x142c, BIT(0), 0);
 +
-+static SUNXI_CCU_GATE_HWS(bus_usb0_clk, "bus-usb0", ahb_hws, 0x1304, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb0_clk, "bus-usb0", ahb_hws, 0x1304, BIT(4) | BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(usb_ohci0_clk, "usb-ohci0", ahb_hws, 0x1304, BIT(4), 0);
-+static SUNXI_CCU_GATE_HWS(bus_usb1_clk, "bus-usb1", ahb_hws, 0x130c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb1_clk, "bus-usb1", ahb_hws, 0x130c, BIT(4) | BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(usb_ohci1_clk, "usb-ohci1", ahb_hws, 0x130c, BIT(4), 0);
 +static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), 0);
 +
