@@ -1,93 +1,91 @@
 # Dynamic Device Tree Overlays in U-Boot: From `config.txt` to Linux Kernel Handoff
 
-*A Technical Guide to In-Memory Device Tree Merging, Dynamic Configuration Files, and the Bootloader-to-Kernel Pipeline*
+*A Technical Deep-Dive into In-Memory FDT Merging, Dynamic Configuration Parsers, and the Bootloader-to-Kernel Contract*
 
 * **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
 
 ---
 
-## 1. Introduction & The Architecture Problem
+## 1. The Combinatorial Hardware Nightmare
 
-In modern embedded Linux systems—particularly heterogeneous architectures pairing multi-core ARM application processors with real-time co-processors or dynamic expansion headers—peripheral configurations change depending on the deployment scenario:
+Embedded hardware rarely stays static. On modern heterogeneous SoCs—like the Allwinner T527 / A527 and A733 pairing octa-core ARM Cortex-A55 cores with dedicated XuanTie E907/E902 RISC-V real-time coprocessors—the exact pin routing, peripheral assignments, and memory maps shift depending on what the board is doing:
 
-* **Scenario A (Avionics / Flight Stack)**: Dedicated hardware UARTs and SPI buses are assigned to a real-time co-processor (e.g., XuanTie E907 RISC-V); onboard sensors (IMU, barometer, compass) are enabled on host I2C buses.
-* **Scenario B (Userspace Driver / UIO)**: Hardware mailboxes or custom peripherals are detached from kernel subsystem drivers and rebound to generic Userspace I/O (`generic-uio`) drivers for ultra-low latency userspace control.
-* **Scenario C (General-Purpose IO)**: Header pins are exposed as standard `/dev/spidev` and GPIO lines for prototyping.
+* **Flight Stack / Avionics**: Hardware UART0 is dedicated to the Linux debug console, UART2 and SPI0 are isolated and handed directly to the RISC-V core for sub-millisecond sensor acquisition, and onboard I2C sensors (IMU, barometer) are enabled on the Linux bus.
+* **Userspace I/O (UIO) / High-Rate IPC**: The hardware inter-processor mailbox (`msgbox`) and dedicated MCU SRAM blocks are detached from the standard kernel mailbox subsystem and bound to `generic-uio`, allowing userspace ring buffers to poll at microsecond latencies.
+* **Standard Prototyping**: Expansion pins are exposed as standard `/dev/spidev0.0` nodes and userspace GPIO lines.
 
 ### The Monolithic DTB Anti-Pattern
-Historically, supporting multiple configurations meant building separate monolithic Device Tree Blobs (`board-flight.dtb`, `board-uio.dtb`, `board-gpio.dtb`). This creates significant drawbacks:
-1. **Combinatorial Explosion**: If you have 3 sensor configurations and 2 IPC modes, you must build and maintain 3 × 2 = 6 full DTBs.
-2. **Maintenance Overhead**: Any upstream kernel update to core clocks, power domains, or memory controller nodes must be duplicated across every custom DTB.
-3. **Flashing Friction**: Switching configurations requires rewriting partition images or modifying low-level bootloader binary environments.
 
-### The Solution: Dynamic In-Memory Overlays
-The industry standard solution separates the architecture into:
-1. **A Single Base Device Tree (`.dtb`)**: Describes the unchanging motherboard hardware (CPU cores, RAM, interrupt controllers, system buses).
-2. **Device Tree Overlays (`.dtbo`)**: Small modular fragments describing specific peripheral changes.
-3. **A Human-Readable Configuration File (`config.txt`)**: Located on the FAT boot partition, where users simply list which overlays to load.
-4. **U-Boot Overlay Engine**: At boot time, U-Boot loads the base DTB into RAM, reads `config.txt`, applies each overlay directly in memory using `libfdt`, and hands the unified device tree to the Linux kernel.
+Building a standalone Device Tree Blob (`.dtb`) for every imaginable hardware permutation (`board-flight.dtb`, `board-flight-uio.dtb`, `board-sensors-uio.dtb`, `board-gpio.dtb`) is an engineering dead end:
+
+1. **Combinatorial Explosion**: 4 sensor layouts and 3 IPC configurations force you to compile, test, and ship 12 distinct monolithic DTB files.
+2. **Maintenance Hell**: Upstream kernel changes to core clocks, power domains, or pin controller bindings have to be hand-ported across a dozen separate `.dts` files.
+3. **Field Failure Risk**: Switching modes in the field requires either rewriting raw bootloader partitions or maintaining brittle boot scripts with massive `if/else` ladders.
+
+---
+
+## 2. The KISS Architecture: In-Memory Bootloader Merging
+
+Rather than building multiple monolithic trees, the clean architecture separates hardware descriptions into modular building blocks:
+
+1. **One Base Device Tree (`.dtb`)**: Describes the immutable motherboard hardware (CPU cores, DRAM controller, interrupt controllers, system interconnects).
+2. **Modular Overlays (`.dtbo`)**: Small standalone fragments that mutate specific nodes, enable peripheral clocks, re-route pinmuxes, or carve out shared memory.
+3. **A Human-Readable Configuration File (`config.txt`)**: Placed on the FAT32 boot partition so developers can enable or disable features with simple key-value entries.
+4. **An In-Memory Overlay Engine in U-Boot**: At boot time, U-Boot loads the base DTB into RAM, reads `config.txt`, merges the selected overlays sequentially using `libfdt`, and passes the unified tree directly to the Linux kernel.
 
 ```text
-+-------------------------------------------------------+
-|                 DYNAMIC BOOT PIPELINE                 |
-+-------------------------------------------------------+
++-------------------------------------------------------------------------+
+|                        DYNAMIC BOOTLOADER PIPELINE                      |
++-------------------------------------------------------------------------+
   |
   +-> 1. U-Boot reads /boot/config.txt (FAT partition)
-  |      Parses: dtoverlay=cubie-a5e-flight-stack uio
+  |      Parses: dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
   |
-  +-> 2. Load Base DTB into RAM @ ${fdt_addr_r}
+  +-> 2. Load Base DTB into RAM @ ${fdt_addr_r} (0x4fa00000)
   |      sun55i-a527-cubie-a5e.dtb (compiled with -@ symbols)
   |
   +-> 3. Expand in-memory Device Tree buffer
-  |      fdt resize 0x10000 (adds 64 KB padding headroom)
+  |      fdt resize 0x10000 (adds 64 KB of headroom in hex)
   |
-  +-> 4. Apply Overlays sequentially into RAM
-  |      - load cubie-a5e-flight-stack.dtbo -> fdt apply
-  |      - load cubie-a5e-uio.dtbo          -> fdt apply
+  +-> 4. Apply Overlays sequentially in RAM via libfdt
+  |      - load cubie-a5e-flight-stack.dtbo -> fdt apply 0x4fe00000
+  |      - load cubie-a5e-uio.dtbo          -> fdt apply 0x4fe00000
   |
-  +-> 5. Load Kernel Image @ ${kernel_addr_r} (0x40200000: 2MB aligned)
+  +-> 5. Load Kernel Image @ ${kernel_addr_r} (0x40200000: strictly 2MB-aligned)
   |
   +-> 6. Execute booti ${kernel_addr_r} - ${fdt_addr_r}
-         ARM64 Register x0 = Physical RAM Address of FDT
-         Kernel boots with unified, fully-merged tree
+         ARM64 Register x0 = Physical RAM Address of merged FDT
+         Kernel boots with zero runtime overlay overhead
 ```
 
----
+### Why Merge in U-Boot Instead of the Linux Kernel?
 
-### Why Do This in U-Boot Instead of the Linux Kernel? (The KISS Principle)
-
-A frequent design question in embedded engineering is: *The Linux kernel supports runtime overlays via `CONFIG_OF_OVERLAY` and `configfs`—why not just let Linux handle overlays in userspace after booting?*
-
-The answer is the **KISS (Keep It Simple, Stupid) principle**, driven by fundamental architectural constraints:
+The Linux kernel technically supports dynamic overlays at runtime through `CONFIG_OF_OVERLAY` and `configfs`. In practice, relying on userspace to apply hardware overlays is a recipe for silent instability:
 
 #### 1. The Boot-Time "Chicken-and-Egg" Problem
-Runtime overlays in the kernel are applied from userspace (via `/sys/kernel/config/device-tree/overlays/` or init scripts). But in real-world systems, overlays frequently configure hardware that the kernel needs **at the very first millisecond of boot**:
-* **Early Serial Console & Pinmux**: If an overlay assigns UART0 to Linux and isolates UART2 for the RISC-V co-processor, waiting for userspace to apply this creates pin conflicts on power-up and blinds you to early kernel panics (`earlycon`).
-* **Reserved Memory Carveouts (`reserved-memory`)**: The XuanTie E907 firmware requires dedicated non-cacheable DMA regions (`rproc_vdev` @ `0x48000000`). The Linux memory subsystem (Buddy allocator, page tables, CMA zones) establishes physical memory boundaries during early architecture initialization (`setup_arch()`). **You cannot dynamically insert `reserved-memory` carveouts into a running kernel memory map from userspace.**
-* **Core Clocks and Power Domains**: Changing clock gates or PMIC regulator voltages after drivers have already probed causes clock tree desynchronization or peripheral brownouts.
+Runtime kernel overlays are applied late in the boot sequence from userspace init scripts. Real-world overlays, however, configure hardware that the kernel needs on the very first instruction:
+* **Early Serial Console & Pinmux**: If an overlay assigns UART0 to Linux and isolates UART2 for the RISC-V coprocessor, waiting for userspace to apply this creates pin conflicts on power-up and blinds you to early kernel panics (`earlycon`).
+* **Reserved Memory Carveouts (`reserved-memory`)**: The XuanTie E907 firmware requires dedicated, non-cacheable DMA memory (`rproc_vdev` @ `0x48000000`). The Linux memory subsystem (Buddy allocator, page tables, CMA zones) establishes physical memory boundaries during early architecture initialization (`setup_arch()`). **You cannot dynamically insert `reserved-memory` carveouts into a running kernel memory map from userspace.**
+* **Core Clocks and Power Domains**: Mutating clock trees or PMIC regulators after platform drivers have already probed causes clock desynchronization or peripheral brownouts.
 
-#### 2. Avoiding Kernel Driver Fragility & Memory Leaks
-Applying and removing Device Tree nodes inside a running kernel is notoriously complex:
-* The kernel must dynamically generate new `platform_device` objects, resolve deferred probes, and track device-node reference counts.
-* If an overlay disables a node (`status = "disabled"`), the associated driver must cleanly unbind. In practice, many kernel drivers do not implement flawless `.remove()` routines for Device Tree hot-unplug, leading to dangling pointers, kernel memory leaks, or oopses.
+#### 2. Kernel Driver Unbind Fragility
+Modifying Device Tree nodes inside a running kernel forces the kernel to dynamically instantiate `platform_device` objects, resolve deferred probes, and track device-node reference counts. If an overlay disables a node (`status = "disabled"`), the bound driver must cleanly unbind. Many kernel drivers do not have battle-tested `.remove()` paths for Device Tree hot-unplug, leading to dangling pointers, kernel memory leaks, or oopses.
 
-#### 3. The Pure Determinism of Bootloader Merging
-By executing all overlay merges in **U-Boot before the kernel boots**:
-* **The Kernel Stays Simple**: To Linux, the Device Tree looks like a standard, 100% static hardware description. The kernel needs zero dynamic overlay patches, no `configfs` daemons, and zero runtime overhead.
-* **Atomic Hardware State**: When the kernel entry point (`head.S`) runs, the entire hardware topology—reserved memory, clocks, pinmux, and driver bindings—is already unified, coherent, and immutable.
-* **No RootFS Dependency**: If an overlay is required to configure the storage controller (eMMC/SDIO) or root filesystem bus, U-Boot handles it before storage is even mounted.
+#### 3. Pure Determinism
+Merging overlays in U-Boot gives the kernel a completely static, fully-resolved hardware description. To Linux, the device tree is indistinguishable from a custom monolithic DTB. The kernel requires zero dynamic overlay patches, no `configfs` daemons, and zero runtime overhead.
 
 ---
 
-## 2. The Tale of Two Environments: Static `uboot.env` vs Dynamic `config.txt`
+## 3. The Two Environments: Static `uboot.env` Binary vs Dynamic `config.txt`
 
-A common source of confusion when inspecting a freshly flashed SD card is discovering a file named `uboot.env` alongside `boot.scr`, but wondering where `config.txt` fits in.
+If you inspect a newly flashed SD card, you will find `uboot.env` sitting in the same boot partition alongside `config.txt` and `boot.scr`. Understanding the architectural divide between these two files is essential.
 
-### The Real-World Target Experience: Why Editing `uboot.env` is Painful
-When you log into Linux on the board and mount the FAT boot partition, you see the contents of partition 1 (`/dev/mmcblk0p1`):
+### The Real-World Target Experience: Why Editing `uboot.env` Fails
+
+Mount the FAT boot partition on a running board:
 
 ```bash
-cubie-a5e-flight login: root
+cubie-a5e login: root
 # mkdir -p /boot
 # mount -t vfat /dev/mmcblk0p1 /boot
 # ls -la /boot
@@ -104,30 +102,28 @@ drwxr-xr-x   18 root     root          4096 Sep  5 09:40 ..
 -rwxr-xr-x    1 root     root           557 Sep  5 09:35 uEnv.txt
 ```
 
-If you try to inspect `uboot.env` using `more` or edit it with `vi`:
+If you try to view `uboot.env` with `more` or edit it with `vi`:
 ```bash
 # more /boot/uboot.env
 --More-- (2% of 65536 bytes) loglevel=8bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000kernel_addr_r=0x40200000kernel_comp_addr_r=0x4400)
 ```
-The screen fills with control codes and unreadable binary characters. And if you attempt to edit `uboot.env` with `vi` and save, U-Boot greets you on the next boot with:
+The terminal fills with control characters. If you save changes with `vi`, the next reboot produces:
 
 ```text
 *** Bad CRC, using default environment ***
 ```
-Your edits are completely discarded, and U-Boot falls back to hardcoded compiled defaults. Why does this happen?
 
----
+U-Boot rejects the file, discards every variable, and falls back to hardcoded compiled defaults.
 
-### Inside `uboot.env`: Binary Architecture, CRC32 Checksums, and C Structs
+### Inside `uboot.env`: CRC32 Checksums and Binary Layout
 
-`uboot.env` is **not a text file**. It is a raw binary image compiled by the host tool `mkenvimage` from a text template ([`project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt)):
+`uboot.env` is **not a text file**. It is a raw binary image compiled during the build by the host tool `mkenvimage` from a text template ([`project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt)):
 
 ```bash
 ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DIR}/uboot-env.txt"
 ```
 
-#### The C Structure Representation (`include/env_internal.h`)
-Inside the U-Boot source tree, the environment binary layout is defined by the following C data structure:
+In the U-Boot source tree (`include/env_internal.h`), the environment binary structure is defined as:
 
 ```c
 /* U-Boot standard non-redundant environment image format */
@@ -135,19 +131,12 @@ struct env_image_single {
     uint32_t crc;       /* 4-byte CRC32 checksum over the data array */
     char     data[];    /* Sequential NULL-separated key=value strings */
 };
-
-/* Redundant environment format (when CONFIG_SYS_REDUNDAND_ENVIRONMENT=y) */
-struct env_image_redundant {
-    uint32_t crc;       /* 4-byte CRC32 checksum over data array + flags */
-    unsigned char flags;/* Generation counter / active buffer indicator */
-    char     data[];    /* Sequential NULL-separated key=value strings */
-};
 ```
 
-On Allwinner platforms without redundant environment enabled, `struct env_image_single` is used.
+On Allwinner platforms without redundant environment enabled, `struct env_image_single` is stored directly on flash.
 
 #### Byte-by-Byte Hex Dump Breakdown
-If you inspect the binary `uboot.env` using `hexdump -C` or `xxd`, the byte layout is exposed:
+Inspecting `uboot.env` with `hexdump -C` reveals the layout:
 
 ```text
 Offset    Hexadecimal Bytes                                 ASCII Representation
@@ -169,205 +158,61 @@ Offset    Hexadecimal Bytes                                 ASCII Representation
 4. **End of Environment Marker**: Marked by two consecutive NUL bytes (`\0\0`).
 5. **Zero Padding**: The remaining ~65 KB of the file is filled with zeroes (`0x00`) to guarantee an exact total file size of 65,536 bytes (`0x10000`).
 
----
+When you edit `uboot.env` with a text editor:
+* **The CRC Breaks**: Modifying a single character invalidates the 4-byte CRC header.
+* **String Boundaries Corrupt**: Text editors treat `\0` as end-of-file or convert it to `\n` or `\r\n`.
+* **File Truncation**: Text editors strip the trailing zero padding, changing the total file size from 65,536 bytes.
 
-### How `mkenvimage` Compiles the Environment
-When the Buildroot host tool `mkenvimage` executes during image assembly, it performs four strict operations:
-1. **Syntax Parsing**: It reads [`project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt), stripping comment lines (beginning with `#`) and empty lines.
-2. **Buffer Packaging**: It replaces line feeds (`\n`) with null bytes (`\0`), sequentializing the tokens into an in-memory buffer starting at offset `0x0004`.
-3. **CRC32 Calculation**: It calculates a standard Ethernet CRC32 checksum (polynomial `0xEDB88320`) over all bytes from offset `0x0004` to `size - 1` (`0xFFFF`).
-4. **Binary Emission**: It writes the 4-byte CRC header to bytes `0x00 - 0x03`, followed by the payload, and pads the file with null bytes until exactly `0x10000` (65,536) bytes are written.
+### The Solution: Decoupling Low-Level Plumbing from User Config
 
----
+We split configuration responsibilities completely:
 
-### How U-Boot Validates `uboot.env` at Boot Time
-During the U-Boot board initialization sequence (`env_init()` and `env_relocate()`):
-1. U-Boot reads the 64 KB block from the storage medium (FAT partition or raw MMC offset) into a memory buffer.
-2. It extracts the 4-byte CRC header at offset `0x0000`.
-3. It recalculates the CRC32 of the remaining 65,532 bytes.
-4. **Verification**:
-   * **If CRC matches**: The environment is marked `ENV_VALID`. U-Boot calls `himport_r()` to parse the null-separated strings into its internal hash table.
-   * **If CRC fails**: The environment is marked `ENV_INVALID`. U-Boot prints:
-     ```text
-     *** Bad CRC, using default environment ***
-     ```
-     It immediately discards the file buffer and falls back to the hardcoded default environment compiled into the U-Boot binary (`default_environment[]`).
-
-#### Why Modifying `uboot.env` with `vi` or `nano` Always Fails:
-* **Destroying CRC32**: Changing even one letter changes the checksum. Since a text editor cannot recalculate the CRC header, U-Boot flags the file as corrupt.
-* **Mangled Null Characters**: Text editors interpret `0x00` as an EOF or replace it with line endings (`\n`, `\r\n`), destroying string boundaries.
-* **Truncated Filesize**: Text editors drop trailing zeroes on save, producing a truncated file that U-Boot rejects.
+* **`uboot.env`**: Static low-level firmware baseline. Holds DRAM addresses, baud rates, and one critical command:
+  ```text
+  bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000
+  ```
+* **`config.txt`**: Pure ASCII text file on the FAT partition. Users can edit it with `vi` on the target or in Notepad on Windows.
+* **`boot.cmd`**: The script engine that reads `config.txt` into RAM using U-Boot's `env import -t` command:
+  ```sh
+  if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
+      echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
+      env import -t ${ramdisk_addr_r} ${filesize}
+  fi
+  ```
 
 ---
 
-### The Spectrum of Bootloader Files: When to Use What
+## 4. SD Card Storage Architecture & On-Target Access
 
-To avoid confusion, here is how each configuration and boot file is used across the platform:
+The SD card layout uses two distinct partitions:
 
-* **config.txt** (Plain Text): Raspberry Pi-style overlay selection (`dtoverlay=`) and kernel args. Safely editable live with `vi` or on any PC.
-* **boot.cmd** (Shell Script): Dynamic boot script implementing overlay loading logic (`config.txt`). Editable in repository.
-* **boot.scr** (Binary Script): Compiled boot engine executed by U-Boot (`source 0x4fc00000`).
-* **uboot.env** (64 KB Binary): Static firmware baseline with CRC32. Do not edit directly.
-* **uboot-env.txt** (Plain Text): Default environment template compiled into `uboot.env`.
-* **uEnv.txt** (Plain Text): Legacy fallback configuration (`overlays=`). Editable live with `vi`.
+* **Sectors 0 - 32767 (Offset 8 KB)**: Raw bootloader carveout (`u-boot-sunxi-with-spl.bin` holding SPL, ATF BL31, and Mainline U-Boot).
+* **Partition 1 (`/dev/mmcblk0p1`, 64 MB FAT32)**: Mounted at `/boot`. Contains the uncompressed kernel `Image`, base DTB, `.dtbo` overlays, `config.txt`, `boot.scr`, and `uboot.env`.
+* **Partition 2 (`/dev/mmcblk0p2`, ext4)**: Root filesystem (`/`).
 
-*Repository file locations:*
-* `config.txt`: [`project-cubie-a5e/board/radxa/cubie_a5e/config.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/config.txt)
-* `boot.cmd`: [`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd)
-* `uboot-env.txt`: [`project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/uboot-env.txt)
-* `uEnv.txt`: [`project-cubie-a5e/board/radxa/cubie_a5e/uEnv.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/uEnv.txt)
-
-
----
-
-### The Modern Solution: Human-Readable `config.txt`
-
-To solve this usability bottleneck, we separate firmware plumbing from user configuration:
-
-* **File Format**: `uboot.env` is a 64 KB binary blob protected by a 4-byte CRC32 header, whereas `config.txt` is pure, human-readable plain text (ASCII/UTF-8).
-* **Primary Purpose**: `uboot.env` handles low-level firmware bootstrap plumbing (baud rates, DRAM addresses, immutable `bootcmd`), whereas `config.txt` provides user runtime configuration (enabling overlays and kernel command-line options).
-* **Editing with vi**: Direct editing of `uboot.env` with `vi` or `nano` corrupts the CRC32 checksum, forcing U-Boot to revert to compiled-in defaults. In contrast, `config.txt` is 100% safe to edit live on the running board or in any text editor on a host PC.
-* **Where to Edit**: Modifying `uboot.env` requires the host `mkenvimage` utility or the U-Boot serial console, while `config.txt` can be edited directly on the target at `/boot/config.txt` or on a PC SD card reader.
-* **Ingestion Mechanism**: `uboot.env` is loaded automatically by U-Boot at reset, while `config.txt` is imported dynamically into RAM by `boot.cmd` using U-Boot's `env import -t` command.
-
-#### How `boot.cmd` Bridges the Two Worlds
-Instead of requiring users to touch `uboot.env`, `uboot.env` provides one critical, immutable baseline command:
-```text
-bootcmd=load mmc 0:1 0x4fc00000 boot.scr && source 0x4fc00000
-```
-This hands control over to our dynamic boot script ([`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd)), which reads `config.txt` directly from the FAT partition into RAM:
-
-```sh
-if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
-    echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
-    env import -t ${ramdisk_addr_r} ${filesize}
-fi
-```
-
-The U-Boot `env import -t <address> <size>` command parses plain text `KEY=VALUE` lines in memory and dynamically injects them into U-Boot's active environment table. This allows users to configure overlays (`dtoverlay=...`) and kernel bootargs (`cmdline=...`) in plain text, completely bypassing `uboot.env`!
-
----
-
-## 3. Accessing and Modifying the Boot Partition on the Target Board
-
-To edit `config.txt` directly on a running Radxa Cubie A5E board, you must know how the SD card storage is organized and mounted.
-
-### Storage Partition Architecture
-The system SD card is partitioned into two distinct filesystems:
-
-* **Sector 0 - 32767** (Raw Flash Blocks): Bootloader Carveout (SPL, ATF BL31, Mainline U-Boot)
-* **Partition 1** (FAT32 Boot Partition, `/dev/mmcblk0p1` - 64 MB): Bootloader, kernel, device tree, overlays, and config
-* **Partition 2** (Linux Root Filesystem, `/dev/mmcblk0p2` - ext4): Mounted as root directory (`/`)
-
-Partition 1 files:
-* `Image` (ARM64 Kernel)
-* `sun55i-a527-cubie-a5e.dtb` (Base DTB)
-* `boot.scr` (Compiled boot engine)
-* `config.txt` (Human-readable user configuration)
-* `cubie-a5e-flight-stack.dtbo` (Flight stack overlay)
-* `cubie-a5e-uio.dtbo` (Userspace UIO doorbell overlay)
-* `uboot.env` (Static U-Boot plumbing environment)
-
-### Automatic Mount via `/etc/fstab`
-In our Buildroot root filesystem overlay ([`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab`](/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab)), we declare:
+In the Buildroot rootfs overlay ([`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab)), the FAT partition is mounted automatically on boot:
 
 ```text
-# /etc/fstab: static file system information.
-# <file system> <mount pt>     <type>   <options>         <dump> <pass>
 /dev/root       /              ext4     rw,noatime        0      1
 /dev/mmcblk0p1  /boot          vfat     defaults          0      2
 proc            /proc          proc     defaults          0      0
-devpts          /dev/pts       devpts   defaults,gid=5,mode=620,ptmxmode=0666 0 0
-tmpfs           /dev/shm       tmpfs    mode=0777         0      0
-tmpfs           /tmp           tmpfs    mode=1777         0      0
-tmpfs           /run           tmpfs    mode=0755,nosuid,nodev 0 0
 sysfs           /sys           sysfs    defaults          0      0
 ```
 
-Because `/dev/mmcblk0p1` is configured to mount at `/boot`, all bootloader files—including `config.txt`—are directly accessible immediately upon system login.
-
-### Manual Mount Procedure
-If you are running on a minimal or rescue rootfs where `/boot` is not automatically mounted:
-
+Editing the hardware configuration directly on the board is a 3-step workflow:
 ```bash
-# 1. Create the mount directory if it doesn't already exist:
-mkdir -p /boot
-
-# 2. Mount the FAT32 boot partition:
-mount -t vfat /dev/mmcblk0p1 /boot
-
-# 3. Verify that the files are present:
-ls -l /boot/config.txt
-```
-
-### Live On-Board Editing Workflow
-With `/boot` mounted, configuring the board is effortless:
-
-```bash
-# Open config.txt with vi:
 vi /boot/config.txt
-
-# Flush dirty filesystem buffers to SD card:
 sync
-
-# Reboot into the new hardware configuration:
 reboot
 ```
 
 ---
 
-## 4. Anatomy of a Device Tree Overlay (`.dtso`)
+## 5. Anatomy of an Overlay (`.dtso`) & The `-@` Symbol Trap
 
-Before analyzing the bootloader script, we must understand how Device Tree Overlays are structured and compiled.
+An overlay source file (`.dtso`) declares `/plugin/;` at the top. Instead of defining a complete system, it targets specific nodes in the base tree using labels (e.g. `&msgbox`) or absolute paths (`target-path = "/soc/mailbox@3003000"`).
 
-### Base Device Tree Compilation (`-@` Flag) & Symbol Resolution
-
-For a base device tree to accept overlays, it **must** be compiled by the Device Tree Compiler (`dtc`) with the symbols flag (`-@`):
-```bash
-dtc -@ -I dts -O dtb -o base.dtb base.dts
-```
-
-> [!IMPORTANT]
-> **The Missing `__symbols__` Trap (`FDT_ERR_NOTFOUND`)**
-> 
-> Under normal compilation without `-@`, `dtc` converts all human-readable node labels (e.g. `uart0: serial@2500000`, `msgbox: mailbox@3003000`, `&i2c1`) into anonymous integer phandles and completely strips the string label names to minimize binary size.
->
-> When `-@` is passed, `dtc` retains every label by generating a dedicated top-level node named `__symbols__`:
-> ```dts
-> __symbols__ {
->     uart0 = "/soc/serial@2500000";
->     msgbox = "/soc/mailbox@3003000";
->     i2c1 = "/soc/i2c@2502400";
->     ccu = "/soc/clock-controller@2001000";
-> };
-> ```
-> 
-> When overlays (`.dtbo`) are compiled with `/plugin/;`, their external label references (e.g., `&msgbox`, `&i2c1`) cannot be assigned fixed phandles at compile time; instead, `dtc` records them in a `__fixups__` table. 
-> 
-> At boot time, U-Boot's `fdt apply` command cross-references the overlay's `__fixups__` table against the base tree's `__symbols__` node to resolve and patch the integer phandle values.
-> 
-> **If the base DTB was compiled without `-@`, the `__symbols__` node does not exist!** U-Boot has no way to map labels, causing `fdt apply` to immediately fail with the cryptic error:
-> ```text
-> libfdt fdt_apply_overlay(): FDT_ERR_NOTFOUND (-1)
-> ```
-> 
-> **How to ensure `-@` is enabled in your build system:**
-> * **Buildroot**: Enable `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` in your board defconfig. Buildroot automatically appends `-@` to all `dtc` invocations.
-> * **Kernel Makefile**: If building the kernel standalone, pass `DTC_FLAGS="-@"` during DTB compilation:
->   ```bash
->   make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- DTC_FLAGS="-@" dtbs
->   ```
-> * **Verification**: You can verify whether a base DTB has symbols using `fdtdump` or `fdtgrep`:
->   ```bash
->   fdtdump sun55i-a527-cubie-a5e.dtb | grep -A 5 __symbols__
->   ```
-
-### Overlay Source Format (`/plugin/`)
-An overlay source file (`.dtso`) declares `/plugin/;` at the top. Instead of defining a complete hardware tree, it references target nodes in the base tree using either:
-* **Node Labels**: Reference by symbol name (e.g., `&uart0`, `&msgbox`, `&i2c1`).
-* **Target Paths**: Explicit path strings (e.g., `target-path = "/soc/serial@2500000"`).
-
-Here is an example overlay ([`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso`](/project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso)) that modifies an existing base node and adds memory regions:
+Here is the Userspace I/O overlay ([`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso)):
 
 ```dts
 /dts-v1/;
@@ -396,97 +241,76 @@ Here is an example overlay ([`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-
 };
 ```
 
-When compiled with `dtc -@ -I dts -O dtb -o cubie-a5e-uio.dtbo cubie-a5e-uio.dtso`, `dtc` generates internal metadata:
-* `__fixups__`: Lists which labels the overlay expects the base tree to provide (`msgbox`, `rproc`).
-* `fragment@0`: Contains the property updates and new nodes to merge into `&msgbox`.
+### The Missing `__symbols__` Trap (`FDT_ERR_NOTFOUND`)
+
+When the Device Tree Compiler (`dtc`) compiles a standard `.dts` without the `-@` flag, it converts all human-readable node labels (`&msgbox`, `&i2c1`, `&uart0`) into anonymous integer phandles and completely strips the string label names.
+
+When an overlay is compiled with `/plugin/;`, its label references cannot be assigned fixed phandles at compile time; `dtc` records them in a `__fixups__` table.
+
+At boot time, U-Boot's `fdt apply` command cross-references the overlay's `__fixups__` table against a top-level `__symbols__` node in the base tree:
+
+```dts
+__symbols__ {
+    uart0 = "/soc/serial@2500000";
+    msgbox = "/soc/mailbox@3003000";
+    i2c1 = "/soc/i2c@2502400";
+    ccu = "/soc/clock-controller@2001000";
+};
+```
+
+**If the base DTB was compiled without `-@`, the `__symbols__` node does not exist.** `fdt apply` fails with:
+```text
+libfdt fdt_apply_overlay(): FDT_ERR_NOTFOUND (-1)
+```
+
+To fix this, enable overlay symbols in your build system:
+* **Buildroot**: Set `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` in defconfig.
+* **Standalone Kernel Build**: Pass `DTC_FLAGS="-@"` during build:
+  ```bash
+  make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- DTC_FLAGS="-@" dtbs
+  ```
+* **Inspect Symbols in DTB**:
+  ```bash
+  fdtdump sun55i-a527-cubie-a5e.dtb | grep -A 5 __symbols__
+  ```
 
 ---
 
-## 5. The User Configuration Layer: Raspberry Pi-Style `config.txt`
+## 6. The `config.txt` Interface & Armbian Comparison
 
-The default configuration file ([`project-cubie-a5e/board/radxa/cubie_a5e/config.txt`](/project-cubie-a5e/board/radxa/cubie_a5e/config.txt)) provides two primary directives:
+The default [`config.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/config.txt) on the boot partition exposes two primary keys:
 
 ```ini
 # /boot/config.txt - Radxa Cubie A5E Hardware & Overlay Configuration
-# (Raspberry Pi style configuration for Allwinner T527 / A527)
 
-# ==============================================================================
 # 1. Device Tree Overlays (dtoverlay)
-# ==============================================================================
-# Space-separated list of overlays. You can omit the '.dtbo' extension!
-#
-# Default: Flight stack (dedicated RISC-V UART2/SPI0, sensors, pin muxing)
-dtoverlay=cubie-a5e-flight-stack
+# Space-separated list of overlays (omitting .dtbo extension is supported)
+dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
 
-# To add the Lite-libmetal UIO Doorbell overlay, simply append it to the list:
-# dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
-
-# ==============================================================================
 # 2. Kernel Command-Line Arguments (cmdline)
-# ==============================================================================
-# Optional extra bootargs appended to the kernel command line.
-# Example: Isolate CPU 7 for hard real-time execution with zero OS jitter:
-# cmdline=isolcpus=7 nohz_full=7 rcu_nocbs=7
-cmdline=
+# Optional bootargs appended to kernel command line
+cmdline=isolcpus=3 nohz_full=3 rcu_nocbs=3
 ```
 
-### Supported Configuration Directives:
-1. `dtoverlay=`: Space-separated list of overlays to apply. You can specify the file name with or without `.dtbo` (e.g., `cubie-a5e-flight-stack` or `cubie-a5e-flight-stack.dtbo`). Multiple overlays are merged sequentially in the order specified.
-2. `cmdline=`: Additional arguments to append to the Linux kernel command line. Useful for configuring CPU isolation (`isolcpus`), dynamic printk debugging (`ignore_loglevel`), or setting custom init targets.
-3. Fallback compatibility: The boot engine also supports legacy `uEnv.txt` directives (`overlays=` and `extra_bootargs=`).
+### Armbian Comparison
+
+Armbian popularized the `env import -t` pattern using `/boot/armbianEnv.txt` (`overlays=`, `extraargs=`). Our implementation adopts this mechanic while addressing several structural constraints:
+
+1. **Partition Isolation**: Armbian uses a single monolithic `ext4` root partition. If an uncontrolled power cut corrupts the `ext4` filesystem, the board cannot boot. Our architecture puts bootloader files, kernels, and overlays onto a dedicated 64 MB FAT32 partition.
+2. **Multi-Format Ingestion**: Our boot script checks for `config.txt` first, falls back to `armbianEnv.txt`, and finally checks legacy `uEnv.txt`. Dropping an existing `armbianEnv.txt` onto the SD card works without modification.
+3. **Cross-Platform Host Editing**: FAT32 mounts natively on Windows, macOS, and Linux PCs without requiring third-party ext4 drivers.
 
 ---
 
-### Architectural Comparison: How Armbian Does It
+## 7. Anatomy of `boot.cmd`: The U-Boot Script Engine
 
-If you have worked with Armbian on Allwinner (Sunxi), Rockchip, or Amlogic boards, this pattern will look very familiar. Armbian pioneered this text-import workflow to solve the same usability problem.
+The plain-text source script ([`project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/boot.cmd)) is compiled into `boot.scr` using `mkimage`:
 
-#### 1. Why Armbian Abandoned Direct `uboot.env` Editing
-In early SBC distributions, modifying boot parameters required using U-Boot's `saveenv` command over a serial UART console, or running binary editing tools. Non-technical users frequently corrupted the 4-byte CRC32 header or NULL padding, leaving boards in an unbootable state. 
-
-To solve this, Armbian introduced `/boot/armbianEnv.txt`:
-```ini
-verbosity=1
-bootlogo=false
-overlay_prefix=sun55i-a527
-overlays=flight-stack uio
-rootdev=UUID=e2a4...
-rootfstype=ext4
-extraargs=isolcpus=7
-```
-Armbian's popular `armbian-config` interactive terminal utility is actually just a menu-driven frontend that writes `KEY=VALUE` strings into `/boot/armbianEnv.txt`.
-
-#### 2. How Armbian's Boot Engine Ingests Configuration
-Inside Armbian's official `boot.cmd` script, you find the exact same U-Boot primitive:
-```sh
-# Armbian boot engine ingestion snippet
-load mmc ${devnum}:${distro_bootpart} ${loadaddr} /boot/armbianEnv.txt || load mmc ${devnum}:${distro_bootpart} ${loadaddr} armbianEnv.txt
-env import -t ${loadaddr} ${filesize}
-```
-U-Boot parses the text file directly into its active environment hash table in RAM, then iterates over `${overlays}` applying each `.dtbo` via `fdt apply`.
-
-#### 3. In-Depth Comparison: Armbian Architecture vs Our Cubie A5E Architecture
-While our design adopts the proven `env import -t` engine popularized by Armbian, we improve upon it across several critical dimensions:
-
-* **Boot Filesystem Architecture**: Standard Armbian uses a single monolithic `ext4` root partition where `/boot` resides inside the Linux filesystem. Our architecture provides a dedicated 64 MB FAT32 boot partition (`boot.vfat`) alongside the `ext4` rootfs.
-* **Cross-Platform Host Editing**: Standard Armbian SD cards cannot be read on Windows or macOS without third-party `ext4` drivers. Our FAT32 boot partition automatically mounts as a standard flash drive on Windows, macOS, and Linux PCs out-of-the-box.
-* **Filesystem Failure Isolation**: In a monolithic setup, if a sudden power cut corrupts the `ext4` filesystem during flight or field operation, the boot files and kernel become inaccessible. With our dedicated FAT32 boot partition, the kernel (`Image`), base device tree (`.dtb`), overlays (`.dtbo`), and configuration (`config.txt`) are physically isolated on partition 1, allowing the system to boot or be recovered easily.
-* **Configuration Syntax**: Armbian uses proprietary `armbianEnv.txt` variables (`overlays=`, `extraargs=`). Our architecture adopts the familiar Raspberry Pi `config.txt` convention (`dtoverlay=`, `cmdline=`).
-* **Ecosystem Compatibility & Multi-Format Ingestion**: Armbian's boot engine is locked strictly to `armbianEnv.txt`. Our universal `boot.cmd` integrates an ordered priority chain: it checks for and imports `config.txt` first, falls back to `armbianEnv.txt` if absent, and finally tries legacy `uEnv.txt`. Rather than attempting to merge multiple disjoint files, it prioritizes and imports the first configuration file it encounters. Developers migrating from Armbian can simply drop their existing `armbianEnv.txt` onto the partition, and the script will automatically import and apply its variables without requiring translation!
-* **Overlay Name Resolution**: Armbian requires rigid board-specific prefixing via `overlay_prefix` (e.g. looking strictly for `${overlay_prefix}-${overlay}.dtbo`), which causes custom overlays to fail if naming doesn't follow strict upstream conventions. Our engine uses smart resolution: if the user specifies `flight-stack` or `cubie-a5e-flight-stack`, it searches directly for the exact file or automatically appends `.dtbo`.
-* **Kernel Arguments Appending**: Armbian only appends `extraargs`. Our engine unifies community conventions by checking `cmdline=` (Pi-style), `extraargs=` (Armbian), and `extra_bootargs=` (uEnv), appending whichever is defined to `bootargs`.
-* **Real-Time & Flight-Critical Tuning**: Armbian focuses on general-purpose server/desktop workloads where low-latency CPU isolation must be manually configured. Our Buildroot architecture integrates an automated real-time init daemon (`/etc/init.d/S15realtime`) that isolates high-performance cores (`isolcpus=3` or `7`), sets RCU affinity, and steers hardware IRQs to low cores automatically when real-time flight overlays are active.
-
----
-
-## 6. Deconstructing the U-Boot Boot Engine (`boot.cmd` -> `boot.scr`)
-
-U-Boot executes a compiled command script (`boot.scr`) created from a plain-text source script (`boot.cmd`) using `mkimage`:
 ```bash
 mkimage -A arm64 -T script -C none -d boot.cmd boot.scr
 ```
 
-Below is the complete, production-grade `boot.cmd` script used on the Radxa Cubie A5E / A7A platforms:
+Here is the complete script running on the platform:
 
 ```sh
 # ==============================================================================
@@ -543,7 +367,7 @@ fi
 echo ">>> Loading Base Device Tree: ${base_dtb}..."
 if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
     fdt addr ${fdt_addr_r}
-    # Expand FDT buffer by 64 KB (0x10000) to accommodate multiple overlays
+    # Expand FDT buffer by 64 KB (0x10000 in hex radix) to accommodate multiple overlays
     fdt resize 0x10000
 else
     echo "ERROR: Failed to load base DTB ${base_dtb}!"
@@ -586,182 +410,67 @@ else
 fi
 ```
 
----
+### Critical Implementation Details & Pitfalls
 
-### Step-by-Step Execution Analysis
+#### 1. The `kernel_addr_r` 2MB Boundary Rule
+In Allwinner 64-bit systems, physical DRAM begins at `0x40000000`. Legacy 32-bit scripts often set `kernel_addr_r=0x40080000` (a 512 KB offset).
 
-#### 1. Memory Map Allocation & Address Safety (The `kernel_addr_r` 2MB Alignment Trap)
-In Allwinner 64-bit systems, system DRAM begins at physical address `0x40000000`. To prevent memory corruption when loading uncompressed kernel images, base device trees, and overlays simultaneously, distinct address slots are allocated:
+**On ARM64, this causes silent boot loops or alignment panics.**
 
-* **`${kernel_addr_r}` (`0x40200000`)**: Staging buffer for the uncompressed ARM64 kernel Image.
-* **`${fdt_addr_r}` (`0x4fa00000`)**: Base Device Tree Blob (`sun55i-a527-cubie-a5e.dtb`), expanded in-place by `fdt resize`.
-* **`${fdtoverlay_addr_r}` (`0x4fe00000`)**: Staging buffer for loading `.dtbo` overlay fragments (reused sequentially).
-* **`${ramdisk_addr_r}` (`0x4ff00000`)**: Scratchpad buffer for `config.txt` text parsing via `env import -t`.
+Per the Linux kernel ARM64 booting protocol (`Documentation/arch/arm64/booting.rst`), the uncompressed kernel `Image` must be placed at a **2MB-aligned** physical memory address. Setting `kernel_addr_r=0x40200000` satisfies this constraint and preserves the lower 2MB (`0x40000000 - 0x401FFFFF`) for ARM Trusted Firmware (TF-A BL31) and secure monitor carveouts.
 
-> [!WARNING]
-> **The `kernel_addr_r` Alignment Trap: Why `0x40080000` Can Fail**
->
-> You will often see legacy boot scripts define `kernel_addr_r=0x40080000` (512 KB offset from DRAM base). **On 64-bit ARM architectures (ARM64), this can cause alignment faults or boot hangs.**
->
-> According to the official Linux kernel ARM64 boot protocol ([`Documentation/arch/arm64/booting.rst`](https://www.kernel.org/doc/Documentation/arch/arm64/booting.rst)):
-> * The uncompressed kernel binary `Image` must be placed at a **2MB-aligned** base address within physical DRAM (e.g. `0x40200000` when DRAM starts at `0x40000000`).
-> * While U-Boot's `booti` command can often relocate compressed images unpacked via `kernel_comp_addr_r`, loading an uncompressed raw `Image` directly to `0x40080000` violates the 2MB boundary (512 KB is not 2MB aligned).
-> * Depending on the kernel's `CONFIG_ARM64_VA_BITS`, page size (4KB vs 64KB), and MMU configuration, executing from an unaligned address forces `booti` to perform an emergency in-memory copy, or can trigger early MMU translation faults and silent boot loops.
->
-> Setting `kernel_addr_r=0x40200000` satisfies the 2MB boundary precisely while leaving 2MB of headroom at `0x40000000` for firmware reserved memory (ARM Trusted Firmware / ATF and OP-TEE).
+#### 2. The U-Boot Hex Radix Trap in `fdt resize`
+When `dtc` generates a DTB, the header field `totalsize` matches the exact compiled byte length. When `fdt apply` attempts to insert new nodes, strings, and phandles, `libfdt` returns `-FDT_ERR_NOSPACE` (`-3`) unless the buffer is expanded first.
 
-#### 2. The `config.txt` Parsing Gap: Bridging Mainline U-Boot and Raspberry Pi Workflows
+U-Boot's command-line parser interprets integer arguments as **hexadecimal by default**.
+* Writing `fdt resize 0x10000` adds exactly 65,536 bytes (64 KB) of padding headroom.
+* Writing decimal `65536` without prefix will be parsed by U-Boot as `0x65536` (415,030 bytes). While it allocates extra memory, on memory-constrained buffers or scripts expecting strict byte counts, omitting the `0x` prefix leads to unexpected buffer overflows or parse failures. Always write `fdt resize 0x10000`.
+
+#### 3. Hush Shell Spacing Bug in Conditional Checks
+In U-Boot's Hush parser, `test` is a built-in command that evaluates whitespace-delimited tokens. 
+
+A common bug in generated scripts is accidental whitespace insertion:
 ```sh
-if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
-    echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."
-    env import -t ${ramdisk_addr_r} ${filesize}
-fi
+# BROKEN: evaluates the literal string " 1" with leading space
+if test "${loaded}" = " 1"; then
+```
+If `${loaded}` is `"1"`, the string equality check fails silently, and the overlay is never applied. Ensure conditionals use clean token spacing:
+```sh
+if test "${loaded}" = "1"; then
 ```
 
-> [!NOTE]
-> **Why Mainline SBCs Need `boot.scr` to Parse `config.txt`**
->
-> On a Raspberry Pi, `config.txt` is parsed natively by the proprietary VideoCore GPU firmware *before* the ARM core ever executes. The GPU firmware reads overlays, applies them in GPU memory, and hands a pre-flattened DTB to U-Boot or the kernel.
->
-> Mainline Allwinner SBCs have **no native `config.txt` parser** in U-Boot or ROM. Mainline U-Boot natively understands compiled binary environment files (`uboot.env`), not arbitrary text files.
->
-> Our production `boot.scr` bridges this gap completely:
-> 1. It uses `load mmc 0:1 ${ramdisk_addr_r} config.txt` to read the plain-text file from FAT into scratchpad RAM.
-> 2. It invokes U-Boot's `env import -t ${ramdisk_addr_r} ${filesize}` to parse the newline-separated `key=value` text entries directly into active U-Boot runtime variables.
-> 3. When `config.txt` contains `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio`, U-Boot dynamically assigns `${dtoverlay}`, which our script seamlessly maps to `${overlays}` to drive the subsequent `fdt apply` loop.
-> 4. When `config.txt` contains `cmdline=isolcpus=7`, U-Boot dynamically sets `${cmdline}`, which our script automatically appends to `${bootargs}`.
->
-> The script also includes fallback support for Armbian-style `armbianEnv.txt` and legacy `uEnv.txt`.
-
-> [!TIP]
-> **The `env import -t` Trailing Newline Requirement**
->
-> U-Boot's `env import -t` parser expects text files to be delimited strictly by standard Unix newlines (`\n`). If a variable definition on the final line of `config.txt` lacks a terminating newline (i.e. the user didn't press <kbd>Enter</kbd> at EOF), certain U-Boot parser implementations will silently drop that last line. Always ensure your configuration files end with an empty blank line.
-
-#### 3. Why `fdt resize 0x10000` is Strictly Mandatory (and the Hex Padding Rule)
-```sh
-fdt addr ${fdt_addr_r}
-fdt resize 0x10000
-```
-This is the single most common point of failure in embedded overlay implementations!
-
-* A compiled base DTB is generated with a fixed header field `totalsize` matching its exact byte length (e.g., 62,914 bytes).
-* When U-Boot executes `fdt apply`, `libfdt` attempts to insert new nodes, properties, and strings into the tree.
-* **If the buffer is not resized, `libfdt` returns `-FDT_ERR_NOSPACE` (`-3`) and the overlay fails.**
-
-> [!IMPORTANT]
-> **U-Boot `fdt resize [extrasize]` Syntax & Hex Rules**
->
-> In U-Boot, the syntax is:
-> ```text
-> fdt resize [extrasize]
-> ```
-> * **Calling `fdt resize` without arguments**: U-Boot calculates the current tree size and adjusts `totalsize` to fit the current tree plus minimal standard padding (typically 4 KB / 1 memory page).
-> * **Calling `fdt resize <extrasize>`**: U-Boot adds `<extrasize>` bytes of additional padding headroom to the existing tree.
-> * **Hex vs Decimal Trap**: In the U-Boot command line, **numeric arguments are interpreted in hexadecimal by default**. Writing decimal `65536` can be misinterpreted by U-Boot's parser as `0x65536` (~415 KB) or cause parsing errors on strict builds.
-> * Always specify hex padding explicitly: `fdt resize 0x10000` grants exactly **64 KB (`0x10000` bytes)** of extra padding headroom, providing ample capacity for multiple complex overlays and string tables.
-
-#### 4. The Multi-Overlay Application Loop with Smart Extension Resolution
-```sh
-for overlay in ${overlays}; do
-    setenv loaded 0
-    if load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}.dtbo; then
-        setenv loaded 1
-    elif load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}; then
-        setenv loaded 1
-    elif load mmc 0:1 ${fdtoverlay_addr_r} overlays/${overlay}.dtbo; then
-        setenv loaded 1
-    fi
-
-    if test "${loaded}" = "1"; then
-        fdt apply ${fdtoverlay_addr_r}
-    fi
-done
-```
-The script implements smart path resolution:
-1. It loops through every space-separated token in `${overlays}`.
-2. It attempts to load `${overlay}.dtbo` from the root of the FAT partition.
-3. If not found, it tries `${overlay}` (in case the user explicitly included `.dtbo`).
-4. If not found, it checks `overlays/${overlay}.dtbo` (matching the Raspberry Pi directory convention).
-5. Once staged in memory at `${fdtoverlay_addr_r}`, `fdt apply` merges the fragment directly into the active tree at `${fdt_addr_r}`.
+#### 4. Trailing Newlines in `env import -t`
+U-Boot's `env import -t` expects newline (`\n`) delimiters. If the last line of `config.txt` does not have a trailing newline (the user didn't press <kbd>Enter</kbd> at the end of the file), U-Boot's parser silently drops the final key-value pair. Always ensure configuration files end with an empty blank line.
 
 ---
 
-## 7. Buildroot Integration: Automating the Overlay, Boot Script, and Disk Image Pipeline
+## 8. Buildroot Automation Pipeline
 
-A key strength of this architecture is that Buildroot automates the entire compilation, staging, and disk-packaging process. Developers do not need to manually run `dtc`, `mkimage`, `mkenvimage`, or `genimage`—everything is integrated into the Buildroot external tree ([`project-cubie-a5e`](/project-cubie-a5e)).
-
-### The Buildroot Workflow Pipeline
+Buildroot coordinates the compilation, staging, and packaging of every boot component automatically within [`project-cubie-a5e`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e).
 
 ```text
 +---------------------------------------------------------------------------------------------------+
-|                                  BUILDROOT AUTOMATION PIPELINE                                    |
+|                                  BUILDROOT PACKAGING PIPELINE                                     |
 +---------------------------------------------------------------------------------------------------+
-| 1. Out-of-Tree DTS Overlays (project-cubie-a5e/dts-overlay/allwinner/*.dtso)                      |
-|    ---> Buildroot Linux package runs dtc -@ ---> ${BINARIES_DIR}/*.dtbo                           |
+| 1. Out-of-Tree Overlays: project-cubie-a5e/dts-overlay/allwinner/*.dtso                            |
+|    Buildroot Linux package compiles with dtc -@ ---> ${BINARIES_DIR}/*.dtbo                       |
 +---------------------------------------------------------------------------------------------------+
-| 2. RootFS Pre-Assembly & Automount (rootfs-overlay & post-build.sh)                               |
-|    ---> Copies etc/fstab (/dev/mmcblk0p1 -> /boot) into ${TARGET_DIR}                             |
-|    ---> post-build.sh ensures mkdir -p ${TARGET_DIR}/boot exists                                  |
+| 2. RootFS Pre-Assembly: rootfs-overlay/etc/fstab & post-build.sh                                  |
+|    Copies fstab (/dev/mmcblk0p1 -> /boot) and creates /boot directory in ${TARGET_DIR}           |
 +---------------------------------------------------------------------------------------------------+
-| 3. Post-Image Processing (post-image.sh)                                                          |
-|    ---> mkimage compiles boot.cmd ---> ${BINARIES_DIR}/boot.scr                                   |
-|    ---> mkenvimage compiles uboot-env.txt ---> ${BINARIES_DIR}/uboot.env                         |
-|    ---> Copies config.txt and uEnv.txt ---> ${BINARIES_DIR}/                                      |
+| 3. Post-Image Processing: post-image.sh                                                           |
+|    - mkimage compiles boot.cmd ---> ${BINARIES_DIR}/boot.scr                                      |
+|    - mkenvimage compiles uboot-env.txt ---> ${BINARIES_DIR}/uboot.env                             |
+|    - Staging: copies config.txt and uEnv.txt into ${BINARIES_DIR}/                                |
 +---------------------------------------------------------------------------------------------------+
-| 4. Final Partition Packaging (genimage.cfg)                                                       |
-|    ---> Stitches u-boot-sunxi-with-spl.bin, boot.vfat (with config.txt, dtbos), and rootfs.ext4   |
-|    ---> Output: ${BINARIES_DIR}/sdcard.img                                                        |
+| 4. Final Disk Assembly: genimage.cfg                                                              |
+|    Stitches SPL, boot.vfat (with config.txt, dtbos, Image), and rootfs.ext4 into sdcard.img       |
 +---------------------------------------------------------------------------------------------------+
 ```
 
-### 1. Compiling Out-of-Tree Overlays (`.dtso` -> `.dtbo`)
-Buildroot compiles out-of-tree Device Tree Overlays using built-in Linux kernel package hooks. In our defconfig ([`project-cubie-a5e/configs/cubie_a5e_defconfig`](/project-cubie-a5e/configs/cubie_a5e_defconfig)), we configure:
+### Post-Image Script (`post-image.sh`)
 
-```kconfig
-# Base in-tree Device Tree from Linux kernel source:
-BR2_LINUX_KERNEL_DTS_SUPPORT=y
-BR2_LINUX_KERNEL_INTREE_DTS_NAME="allwinner/sun55i-a527-cubie-a5e"
-
-# Path to custom out-of-tree Device Tree Overlays:
-BR2_LINUX_KERNEL_CUSTOM_DTS_DIR="$(BR2_EXTERNAL_CUBIE_A5E_PATH)/dts-overlay"
-
-# Enable overlay compilation (-@ symbols flag):
-BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y
-```
-
-When Buildroot builds the kernel:
-1. It copies all overlay source files (`.dtso`) from `$(BR2_EXTERNAL_CUBIE_A5E_PATH)/dts-overlay/allwinner/` into the kernel build directory.
-2. It invokes the Device Tree Compiler (`dtc`) with the `-@` symbols flag to retain symbol fixups.
-3. It copies the resulting binary overlays (`cubie-a5e-flight-stack.dtbo`, `cubie-a5e-uio.dtbo`) directly into `${BINARIES_DIR}/`.
-
-### 2. Automating `/boot` Mount in the Root Filesystem (`post-build.sh` & `rootfs-overlay`)
-To ensure that `/boot` is ready for the user to edit immediately after boot without manual mount commands:
-
-1. **Rootfs Overlay ([`project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab`](/project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/fstab))**:
-   ```fstab
-   # /etc/fstab: static file system information.
-   /dev/root       /              ext4     rw,noatime        0      1
-   /dev/mmcblk0p1  /boot          vfat     defaults          0      2
-   proc            /proc          proc     defaults          0      0
-   sysfs           /sys           sysfs    defaults          0      0
-   ```
-   Buildroot copies this file into the target rootfs during filesystem construction.
-
-2. **Post-Build Script ([`project-cubie-a5e/board/radxa/cubie_a5e/post-build.sh`](/project-cubie-a5e/board/radxa/cubie_a5e/post-build.sh))**:
-   ```bash
-   #!/bin/sh
-   TARGET_DIR="$1"
-
-   # Ensure /boot mount point directory exists for FAT boot partition automount
-   mkdir -p "${TARGET_DIR}/boot"
-
-   exit 0
-   ```
-   Configured via `BR2_ROOTFS_POST_BUILD_SCRIPT`, this guarantees the `/boot` mount directory physically exists in `${TARGET_DIR}` before `rootfs.ext4` is generated.
-
-### 3. Staging Boot Artifacts via Post-Image Script (`post-image.sh`)
-Once the kernel and root filesystem are built, Buildroot executes the post-image script ([`project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh`](/project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh)):
+When the kernel and rootfs finishes building, Buildroot executes [`project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh):
 
 ```bash
 #!/bin/sh
@@ -769,7 +478,7 @@ BOARD_DIR="$(dirname $0)"
 GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 
-# 1. Compile boot.cmd into boot.scr using host mkimage (from BR2_PACKAGE_HOST_UBOOT_TOOLS)
+# 1. Compile boot.cmd into boot.scr using host mkimage
 ${HOST_DIR}/bin/mkimage -A arm64 -T script -C none -d "${BOARD_DIR}/boot.cmd" "${BINARIES_DIR}/boot.scr"
 
 # 2. Compile uboot-env.txt into uboot.env binary using host mkenvimage
@@ -790,12 +499,9 @@ genimage --config "${GENIMAGE_CFG}" \
 exit 0
 ```
 
-#### Key Elements of `post-image.sh`:
-* **Host Toolchain (`${HOST_DIR}/bin/mkimage` and `mkenvimage`)**: Provided by enabling `BR2_PACKAGE_HOST_UBOOT_TOOLS=y` in Buildroot.
-* **Staging `config.txt`**: Because `genimage` only reads files from `--inputpath "${BINARIES_DIR}"`, copying `config.txt` and `uEnv.txt` into `${BINARIES_DIR}` is required so they get included in the FAT filesystem.
+### Partition Assembly (`genimage.cfg`)
 
-### 4. Assembling the Multi-Partition Disk Image (`genimage.cfg`)
-Buildroot's host `genimage` tool reads [`project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg`](/project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg):
+Host `genimage` reads [`project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/board/radxa/cubie_a5e/genimage.cfg):
 
 ```cfg
 image boot.vfat {
@@ -838,164 +544,103 @@ image sdcard.img {
 }
 ```
 
-This constructs a flashable `sdcard.img` with:
-* Raw sector offset 8 KB: Mainline U-Boot with SPL (`u-boot-sunxi-with-spl.bin`).
-* Offset 4 MB: Partition 1 `boot.vfat` (64 MB FAT32 containing kernel, base DTB, overlays, `config.txt`, `boot.scr`, and `uboot.env`).
-* Partition 2: `rootfs.ext4` (Linux ext4 root filesystem).
-
-### 5. Single-Command Build & Flash
-To build the complete image:
+Building the entire stack requires two commands:
 ```bash
-# Configure Buildroot with the external tree:
 make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
-
-# Compile kernel, rootfs, overlays, bootloaders, and package disk image:
 make -C bld
 ```
 
-The resulting image is written to `bld/images/sdcard.img` and can be flashed directly to an SD card:
+Flash the generated image:
 ```bash
 sudo dd if=bld/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
 ---
 
-## 8. The Handoff: From U-Boot to the Linux Kernel
+## 9. The Kernel Handoff Contract (ARM64 Register `x0`)
 
-Once all overlays have been sequentially merged into `${fdt_addr_r}`, U-Boot initiates the boot handoff:
-
+Once U-Boot applies all overlays into memory at `0x4fa00000`, it executes:
 ```sh
 booti ${kernel_addr_r} - ${fdt_addr_r}
 ```
 
-### The ARM64 Boot Protocol Handoff
-Under the ARM64 Linux kernel boot protocol (`Documentation/arm64/booting.rst`), the bootloader must fulfill strict hardware contracts before jumping to the kernel entry point:
+Under the ARM64 boot protocol:
+* **Register `x0`**: Holds the 64-bit physical DRAM address of the Device Tree Blob (`0x4fa00000`).
+* **Registers `x1 - x3`**: Must be set to `0`.
+* **MMU**: Disabled.
+* **Caches**: Data cache cleaned to Point of Coherency (PoC), instruction cache invalidated.
+* **CPU Mode**: EL2 (Hypervisor) or non-secure EL1.
 
-* **Register `x0`**: 64-bit physical RAM address of the Device Tree Blob (`${fdt_addr_r}` = `0x4fa00000`).
-* **Registers `x1`, `x2`, `x3`**: Reserved for future architectural use (must be initialized to `0`).
-* **MMU & Caches**: MMU disabled; Data Cache cleaned to Point of Coherency (PoC); Instruction Cache invalidated.
-* **CPU Mode**: EL2 (Hypervisor Mode) or EL1, with DAIF interrupts strictly masked.
-
-When `booti` executes:
-1. U-Boot flushes the data cache across the modified Device Tree region (`0x4fa00000 - 0x4fb00000`) so the kernel's initial uncached memory reads see the merged data.
-2. It loads physical address `0x4fa00000` into core CPU register `x0`.
-3. It branches directly to `${kernel_addr_r}` (`0x40200000`), respecting the 2MB ARM64 alignment boundary.
-
-### Early Kernel Ingestion
-Inside the Linux kernel:
-1. Early assembly (`head.S`) reads register `x0` and verifies the FDT magic number (`0xd00dfeed`).
-2. `setup_machine_fdt()` unrolls the tree into the kernel's internal unflattened device tree structure (`struct device_node`).
-3. Platform bus drivers (`of_platform_default_populate()`) instantiate drivers matching the merged `compatible` strings.
+When `booti` jumps to `0x40200000`, the kernel entry point (`arch/arm64/kernel/head.S`) reads `x0`, verifies the `0xd00dfeed` FDT header magic, and unrolls the merged nodes via `setup_machine_fdt()`. To Linux, the device tree is completely static.
 
 ---
 
-## 9. Runtime Verification in Linux Userspace
+## 10. Live Verification on Hardware
 
-Once Linux has booted, how do we prove that U-Boot successfully merged the overlays?
+Boot the board with `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` in `/boot/config.txt`.
 
-### 1. Inspecting `/proc/device-tree`
-The Linux kernel exposes the live, unflattened Device Tree in sysfs at `/proc/device-tree` (symlinked to `/sys/firmware/devicetree/base`). Every directory represents a node; every file represents a property.
+### 1. Serial Console U-Boot Log
+During boot, U-Boot outputs the sequential merge:
 
-To verify that an overlay successfully modified a node:
+```text
+=== Initializing Radxa Cubie A5E Dynamic Boot Sequence ===
+>>> Found Raspberry Pi-style config.txt! Importing configuration...
+>>> Loading Base Device Tree: sun55i-a527-cubie-a5e.dtb...
+62914 bytes read in 6 ms (10.0 MiB/s)
+>>> Processing Device Tree Overlays: cubie-a5e-flight-stack cubie-a5e-uio...
+    Searching overlay: cubie-a5e-flight-stack...
+5487 bytes read in 2 ms (2.6 MiB/s)
+    [OK] Applied cubie-a5e-flight-stack successfully.
+    Searching overlay: cubie-a5e-uio...
+1114 bytes read in 1 ms (1.1 MiB/s)
+    [OK] Applied cubie-a5e-uio successfully.
+>>> Loading Linux Kernel Image...
+20140544 bytes read in 868 ms (22.1 MiB/s)
+>>> Booting Linux Kernel with Dynamic Overlays...
+## Flattened Device Tree blob at 4fa00000
+   Booting using the fdt blob at 0x4fa00000
+   Loading Device Tree to 0000000049ff0000, end 0000000049ffffff ... OK
+
+Starting kernel ...
+```
+
+### 2. Live Linux Inspection via Sysfs and `/proc/device-tree`
+
+Verify the mailbox node was converted from the standard kernel driver to Userspace I/O:
+
 ```bash
-# Check the compatible string of the mailbox node:
+# 1. Verify compatible string is generic-uio
 cat /proc/device-tree/soc/mailbox@3003000/compatible
-# Expected output when cubie-a5e-uio.dtbo was applied:
-# generic-uio
-```
+# Output: generic-uio
 
-To verify that dual-MMIO registers were merged into the node:
-```bash
-# Dump the reg property names:
+# 2. Check dual-MMIO reg names added by the overlay
 xxd -p /proc/device-tree/soc/mailbox@3003000/reg-names | xxd -r -p
-# Expected output:
+# Output: msgboxsram
+
+# 3. Check /dev/uio0 driver binding
+ls -la /dev/uio0
+# crw-rw---- 1 root root 242, 0 Sep  6 12:00 /dev/uio0
+
+# 4. Verify physical memory map carveouts exported by the kernel
+cat /sys/class/uio/uio0/maps/map0/name && cat /sys/class/uio/uio0/maps/map0/addr
 # msgbox
+# 0x3003000
+
+cat /sys/class/uio/uio0/maps/map1/name && cat /sys/class/uio/uio0/maps/map1/addr
 # sram
-```
-
-### 2. Checking Driver Enumeration
-Because the overlay changed `compatible = "generic-uio"`, the kernel binds `uio_pdrv_genirq` and enumerates `/dev/uio0`:
-```bash
-# Verify UIO device presence:
-ls -l /dev/uio0
-# crw-rw---- 1 root root 242, 0 Sep  4 22:30 /dev/uio0
-
-# Verify memory maps exported by the overlay:
-cat /sys/class/uio/uio0/maps/map0/name   # -> msgbox (0x3003000)
-cat /sys/class/uio/uio0/maps/map1/name   # -> sram   (0x7131000)
+# 0x7131000
 ```
 
 ---
 
-## 10. Troubleshooting & Common Pitfalls
+## 11. Field Triage & Troubleshooting Matrix
 
-### 1. Accidentally Editing `uboot.env` Directly: `*** Bad CRC ***`
-* **Symptom**: You edited `/boot/uboot.env` with `vi` or `nano`. On next reboot, U-Boot outputs:
-  ```text
-  *** Bad CRC, using default environment ***
-  ```
-  and ignores all your custom parameters.
-* **Root Cause**: `uboot.env` is a compiled 64 KB binary blob protected by a 4-byte CRC32 header. Editing it directly in a text editor corrupts the NULL delimiters and invalidates the checksum.
-* **Fix**: **Do not edit `uboot.env`**. Use `/boot/config.txt` instead! `config.txt` is pure ASCII text, has no checksum restrictions, and is automatically parsed into memory by U-Boot at boot time.
-
-### 2. The `/boot` Partition Is Not Mounted in Linux
-* **Symptom**: You log in and `/boot` is completely empty, or `ls /boot` returns nothing.
-* **Root Cause**: In minimal rootfs configurations, `/dev/mmcblk0p1` may not have been mounted yet.
-* **Fix**: Run:
-  ```bash
-  mkdir -p /boot
-  mount -t vfat /dev/mmcblk0p1 /boot
-  ```
-  To make this permanent across reboots, ensure your rootfs `/etc/fstab` includes:
-  ```text
-  /dev/mmcblk0p1  /boot  vfat  defaults  0  2
-  ```
-
-### 3. `config.txt` Is Missing on the SD Card After Flashing
-* **Symptom**: You mount `/dev/mmcblk0p1` and see `uboot.env`, `boot.scr`, and `Image`, but `config.txt` is absent.
-* **Root Cause**: The Buildroot post-image packaging script did not copy `config.txt` from the board directory to `${BINARIES_DIR}` before invoking `genimage`.
-* **Fix**: Update [`project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh`](/project-cubie-a5e/board/radxa/cubie_a5e/post-image.sh) to copy `config.txt` to `${BINARIES_DIR}`:
-  ```bash
-  cp -f "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt"
-  ```
-  Alternatively, you can manually create `/boot/config.txt` directly on the target:
-  ```bash
-  echo "dtoverlay=cubie-a5e-flight-stack" > /boot/config.txt
-  ```
-
-### 4. `fdt apply` Fails with Error `-3` (`-FDT_ERR_NOSPACE`)
-* **Symptom**: Overlay fails to apply with return code `-3`.
-* **Root Cause**: The base DTB buffer in RAM was not expanded before applying overlays.
-* **Fix**: Execute `fdt resize 0x10000` immediately after `fdt addr ${fdt_addr_r}` to allocate 64 KB of buffer padding headroom.
-
-### 5. `fdt apply` Fails with Error `-1` or `-13` (`-FDT_ERR_NOTFOUND`)
-* **Symptom**: Overlay fails to find target nodes with return code `-1` or `-13`.
-* **Root Cause**: The base DTB was compiled without `-@` (symbols), omitting the `__symbols__` lookup table required for phandle resolution.
-* **Fix**: Ensure `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` is enabled in your Buildroot defconfig, or build kernel device trees with `make DTC_FLAGS="-@" dtbs`.
-
-### 6. Kernel Panics with `FDT: bad magic` or Alignment Fault During `booti`
-* **Symptom**: Kernel halts immediately during early boot with corrupt FDT magic or early fault.
-* **Root Cause**: Memory addresses overlap, or `kernel_addr_r` violates ARM64 2MB alignment.
-* **Fix**: Verify memory spacing and alignment:
-  - Ensure `kernel_addr_r` is placed at a 2MB-aligned address (`0x40200000`), not an unaligned offset like `0x40080000`.
-  - Ensure `${fdt_addr_r}` (`0x4fa00000`) is located well above the kernel memory footprint.
-
-### 7. Changes in `config.txt` Have No Effect (DOS Line Endings & Missing Trailing Newline)
-* **Symptom**: Overlays or boot arguments defined in `config.txt` are ignored by U-Boot.
-* **Root Cause 1 (CRLF Line Endings on Windows)**: When editing `config.txt` directly on a Windows host PC by inserting the SD card into a card reader (as supported by our FAT32 boot partition), standard Windows text editors like basic Notepad historically save files with DOS/Windows carriage returns (`\r\n`). In U-Boot's `env import -t` parser, the trailing `\r` remains attached to variable values (e.g., `cubie-a5e-uio\r`), causing file load commands to fail looking for non-existent filenames.
-* **Root Cause 2 (Missing Trailing Newline)**: If the final line in `config.txt` lacks a terminating newline character, older U-Boot `env import -t` parsers silently discard that final variable.
-* **Fix**: 
-  - When editing on Windows, use an editor like VS Code, Notepad++, or Sublime Text configured to save with **LF (Unix) line endings** instead of CRLF.
-  - Always press <kbd>Enter</kbd> after your final line so the file ends with a clean trailing newline.
-  - If troubleshooting on target, convert line endings with `dos2unix /boot/config.txt`.
-
----
-
-## 11. Summary
-
-By decoupling **low-level bootloader plumbing** (`uboot.env`) from **runtime user configuration** (`config.txt`), we eliminate developer friction while preserving rock-solid boot reliability:
-
-1. **`uboot.env` Stays Untouched**: Serves as the static firmware foundation, initializing serial clocks, DRAM memory maps, and launching `boot.scr`. Developers never need to struggle with binary editors or CRC calculation tools.
-2. **`config.txt` Delivers Raspberry Pi Simplicity**: A clean, plain-text configuration file located on the FAT partition. Anyone can enable peripherals, toggle UIO drivers, or isolate CPU cores using standard text editors on Linux, macOS, or Windows.
-3. **Buildroot End-to-End Automation**: Buildroot handles the complete workflow out-of-the-box—compiling out-of-tree `.dtso` fragments with `-@`, staging `config.txt` into `${BINARIES_DIR}`, pre-configuring `/boot` mounts in `/etc/fstab`, and packaging a turnkey `sdcard.img` ready to flash.
-4. **Deterministic Boot Pipeline**: U-Boot's `env import -t` dynamically bridges the configuration into memory, expands the base Device Tree with `fdt resize 0x10000`, applies overlays via `fdt apply`, and passes an immutable hardware contract to Linux via ARM64 register `x0` at 2MB-aligned `0x40200000`.
+| Symptom | Root Cause | Fix |
+| :--- | :--- | :--- |
+| `*** Bad CRC, using default environment ***` | Editing `uboot.env` with `vi` broke the 4-byte CRC32 header and null delimiters. | Never edit `uboot.env` directly. Use `/boot/config.txt`. Re-flash or delete `uboot.env` to restore defaults. |
+| `libfdt fdt_apply_overlay(): FDT_ERR_NOSPACE (-3)` | The base DTB buffer at `${fdt_addr_r}` ran out of memory during overlay node insertion. | Call `fdt resize 0x10000` in `boot.cmd` immediately after `fdt addr ${fdt_addr_r}`. |
+| `libfdt fdt_apply_overlay(): FDT_ERR_NOTFOUND (-1)` | Base DTB was compiled without `-@` (symbols), omitting the `__symbols__` lookup table. | Set `BR2_LINUX_KERNEL_DTB_OVERLAY_SUPPORT=y` in defconfig, or build DTBs with `make DTC_FLAGS="-@" dtbs`. |
+| Kernel hangs immediately after `Starting kernel ...` | `kernel_addr_r` was set to an unaligned offset (e.g. `0x40080000`), violating ARM64 2MB alignment. | Set `kernel_addr_r=0x40200000` (2MB boundary from DRAM base `0x40000000`). |
+| Overlays defined in `config.txt` are completely ignored | `config.txt` was saved with DOS CRLF (`\r\n`) line endings or lacks a trailing newline. | Convert with `dos2unix /boot/config.txt` and ensure the file ends with an empty line. |
+| `[WARN] Could not find overlay file` | File naming mismatch in `dtoverlay=`. | Use the exact file basename without `.dtbo` (e.g., `dtoverlay=cubie-a5e-uio`). |
+| `/boot` is empty on target | The FAT partition was not mounted at boot. | Run `mount -t vfat /dev/mmcblk0p1 /boot` and add the mount to `/etc/fstab`. |
