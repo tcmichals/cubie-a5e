@@ -9,7 +9,7 @@
  * 3. Deliberately triggering a hardware exception (Illegal Instruction / Fault).
  * 4. Formatting and outputting an exhaustive crash autopsy (mepc, mcause, mtval,
  *    and registers x1..x31) to /sys/kernel/debug/remoteproc/remoteproc0/trace0
- *    and S_UART0, and writing fatal signature 0xDEADF00D to Shared SRAM A2 (0x00040000).
+ *    and S_UART0, and writing fatal signature 0xDEADF00D to Shared PubSRAM C (0x00020000).
  */
 
 #include <stdint.h>
@@ -18,7 +18,8 @@
 #include "hal/timer.hpp"
 #include "hal/crash.hpp"
 
-#define SRAM_HEARTBEAT_LOC ((volatile uint32_t *)0x07130000UL)
+__attribute__((used, section(".sram_c_loc1"), aligned(4)))
+static volatile uint32_t sram_heartbeat[2];
 
 int main(void) {
     // 1. Initialize HAL
@@ -31,12 +32,12 @@ int main(void) {
     hal::Trace::puts("  Trace: /sys/kernel/debug/remoteproc/remoteproc0/trace0        \n");
     hal::Trace::puts("================================================================\n");
 
-    SRAM_HEARTBEAT_LOC[0] = 0x54455354; // "TEST"
-    SRAM_HEARTBEAT_LOC[1] = 0;
+    sram_heartbeat[0] = 0x54455354; // "TEST"
+    sram_heartbeat[1] = 0;
 
     // 2. Emit 3 normal countdown heartbeats
     for (uint32_t i = 1; i <= 3; i++) {
-        SRAM_HEARTBEAT_LOC[1] = i;
+        sram_heartbeat[1] = i;
 
         hal::Trace::printf("[testCrash] Normal Heartbeat #%u / 3 (countdown to intentional fault)\n", i);
 
