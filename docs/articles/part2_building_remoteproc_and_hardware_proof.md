@@ -84,10 +84,10 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
                 *is_iomem = true;
             return priv->itcm_va + (da - priv->itcm_phys);
         }
-        if (da >= E906_ITCM_DA && (da + len) <= (E906_ITCM_DA + priv->itcm_size)) {
+        if (da >= E907_ITCM_DA && (da + len) <= (E907_ITCM_DA + priv->itcm_size)) {
             if (is_iomem)
                 *is_iomem = true;
-            return priv->itcm_va + (da - E906_ITCM_DA);
+            return priv->itcm_va + (da - E907_ITCM_DA);
         }
     }
 
@@ -98,10 +98,10 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
                 *is_iomem = true;
             return priv->dtcm_va + (da - priv->dtcm_phys);
         }
-        if (da >= E906_DTCM_DA && (da + len) <= (E906_DTCM_DA + priv->dtcm_size)) {
+        if (da >= E907_DTCM_DA && (da + len) <= (E907_DTCM_DA + priv->dtcm_size)) {
             if (is_iomem)
                 *is_iomem = true;
-            return priv->dtcm_va + (da - E906_DTCM_DA);
+            return priv->dtcm_va + (da - E907_DTCM_DA);
         }
     }
 
@@ -127,7 +127,7 @@ static int sunxi_rproc_start(struct rproc *rproc)
     struct sunxi_rproc *priv = rproc->priv;
 
     /* 1. Program Boot Address Register (STA_ADD_REG @ 0x07130204) */
-    writel(rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
+    writel(rproc->bootaddr, priv->cfg_va + E907_STA_ADD_REG);
 
     /* 2. Deassert core run reset (RST_BUS_MCU_RISCV_CORE, bit 18) */
     reset_control_deassert(priv->rst_core);
@@ -319,7 +319,7 @@ When the illegal instruction executes:
    x10(a0): 0x00000003  x11(a1): 0x00021000
    ================================================================
    ```
-4. It writes fatal signature `0xDEADF00D` into Shared SRAM A2 (`0x00040000`) before halting cleanly.
+4. It writes fatal signature `0xDEADF00D` into Shared PubSRAM C (`0x00020000`) before halting cleanly.
 
 ---
 
@@ -416,11 +416,20 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 ping_rpmsg -n 5000
 ```
 
+> [!TIP]
+> **Scripting RemoteProc Transitions & Hush Token Spacing**
+>
+> When writing shell scripts or boot hooks to automate these firmware toggles (e.g., verifying return codes or checking `/sys/class/remoteproc/remoteproc0/state`), ensure conditional checks match strict token spacing:
+> ```sh
+> if test "${loaded}" = "1"; then
+> ```
+> As detailed in the Device Tree Overlay guide, accidental whitespace like `test "${loaded}" = " 1"` causes silent conditional failures in strict parsers like U-Boot's Hush shell and embedded busybox environments.
+
 Notice that **zero `/dev/mem` or root privilege poking is used**. All hardware interactions are managed cleanly by the kernel drivers (`sunxi_rproc.c`, `uio_pdrv_genirq`, `virtio_rpmsg_bus`), ensuring system stability and maintaining strict memory protection (`CONFIG_STRICT_DEVMEM`).
 
 ---
 
-## 5. Summary & What's Next in Part 3
+## 5. What's Next in Part 3
 
 With the `sunxi_rproc.c` driver and `riscv-firmware/apps` verification suite in place:
 1. The Linux host reliably loads multi-segment ELF binaries into PubSRAM C and Dedicated MCU SRAM. The `da_to_va` driver is fully prepared for optional ITCM/DTCM segments when the TCM extension linker script (described in Part 1, Section 4.4) is adopted.
@@ -438,7 +447,3 @@ In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive d
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite** *(You are here)*
 * **[Part 3: Inter-Processor Communication (IPC) Deep Dive](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
-
----
-
-#EmbeddedSystems #RISCV #Linux #Kernel #RemoteProc #Allwinner #Buildroot #RealTime #UIO
