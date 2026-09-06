@@ -295,6 +295,7 @@ SECTIONS
     la      a1, _eitcm              /* Destination: ITCM end */
     la      a2, _sidata_itcm        /* Source: LMA in SRAM */
     beq     a0, a2, .Lcopy_itcm_done /* Skip if LMA == VMA */
+    /* Ensure a2 source pointer is 4-byte word-aligned to prevent unaligned trap loops */
 .Lcopy_itcm_loop:
     bgeu    a0, a1, .Lcopy_itcm_done
     lw      t0, 0(a2)
@@ -312,6 +313,7 @@ SECTIONS
     la      a1, _edtcm              /* Destination: DTCM end */
     la      a2, _sidata_dtcm        /* Source: LMA in SRAM */
     beq     a0, a2, .Lcopy_dtcm_done
+    /* Ensure a2 source pointer is 4-byte word-aligned to prevent unaligned trap loops */
 .Lcopy_dtcm_loop:
     bgeu    a0, a1, .Lcopy_dtcm_done
     lw      t0, 0(a2)
@@ -337,9 +339,10 @@ SECTIONS
 > [!NOTE]
 > **Pipeline Synchronization & Compiler Flags for XuanTie Cores**
 >
-> While the standard RISC-V `fence.i` instruction invalidates the local instruction cache and flushes the prefetch buffer, deeply pipelined XuanTie core implementations or aggressive GCC optimization levels require two engineering precautions:
+> While the standard RISC-V `fence.i` instruction invalidates the local instruction cache and flushes the prefetch buffer, deeply pipelined XuanTie core implementations or aggressive GCC optimization levels require three engineering precautions:
 > 1. **Instruction Serialization**: The `fence.i` instruction guarantees that stores to ITCM become visible to instruction fetches before subsequent instructions are fetched.
-> 2. **Compiler Optimization Safeguards**: When compiling bare-metal firmware with `-march=rv32imafdc -mabi=ilp32d`, ensure flags like `-mno-shorten-memrefs` (or `-fno-tree-loop-distribute-patterns`) are enabled if writing high-level C copy loops. This prevents GCC from replacing raw 32-bit word copy loops with unaligned `memcpy` runtime helper calls before the C runtime environment is fully ready.
+> 2. **Strict 4-Byte Linker Alignment**: In raw assembly loops using 32-bit `lw` / `sw` instructions, the source and destination pointers *must* be 4-byte aligned. Passing `. = ALIGN(4);` in the linker script before capturing `_sidata_itcm` and `_sidata_dtcm` guarantees word alignment, preventing unaligned memory access trap loops before the trap handler (`mtvec`) is initialized.
+> 3. **Compiler Optimization Safeguards**: When compiling bare-metal firmware with `-march=rv32imafdc -mabi=ilp32d`, ensure flags like `-mno-shorten-memrefs` (or `-fno-tree-loop-distribute-patterns`) are enabled if writing high-level C copy loops. This prevents GCC from replacing raw 32-bit word copy loops with unaligned `memcpy` runtime helper calls before the C runtime environment is fully ready.
 
 #### 3. Pinning Functions and Data in C/C++
 ```c
