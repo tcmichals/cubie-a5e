@@ -14,7 +14,7 @@ if test -z "${fdtoverlay_addr_r}"; then setenv fdtoverlay_addr_r 0x4fe00000; fi
 if test -z "${ramdisk_addr_r}";    then setenv ramdisk_addr_r    0x4ff00000; fi
 
 setenv base_dtb sun60i-a733-cubie-a7a.dtb
-setenv overlays "cubie-a7a-flight-stack"
+setenv overlays ""
 
 # Ground-truth dump of CCU interconnect/USB gate state left by the boot chain
 echo === CCU gate state (AHB 05C0 / MBUS 05E0,05E4 / MSI2 05A4 / DCAP 1A00 / USB 1300..135C) ===
@@ -64,28 +64,42 @@ else
 fi
 
 # Dynamically iterate and apply each Device Tree Overlay in ${overlays}
-echo ">>> Processing Device Tree Overlays: ${overlays}..."
-for overlay in ${overlays}; do
-    echo "    Searching overlay: ${overlay}..."
-    setenv loaded 0
-    if load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}.dtbo; then
-        setenv loaded 1
-    elif load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}; then
-        setenv loaded 1
-    elif load mmc 0:1 ${fdtoverlay_addr_r} overlays/${overlay}.dtbo; then
-        setenv loaded 1
-    fi
-
-    if test "${loaded}" = "1"; then
-        if fdt apply ${fdtoverlay_addr_r}; then
-            echo "    [OK] Applied ${overlay} successfully."
-        else
-            echo "    [ERROR] fdt apply failed for ${overlay}!"
+if test -n "${overlays}"; then
+    echo ">>> Processing Device Tree Overlays: ${overlays}..."
+    setenv fdt_apply_error 0
+    for overlay in ${overlays}; do
+        echo "    Searching overlay: ${overlay}..."
+        setenv loaded 0
+        if load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}.dtbo; then
+            setenv loaded 1
+        elif load mmc 0:1 ${fdtoverlay_addr_r} ${overlay}; then
+            setenv loaded 1
+        elif load mmc 0:1 ${fdtoverlay_addr_r} overlays/${overlay}.dtbo; then
+            setenv loaded 1
         fi
-    else
-        echo "    [WARN] Could not find overlay file for ${overlay} on mmc 0:1!"
+
+        if test "${loaded}" = "1"; then
+            if fdt apply ${fdtoverlay_addr_r}; then
+                echo "    [OK] Applied ${overlay} successfully."
+            else
+                echo "    [ERROR] fdt apply failed for ${overlay}!"
+                setenv fdt_apply_error 1
+            fi
+        else
+            echo "    [WARN] Could not find overlay file for ${overlay} on mmc 0:1!"
+        fi
+    done
+
+    if test "${fdt_apply_error}" = "1"; then
+        echo ">>> [WARNING] One or more overlays failed! Reloading clean base DTB..."
+        if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
+            fdt addr ${fdt_addr_r}
+            echo ">>> [OK] Clean base DTB restored."
+        else
+            echo ">>> [ERROR] Failed to reload base DTB!"
+        fi
     fi
-done
+fi
 
 # Load Linux kernel Image and boot
 echo ">>> Loading Linux Kernel Image..."

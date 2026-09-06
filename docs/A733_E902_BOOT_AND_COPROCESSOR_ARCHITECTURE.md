@@ -75,6 +75,86 @@ The start address register `0x07032204` defines the instruction fetch entry poin
 
 ---
 
+## 4.1 A733 U-Boot Power FEX (`sys_config.fex` / `power.fex`) Architecture & Compilation
+
+The Allwinner A733 hardware power tree and regulator voltage tables are defined using Allwinner's **FEX configuration format** and compiled directly into the binary boot structures during the U-Boot packaging phase.
+
+### A. Power FEX Configuration Schema (`sys_config.fex`)
+
+The power configuration defines the initial boot voltages, PMIC bus bindings, and power domain assignments:
+
+```ini
+[power_sply]
+dcdc1_vol       = 3300000   ; 3.3V - USB 2.0 Hub (FE1.1S), AIC8800 Wi-Fi 6, Motorcomm GbE PHY
+dcdc2_vol       = 900000    ; 0.9V - ARM Cortex-A76 Big Cores VDD-CPU
+dcdc3_vol       = 900000    ; 0.9V - ARM Cortex-A55 Little Cores VDD-CPU
+dcdc4_vol       = 1100000   ; 1.1V - LPDDR5 VDD2 DRAM Core Power
+aldo1_vol       = 1800000   ; 1.8V - VCC-PL / VCC-PM PRCM IO Banks & Analog PLL
+aldo2_vol       = 1800000   ; 1.8V - MIPI-CSI / MIPI-DSI Analog Power
+aldo3_vol       = 3300000   ; 3.3V - GPIO Port H / Port B IO Voltage (VCC-IO)
+bldo1_vol       = 1800000   ; 1.8V - LPDDR5 VDDQ / PLL Reference
+cldo1_vol       = 3300000   ; 3.3V - MicroSD Card VCC-SD (`PF0`-`PF5`)
+
+[pmu1_para]
+pmu_used        = 1
+pmu_twi_addr    = 0x34      ; PMIC Device Address on RSB / TWI
+pmu_twi_id      = 0         ; Bound to r_rsb / r_i2c0 (0x07083000)
+pmu_irq_id      = 203       ; GIC SPI 203 / R_PIO Interrupt
+pmu_battery_rdc = 100
+pmu_battery_cap = 0
+pmu_bat_unused  = 1
+pmu_power_key   = 1
+pmu_reset_key   = 1
+```
+
+### B. Compilation & Packaging Pipeline (`dragonsecboot`)
+
+During the U-Boot build, the text FEX files are compiled into binary parameter blocks and packaged into the TOC1 container:
+
+1. **FEX Compiler (`fexc` / `script.bin` generator)**:
+   - Converts `sys_config.fex` into binary struct format with 32-bit little-endian fields and CRC checks.
+2. **TOC1 Manifest Integration (`boot_package.cfg`)**:
+   ```ini
+   [package]
+   item=u-boot,          u-boot.bin,          0x4a000000
+   item=monitor,         bl31.bin,            0x48000000
+   item=scp,             scp.fex,             0x40014000
+   item=dtb,             sun60i-a733-a7a.dtb, 0x4fa00000
+   item=power_cfg,       power.fex,           0x40020000
+   ```
+3. **Packaging (`dragonsecboot`)**:
+   - Compiles the components into `boot_package.fex` and writes it to **Sector 24576 (12.0 MB offset)** on the boot media.
+
+### C. Boot-Time Hardware Rail Sequencing
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. Vendor boot0 (SRAM @ 0x47000)                                       │
+│    • Reads power.fex binary block from boot_package.fex (Sector 24576) │
+│    • Configures AXP8191 DCDC2/3 (0.9V VDD-CPU) & DCDC4 (1.1V LPDDR5)   │
+│    • Calibrates LPDDR5 PHY at target voltage                           │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. scp.fex Execution (XuanTie E902 @ 0x40014000)                       │
+│    • Reads [power_sply] tables from DRAM                               │
+│    • Initializes Reduced Serial Bus (RSB) at 0x07083000                │
+│    • Programs AXP8191 DCDC1 = 3.3V (Enables FE1.1S Hub & AIC8800 Wi-Fi)│
+│    • Programs ALDO1/3 & CLDO1 for system I/O buses                     │
+│    • Enters SCPI command listener loop for TF-A BL31 DVFS calls        │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. Mainline U-Boot Proper (ARM EL2 @ 0x4A000000)                       │
+│    • Queries PMIC state and verifies voltage rail stability            │
+│    • Boots Linux kernel 7.1 PREEMPT_RT with active DTB regulator trees │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 5. E902 as a Dedicated I/O Processor (Offloading Linux)
 
 In Mode 2, the XuanTie E902 is repurposed as a **high-speed I/O Front-End and Hardware Serializer**. Instead of burdening the Linux ARM host with thousands of individual hardware interrupts per second, the E902 handles all time-critical peripheral transactions directly:

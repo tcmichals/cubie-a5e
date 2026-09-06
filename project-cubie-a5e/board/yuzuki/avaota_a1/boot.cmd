@@ -59,6 +59,7 @@ fi
 # 8. Dynamically iterate and apply each Device Tree Overlay in ${overlays}
 if test -n "${overlays}"; then
     echo ">>> Processing Device Tree Overlays: ${overlays}..."
+    setenv fdt_apply_error 0
     for overlay in ${overlays}; do
         echo "    Searching overlay: ${overlay}..."
         setenv loaded 0
@@ -75,11 +76,22 @@ if test -n "${overlays}"; then
                 echo "    [OK] Applied ${overlay} successfully."
             else
                 echo "    [ERROR] fdt apply failed for ${overlay}!"
+                setenv fdt_apply_error 1
             fi
         else
             echo "    [WARN] Could not find overlay file for ${overlay} on mmc 0:1!"
         fi
     done
+
+    if test "${fdt_apply_error}" = "1"; then
+        echo ">>> [WARNING] One or more overlays failed! Reloading clean base DTB..."
+        if load mmc 0:1 ${fdt_addr_r} ${base_dtb}; then
+            fdt addr ${fdt_addr_r}
+            echo ">>> [OK] Clean base DTB restored."
+        else
+            echo ">>> [ERROR] Failed to reload base DTB!"
+        fi
+    fi
 fi
 
 # 9. Load Linux kernel Image and boot

@@ -58,7 +58,7 @@ V0.93 and critical clock definitions.
 +obj-$(CONFIG_SUN60I_A733_R_CCU) += ccu-sun60i-a733-r.o
 --- a/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733-r.c
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,147 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -99,6 +99,7 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(r_bus_twi0_clk,  "r-bus-twi0",  r_apbs1_hws, 0x019c, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(r_bus_twi1_clk,  "r-bus-twi1",  r_apbs1_hws, 0x019c, BIT(1), 0);
 +static SUNXI_CCU_GATE_HWS(r_bus_twi2_clk,  "r-bus-twi2",  r_apbs1_hws, 0x019c, BIT(2), 0);
++static SUNXI_CCU_GATE_HWS(r_bus_ppu_clk,   "r-bus-ppu",   r_apbs0_hws, 0x01ac, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(r_bus_rtc_clk,   "r-bus-rtc",   r_apbs0_hws, 0x020c, BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(r_bus_cpucfg_clk,"r-bus-cpucfg",r_apbs0_hws, 0x022c, BIT(0), CLK_IS_CRITICAL);
 +
@@ -122,6 +123,7 @@ V0.93 and critical clock definitions.
 +	&r_bus_twi0_clk.common,
 +	&r_bus_twi1_clk.common,
 +	&r_bus_twi2_clk.common,
++	&r_bus_ppu_clk.common,
 +	&r_bus_rtc_clk.common,
 +	&r_bus_cpucfg_clk.common,
 +	&riscv_24m_clk.common,
@@ -144,6 +146,7 @@ V0.93 and critical clock definitions.
 +		[CLK_R_TWI0]		= &r_bus_twi0_clk.common.hw,
 +		[CLK_R_TWI1]		= &r_bus_twi1_clk.common.hw,
 +		[CLK_R_TWI2]		= &r_bus_twi2_clk.common.hw,
++		[CLK_R_PPU]		= &r_bus_ppu_clk.common.hw,
 +		[CLK_RTC]		= &r_bus_rtc_clk.common.hw,
 +		[CLK_R_CPUCFG]		= &r_bus_cpucfg_clk.common.hw,
 +		[CLK_RISCV_24M]		= &riscv_24m_clk.common.hw,
@@ -161,6 +164,7 @@ V0.93 and critical clock definitions.
 +	[RST_BUS_R_TWI0]	= { 0x019c, BIT(16) },
 +	[RST_BUS_R_TWI1]	= { 0x019c, BIT(17) },
 +	[RST_BUS_R_TWI2]	= { 0x019c, BIT(18) },
++	[RST_BUS_R_PPU]		= { 0x01ac, BIT(16) },
 +	[RST_BUS_R_IRRX]	= { 0x01cc, BIT(16) },
 +	[RST_BUS_RTC]		= { 0x020c, BIT(16) },
 +	[RST_BUS_RISCV_CFG]	= { 0x021c, BIT(16) },
@@ -215,7 +219,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,378 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -335,7 +339,7 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(usb_ohci0_clk, "usb-ohci0", ahb_hws, 0x1304, BIT(4), 0);
 +static SUNXI_CCU_GATE_HWS(bus_usb1_clk, "bus-usb1", ahb_hws, 0x130c, BIT(4) | BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(usb_ohci1_clk, "usb-ohci1", ahb_hws, 0x130c, BIT(4), 0);
-+static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), 0);
++static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), CLK_IS_CRITICAL);
 +
 +/*
 + * The MSI-Lite2 interconnect slice carries all CPU MMIO traffic to the
@@ -565,6 +569,16 @@ V0.93 and critical clock definitions.
 +	/* Enable GMAC0 PHY 25MHz fanout clock (150MHz / (5+1) = 25MHz) */
 +	writel(BIT(31) | 5, reg + 0x1410);
 +
++	/* Enable USB2 (DWC3) core clock & deassert reset (0x135C: RST_BUS_USB2 | CLK_BUS_USB2) */
++	writel(BIT(16) | BIT(0), reg + 0x135C);
++
++	/* Initialize USB2 PHY tuning register at 0x06B00000 */
++	void __iomem *u2phy = ioremap(0x06B00000, 0x800);
++	if (u2phy) {
++		writel(0x143338D6, u2phy + 0x00);
++		iounmap(u2phy);
++	}
++
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);
 +}
 +
@@ -785,7 +799,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/reset/sun60i-a733-r-ccu.h
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,21 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_RST_SUN60I_A733_R_CCU_H_
 +#define _DT_BINDINGS_RST_SUN60I_A733_R_CCU_H_
@@ -799,10 +813,11 @@ V0.93 and critical clock definitions.
 +#define RST_BUS_R_TWI2		6
 +#define RST_BUS_R_TWI1		7
 +#define RST_BUS_R_TWI0		8
-+#define RST_BUS_R_IRRX		9
-+#define RST_BUS_RTC		10
-+#define RST_BUS_RISCV_CFG	11
-+#define RST_BUS_R_CPUCFG	12
-+#define RST_BUS_MODULE		13
++#define RST_BUS_R_PPU		9
++#define RST_BUS_R_IRRX		10
++#define RST_BUS_RTC		11
++#define RST_BUS_RISCV_CFG	12
++#define RST_BUS_R_CPUCFG	13
++#define RST_BUS_MODULE		14
 +
 +#endif
