@@ -219,7 +219,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,378 @@
+@@ -0,0 +1,379 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -543,6 +543,7 @@ V0.93 and critical clock definitions.
 +
 +static int sun60i_a733_ccu_probe(struct platform_device *pdev)
 +{
++	void __iomem *u2phy;
 +	void __iomem *reg = devm_platform_ioremap_resource(pdev, 0);
 +	if (IS_ERR(reg))
 +		return PTR_ERR(reg);
@@ -573,7 +574,7 @@ V0.93 and critical clock definitions.
 +	writel(BIT(16) | BIT(0), reg + 0x135C);
 +
 +	/* Initialize USB2 PHY tuning register at 0x06B00000 */
-+	void __iomem *u2phy = ioremap(0x06B00000, 0x800);
++	u2phy = ioremap(0x06B00000, 0x800);
 +	if (u2phy) {
 +		writel(0x143338D6, u2phy + 0x00);
 +		iounmap(u2phy);
