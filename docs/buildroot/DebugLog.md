@@ -407,3 +407,60 @@ Upon registering the CCU platform driver (`sun60i_a733_ccu_driver`), the kernel 
 1. Defined separate, dedicated clock gates for the OHCI 12M clocks (`usb_ohci0_clk` on bit 4 of `0x1304` and `usb_ohci1_clk` on bit 4 of `0x130c`) and isolated the bus gates (`bus_usb0_clk` on bit 0 of `0x1304` and `bus_usb1_clk` on bit 0 of `0x130c`).
 2. Mapped unique `struct clk_hw` pointers for every entry in `sun60i_a733_hw_clks`.
 3. Updated Linux patch `0003-clk-sunxi-ng-add-allwinner-a733-ccu-and-prcm.patch` and rebuilt `sdcard.img`.
+
+---
+
+## Case Study 12: Radxa Cubie A7A USB Subsystem, DWC3 Core Failure & Power Controller `sync_state()` Stall
+**Date:** September 7, 2026  
+**Component:** `drivers/usb/dwc3/core.c`, `drivers/pmdomain/sunxi/sun55i-pck600.c`, `drivers/clk/sunxi-ng/ccu-sun60i-a733.c` & Device Tree
+
+### 🚨 Symptoms
+Upon booting upstream Linux 7.1 (`PREEMPT_RT`) on Radxa Cubie A7A (Allwinner A733 / `sun60iw2`), `lsusb` displayed only EHCI/OHCI root hubs (Buses 1–4). The USB Type-A ports, on-board FE1.1S 4-port USB hub (`U6`), and on-board AIC8800 Wi-Fi 6 chip (`U3`) were completely absent.
+
+`dmesg` revealed two critical errors:
+```text
+[    1.263289] dwc3 6a00000.usb: this is not a DesignWare USB3 DRD Core
+[   14.821618] sunxi-pck-600 7060000.power-controller: sync_state() pending due to 6a00000.usb
+```
+
+### 🔍 Root Cause Analysis
+
+1. **Hardware Schematic & Power Matrix Verification**:
+   - **Type-C Port (J16)**: Direct 5V power input (`VCC5V0_SYS`). Data lines route to `USB0-DP`/`DM` (EHCI0/OHCI0 @ `0x04101000`/`0x04101400`). No output VBUS switch.
+   - **Bottom Type-A Port (CON_U3_U2)**: USB 2.0 lines route to `USB1-DP`/`DM` (EHCI1/OHCI1 @ `0x04200000`/`0x04200400`). 5V VBUS (`VCC5V0_USB30_OTG`) is switched by `U2` (SGM2576), gated by GPIO **`PL2` (`USB0-DRVVBUS`)**.
+   - **FE1.1S 4-Port Hub (U6)**: Upstream USB 2.0 lines route to `USB2-DP`/`DM` on the A733 SoC, driven by the **DWC3 USB3/2 Controller (`0x06A00000`)**. 5V Hub VBUS is switched by `U5` (SGM2576), gated by GPIO **`PM5` (`USB_HOST_EN`)**.
+   - **AIC8800 Wi-Fi 6 (U3)**: Hardwired to **Downstream Port 4** of the FE1.1S Hub (`USB4_DP`/`DM`), enabled by `PM0` (`USB_WIFI_PWR`) and `PM1` (`WL-REG-ON`). If the DWC3 controller or FE1.1S Hub fails to enumerate, on-board Wi-Fi is physically disconnected.
+
+2. **Why `dwc3 6a00000.usb: this is not a DesignWare USB3 DRD Core` Occurred**:
+   - In `drivers/usb/dwc3/core.c`, `dwc3_core_is_valid()` reads `dwc3_readl(dwc, DWC3_GSNPSID)` at MMIO `0x06A00000 + 0xC120`.
+   - The read returned `0x00000000` because:
+     a) **MSI-Lite2 Interconnect Bridge Was in Reset / Gated**: In CCU register `0x1340` (`USB_REF_MSI_LITE`), Bit 31 enables `USB_REF` (24 MHz), but **Bit 16 (`RST_MSI_LITE2`)** and **Bit 0 (`CLK_MSI_LITE2`)** must be set (`0x80010001`). In `ccu-sun60i-a733.c`, `usb_ref_clk` only asserted Bit 31. Without Bit 16 and Bit 0, the AXI/AHB interconnect bridge between the CPU and DWC3 controller is gated and held in reset, causing MMIO reads to `0x06A00000` to silently return `0x00000000`.
+     b) **Double Wrapping in DTS**: Mainline DTS wrapped `dwc3: usb@6a00000` inside an obsolete `allwinner,sun50i-h6-dwc3` node (`dwc3-of-simple.c`), attaching both parent and child to `power-domains = <&pck600 PD_USB2>`.
+
+3. **Why `sync_state()` Stalled**:
+   - The Linux driver core uses devlink to track consumers of the `pck600` power domain.
+   - Because `6a00000.usb` returned `-ENODEV` during probe, it never successfully initialized.
+   - The power controller was held indefinitely in a pending state, unable to complete its post-boot transition.
+
+### 🛠️ The Fixes
+1. **CCU MSI-Lite2 & DWC3 Bus Clock & Reset Initialization**:
+   - In `drivers/clk/sunxi-ng/ccu-sun60i-a733.c`:
+     - Write `0x80010001` to `0x1340` (`USB_REF_MSI_LITE`: Bit 31 `USB_REF`, Bit 16 reset deassert, Bit 0 clock enable).
+     - Write `BIT(16) | BIT(0)` to `0x135C` (`RST_BUS_USB2 | CLK_BUS_USB2`).
+     - Added direct diagnostic read of `GSNPSID` (`0x06A0C120`) to confirm hardware access before driver probe.
+2. **Flatten DTS DWC3 Node**:
+   - Converted `dwc3: usb@6a00000` to a direct `compatible = "snps,dwc3"` node with `resets = <&ccu RST_BUS_USB2>`, matching mainline Allwinner H6/T527 standards and eliminating the redundant wrapper.
+3. **Correct VBUS Regulator Pin Mapping**:
+   - Fixed `usbphy: phy@4100400` so `usb1_vbus-supply` points to `PL2` (Bottom Type-A Port VBUS via `U2`).
+   - Ensured `PM5` (`USB_HOST_EN` via `U5` for FE1.1S Hub & Top Type-A Port), `PM0` (`USB_WIFI_PWR`), and `PM1` (`WL-REG-ON`) are enabled as `regulator-always-on; regulator-boot-on;`.
+4. **Isolate Cadence Combo PHY & Restrict DWC3 to High-Speed**:
+   - The Allwinner A733 features a Cadence Combo PHY (SerDes @ `0x06C00000`) multiplexing USB 3.1 Gen2, PCIe 3.0, and DP Alt Mode.
+   - On the Radxa Cubie A7A, DWC3 lines (`USB2_DP`/`DM`) connect exclusively to the FE1.1S USB 2.0 Hub, while the Combo PHY lanes are routed to the 40-pin PCIe header.
+   - Restricting `maximum-speed = "high-speed"` prevents DWC3 from requiring or waiting for an unported Cadence Combo PHY driver, matching the physical board wiring.
+5. **PCK-600 Power Domain Initialization Fix (`is_off = true`)**:
+   - In `drivers/pmdomain/sunxi/sun55i-pck600.c`, domains were initialized with `pm_genpd_init(&pd->genpd, NULL, false)`. Genpd assumed all domains were active in hardware and skipped `.power_on()`.
+   - Initialized domains with `is_off = true` so genpd calls `sunxi_pck600_power_on()` when consumers attach, properly sequencing hardware PPU switches and logging `PWSR` register status.
+6. **Permissive Devlink & RSB Node Disablement**:
+   - Added `fw_devlink=permissive` to `bootargs` to prevent missing device tree tracking dependencies from blocking system startup.
+   - Disabled the erroneous `r_rsb: rsb@7083000` node (which is `s_twi0` I2C, not RSB), eliminating the 1.2-second boot timeout.
+

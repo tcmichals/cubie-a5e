@@ -1,23 +1,23 @@
 From: Tim Michals <tcmichals@gmail.com>
-Subject: [PATCH] pmdomain: sunxi-pck600: detect hardware initial power status
+Subject: [PATCH] pmdomain: sunxi-pck600: properly manage power domain states
 
 At boot, sunxi_pck600_probe initializes power domains with
 pm_genpd_init(&pd->genpd, NULL, false), passing is_off = false.
-This incorrectly tells genpd that the domain is already powered on
-in hardware. On cold boot, power domains (such as PD_USB2 / domain 8)
-are powered off in hardware (PPU_PWSR == 0). When consumer drivers
-probe and attach, genpd checks genpd_status_on(genpd), assumes the
-domain is already on, and skips calling .power_on(), leaving the IP
-block unpowered.
+This incorrectly tells genpd that all domains are already powered on
+in hardware. When consumer drivers probe and attach via genpd_dev_pm_attach(),
+genpd checks genpd_status_on(genpd), assumes the domain is already on,
+and skips calling .power_on().
 
-Read PPU_PWSR to determine the actual power status at probe, passing
-!is_on to pm_genpd_init(). Also add an informational log message in
-sunxi_pck600_pd_set_power() to trace domain power transitions.
+Initialize peripheral domains with is_off = true so genpd explicitly
+invokes .power_on() when consumer drivers attach, properly configuring
+hardware PPU power switches and deasserting power gates. Also add
+informational log messages in sunxi_pck600_probe() and
+sunxi_pck600_pd_set_power() to trace domain transitions.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/pmdomain/sunxi/sun55i-pck600.c | 15 ++++++++++++++-
- 1 file changed, 14 insertions(+), 1 deletion(-)
+ drivers/pmdomain/sunxi/sun55i-pck600.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
 
 --- a/drivers/pmdomain/sunxi/sun55i-pck600.c
 +++ b/drivers/pmdomain/sunxi/sun55i-pck600.c
@@ -26,31 +26,20 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  		dev_err(pck->dev, "failed to turn domain \"%s\" %s: %d\n",
  			genpd->name, str_on_off(on), ret);
 +	else
-+		dev_info(pck->dev, "turned domain \"%s\" %s\n",
-+			 genpd->name, str_on_off(on));
++		dev_info(pck->dev, "turned domain \"%s\" %s (PWSR=0x%08x)\n",
++			 genpd->name, str_on_off(on), readl(pd->base + PPU_PWSR));
  
  	return ret;
  }
-@@ -109,6 +112,13 @@ static int sunxi_pck600_power_off(struct generic_pm_domain *domain)
- 	return sunxi_pck600_pd_set_power(pd, false);
- }
- 
-+static bool sunxi_pck600_pd_is_on(struct sunxi_pck600_pd *pd)
-+{
-+	u32 reg = readl(pd->base + PPU_PWSR);
-+
-+	return FIELD_GET(PPU_PWR_STATUS, reg) == PPU_POWER_MODE_ON;
-+}
-+
- static void sunxi_pck600_pd_setup(struct sunxi_pck600_pd *pd,
- 				  const struct sunxi_pck600_desc *desc)
- {
-@@ -171,7 +181,7 @@ static int sunxi_pck600_probe(struct platform_device *pdev)
+@@ -183,7 +186,10 @@ static int sunxi_pck600_probe(struct platform_device *pdev)
  		pd->base = base + PPU_REG_SIZE * i;
  
  		sunxi_pck600_pd_setup(pd, desc);
 -		ret = pm_genpd_init(&pd->genpd, NULL, false);
-+		ret = pm_genpd_init(&pd->genpd, NULL, !sunxi_pck600_pd_is_on(pd));
++		dev_info(dev, "PD[%d] %s: base=%px PWSR=0x%08x PWPR=0x%08x\n",
++			 i, desc->pd_names[i], pd->base,
++			 readl(pd->base + PPU_PWSR), readl(pd->base + PPU_PWPR));
++		ret = pm_genpd_init(&pd->genpd, NULL, true);
  		if (ret) {
  			dev_err_probe(dev, ret, "failed to initialize power domain\n");
  			goto err_remove_pds;

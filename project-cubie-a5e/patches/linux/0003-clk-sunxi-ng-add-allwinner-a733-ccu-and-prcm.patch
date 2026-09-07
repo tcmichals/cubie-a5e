@@ -354,7 +354,7 @@ V0.93 and critical clock definitions.
 +			   0x1a00, BIT(3), CLK_IS_CRITICAL);
 +
 +/* USB reference and PHY clocks */
-+static SUNXI_CCU_GATE_DATA(usb_ref_clk, "usb-ref", osc24M, 0x1340, BIT(31), CLK_IS_CRITICAL);
++static SUNXI_CCU_GATE_DATA(usb_ref_clk, "usb-ref", osc24M, 0x1340, BIT(31) | BIT(16) | BIT(0), CLK_IS_CRITICAL);
 +static SUNXI_CCU_GATE_DATA(usb_phy0_clk, "usb-phy0", osc24M, 0x1300, BIT(31), 0);
 +static SUNXI_CCU_GATE_DATA(usb_phy1_clk, "usb-phy1", osc24M, 0x1308, BIT(31), 0);
 +
@@ -570,6 +570,12 @@ V0.93 and critical clock definitions.
 +	/* Enable GMAC0 PHY 25MHz fanout clock (150MHz / (5+1) = 25MHz) */
 +	writel(BIT(31) | 5, reg + 0x1410);
 +
++	/* Enable USB subsystem AHB master gate */
++	writel(BIT(0), reg + 0x05A4);
++
++	/* Enable MSI_LITE2 bus clock & deassert reset, plus USB_REF 24M (0x1340) */
++	writel(BIT(31) | BIT(16) | BIT(0), reg + 0x1340);
++
 +	/* Enable USB2 (DWC3) core clock & deassert reset (0x135C: RST_BUS_USB2 | CLK_BUS_USB2) */
 +	writel(BIT(16) | BIT(0), reg + 0x135C);
 +
@@ -578,6 +584,16 @@ V0.93 and critical clock definitions.
 +	if (u2phy) {
 +		writel(0x143338D6, u2phy + 0x00);
 +		iounmap(u2phy);
++	}
++
++	/* Diagnostic read of DWC3 registers directly */
++	{
++		void __iomem *dwc_test = ioremap(0x06A00000, 0x10000);
++		if (dwc_test) {
++			pr_info("sun60i-ccu: DWC3 test: 0x00=%08x, 0xc100=%08x, GSNPSID(0xc120)=%08x\n",
++				readl(dwc_test + 0x00), readl(dwc_test + 0xc100), readl(dwc_test + 0xc120));
++			iounmap(dwc_test);
++		}
 +	}
 +
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);

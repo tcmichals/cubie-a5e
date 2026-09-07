@@ -61,7 +61,7 @@ index 0000000..1234567
 +	};
 +
 +	chosen {
-+		bootargs = "earlycon=uart8250,mmio32,0x02500000 console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8";
++		bootargs = "earlycon=uart8250,mmio32,0x02500000 console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 fw_devlink=permissive";
 +		stdout-path = "serial0:115200n8";
 +	};
 +
@@ -427,7 +427,7 @@ index 0000000..1234567
 +			reset-names = "usb0_reset",
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
-+			usb1_vbus-supply = <&reg_usb1_vbus>;
++			usb1_vbus-supply = <&reg_usb0_vbus>;
 +			#phy-cells = <1>;
 +			status = "okay";
 +		};
@@ -480,36 +480,26 @@ index 0000000..1234567
 +			status = "okay";
 +		};
 +
-+		usb_dwc3: usb@6a00000 {
-+			compatible = "allwinner,sun50i-h6-dwc3";
-+			clocks = <&ccu CLK_BUS_USB2>;
++		dwc3: usb@6a00000 {
++			compatible = "snps,dwc3";
++			reg = <0x06a00000 0x100000>;
++			interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_USB2>,
++				 <&ccu CLK_BUS_USB2>,
++				 <&osc24M>;
++			clock-names = "bus_early", "ref", "suspend";
 +			resets = <&ccu RST_BUS_USB2>;
 +			power-domains = <&pck600 PD_USB2>;
-+			#address-cells = <1>;
-+			#size-cells = <1>;
-+			ranges;
++			dr_mode = "host";
++			maximum-speed = "high-speed";
++			phy_type = "utmi";
++			snps,dis_enblslpm_quirk;
++			snps,dis-u1-entry-quirk;
++			snps,dis-u2-entry-quirk;
++			snps,dis_u3_susphy_quirk;
++			snps,dis_u2_susphy_quirk;
++			vbus-supply = <&reg_usb1_vbus>;
 +			status = "okay";
-+
-+			dwc3: usb@6a00000 {
-+				compatible = "snps,dwc3";
-+				reg = <0x06a00000 0x100000>;
-+				interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
-+				clocks = <&ccu CLK_BUS_USB2>,
-+					 <&ccu CLK_BUS_USB2>,
-+					 <&osc24M>;
-+				clock-names = "bus_early", "ref", "suspend";
-+				dr_mode = "host";
-+				power-domains = <&pck600 PD_USB2>;
-+				maximum-speed = "super-speed";
-+				phy_type = "utmi";
-+				snps,dis_enblslpm_quirk;
-+				snps,dis-u1-entry-quirk;
-+				snps,dis-u2-entry-quirk;
-+				snps,dis_u3_susphy_quirk;
-+				snps,dis_u2_susphy_quirk;
-+				vbus-supply = <&reg_usb1_vbus>;
-+				status = "okay";
-+			};
 +		};
 +
 +		gmac0: ethernet@4500000 {
@@ -619,7 +609,7 @@ index 0000000..1234567
 +			pinctrl-0 = <&r_i2c0_pins>;
 +			#address-cells = <1>;
 +			#size-cells = <0>;
-+			status = "okay";
++			status = "disabled";
 +
 +			axp8191: pmic@3a3 {
 +				compatible = "x-powers,axp8191";
