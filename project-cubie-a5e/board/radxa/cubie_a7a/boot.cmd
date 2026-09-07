@@ -25,6 +25,14 @@ md.l 0x02003a00 1
 md.l 0x02003300 4
 md.l 0x0200335c 1
 
+echo === Testing DWC3 activation in U-Boot ===
+mw.l 0x020025a4 0x00030001
+mw.l 0x02003340 0x80010001
+mw.l 0x0200335c 0x00010001
+echo === Read back CCU 0x0200335C and DWC3 GSNPSID 0x06A0C120 ===
+md.l 0x0200335c 1
+md.l 0x06a0c120 1
+
 # Check for Raspberry Pi-style config.txt first, then armbianEnv.txt, then uEnv.txt
 if load mmc 0:1 ${ramdisk_addr_r} config.txt; then
     echo ">>> Found Raspberry Pi-style config.txt! Importing configuration..."

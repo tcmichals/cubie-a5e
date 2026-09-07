@@ -444,7 +444,7 @@ V0.93 and critical clock definitions.
 +	&spi1_clk.common,
 +};
 +
-+#define CLK_NUMBER (CLK_GMAC_PTP + 1)
++#define CLK_NUMBER (CLK_USB_REF + 1)
 +static struct {
 +	unsigned int num;
 +	struct clk_hw *hws[CLK_NUMBER];
@@ -496,6 +496,7 @@ V0.93 and critical clock definitions.
 +		[CLK_BUS_MSI_LITE2]	= &bus_msi_lite2_clk.common.hw,
 +		[CLK_RES_DCAP_24M]	= &res_dcap_24m_clk.common.hw,
 +		[CLK_GMAC_PTP]		= &gmac_ptp_clk.common.hw,
++		[CLK_USB_REF]		= &usb_ref_clk.common.hw,
 +	},
 +};
 +
@@ -570,8 +571,8 @@ V0.93 and critical clock definitions.
 +	/* Enable GMAC0 PHY 25MHz fanout clock (150MHz / (5+1) = 25MHz) */
 +	writel(BIT(31) | 5, reg + 0x1410);
 +
-+	/* Enable USB subsystem AHB master gate */
-+	writel(BIT(0), reg + 0x05A4);
++	/* Enable USB subsystem AHB master gate & deassert MSI2 resets */
++	writel(BIT(17) | BIT(16) | BIT(0), reg + 0x05A4);
 +
 +	/* Enable MSI_LITE2 bus clock & deassert reset, plus USB_REF 24M (0x1340) */
 +	writel(BIT(31) | BIT(16) | BIT(0), reg + 0x1340);
@@ -628,7 +629,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-ccu.h
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,93 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
@@ -719,6 +720,7 @@ V0.93 and critical clock definitions.
 +#define CLK_BUS_MSI_LITE2	83
 +#define CLK_RES_DCAP_24M	84
 +#define CLK_GMAC_PTP		85
++#define CLK_USB_REF		86
 +
 +#endif
 --- /dev/null

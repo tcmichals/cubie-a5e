@@ -1,35 +1,35 @@
 From: Tim Michals <tcmichals@gmail.com>
 Subject: [PATCH] pmdomain: sunxi-pck600: properly manage power domain states
 
-At boot, sunxi_pck600_probe initializes power domains with
-pm_genpd_init(&pd->genpd, NULL, false), passing is_off = false.
-This incorrectly tells genpd that all domains are already powered on
-in hardware. When consumer drivers probe and attach via genpd_dev_pm_attach(),
-genpd checks genpd_status_on(genpd), assumes the domain is already on,
-and skips calling .power_on().
-
-Initialize peripheral domains with is_off = true so genpd explicitly
-invokes .power_on() when consumer drivers attach, properly configuring
-hardware PPU power switches and deasserting power gates. Also add
-informational log messages in sunxi_pck600_probe() and
-sunxi_pck600_pd_set_power() to trace domain transitions.
+Initialize peripheral domains with is_off = true and configure CCU
+resets and clocks on domain activation.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/pmdomain/sunxi/sun55i-pck600.c | 16 ++++++++++++++--
- 1 file changed, 14 insertions(+), 2 deletions(-)
-
 --- a/drivers/pmdomain/sunxi/sun55i-pck600.c
 +++ b/drivers/pmdomain/sunxi/sun55i-pck600.c
-@@ -91,6 +91,18 @@ static int sunxi_pck600_pd_set_power(struct sunxi_pck600_pd *pd, bool on)
+@@ -89,8 +89,30 @@
+ 					FIELD_GET(PPU_PWR_STATUS, reg) == val,
+ 					0, 10000);
  	if (ret)
- 		dev_err(pck ? pck->dev : NULL, "failed to turn domain \"%s\" %s: %d\n",
+-		dev_err(pck->dev, "failed to turn domain \"%s\" %s: %d\n",
++		dev_err(pck ? pck->dev : NULL, "failed to turn domain \"%s\" %s: %d\n",
  			genpd->name, str_on_off(on), ret);
++
 +	else {
 +		dev_info(pck ? pck->dev : NULL, "turned domain \"%s\" %s (PWSR=0x%08x)\n",
 +			 genpd->name, str_on_off(on), readl(pd->base + PPU_PWSR));
 +		if (on && !strcmp(genpd->name, "USB2")) {
++			void __iomem *ccu_reg = ioremap(0x02002000, 0x2000);
 +			void __iomem *dwc_test = ioremap(0x06A00000, 0x10000);
++			if (ccu_reg) {
++				writel(0x00030001, ccu_reg + 0x05A4);
++				writel(BIT(31) | BIT(16) | BIT(0), ccu_reg + 0x1340);
++				writel(BIT(16) | BIT(0), ccu_reg + 0x135C);
++				pr_info("sunxi-pck-600: CCU 0x05a4=%08x 0x1340=%08x 0x135c=%08x\n",
++					readl(ccu_reg + 0x05A4), readl(ccu_reg + 0x1340), readl(ccu_reg + 0x135C));
++				iounmap(ccu_reg);
++			}
 +			if (dwc_test) {
 +				pr_info("sunxi-pck-600: USB2 domain ON - 0x00=%08x 0xc100=%08x GSNPSID(0xc120)=%08x\n",
 +					readl(dwc_test + 0x00), readl(dwc_test + 0xc100), readl(dwc_test + 0xc120));
@@ -40,7 +40,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  	return ret;
  }
-@@ -178,8 +190,12 @@ static int sunxi_pck600_probe(struct platform_device *pdev)
+@@ -165,13 +187,17 @@
  	for (i = 0; i < desc->num_domains; i++) {
  		struct sunxi_pck600_pd *pd = &pck->pds[i];
  
@@ -59,4 +59,3 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  		if (ret) {
  			dev_err_probe(dev, ret, "failed to initialize power domain\n");
  			goto err_remove_pds;
-
