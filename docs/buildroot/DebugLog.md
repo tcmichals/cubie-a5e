@@ -464,3 +464,45 @@ Upon booting upstream Linux 7.1 (`PREEMPT_RT`) on Radxa Cubie A7A (Allwinner A73
    - Added `fw_devlink=permissive` to `bootargs` to prevent missing device tree tracking dependencies from blocking system startup.
    - Disabled the erroneous `r_rsb: rsb@7083000` node (which is `s_twi0` I2C, not RSB), eliminating the 1.2-second boot timeout.
 
+### 🔴 OUTSTANDING BLOCKER: CCU Register Writes to 0x1340 / 0x135C Don't Stick
+
+**Status**: System boots to login prompt, all EHCI/OHCI USB 2.0 controllers work (Buses 1–4), rootfs mounts, but **DWC3 @ `0x06A00000` still fails** with `this is not a DesignWare USB3 DRD Core`. FE1.1S hub and AIC8800 Wi-Fi remain disconnected.
+
+**Diagnostic Evidence** (from `dmesg` on latest boot):
+```
+sunxi-pck-600: CCU 0x05a4=00030001 0x1340=80000000 0x135c=00010000
+sunxi-pck-600: USB2 domain ON - 0x00=00000000 0xc100=00000000 GSNPSID(0xc120)=00000000
+```
+
+| Register | Offset | Value Written | Readback | Status |
+|:---|:---|:---|:---|:---|
+| `MSI2_BGR` | `0x05A4` | `0x00030001` | `0x00030001` | ✅ Sticks |
+| `USB_REF` | `0x1340` | `0x80010001` | `0x80000000` | ❌ Bits 16,0 dropped |
+| `USB2_BGR` | `0x135C` | `0x00010001` | `0x00010000` | ❌ Bit 0 dropped |
+| `GSNPSID` | `0x06A0C120` | (read only) | `0x00000000` | ❌ DWC3 unreachable |
+
+**Analysis**:
+- `0x05A4` (MSI-Lite2 bus gate + resets) writes correctly and sticks.
+- `0x1340` bit 31 (`USB_REF` 24 MHz) sticks, but **bits 16 and 0 are silently dropped** by hardware.
+- `0x135C` bit 16 (reset deassert) sticks, but **bit 0 (bus clock gate) is silently dropped**.
+- This occurs both in the CCU probe (early) AND in the pck600 USB2 power-on handler (late), suggesting it's not just a sequencing issue.
+
+**Possible Root Causes**:
+1. **Wrong register mapping**: `0x1340` and `0x135C` may not be the correct registers for `CLK_USB2_MF` (vendor index 224) and `RST_USB_2` (vendor index 88). The vendor BSP CCU driver (`ccu-sun60iw2.c`) maps these indices to actual hardware registers, but we don't have that driver source. Our assignments were inferred from patterns, not confirmed.
+2. **Power domain dependency**: The DWC3 clock gates at `0x1340`/`0x135C` may be physically gated by the USB2 PPU power domain. Writes might require the power domain to be stable first, and even our pck600 handler may be writing too early in the power-up sequence.
+3. **Key-protected register**: Some Allwinner CCU registers require a specific key value in upper bits for writes to take effect (similar to `0x05C0`/`0x05E0` AHB/MBUS gates). If `0x1340` is key-protected, our raw write may be rejected.
+
+**Next Steps**:
+1. Run live `devmem` on the booted board to test register write-readback with power domain already stable:
+   ```bash
+   devmem 0x02003340; devmem 0x0200335c; devmem 0x06a0c120
+   devmem 0x02003340 32 0x80010001; devmem 0x0200335c 32 0x00010001
+   devmem 0x02003340; devmem 0x0200335c; devmem 0x06a0c120
+   ```
+2. If bits still don't stick, scan neighboring registers for the real DWC3 bus clock:
+   ```bash
+   for r in 1330 1334 1338 133c 1340 1344 1348 134c 1350 1354 1358 135c 1360; do
+     printf "0x%s: " $r; devmem 0x02003${r}; done
+   ```
+3. Cross-reference against the vendor `ccu-sun60iw2.c` clock driver (not available in our tree) to find the actual register offset for `CLK_USB2_MF` (index 224).
+

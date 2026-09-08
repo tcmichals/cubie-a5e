@@ -1,16 +1,14 @@
 From: Tim Michals <tcmichals@gmail.com>
 Subject: [PATCH] pmdomain: sunxi-pck600: properly manage power domain states
 
-Detect initial power domain state from PPU_PWSR instead of forcing
-is_off = true, and open master interconnect gates (AHB 0x05C0, MBUS
-0x05E0/0x05E4, MSI2 0x05A4, and USB2 0x1340/0x135C) when domain
-USB2 is activated.
+Initialize peripheral domains with is_off = true and configure CCU
+resets and clocks on domain activation.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 --- a/drivers/pmdomain/sunxi/sun55i-pck600.c
 +++ b/drivers/pmdomain/sunxi/sun55i-pck600.c
-@@ -89,8 +89,34 @@
+@@ -89,8 +89,30 @@
  					FIELD_GET(PPU_PWR_STATUS, reg) == val,
  					0, 10000);
  	if (ret)
@@ -25,14 +23,10 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			void __iomem *ccu_reg = ioremap(0x02002000, 0x2000);
 +			void __iomem *dwc_test = ioremap(0x06A00000, 0x10000);
 +			if (ccu_reg) {
-+				writel(0x010000FF | 0x110103FF, ccu_reg + 0x05C0);
-+				writel(0x41055800 | 0xF1055803, ccu_reg + 0x05E0);
-+				writel(0x00040302 | 0x0007FFFF, ccu_reg + 0x05E4);
-+				writel(BIT(17) | BIT(16) | BIT(0), ccu_reg + 0x05A4);
++				writel(0x00030001, ccu_reg + 0x05A4);
 +				writel(BIT(31) | BIT(16) | BIT(0), ccu_reg + 0x1340);
 +				writel(BIT(16) | BIT(0), ccu_reg + 0x135C);
-+				pr_info("sunxi-pck-600: CCU 0x05c0=%08x 0x05e0=%08x 0x05a4=%08x 0x1340=%08x 0x135c=%08x\n",
-+					readl(ccu_reg + 0x05C0), readl(ccu_reg + 0x05E0),
++				pr_info("sunxi-pck-600: CCU 0x05a4=%08x 0x1340=%08x 0x135c=%08x\n",
 +					readl(ccu_reg + 0x05A4), readl(ccu_reg + 0x1340), readl(ccu_reg + 0x135C));
 +				iounmap(ccu_reg);
 +			}
@@ -46,10 +40,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  	return ret;
  }
-@@ -165,13 +191,18 @@
+@@ -165,13 +187,17 @@
  	for (i = 0; i < desc->num_domains; i++) {
  		struct sunxi_pck600_pd *pd = &pck->pds[i];
-+		bool is_off;
  
 +		pd->pck = pck;
  		pd->genpd.name = desc->pd_names[i];
@@ -59,11 +52,10 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  		sunxi_pck600_pd_setup(pd, desc);
 -		ret = pm_genpd_init(&pd->genpd, NULL, false);
-+		is_off = (FIELD_GET(PPU_PWR_STATUS, readl(pd->base + PPU_PWSR)) != PPU_POWER_MODE_ON);
-+		dev_info(dev, "PD[%d] %s: base=%px PWSR=0x%08x PWPR=0x%08x is_off=%d\n",
++		dev_info(dev, "PD[%d] %s: base=%px PWSR=0x%08x PWPR=0x%08x\n",
 +			 i, desc->pd_names[i], pd->base,
-+			 readl(pd->base + PPU_PWSR), readl(pd->base + PPU_PWPR), is_off);
-+		ret = pm_genpd_init(&pd->genpd, NULL, is_off);
++			 readl(pd->base + PPU_PWSR), readl(pd->base + PPU_PWPR));
++		ret = pm_genpd_init(&pd->genpd, NULL, true);
  		if (ret) {
  			dev_err_probe(dev, ret, "failed to initialize power domain\n");
  			goto err_remove_pds;
