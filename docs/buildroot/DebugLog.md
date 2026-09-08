@@ -492,17 +492,93 @@ sunxi-pck-600: USB2 domain ON - 0x00=00000000 0xc100=00000000 GSNPSID(0xc120)=00
 2. **Power domain dependency**: The DWC3 clock gates at `0x1340`/`0x135C` may be physically gated by the USB2 PPU power domain. Writes might require the power domain to be stable first, and even our pck600 handler may be writing too early in the power-up sequence.
 3. **Key-protected register**: Some Allwinner CCU registers require a specific key value in upper bits for writes to take effect (similar to `0x05C0`/`0x05E0` AHB/MBUS gates). If `0x1340` is key-protected, our raw write may be rejected.
 
-**Next Steps**:
-1. Run live `devmem` on the booted board to test register write-readback with power domain already stable:
+### 🔬 Live `devmem` Diagnostic Results (September 7, 2026)
+
+**Test 1: Confirm 0x1340/0x135C bits don't stick**
+```
+# devmem 0x020025a4; devmem 0x02003340; devmem 0x0200335c; devmem 0x06a0c120
+0x00030001    <- 0x05A4 MSI2_BGR: OK
+0x80000000    <- 0x1340: only bit 31
+0x00000000    <- 0x135C: initially zero!
+0x00000000    <- GSNPSID: DWC3 unreachable
+
+# devmem 0x02003340 32 0x80010001; devmem 0x0200335c 32 0x00010001
+# devmem 0x02003340; devmem 0x0200335c
+0x80000000    <- 0x1340: bits 16,0 DROPPED
+0x00010000    <- 0x135C: bit 0 DROPPED, bit 16 sticks (reset deassert)
+
+# devmem 0x06a0c120
+0x00000000    <- STILL unreachable
+```
+
+**Test 2: Full USB CCU register scan (0x1300-0x137C)**
+```
+0x1300: 0xC0000000   USB0 PHY (clock + reset)
+0x1304: 0x01110111   USB0 HCI (EHCI0/OHCI0 clocks + resets) 
+0x1308: 0xC0000000   USB1 PHY (clock + reset)
+0x130c: 0x00110011   USB1 HCI (EHCI1/OHCI1 clocks + resets)
+0x1310-0x133c: all 0x00000000
+0x1340: 0x80000000   USB_REF 24MHz (bit 31 only)
+0x1344-0x1350: all 0x00000000
+0x1354: 0x00000000   ← USB2_MF_CLK_REG (FOUND!)
+0x1358: 0x00000000
+0x135c: 0x00010000   USB2_BGR_REG (bit 16 = reset deassert ONLY)
+0x1360-0x137c: all 0x00000000
+```
+
+**Test 3: Prove 0x135C only has bit 16**
+```
+# devmem 0x0200335c 32 0xFFFFFFFF; devmem 0x0200335c
+0x00010000    <- ONLY bit 16 is writable (confirmed: no clock gate here)
+```
+
+**Test 4: Found real USB2_MF_CLK_REG at 0x1354!**
+```
+# devmem 0x02003354 32 0x80000000; devmem 0x02003354
+0x80000000    <- Bit 31 (gate enable) STICKS!
+
+# devmem 0x02003354 32 0xFFFFFFFF; devmem 0x02003354
+0x8700001F    <- Real clock register confirmed!
+              <- Bit 31: gate enable
+              <- Bits 26:24 = 0x7: parent mux (3-bit)
+              <- Bits 4:0 = 0x1F: divider (5-bit)
+
+# devmem 0x06a0c120
+0x00000000    <- STILL unreachable (need more clocks!)
+```
+
+### 📋 A733 USB2 (DWC3) CCU Register Map (from TRM / devmem probing)
+
+| CCU Offset | Physical Addr | Name | Writable Bits | Status |
+|:---|:---|:---|:---|:---|
+| `0x1340` | `0x02003340` | `USB_REF_CLK_REG` | Bit 31 only | ✅ Enabled |
+| `0x1354` | `0x02003354` | `USB2_MF_CLK_REG` (CLK_USB2_MF=224) | `0x8700001F` | ✅ Enabled |
+| `0x135C` | `0x0200335C` | `USB2_BGR_REG` (RST_USB_2=88) | Bit 16 only (reset) | ✅ Deasserted |
+| `0x1360` | `0x02003360` | `USB2_U3_UTMI_CLK_REG`? | Unknown | ❓ Not probed yet |
+| `0x1364` | `0x02003364` | `USB2_U2_PIPE_CLK_REG`? | Unknown | ❓ Not probed yet |
+| `0x1348` | `0x02003348` | `USB2_U2_REF_CLK_REG`? | Unknown | ❓ Not probed yet |
+| `0x134C` | `0x0200334C` | `USB2_SUSPEND_CLK_REG`? | Unknown | ❓ Not probed yet |
+
+### ⏭️ Immediate Next Steps
+
+The vendor DTS uses THREE clocks for DWC3:
+```dts
+clocks = <&ccu CLK_USB2_MF>, <&ccu CLK_USB2_U2_REF>, <&ccu CLK_USB2_SUSPEND>;
+```
+
+Only CLK_USB2_MF (0x1354) is enabled so far. **The other two clocks (USB2_U2_REF and USB2_SUSPEND) must also be found and enabled.**
+
+1. **Probe all remaining registers** for writable bits to find CLK_USB2_U2_REF and CLK_USB2_SUSPEND:
    ```bash
-   devmem 0x02003340; devmem 0x0200335c; devmem 0x06a0c120
-   devmem 0x02003340 32 0x80010001; devmem 0x0200335c 32 0x00010001
-   devmem 0x02003340; devmem 0x0200335c; devmem 0x06a0c120
+   for r in 1344 1348 134c 1350 1358 1360 1364 1368; do
+     devmem 0x02003${r} 32 0xFFFFFFFF
+     printf "0x%s: "; devmem 0x02003${r}
+   done
+   devmem 0x06a0c120
    ```
-2. If bits still don't stick, scan neighboring registers for the real DWC3 bus clock:
-   ```bash
-   for r in 1330 1334 1338 133c 1340 1344 1348 134c 1350 1354 1358 135c 1360; do
-     printf "0x%s: " $r; devmem 0x02003${r}; done
-   ```
-3. Cross-reference against the vendor `ccu-sun60iw2.c` clock driver (not available in our tree) to find the actual register offset for `CLK_USB2_MF` (index 224).
+2. Once all three clocks are enabled and GSNPSID reads `0x5533xxxx`, update:
+   - `ccu-sun60i-a733.c`: add proper clock definitions at correct register offsets
+   - `sun60i-a733-cubie-a7a.dts`: wire DWC3 to the correct clock-names
+   - Remove hardcoded register pokes from pck600 patch
+3. Rebuild, flash, and verify FE1.1S hub (`1a40:0101`) + AIC8800 (`a69c:8800`) enumerate.
 
