@@ -16,17 +16,18 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 |  |     APPLICATION DOMAIN (ARM64)    |   |     REAL-TIME CO-PROCESSOR DOMAIN         |  |
 |  |  - 8× Cortex-A55 @ 1.80 GHz       |   |  - XuanTie E907 RV32IMAFDC @ 200 MHz      |  |
 |  |  - Mainline Linux 7.1 PREEMPT_RT  |   |  - Cadence Tensilica HiFi4 Audio DSP      |  |
-|  |  - RemoteProc Kernel Driver       |   |    @ 600 MHz                              |  |  +-----------------+-----------------+   +---------------------+---------------------+  |
+|  |  - RemoteProc Kernel Driver       |   |    @ 600 MHz                              |  |
+|  +-----------------------------------+   +-------------------------------------------+  |
 |                    │                                           │                        |
 |                    ▼                                           ▼                        |
 |  +-----------------------------------------------------------------------------------+  |
 |  |               SHARED SYSTEM INTERCONNECT & ON-CHIP SRAM BUS                       |  |
-|  |  - 128 KB Shared PubSRAM C (0x00020000) [Default Boot & Fast Runtime Execution]   |  |
-|  |  - 256 KB Dedicated MCU SRAM (0x3ffc0000 Core / 0x07280000 Host) [High-Perf SRAM]|  |
+|  |  - 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000) [Exclusive E907 Firmware]  |  |
+|  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
+|  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
 |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
-|  |  - 4 KB DDR RemoteProc Trace Carveout (0x48000000)                                |  |
-|  |  - 1 MB DDR DMA Payload Pool (0x48100000)                                         |  |
-|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
+|  |  - 1 MB DDR DMA Payload Pool (0x48100000) [Non-Cacheable Streaming Payloads Only] |  |
+|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000 Host Physical)                    |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 ```
@@ -41,56 +42,89 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
   - **C**: Compressed 16-bit instructions for high code density.
   - **DSP / RVP**: Packed SIMD & DSP extensions for accelerated digital signal processing.
   - **_zicsr & _zifencei**: Standard CSR manipulation and instruction fence operations.
-* **On-Chip Fast Memory Architecture:** 
-  - **128 KB PubSRAM C (`0x00020000`)**: 1:1 Identity-mapped on both ARM and RISC-V interconnects. Native default boot and execution memory for Linux RemoteProc.
-  - **256 KB Dedicated MCU SRAM (`0x3ffc0000` Core / `0x07280000` Host)**: Zero-wait-state dedicated on-chip memory space (`r_sram`) for maximum IPC throughput and real-time control loops.
+* **On-Chip Fast Memory Architecture (Pure SRAM & DDR — NO ITCM / NO DTCM):** 
+  - **SRAM_A3 Slice 0 (`0x40000000` Core, `0x07280000` / `0x07200000` Host, 256–512 KB)**: Primary zero-wait-state on-chip execution pool (`.vectors`, `.text`, `.rodata`, `.data`, `.bss`, `.stack`, `.trace_buffer`).
+  - **SRAM_A3 Slice 1 (`0x40040000` Core, `0x072c0000` / `0x07280000` Host, 256–512 KB)**: Switchable high-speed on-chip SRAM bank enabled by setting `REMAP_CTRL_REG` Bit 1 (`SRAMA3_2_RAM_REMAP = 1`).
+  - **DDR DRAM Carveout (`0x48100000` payload pool)**: Non-cacheable high-bandwidth DMA memory strictly for streaming payloads (`testDRAMMsg`). Control blocks, stacks, and trace buffers MUST NEVER be placed in DDR.
 * **Toolchain / ABI:** Target `-march=rv32imafdc_zicsr_zifencei -mabi=ilp32d -mcmodel=medany`.
 
 ---
 
 ## 2. Verified Memory Map of XuanTie E907 on Allwinner T527 / A523
 
-### 2.1 Memory Subsystem Mapping (Hardware Confirmed via Live Probe)
+### 2.1 E907 Memory Map (SRAM_A3 Pools & DDR Carveouts)
+
+The E907 executes exclusively from the on-chip `SRAM_A3` pools and dedicated DDR carveouts:
 
 | Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address (DA) | Size | Latency & Usage |
 | :--- | :--- | :--- | :--- | :--- |
-| **Shared PubSRAM C** | **`0x00020000`** | **`0x00020000`** | **128 KB** | **Primary Boot & Execution window**; directly mapped in mainline RemoteProc (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`) |
-| **Dedicated MCU SRAM (`r_sram`)** | **`0x07280000`** | **`0x3ffc0000`** | **256 KB** | Zero-wait-state dedicated high-memory window; verified live execution at ~570k counts/10ms |
-| **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector), `0x0248` (`WORK_MODE_REG`) |
-| **DDR Trace Buffer (`trace0`)** | **`0x48000000`** | **`0x48000000`** | **4 KB** | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) |
+| **SRAM_A3 Slice 0 (`r_sram`)** | **`0x07280000` (A527) / `0x07200000` (T527)** | **`0x40000000`** | **256 KB / 512 KB** | **Primary E907 Boot & Execution Pool** (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`). Zero wait states. |
+| **SRAM_A3 Slice 1 (`r_sram1`)** | **`0x072c0000` (A527) / `0x07280000` (T527)** | **`0x40040000`** | **256 KB / 512 KB** | **Secondary High-Speed SRAM Bank** enabled via `REMAP_CTRL_REG[1] = 1`. Shared IPC/buffers. |
+| **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware control registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector), `0x0248` (`WORK_MODE_REG`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
 
 > [!IMPORTANT]
-> ### WHY `0x00000000` AND `0x07110000`/`0x07120000` DO NOT EXIST ON A523/T527
-> 1. **Theoretical TCM Mappings Were Inaccurate**: Legacy documentation for older chips (e.g. Allwinner D1) placed ITCM at `0x00000000` and DTCM at `0x00080000`. On Allwinner A523/T527, `0x07110000` and `0x07120000` are non-writable/reserved registers.
-> 2. **Hardware Lockup Discovery**: Setting `STA_ADD_REG` to `0x000000BA` causes an immediate bus error on instruction fetch, triggering a double-fault on `mtvec` (also `0x0`) and placing the core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
-> 3. **Verified Live Boot Addresses**: Setting `STA_ADD_REG` to **`0x00020000`** (PubSRAM C) or **`0x3ffc0000`** (Dedicated SRAM) runs cleanly without lockup (`WORK_MODE_REG = 0x00000003`, Bit 3 `BIT_LOCK_STA = 0`).
+> ### TRACE BUFFER SILICON LOCATION: STRICTLY ON-CHIP SRAM, NEVER DDR
+> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x40000000` in `e907_sram.ld` or `0x40040000` in `e907_ddr.ld`):
+> 1. **Early Boot & Determinism**: The E907 logs boot vectors, clock status, and peripheral bring-up immediately upon reset—long before DDR is initialized, or even when DDR is powered down in low-power sleep.
+> 2. **Zero Wait States**: On-chip SRAM guarantees single-cycle logging latency without DRAM bus contention, page misses, or memory refresh stalls.
+> 3. **Crash Survivability**: When a fatal exception or illegal instruction trap occurs (`testCrash`), crash register dumps (`mepc`, `mcause`, `sp`) are safely preserved into SRAM even if the DDR controller has locked up or crashed.
+> 4. **Host Read Access**: Linux `sunxi_rproc.c` maps `r_sram` via `devm_ioremap_wc` (normal non-cacheable memory on ARM64), allowing debugfs `rproc_trace_read()` to perform byte-level reads directly without external aborts.
 
-### 2.2 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
+### 2.2 Silicon Hardware Ownership & Off-Limits Regions (The "PubSRAM" Truth)
+
+> [!IMPORTANT]
+> ### HARDWARE TRUTH: CLEARING UP THE "PUBSRAM" CONFUSION ON T527
+> Any older documentation, recycled vendor BSP templates, or earlier assumptions labeling `0x00020000` as the E907's "Primary Boot & Execution window" are **dangerously incorrect** for the T527/A527 silicon:
+> 1. **`0x00020000` (128 KB) is HiFi4 DSP Memory**: This physical silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. If the E907 attempts to boot or execute from here, it will collide with the DSP and corrupt DSP audio algorithms. It is NOT used for OP-TEE.
+> 2. **`0x00044000` (160 KB) is OP-TEE / TrustZone Memory (`SRAM A2`)**: This memory is locked by the hardware firewall for secure booting, TF-A BL31, and OP-TEE. It is completely separate from the `0x00020000` block.
+> 3. **Why the confusing "Shared PubSRAM" label in BSP code?** Allwinner frequently recycles documentation across SoC families (D1, V853, T527). In older chips, that lower address space was shared MCU SRAM. On the T527, it is physically the DSP's local RAM. It is only "shared" in the sense that Bit 0 of `REMAP_CTRL_REG` allows the ARM host to peek into it to send IPC messages to the DSP.
+> 4. **The Final Verdict for E907 Firmware**: Erase `0x00020000` from the E907 mental model and linker scripts entirely. E907 `.vectors`, `.text`, `.data`, and `.stack` must live **exclusively** in the `SRAM_A3` pools (`0x40000000` and `0x40040000`).
+
+> [!IMPORTANT]
+> ### NO ITCM OR DTCM ON E907 (PURE SRAM & DDR ARCHITECTURE)
+> 1. **Zero TCM in Silicon**: Unlike older Allwinner chips (e.g. Allwinner D1 / V853) that implemented private tightly-coupled memories at `0x00000000` (ITCM) and `0x00080000` (DTCM), the XuanTie E907 on the T527 / A527 **implements NO ITCM and NO DTCM**. Addresses `0x07110000` and `0x07120000` do not exist in silicon.
+> 2. **Hardware Lockup Discovery**: Setting `STA_ADD_REG` to `0x000000BA` causes an immediate bus error on instruction fetch, triggering a double-fault on `mtvec` (also `0x0`) and placing the core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
+> 3. **Verified Live Boot Addresses**: Setting `STA_ADD_REG` to **`0x40000000`** (SRAM_A3 Space 0) or **`0x40040000`** (SRAM_A3 Space 1) runs cleanly without lockup (`WORK_MODE_REG = 0x00000003`, Bit 3 `BIT_LOCK_STA = 0`).
+
+### 2.3 Off-Limits Memory Regions & Hardware Traps (Forbidden Memory Zones)
+
+There are four strictly off-limits memory zones that RISC-V firmware and Linux RemoteProc must never touch:
+
+| Forbidden Zone | Address Range | Hardware Owner | Consequence of Access | Protection in Linux Driver (`sunxi_rproc.c`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Zone 1: Low Addresses / Fake TCM** | `< 0x00020000` (`0x00000000`–`0x0001FFFF`) | Silicon Mask ROM (BROM) | Hardware lockup (`WORK_MODE_REG` Bit 3 `BIT_LOCK_STA = 1`). No ITCM exists on E907. | Outright rejected with `-EINVAL` in `da_to_va()` |
+| **Zone 2: HiFi4 DSP Local RAM** | `0x00020000`–`0x0003FFFF` (128 KB) | Cadence HiFi4 Audio DSP | Bus collision with DSP; corrupts DSP execution. Only accessible to host when `REMAP[0]=1`. | Outright rejected with `-EINVAL` in `da_to_va()` |
+| **Zone 3: Secure SRAM A2** | `0x00040000`–`0x00067FFF` (160 KB) | TF-A BL31 / OP-TEE / PSCI | TrustZone / S-BUS security exception; kernel crash or bus lockup | Outright rejected with `-EINVAL` in `da_to_va()` |
+| **Zone 4: DSP Local Secondary RAM** | `0x00400000`–`0x0044FFFF` (128 KB) | Cadence HiFi4 Audio DSP | Corrupts DSP audio algorithms; bus collision once DSP takes ownership (`REMAP[0] = 0`) | Outright rejected with `-EINVAL` in `da_to_va()` |
+
+### 2.4 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
 
 | SRAM Bank | Physical Base (Host) | Core Address (E907) | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E907? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`BROM`** | `0x00000000` | Unmapped | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (BootROM) |
-| **`PubSRAM C`** | `0x00020000` | `0x00020000` | 128 KB | **XuanTie E907 / Linux** | **Default RemoteProc firmware window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)** | ✅ **YES (Default Boot Memory)** |
-| **`SRAM A2`** | `0x00040000` | `0x00040000` | 208 KB | **Secure EL3 (TF-A) / CPUS** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug), or A733 `scp.fex` PMIC core** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
+| **`DSP RAM` (`PubSRAM C`)** | `0x00020000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **DSP Instruction/Data RAM**. Host IPC peek only via `REMAP_CTRL_REG[0]`. | ❌ **STRICTLY PROHIBITED** (DSP Collision) |
+| **`SRAM A2`** | `0x00044000` | Unmapped | 160 KB | **Secure EL3 (TF-A) / OP-TEE** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug)** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
+| **`SRAM_A3 Space 0` (`r_sram`)** | `0x07280000` (A527) / `0x07200000` (T527) | `0x40000000` | 256 KB / 512 KB | **XuanTie E907** | **Primary zero-wait-state execution window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)** | ✅ **YES (Primary E907 Pool)** |
+| **`SRAM_A3 Space 1` (`r_sram1`)** | `0x072c0000` (A527) / `0x07280000` (T527) | `0x40040000` | 256 KB / 512 KB | **XuanTie E907 / Shared** | **Secondary zero-wait-state SRAMA3_2 bank enabled via REMAP_CTRL_REG[1]=1** | ✅ **YES (Secondary E907 Pool)** |
+| **`DSP IRAM/DRAM`**| `0x00400000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **Private DSP Execution & Audio Buffers** | ❌ **STRICTLY PROHIBITED** (DSP Local RAM) |
 | **`CFG Regs`** | `0x07130000` | `0x07130000` | 4 KB | **Host & E907 Control** | Hardware version (`0x00`), Boot entry vector (`0x204`), Work Mode / Lockup status (`0x248`) | ✅ **YES (Registers Only, Not SRAM)** |
-| **`R_SRAM`** | `0x07280000` | `0x3ffc0000` | 256 KB | **XuanTie E907** | **Zero-wait-state high-performance dedicated SRAM space 0** | ✅ **YES (Zero-Wait-State SRAM)** |
-| **`trace0`** | `0x48000000` | `0x48000000` | 4 KB | Linux RemoteProc | RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) | ✅ **YES (Logging Carveout)** |
-| **`dram_dma`**| `0x48100000`| `0x48100000` | 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool for high-bandwidth IPC (`testDRAMMsg`) | ✅ **YES (Streaming Carveout)** |
+| **`dram_dma`**| `0x48100000`| `0x48100000` | 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool strictly for streaming IPC payloads (`testDRAMMsg`) | ✅ **YES (Streaming Carveout Only)** |
 
-### 2.3 Control, Peripheral & Inter-Core Registers
+### 2.5 Control, Peripheral & Inter-Core Registers
 
 | Peripheral Block | Linux Host Physical Address | E907 RISC-V Address | Description & Hardware Usage |
 | :--- | :--- | :--- | :--- |
-| **MCU CCU Clocks & Resets** | **`0x07102000`** | **`0x07102000`** | Core clock gate (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE), PubSRAM clock/reset (`0x07102114`) |
+| **Hardware REMAP Register**| **`0x07010364` (A527) / `0x07140364` (T527)**| — | Offset `0x364`: Bit 0 = `MCU_RAM_REMAP` (DSP), Bit 1 = `SRAMA3_2_RAM_REMAP` (E907 SRAM_A3 Slice 1) |
+| **MCU CCU Clocks & Resets** | **`0x07102000` / `0x07140000`** | **`0x07102000` / `0x07140000`** | Core clock gate (`CLK_MCU_RISCV`), bus clock gate (`CLK_BUS_MCU_RISCV_CFG`), resets (`cfg`, `core`) |
 | **RISC-V CFG Controller** | **`0x07130000`** | **`0x07130000`** | Boot entry vector register (`0x07130204`), Work Mode & Lockup status register (`0x07130248`) |
-| **Hardware MSGBOX (Mailbox)** | **`0x03003000`** | **`0x03003000`** | Hardware doorbell FIFO: <br>• **Channel 0**: RISC-V $\rightarrow$ Linux (GIC SPI 147)<br>• **Channel 1**: Linux $\rightarrow$ RISC-V (PLIC IRQ 25) |
+| **Hardware MSGBOX (Mailbox)** | **`0x03003000`** | **`0x03003000`** | Hardware doorbell FIFO: Channels 0/1 Linux $\leftrightarrow$ RISC-V |
 | **Main PIO (GPIO B–K)** | **`0x02000000`** | **`0x02000000`** | 1:1 mapped GPIO pin control registers |
 | **UART0 (Debug Console)** | **`0x02500000`** | **`0x02500000`** | Shared serial console |
 | **UART2 (Co-processor Port)** | **`0x02500800`** | **`0x02500800`** | High-speed serial / RC receiver interface |
 | **SPI0 Controller** | **`0x04025000`** | **`0x04025000`** | Direct high-speed peripheral bus |
 
-### 2.4 Visual Address Translation Architecture
+### 2.6 Visual Address Translation Architecture
 
 ```
 +===================================================================================+
@@ -99,215 +133,92 @@ The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time aux
 
   LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
   ================================                  =============================
-  0x00020000 - 0x0003FFFF [ 128 KB ] ─────────────> 0x00020000 - 0x0003FFFF (PubSRAM C)
-    (Mapped via RemoteProc "sram")                    (Default Boot, .vectors, .text, .data, stack)
+  0x07280000 - 0x072BFFFF [ 256 KB ] ─────────────> 0x40000000 - 0x4003FFFF (SRAM_A3 Space 0)
+    (Mapped via RemoteProc "r_sram")                  (E907 Primary Boot, .vectors, .text, .data, stack, .trace_buffer)
 
-  0x07280000 - 0x072BFFFF [ 256 KB ] ─────────────> 0x3ffc0000 - 0x3fffffff (Dedicated SRAM)
-    (Mapped via RemoteProc "r_sram")                  (Zero-wait-state High-SRAM Window)
+  0x072C0000 - 0x072FFFFF [ 256 KB ] ─────────────> 0x40040000 - 0x4007FFFF (SRAM_A3 Space 1)
+    (Mapped via RemoteProc "r_sram1")                 (SRAMA3_2 via REMAP_CTRL_REG[1] = 1, IPC, .trace_buffer)
+
+  0x00020000 - 0x0003FFFF [ 128 KB ] ─────────────> [ CADENCE HIFI4 DSP ONLY - FORBIDDEN TO E907 ]
+    (DSP Local Instruction/Data RAM)                  (Host IPC peek only via REMAP_CTRL_REG[0] = 1)
+
+  0x00044000 - 0x00067FFF [ 160 KB ] ─────────────> [ OP-TEE / TRUSTZONE SRAM A2 - FORBIDDEN ]
+    (Firewalled by TrustZone SPC)                     (TF-A BL31 & OP-TEE execution only)
 
   0x07130000 - 0x07130FFF [   4 KB ] ─────────────> 0x07130000 - 0x07130FFF (CFG Regs)
     (STA_ADD_REG 0x204, WORK_MODE 0x248)              (Control & Lockup Status)
 
-  0x48000000 - 0x48000FFF [   4 KB ] ─────────────> 0x48000000 - 0x48000FFF (trace0)
-    (RemoteProc Trace Carveout)                       (Direct Identity Mapped)
-
-  0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR Carveout)
-    (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Payload Buffers)
+  0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR DMA Pool)
+    (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Streaming Payloads Only)
 +===================================================================================+
 ```
 
-### 2.5 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
+### 2.7 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
 
 When Linux RemoteProc loads a firmware ELF:
-1. **PubSRAM C Segments (`0x00020000`–`0x0003FFFF`, 128 KB)**:
-   `sunxi_rproc_da_to_va()` maps the device address 1:1 to host physical memory `0x00020000` and copies code/data directly via `memcpy_toio()`. This is supported out-of-the-box by mainline Linux without kernel modifications.
-2. **Dedicated MCU SRAM Segments (`0x3ffc0000`–`0x3fffffff`, 256 KB)**:
-   High SRAM zero-wait-state window on the E907 interconnect, mapped to host physical address `0x07280000`. Provides 3x higher throughput for tight computational loops.
-3. **RISC-V CFG Controller (`0x07130000`)**:
-   Hardware control registers (not writable SRAM). On start, the driver writes the ELF entry point (`0x00020000` or `0x3ffc0000`) to `STA_ADD_REG` (`0x07130204`). Core status and lockup can be checked at `WORK_MODE_REG` (`0x07130248`).
-4. **DDR Carveouts (`0x48000000` & `0x48100000`)**:
-   Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings.
+1. **Dedicated SRAM Space 0 (`0x40000000`)**:
+   Core Device Address `0x40000000` is translated by `sunxi_rproc_da_to_va()` directly into `priv->r_sram_va` (host physical `0x07280000` / `0x07200000`). This is where all `.vectors`, `.text`, `.rodata`, `.data`, `.bss`, `.stack`, and `.trace_buffer` reside.
+2. **Dedicated SRAM Space 1 (`0x40040000`)**:
+   Core Device Address `0x40040000` is translated directly into `priv->r_sram1_va` (host physical `0x072c0000` / `0x07280000`). RemoteProc un-gates this bank by writing `1` to `REMAP_CTRL_REG` Bit 1 prior to loading segments.
+3. **Hard Error Guards for Forbidden Memory**:
+   `sunxi_rproc_da_to_va()` rejects any attempt to load into `< 0x00020000` (BROM/fake TCM), `0x00020000`–`0x0003FFFF` (HiFi4 DSP memory), `0x00040000`–`0x00067FFF` (OP-TEE SRAM A2), or `0x00400000`–`0x0044FFFF` (DSP secondary RAM).
+4. **RISC-V CFG Controller (`0x07130000`)**:
+   Hardware control registers (not writable SRAM). On start, the driver writes the ELF entry point (`0x40000000`) to `STA_ADD_REG` (`0x07130204`). Core status and lockup can be checked at `WORK_MODE_REG` (`0x07130248`).
+5. **DDR Streaming DMA Carveout (`0x48100000`)**:
+   Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings. Reserved strictly for bulk streaming payload transfers (`testDRAMMsg`). Control blocks, descriptors, and trace buffers (`trace0`) MUST NEVER be in DDR; they reside in deterministic on-chip SRAM.
 
-### 2.6 ITCM & DTCM Architecture & Programmer's Implementation Guide
+### 2.8 Hardware Remap Architecture in Device Tree & Linux Driver
 
-For embedded and hard real-time systems engineers, **ITCM (Instruction Tightly-Coupled Memory)** and **DTCM (Data Tightly-Coupled Memory)** are the most critical memory subsystems on the XuanTie E907 core.
+#### 1. Hardware Register & Bit Definitions
+On the Allwinner T527 and A523/A527, `REMAP_CTRL_REG` controls memory bridge routing between the ARM host interconnect and the `MCU_SYS` co-processor domain:
+- **T527 (`sun60iw1`)**: Located in `DSP_CCU` @ `0x07140000` + Offset `0x364` = **`0x07140364`**
+- **A523 / A527 (`sun55iw3`)**: Located in `PRCM / R_CCU` @ `0x07010000` + Offset `0x364` = **`0x07010364`**
 
-#### 1. Architectural Role & Why TCM is Needed
-The XuanTie E907 features a modified Harvard bus architecture:
-* **ITCM**: Connected directly to the core's instruction fetch pipeline. Fetches occur in **1 single clock cycle with zero wait states**, completely decoupled from the system bus and L1 instruction cache. This eliminates cache miss penalties, bus arbitration delays, and pipeline stalls.
-  - **Ideal Use Cases**: Critical interrupt handlers (e.g. Mailbox Doorbell ISR, high-rate SPI/UART DMA callbacks), trap/fault handlers, and inner real-time PID attitude estimation loops.
-* **DTCM**: Connected directly to the core's load/store execution unit. Reads and writes complete in **1 clock cycle with zero wait states**.
-  - **Ideal Use Cases**: Stack (`.stack`), fast lookup tables (LUTs), critical state machines, and circular ring buffer head/tail pointers where atomic synchronization cannot afford bus jitter.
+| Bit Field | Name | Reset | Hardware Meaning & Routing |
+| :--- | :--- | :--- | :--- |
+| **Bit 0** | `MCU_RAM_REMAP` | `0` | **`0`**: DSP local memory (`0x00020000` and `0x00400000`–`0x0044FFFF`) is private and exclusive to the Cadence HiFi4 DSP.<br>**`1`**: DSP memory window is visible to CPUX to exchange IPC messages with the DSP.<br>*(E907 driver leaves Bit 0 as `0` to prevent any DSP collisions).* |
+| **Bit 1** | `SRAMA3_2_RAM_REMAP` | `0` | **`0`**: `SRAMA3_2` is not bridged for `MCU_SYS`.<br>**`1`**: `SRAMA3_2` (`0x07280000` / `0x072c0000`) is bridged into `MCU_SYS`, appearing at core DA **`0x40040000`**. |
 
-#### 2. The Hardware Challenge: Why RemoteProc Cannot Load TCM Directly
-On the Allwinner A523/T527 SoC:
-* ITCM and DTCM reside on the **private internal core bus** of the XuanTie E907.
-* Mainline Linux and the ARM Cortex-A55 cores operate over the main system AXI interconnect.
-* **Silicon Reality**: There is no active external bus bridge allowing the ARM host to write directly into the E907's private TCM while the core clock and TCM controllers are in reset. Legacy documentation suggested writing to `0x07110000` or `0x07120000`, but live hardware probing proves those registers are non-writable/reserved on A523/T527.
-* Setting the core's boot entry register (`STA_ADD_REG`) directly to `0x00000000` while TCM is uninitialized causes an immediate instruction fetch abort, resulting in **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
+#### 2. Device Tree Node Definition (`sun55i-a523.dtsi`)
+The clean Device Tree node connects the remoteproc driver exclusively to E907 resources (no DSP memory or PUBSRAM clocks/resets):
 
-#### 3. The Solution: Two-Stage Bootstrapping ("How to Copy to TCM")
-To utilize ITCM and DTCM on Allwinner T527 without hardware lockup, programmers use the standard embedded **LMA vs. VMA Staging Pattern**:
-1. **Host Loading (LMA - Load Memory Address)**: Linux RemoteProc loads the entire firmware ELF into accessible on-chip SRAM:
-   - **PubSRAM C (`0x00020000`, 128 KB)**, OR
-   - **Dedicated High SRAM (`0x3ffc0000`, 256 KB)**.
-2. **Core Startup**: The E907 starts executing from SRAM (`_start` in `startup.S`).
-3. **Core-Initiated Copy (VMA - Virtual/Execution Memory Address)**: Early in the startup sequence, the E907's own CPU instructions copy the designated `.itcm` functions and `.dtcm` data from SRAM (LMA) to TCM (VMA).
-4. **Instruction Synchronization (`fence.i`)**: The core executes `fence.i` to invalidate and synchronize its instruction fetch pipeline so newly copied instructions in ITCM are fetched cleanly.
-5. **Execution**: The core jumps into or calls the TCM-resident routines, running at pure 1-cycle latency!
-
-#### 4. Step-by-Step Linker Script Configuration (`.ld`)
-To stage TCM code and data, configure the GNU Linker Script with distinct Load Memory Addresses (`AT(...)`):
-
-```ld
-MEMORY
-{
-    /* Staging / Primary Executable SRAM */
-    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
-
-    /* Tightly-Coupled Memories (Local E907 Core View) */
-    ITCM (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
-    DTCM (rwx) : ORIGIN = 0x00080000, LENGTH = 64K
-}
-
-SECTIONS
-{
-    /* Primary bootstrap in SRAM */
-    .vectors : { KEEP(*(.vectors)) } > SRAM
-    .text    : { *(.text) *(.text.*) } > SRAM
-    .rodata  : { *(.rodata) *(.rodata.*) } > SRAM
-
-    /* Critical Real-Time Code: Stored in SRAM (LMA), Executed in ITCM (VMA) */
-    .itcm_text : AT(_sidata_itcm)
-    {
-        . = ALIGN(4);
-        _sitcm = .;
-        *(.itcm)
-        *(.itcm.*)
-        *(.fast_code)
-        . = ALIGN(4);
-        _eitcm = .;
-    } > ITCM
-    _sidata_itcm = LOADADDR(.itcm_text);
-
-    /* Critical Real-Time Data: Stored in SRAM (LMA), Executed in DTCM (VMA) */
-    .dtcm_data : AT(_sidata_dtcm)
-    {
-        . = ALIGN(4);
-        _sdtcm = .;
-        *(.dtcm)
-        *(.dtcm.*)
-        *(.fast_data)
-        . = ALIGN(4);
-        _edtcm = .;
-    } > DTCM
-    _sidata_dtcm = LOADADDR(.dtcm_data);
-
-    /* DTCM Uninitialized BSS */
-    .dtcm_bss (NOLOAD) :
-    {
-        . = ALIGN(4);
-        _sbss_dtcm = .;
-        *(.dtcm_bss)
-        *(.dtcm_bss.*)
-        . = ALIGN(4);
-        _ebss_dtcm = .;
-    } > DTCM
-}
+```dts
+rproc: remoteproc@7130000 {
+	compatible = "allwinner,sun55i-a523-rproc",
+	             "allwinner,sun55i-a527-rproc";
+	reg = <0x07130000 0x1000>,      /* "cfg": E907 CFG & boot-address registers */
+	      <0x07280000 0x40000>,     /* "r_sram": SRAM_A3 Space 0 (256 KB on A523, 512 KB on T527) */
+	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM_A3 Space 1 (256 KB on A523, 512 KB on T527) */
+	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG (0x07010364 on A523, 0x07140364 on T527) */
+	reg-names = "cfg", "r_sram", "r_sram1", "remap";
+	clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
+	         <&mcu_ccu CLK_MCU_RISCV>;
+	clock-names = "bus", "core";
+	resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
+	         <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
+	reset-names = "cfg", "core";
+	mboxes = <&msgbox 0>, <&msgbox 1>;
+	mbox-names = "rx", "tx";
+	status = "disabled";
+};
 ```
 
-#### 5. Assembly Startup Copy Routine (`startup.S`)
-In `startup.S`, insert the copy routine before calling C/C++ constructors or `main()`:
-
-```assembly
-    /* =============================================================
-     * 1. Copy Critical Code from SRAM (LMA) to ITCM (VMA)
-     * ============================================================= */
-    la      a0, _sitcm              /* Destination: ITCM start */
-    la      a1, _eitcm              /* Destination: ITCM end */
-    la      a2, _sidata_itcm        /* Source: LMA in SRAM */
-    beq     a0, a2, .Lcopy_itcm_done /* Skip if LMA == VMA */
-.Lcopy_itcm_loop:
-    bgeu    a0, a1, .Lcopy_itcm_done
-    lw      t0, 0(a2)
-    sw      t0, 0(a0)
-    addi    a0, a0, 4
-    addi    a2, a2, 4
-    j       .Lcopy_itcm_loop
-.Lcopy_itcm_done:
-    fence.i                         /* CRITICAL: Synchronize instruction cache & pipeline */
-
-    /* =============================================================
-     * 2. Copy Critical Data from SRAM (LMA) to DTCM (VMA)
-     * ============================================================= */
-    la      a0, _sdtcm              /* Destination: DTCM start */
-    la      a1, _edtcm              /* Destination: DTCM end */
-    la      a2, _sidata_dtcm        /* Source: LMA in SRAM */
-    beq     a0, a2, .Lcopy_dtcm_done
-.Lcopy_dtcm_loop:
-    bgeu    a0, a1, .Lcopy_dtcm_done
-    lw      t0, 0(a2)
-    sw      t0, 0(a0)
-    addi    a0, a0, 4
-    addi    a2, a2, 4
-    j       .Lcopy_dtcm_loop
-.Lcopy_dtcm_done:
-
-    /* =============================================================
-     * 3. Clear DTCM BSS (.dtcm_bss)
-     * ============================================================= */
-    la      a0, _sbss_dtcm
-    la      a1, _ebss_dtcm
-.Lzero_dtcm_loop:
-    bgeu    a0, a1, .Lzero_dtcm_done
-    sw      zero, 0(a0)
-    addi    a0, a0, 4
-    j       .Lzero_dtcm_loop
-.Lzero_dtcm_done:
-```
-
-#### 6. How Programmers Use TCM in C / C++
-Programmers define compiler macros to place critical functions and variables into TCM:
-
-```c
-#define __ITCM_TEXT __attribute__((section(".itcm"), noinline))
-#define __DTCM_DATA __attribute__((section(".dtcm")))
-#define __DTCM_BSS  __attribute__((section(".dtcm_bss")))
-
-/* Pinned in ITCM: 1-cycle execution, immune to system bus congestion */
-void __ITCM_TEXT fast_flight_loop_isr(void) {
-    // Hard real-time attitude estimation & motor PWM update
-}
-
-/* Pinned in DTCM: 1-cycle read/write, zero cache jitter */
-static volatile float __DTCM_DATA pid_gains[3] = {1.25f, 0.05f, 0.12f};
-static volatile uint32_t __DTCM_BSS fast_cycle_count;
-```
-
-#### 7. The Zero-Copy Alternative: Dedicated High SRAM (`0x3ffc0000` / `0x07280000`)
-If your application needs high-performance execution without the overhead of copying sections from LMA to VMA at boot:
-* The XuanTie E907 on T527 features **256 KB of Dedicated High SRAM** mapped at **`0x3ffc0000`** in the core's address space (physical **`0x07280000`**).
-* **Direct RemoteProc Loading**: Unlike private TCM, Dedicated High SRAM is an on-chip SRAM bank accessible to both the ARM host bus and the E907 core. Linux RemoteProc can load code and data directly into it at startup.
-* **Measured Performance**: In live hardware execution tests on the Radxa Cubie A5E, a tight counting loop ran at **~570,000 counts per 10 ms** in Dedicated High SRAM versus **~171,000 counts per 10 ms** in PubSRAM C.
-* For large real-time applications (up to 256 KB), Dedicated High SRAM provides near-TCM execution speeds with 100% zero boot-time copy overhead!
-
-#### 8. Memory Hierarchy & Determinism Comparison
-
-| Subsystem | Core Address | Host Address | Access Latency | Cache Jitter? | Direct RemoteProc ELF Load? | Typical Programmer Usage |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ITCM** | `0x00000000` | Unmapped | **1 Cycle (Zero Wait)** | **0% (Deterministic)** | ❌ No (Requires boot copy) | Time-critical ISRs, trap vectors, PID inner loops |
-| **DTCM** | `0x00080000` | Unmapped | **1 Cycle (Zero Wait)** | **0% (Deterministic)** | ❌ No (Requires boot copy) | High-speed stack, fast LUTs, atomic state |
-| **Dedicated High SRAM** | `0x3ffc0000` | `0x07280000` | **~1-2 Cycles (Fast on-chip)**| **0% (Deterministic)** | ✅ **YES (Zero Copy)** | Full 256 KB firmware, real-time RTOS, SPSC queues |
-| **PubSRAM C** | `0x00020000` | `0x00020000` | **~2-4 Cycles (Shared bus)** | **Very Low** | ✅ **YES (Default Boot)** | General firmware, bootloader, trace buffer |
-| **DDR DRAM** | `0x40000000`+ | `0x40000000`+ | **~50-100+ Cycles** | **High (L1 miss penalty)** | ✅ Yes (DMA Carveout) | Large streaming payload buffers (1 MB+) |
+#### 3. RemoteProc Driver Lifecycle (`sunxi_rproc.c`)
+- **Probe (`sunxi_rproc_register_mem`)**: Maps `"r_sram"` (`0x07280000`), `"r_sram1"` (`0x072c0000`), and `"remap"` (`0x07010364`).
+- **Prepare (`sunxi_rproc_prepare`)**: Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Bit 0 is left untouched.
+- **DA Translation (`sunxi_rproc_da_to_va`)**: Translates `0x40000000` to `priv->r_sram_va` and `0x40040000` to `priv->r_sram1_va`. Rejects forbidden regions (`< 0x00020000`, `0x00020000`–`0x0003FFFF`, `0x00040000`–`0x00067FFF`, and `0x00400000`–`0x0044FFFF`).
+- **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG` on core shutdown.
 
 ---
 
-## 3. Firmware Layout, Linker Script & Bootstrap Sequence
+## 3. Firmware Layout, Linker Scripts & Bootstrap Sequence
 
-### Unified Linker Script (`riscv-firmware/common/arch_riscv/firmware_t527.ld`)
+### Production Linker Scripts (`riscv-firmware/common/arch_riscv/`)
 
-The unified linker script places execution code, data, stack, trace buffer, and shared structures into verified **PubSRAM C (`0x00020000`, 128 KB)**:
+Three specialized linker scripts cover all deployment and simulation targets:
+
+1. **`e907_sram.ld` (Default - Pure SRAM_A3)**:
+   Places all execution code, data, stack, trace buffer, and shared structures into verified **SRAM_A3 Slice 0 (`0x40000000`, 256 KB)**:
 
 ```ld
 OUTPUT_ARCH("riscv")
@@ -315,7 +226,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    SRAM (rwx) : ORIGIN = 0x00020000, LENGTH = 128K
+    SRAM_A3 (rwx) : ORIGIN = 0x40000000, LENGTH = 256K
 }
 
 SECTIONS
@@ -326,23 +237,27 @@ SECTIONS
         . = ALIGN(64);
         KEEP(*(.vectors))
         KEEP(*(.text.startup))
-    } > SRAM
+    } > SRAM_A3
 
     .text :
     {
         . = ALIGN(4);
         *(.text)
         *(.text.*)
+        *(.fastcode)
+        *(.fastcode.*)
         . = ALIGN(4);
-    } > SRAM
+    } > SRAM_A3
 
     .rodata :
     {
         . = ALIGN(4);
         *(.rodata)
         *(.rodata.*)
+        *(.srodata)
+        *(.srodata.*)
         . = ALIGN(4);
-    } > SRAM
+    } > SRAM_A3
 
     /* RemoteProc Resource Table (Parsed by Linux on ELF Load) */
     .resource_table :
@@ -351,7 +266,7 @@ SECTIONS
         KEEP(*(.resource_table))
         KEEP(*(.resource_table*))
         . = ALIGN(4);
-    } > SRAM
+    } > SRAM_A3
 
     .data :
     {
@@ -364,7 +279,7 @@ SECTIONS
         *(.sdata.*)
         . = ALIGN(4);
         _edata = .;
-    } > SRAM
+    } > SRAM_A3
     _sidata = LOADADDR(.data);
 
     .bss :
@@ -378,7 +293,7 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _ebss = .;
-    } > SRAM
+    } > SRAM_A3
 
     /* Execution Stack (8 KB) */
     .stack (NOLOAD) :
@@ -387,7 +302,7 @@ SECTIONS
         _stack_bottom = .;
         . += 0x2000;
         _stack_top = .;
-    } > SRAM
+    } > SRAM_A3
 
     /* Scratchpad Memory */
     .dtcm_scratch (NOLOAD) :
@@ -398,7 +313,7 @@ SECTIONS
         *(.dtcm_scratch.*)
         . = ALIGN(4);
         __dtcm_scratch_end = .;
-    } > SRAM
+    } > SRAM_A3
 
     /* RemoteProc Trace Buffer */
     .trace_buffer (NOLOAD) :
@@ -409,7 +324,7 @@ SECTIONS
         KEEP(*(.trace_buffer.*))
         . = ALIGN(4);
         __trace_end = .;
-    } > SRAM
+    } > SRAM_A3
 
     /* Shared Application / IPC Memory */
     .sram_c (NOLOAD) :
@@ -422,19 +337,44 @@ SECTIONS
         *(.sram_c_loc2)
         . = ALIGN(4);
         __sram_c_end = .;
-    } > SRAM
+    } > SRAM_A3
 }
+```
+
+2. **`e907_ddr.ld` (Multi-Bank SRAM + DDR)**:
+   Places fast code (`.fastcode`) and critical stack in zero-wait-state `SRAM_FAST` (`0x40000000`), resource tables and IPC structures in `SRAM_A3_2` (`0x40040000`), and large VirtIO packet pools in non-cacheable DDR (`0x48100000`).
+
+3. **`qemu.ld` (QEMU virt Emulation)**:
+   Places all code, data, and stack in QEMU virt machine DRAM (`0x80000000`, 128 MB) with `_start` aligned at the base of memory.
+
+Build selection is controlled directly via `common.mk`:
+```bash
+# Default build (SRAM_A3 0x40000000)
+make
+
+# Multi-Bank SRAM + DDR build
+make MEM=ddr
+
+# QEMU Emulation build
+make MEM=qemu
+# or shortcut:
+make QEMU=1
+
+# Run local QEMU simulation with GDB stub:
+make qemu
+# In another terminal, connect GDB:
+make gdb
 ```
 
 ### Bootstrap Sequence (`riscv-firmware/common/arch_riscv/startup.S`)
 
 1. **Disable Interrupts**: `csrw mie, zero`, `csrw mip, zero`.
-2. **Setup Stack Pointer**: `la sp, _stack_top` in SRAM (`0x00020000 + offset`).
+2. **Setup Stack Pointer**: `la sp, _stack_top` in SRAM_A3 (`0x40000000 + offset`).
 3. **Setup Global Pointer**: `la gp, __global_pointer$` for relaxed linker addressing.
-4. **Configure Trap Vector**: `csrw mtvec, _vectors` (aligned to 64 bytes in SRAM `0x00020000`) before enabling FPU.
+4. **Configure Trap Vector**: `csrw mtvec, _vectors` (aligned to 64 bytes in SRAM_A3 `0x40000000`) before enabling FPU.
 5. **Enable Hardware FPU**: `csrs mstatus, (3 << 13)` (Sets `mstatus.FS = 0b11` to enable single/double precision FPU).
 6. **Copy Initialized Data**: Checks if LMA != VMA before copying `.data`.
-7. **Zero BSS**: Clears `.bss` variables in SRAM.
+7. **Zero BSS**: Clears `.bss` variables in SRAM_A3.
 8. **Call Global C++ Constructors**: Calls `__libc_init_array` if present.
 9. **Jump to Application**: Executes `call main`.
 
@@ -459,7 +399,7 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
   - Formats telemetry, heartbeats, and sensor readings directly into the RemoteProc debugfs `trace0` buffer.
 * **`hal::Crash` (`hal/crash.hpp`)**:
   - Machine-mode exception and trap autopsy handler.
-  - Captures all 31 GPRs (`x1`–`x31`) and CSRs (`mepc`, `mcause`, `mtval`, `mstatus`) upon fatal faults, outputting structured crash logs to `trace0` and writing `0xDEADF00D` to SRAM (`0x00020000`).
+  - Captures all 31 GPRs (`x1`–`x31`) and CSRs (`mepc`, `mcause`, `mtval`, `mstatus`) upon fatal faults, outputting structured crash logs to `trace0` and writing `0xDEADF00D` to SRAM (`0x40000000`).
 * **`hal::Timer` (`hal/timer.hpp`)**:
   - Calibrated 64-bit microsecond counter and busy-wait delay for the 200 MHz core (`TICKS_PER_US = 200`).
 
@@ -471,7 +411,7 @@ Under [`riscv-firmware/apps/`](/riscv-firmware/apps/), seven progressive test ap
 
 ```text
 apps/
-├── testBasic/               # Minimal boot, PubSRAM execution, and live counter increments
+├── testBasic/               # Minimal boot, SRAM_A3 execution, and live counter increments
 ├── testStringBinaryTrace0/  # Combined ASCII text + packed binary telemetry with hardware FPU
 ├── testCrash/               # Hardware exception trapping (mtvec) & full register crash dump
 ├── testPing/                # Fast, low-jitter Direct Shared Memory (hal::SpscQueue) + Linux benchmark
@@ -484,10 +424,10 @@ apps/
 
 ### Application Details
 
-1. **`testBasic`**: Boots into PubSRAM C `0x00020000` and continuously writes magic counters to SRAM (`0x00021000`, `0x00021004`) for sanity testing.
-2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in PubSRAM C. Combines double-precision hardware FPU math (sine wave computation) with a 36-byte packed binary `TelemetryPacket` in SRAM (`0x00021000`) and formatted ASCII log output in `trace0`.
+1. **`testBasic`**: Boots into SRAM_A3 `0x40000000` and continuously writes magic counters to SRAM (`0x40001000`, `0x40001004`) for sanity testing.
+2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in SRAM_A3. Combines double-precision hardware FPU math (sine wave computation) with a 36-byte packed binary `TelemetryPacket` in SRAM (`0x40001000`) and formatted ASCII log output in `trace0`.
    > **Note on `epoll` & Polling**: Upstream Linux debugfs `trace0` (`drivers/remoteproc/remoteproc_debugfs.c`) does **not** implement `.poll` or attach a wait queue; calling `epoll_ctl()` returns `EPERM`. Thus, companion scripts (`monitor_trace.py`) poll in a loop. Hardware Mailbox doorbells and `/dev/rpmsg0` provide event-driven notifications with full `epoll` support for 0% host CPU wait.
-3. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to SRAM (`0x00020000`).
+3. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to SRAM (`0x40000000`).
 4. **`testPing`**: Ultra-low-latency direct shared SRAM SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
 5. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg`. Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg`.
 6. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state SRAM SPSC control queues with a 1 MB DDR DRAM payload buffer pool (`0x48100000`) configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
@@ -499,8 +439,8 @@ apps/
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in PubSRAM C (`0x00020000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct PubSRAM C (`0x00020000`, 64B frames) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM_A3 (`0x40000000`) | Lock-Free SPSC in SRAM_A3 (`0x40000000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM_A3 (`0x40000000`, 64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | Kernel UIO / Shared SRAM (`sunxi_rproc`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
@@ -545,13 +485,13 @@ The Linux RemoteProc framework allows stopping, switching, and starting firmware
 
 ```bash
 # ==============================================================================
-# 1. Run Pure Shared SRAM C Ping (testPing)
+# 1. Run Pure Shared SRAM Ping (testPing)
 # ==============================================================================
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 
-# Run high-frequency latency benchmark (e.g., 50,000 round-trips over 0x00020000)
+# Run high-frequency latency benchmark (e.g., 50,000 round-trips over SRAM_A3 0x40000000)
 ping_shm -n 50000
 
 # ==============================================================================
@@ -577,24 +517,352 @@ ping_rpmsg -n 5000
 
 ---
 
-### 7.3 Reading RemoteProc Trace Logs
+### 7.3 RemoteProc Debugfs: Architecture, Mounting & Log Streaming
 
-To view ASCII startup banners, periodic telemetry, or crash dumps:
+The Linux RemoteProc framework uses the kernel's `debugfs` virtual filesystem to expose low-level diagnostics, crash logs, and recovery controls for the XuanTie E907 co-processor.
+
+#### 1. Mounting Debugfs in Linux
+On Buildroot or standard Linux distributions, `debugfs` can be mounted dynamically or configured to mount automatically at boot:
 
 ```bash
-# Read live log stream from the E907 co-processor
+# Check if debugfs is already mounted
+mount | grep -i debugfs
+
+# Mount debugfs manually if not mounted:
+mount -t debugfs none /sys/kernel/debug
+
+# Or add to /etc/fstab for automatic mounting on every boot:
+# debugfs  /sys/kernel/debug  debugfs  defaults  0  0
+```
+
+> [!NOTE]
+> **Kernel Configuration Prerequisites**:
+> Both `CONFIG_DEBUG_FS=y` and `CONFIG_REMOTEPROC=y` must be enabled in the Linux kernel configuration (`cubie_a5e_defconfig`).
+
+#### 2. RemoteProc Debugfs Directory Structure
+Once debugfs is mounted and `sunxi_rproc` initializes the co-processor, the driver exposes a dedicated debug hierarchy at `/sys/kernel/debug/remoteproc/remoteproc0/`:
+
+| Debugfs File | Permissions | Function & Usage |
+| :--- | :--- | :--- |
+| **`trace0`** | `r--r--r--` (Read-only) | Direct byte stream of the on-chip SRAM trace buffer declared in the ELF `.resource_table`. |
+| **`recovery`** | `rw-r--r--` (Read/Write) | Controls auto-restart behavior upon crash/watchdog: `enabled` (default) or `disabled`. |
+| **`version`** | `r--r--r--` (Read-only) | Displays the Linux RemoteProc subsystem version string. |
+| **`coredump`** | `rw-r--r--` (Read/Write) | Configures remoteproc coredump capture mode: `default`, `inline`, or `disabled`. |
+
+#### 3. How Linux RemoteProc Maps `trace0` to On-Chip SRAM
+The connection between the RISC-V firmware's `hal::Trace` and Linux userspace `cat /sys/kernel/debug/remoteproc/remoteproc0/trace0` operates entirely through on-chip SRAM via the ELF resource table:
+
+```
+  ┌─────────────────────────────────────────────────────────────┐
+  │                 RISC-V Firmware (ELF Image)                 │
+  │                                                             │
+  │  .resource_table:                                           │
+  │    RSC_TRACE type descriptor:                               │
+  │      da   = &g_rproc_trace_buffer (DA 0x40000000 + offset)  │
+  │      len  = 4096 bytes                                      │
+  │      name = "trace0"                                        │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │ Firmware load by Linux RemoteProc
+                                 ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │          Linux Kernel RemoteProc Core (remoteproc_core.c)   │
+  │                                                             │
+  │  Calls driver: rproc->ops->da_to_va(rproc, da, len)         │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │
+                                 ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │         Allwinner Driver (drivers/remoteproc/sunxi_rproc.c) │
+  │                                                             │
+  │  sunxi_rproc_da_to_va():                                    │
+  │    1. Validates da against on-chip SRAM_A3 (r_sram / r_sram1)│
+  │    2. Translates DA to kernel VA via devm_ioremap_wc:       │
+  │       va = rproc_pdata->sram_va + (da - SRAM_A3_BASE)       │
+  │       (Maps physical 0x07280000 / 0x07200000 into kernel)   │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │
+                                 ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │        Linux Debugfs Interface (remoteproc_debugfs.c)       │
+  │                                                             │
+  │  Creates: /sys/kernel/debug/remoteproc/remoteproc0/trace0   │
+  │  rproc_trace_read(): Copies directly from kernel VA to      │
+  │  userspace buffer on read. Zero DRAM overhead.              │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+#### 4. Reading and Streaming Trace Logs
+Developers can view logs in several ways depending on the workflow:
+
+```bash
+# Method A: Direct one-shot read of the entire trace buffer
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+
+# Method B: Continuous tail / polling loop (refreshes terminal every second)
+while true; do
+    clear
+    cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+    sleep 1
+done
+
+# Method C: Dedicated Python Trace Monitor (incremental stream)
+# Installed on target at /usr/local/bin/monitor_trace.py
+python3 /usr/local/bin/monitor_trace.py /sys/kernel/debug/remoteproc/remoteproc0/trace0
+```
+
+---
+
+### 7.4 Hardware Exception Architecture & HAL Crash Handling
+
+The firmware Hardware Abstraction Layer (`hal`) contains a robust, fail-safe exception handler (`common/hal/crash.cpp` and `common/arch_riscv/startup.S`) designed to prevent silicon lockups and capture post-mortem forensic state.
+
+#### 1. Hardware Exception Pipeline
+When an illegal instruction, misaligned access, or memory bus fault occurs on the E907 core:
+
+```
+  ┌──────────────────────────────────────────────────────────────┐
+  │                 Hardware Fault Triggers                      │
+  │  (e.g., Null pointer read/write, Illegal instruction, PMP)   │
+  └──────────────────────────────┬───────────────────────────────┘
+                                 │ Hardware CSR Capture:
+                                 │   mepc    = faulting PC
+                                 │   mcause  = exception reason code
+                                 │   mtval   = fault address / opcode
+                                 │   mstatus = previous machine state
+                                 ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │       Vector Table Jump (mtvec -> default_trap_entry)        │
+  │                       (startup.S)                            │
+  │                                                              │
+  │  1. Reserves 140 bytes on stack: addi sp, sp, -140           │
+  │  2. Saves all 31 General Purpose Registers (x1 to x31)       │
+  │  3. Reads CSRs (mepc, mcause, mtval, mstatus) and stores     │
+  │     them into the stack frame.                               │
+  └──────────────────────────────┬───────────────────────────────┘
+                                 │ Checks mcause Bit 31:
+                                 │   Bit 31 == 1: Asynchronous IRQ
+                                 │   Bit 31 == 0: Synchronous Exception
+                                 ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │      hal_crash_dispatcher() -> hal::CrashHandler::handle()    │
+  │                       (crash.cpp)                            │
+  │                                                              │
+  │  1. Persistent Crash Signature:                              │
+  │     Writes 0xDEADF00D magic, mepc, mcause, mtval to          │
+  │     SRAM_A3 Space 0 Top: 0x4003FF00 (Host: 0x072BFF00)      │
+  │                                                              │
+  │  2. Formatted Autopsy Generation:                            │
+  │     - Decodes mcause to human-readable string                │
+  │     - Dumps CSRs: mepc, mcause, mtval, mstatus               │
+  │     - Dumps all 31 GPRs (ra, sp, gp, tp, t0-t6, s0-s11, a0-a7)│
+  │     - Emits report to trace0 buffer and S_UART0 console      │
+  └──────────────────────────────┬───────────────────────────────┘
+                                 │ Returns to startup.S
+                                 ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │                  Safe Core Parking Loop                      │
+  │                       (startup.S)                            │
+  │                                                              │
+  │  1. Disables all interrupts: csrci mstatus, 8                │
+  │  2. Low-power park loop: 1: wfi; j 1b                        │
+  │  * Prevents double-fault loop into hardware silicon lockup!  │
+  └──────────────────────────────────────────────────────────────┘
+```
+
+#### 2. The `hal::CrashFrame` Structure
+The stack layout preserved by `startup.S` corresponds directly to the C++ structure defined in `common/hal/crash.hpp`:
+
+```cpp
+namespace hal {
+
+struct CrashFrame {
+    uint32_t ra, sp, gp, tp;
+    uint32_t t0, t1, t2;
+    uint32_t s0, s1;
+    uint32_t a0, a1, a2, a3, a4, a5, a6, a7;
+    uint32_t s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+    uint32_t t3, t4, t5, t6;
+    uint32_t mepc;
+    uint32_t mcause;
+    uint32_t mtval;
+    uint32_t mstatus;
+};
+
+class CrashHandler {
+public:
+    static void handle(const CrashFrame &frame) noexcept;
+    static const char *get_cause_name(uint32_t mcause) noexcept;
+};
+
+} // namespace hal
+```
+
+#### 3. Persistent Crash Signature in SRAM_A3
+To ensure forensic data survives even if the trace buffer is partially corrupted or overwritten, `hal::CrashHandler::handle()` writes a 4-word persistent signature to the very top 256 bytes of SRAM_A3 Space 0 (`0x4003FF00` Core DA):
+
+| Word Offset | Address (RISC-V DA) | Address (Host Physical A527) | Address (Host Physical T527) | Value / Field Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Word 0` | `0x4003FF00` | `0x072BFF00` | `0x0723FF00` | `0xDEADF00D` (Fatal crash magic identifier) |
+| `Word 1` | `0x4003FF04` | `0x072BFF04` | `0x0723FF04` | `mepc` (Program counter of faulting instruction) |
+| `Word 2` | `0x4003FF08` | `0x072BFF08` | `0x0723FF08` | `mcause` (Hardware exception reason code) |
+| `Word 3` | `0x4003FF0C` | `0x072BFF0C` | `0x0723FF0C` | `mtval` (Faulting memory address or bad opcode) |
+
+> [!IMPORTANT]
+> **Why 0x4003FF00 and NOT 0x40000000?**
+> SRAM_A3 Space 0 base (`0x40000000`) is where the RISC-V `.vectors` table and entry point reside. Writing a crash dump signature to `0x40000000` would overwrite the reset and trap vectors, causing subsequent core warm-restarts to fault immediately. Moving the crash signature to `0x4003FF00` (the last 256 bytes of the 256 KB slice) ensures both `.vectors` and crash forensics remain completely intact.
+
+---
+
+### 7.5 Step-by-Step Crash Dump Debugging from Linux
+
+This section provides a practical, step-by-step walkthrough for debugging a firmware crash using the included `testCrash.elf` diagnostic application.
+
+#### Step 1: Disable RemoteProc Auto-Recovery
+By default, the Linux RemoteProc subsystem attempts to immediately restart the co-processor when a crash or timeout occurs. To inspect the post-mortem registers without the kernel restarting the core:
+
+```bash
+# On target Linux shell:
+echo disabled > /sys/kernel/debug/remoteproc/remoteproc0/recovery
+```
+
+#### Step 2: Trigger the Crash (`testCrash.elf`)
+Load and start `testCrash.elf`, which purposefully executes a faulting operation (e.g. invalid memory read):
+
+```bash
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testCrash.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+```
+
+#### Step 3: Inspect the Autopsy Report via Debugfs `trace0`
+Read the debugfs trace buffer to obtain the human-readable exception autopsy:
+
+```bash
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
+
+**Expected Autopsy Output:**
+```text
+################################################################
+  FATAL HARDWARE EXCEPTION DETECTED ON XUANTIE E907 RISC-V CORE 
+################################################################
+  Cause Name : Illegal instruction
+  mcause     : 0x00000002
+  mepc (PC)  : 0x4000080e
+  mtval      : 0x00000000
+  mstatus    : 0x00001880
+
+--- General Purpose Register (GPR) Dump ---
+  ra (x1) = 0x40000812  sp (x2) = 0x4003fea0  gp (x3) = 0x40008400
+  tp (x4) = 0x00000000  t0 (x5) = 0x00000000  t1 (x6) = 0x00000000
+  t2 (x7) = 0x00000000  s0 (x8) = 0x00000004  s1 (x9) = 0x00000000
+  a0 (x10)= 0x00000064  a1 (x11)= 0x00000000  a2 (x12)= 0x00000000
+  a3 (x13)= 0x00000000  a4 (x14)= 0x00000000  a5 (x15)= 0x00000003
+  a6 (x16)= 0x00000000  a7 (x17)= 0x00000000  s2 (x18)= 0x00000000
+  s3 (x19)= 0x00000000  s4 (x20)= 0x00000000  s5 (x21)= 0x00000000
+  s6 (x22)= 0x00000000  s7 (x23)= 0x00000000  s8 (x24)= 0x00000000
+  s9 (x25)= 0x00000000  s10(x26)= 0x00000000  s11(x27)= 0x00000000
+  t3 (x28)= 0x00000000  t4 (x29)= 0x00000000  t5 (x30)= 0x00000000
+  t6 (x31)= 0x00000000
+################################################################
+  Core halted safely. Inspect /sys/.../trace0 or SRAM_A3 (0x4003FF00)
+################################################################
+```
+
+#### Step 4: Low-Level Physical Memory Verification (`devmem2`)
+If `trace0` is unavailable or truncated, read the raw hardware crash signature directly from physical SRAM using `devmem2`:
+
+```bash
+# On Allwinner A527 (Radxa Cubie A5E):
+# Host physical address: 0x07280000 (r_sram) + 0x0003FF00 = 0x072BFF00
+devmem2 0x072BFF00 w 4
+
+# On Allwinner T527:
+# Host physical address: 0x07200000 (r_sram) + 0x0003FF00 = 0x0723FF00
+devmem2 0x0723FF00 w 4
+```
+
+**Verification:**
+* `0x072BFF00`: `0xDEADF00D` $\rightarrow$ Magic confirmed! A fatal trap occurred.
+* `0x072BFF04`: `0x4000080E` $\rightarrow$ `mepc` (Program Counter of faulting instruction).
+* `0x072BFF08`: `0x00000002` $\rightarrow$ `mcause` (Illegal instruction exception).
+* `0x072BFF0C`: `0x00000000` $\rightarrow$ `mtval` (Faulting opcode: `0x00000000`).
+
+#### Step 5: Pinpoint the Exact C/C++ Source Line (`addr2line`)
+On your host development machine (or target with GNU toolchain installed), use `riscv-none-elf-addr2line` with the `mepc` address:
+
+```bash
+riscv-none-elf-addr2line -e riscv-firmware/bin/testCrash.elf -a -f -C 0x4000080e
+```
+
+**Output:**
+```text
+0x4000080e
+main
+/home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/riscv-firmware/apps/testCrash/main.cpp:51
+```
+`addr2line` instantly identifies the exact function (`main`), file (`main.cpp`), and line number (`51`) where the crash occurred!
+
+#### Step 6: Disassemble the Faulting Instruction (`objdump`)
+To see the exact machine instructions surrounding `mepc`:
+
+```bash
+riscv-none-elf-objdump -d -S riscv-firmware/bin/testCrash.elf > /tmp/testCrash.asm
+grep -C 5 "4000080e:" /tmp/testCrash.asm
+```
+
+**Assembly Output:**
+```assembly
+40000808:	06400513          	li	a0,100
+4000080c:	39e1                	jal	400004e4 <_ZN3hal5Timer8delay_msEm>
+4000080e:	00000000          	.word	0x00000000   <-- FAULT: Invalid instruction opcode
+40000812:	00001517          	auipc	a0,0x1
+```
+The disassembly confirms that the instruction at `0x4000080e` is `.word 0x00000000`, which the XuanTie E907 decoded as an illegal instruction, triggering exception `0x2`.
+
+#### Step 7: Reference Table of RISC-V Exception Causes (`mcause`)
+Use this table to interpret any `mcause` code reported in the crash dump:
+
+| `mcause` Code | Exception Name | Root Cause / Trigger | What `mtval` Contains |
+| :--- | :--- | :--- | :--- |
+| `0x00000000` | Instruction address misaligned | Branch/jump target is not 2- or 4-byte aligned | Target misaligned address |
+| `0x00000001` | Instruction access fault | Jump to non-existent memory, forbidden zones (`< 0x00020000`), or PMP violation | Faulting instruction address |
+| `0x00000002` | Illegal instruction | Invalid instruction opcode, executing data/stack, or unsupported ISA extension | Invalid 32-bit instruction word |
+| `0x00000003` | Breakpoint | Software `ebreak` instruction executed | Program counter of `ebreak` |
+| `0x00000004` | Load address misaligned | Unaligned 32-bit load (e.g. `lw` on non-4-byte boundary) | Memory address that was accessed |
+| `0x00000005` | Load access fault | Read from null pointer (`0x0`), non-existent MMIO, DSP RAM, or PMP protected region | Faulting memory address accessed |
+| `0x00000006` | Store/AMO address misaligned | Unaligned 32-bit store (e.g. `sw` on non-4-byte boundary) | Memory address that was accessed |
+| `0x00000007` | Store/AMO access fault | Write to Flash/ROM, unmapped MMIO, DSP RAM, or PMP protected region | Faulting memory address accessed |
+| `0x00000008` | Environment call from U-mode | User space `ecall` | `0x00000000` |
+| `0x0000000B` | Environment call from M-mode | Machine mode `ecall` | `0x00000000` |
+| `0x0000000C` | Instruction page fault | Virtual memory page table fault on instruction fetch | Faulting virtual address |
+| `0x0000000D` | Load page fault | Virtual memory page table fault on data read | Faulting virtual address |
+| `0x0000000F` | Store/AMO page fault | Virtual memory page table fault on data write | Faulting virtual address |
+
+#### Step 8: Distinguishing Clean HAL Park vs Hardware Silicon Lockup
+In the event of a catastrophic failure (e.g. bad vector table or unhandled trap), check the RISC-V hardware status register directly:
+
+```bash
+# Read WORK_MODE_REG (0x07130248) on Linux:
+devmem2 0x07130248 w
+```
+
+* **Clean HAL Park (`0x00000003`)**:
+  Bit 0 (`MCU_RUN = 1`), Bit 1 (`BIT_RUN_STA = 1`), Bit 3 (`BIT_LOCK_STA = 0`).
+  The core trapped cleanly, preserved the autopsy in SRAM, and parked in low-power `wfi`. The core can be cleanly reloaded and restarted via RemoteProc.
+* **Hardware Silicon Lockup (`0x0000000B`)**:
+  Bit 3 (`BIT_LOCK_STA = 1`).
+  The core experienced a double-fault (e.g. `STA_ADD_REG` pointed to invalid memory or `mtvec` was null). The hardware lockup flag is asserted by the silicon interconnect. The core must be reset via `sunxi_rproc` (`echo stop > ... && echo start > ...`).
 
 ---
 
 ## 8. Troubleshooting & Verification Checklist
 
-1. **Check RemoteProc Kernel Driver**:
+1. **Verify RemoteProc Kernel Driver Initialization**:
    ```bash
    dmesg | grep -i sunxi_rproc
    ```
-   Verify that `sunxi-rproc 7102000.remoteproc: assigned reserved memory node rproc_trace@48000000` is initialized.
+   Verify that `sunxi_rproc` registers `r_sram` (`0x07280000`) and `r_sram1` (`0x072c0000`), and RemoteProc exposes `trace0` directly from on-chip SRAM via the `.resource_table`.
 
 2. **Verify Co-Processor State**:
    ```bash
@@ -611,5 +879,8 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
    ping_uio -n 1000
    ```
 
-4. **Verify Exception Handling**:
-   When running `testCrash.elf`, read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to inspect the full GPR and CSR exception frame dump (`mepc`, `mcause`, `mtval`, `mstatus`, `ra`, `sp`, `gp`, etc.) and verify `0xDEADF00D` in PubSRAM C (`0x00020000`).
+4. **Verify Exception Handling & Crash Forensics**:
+   When running `testCrash.elf`:
+   * Read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to inspect the full GPR and CSR exception frame dump (`mepc`, `mcause`, `mtval`, `mstatus`, `ra`, `sp`, `gp`, etc.).
+   * Verify persistent crash magic `0xDEADF00D` in SRAM_A3 at `0x4003FF00` (`devmem2 0x072BFF00 w 4`).
+   * Resolve faulting PC using `riscv-none-elf-addr2line -e testCrash.elf -a -f -C <mepc>`.

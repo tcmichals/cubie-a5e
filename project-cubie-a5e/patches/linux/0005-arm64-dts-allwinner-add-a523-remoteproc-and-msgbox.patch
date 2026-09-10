@@ -4,8 +4,8 @@ Subject: [PATCH] arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 
 Add the hardware mailbox (CPUX_MSGBOX) node and the XuanTie RISC-V
 remoteproc node for Allwinner A523/A527 SoCs. Connect the remoteproc
-node to the MCU CCU clocks (bus, core, sram) and resets (cfg, core,
-sram) to support remote processor lifecycle management and RPMsg IPC.
+node to the MCU CCU clocks (bus, core) and resets (cfg, core) to
+support remote processor lifecycle management and RPMsg IPC.
 
 Cc: Bjorn Andersson <andersson@kernel.org>
 Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
@@ -21,14 +21,14 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 31 ++++++++++++++++++++++++++
- 1 file changed, 31 insertions(+)
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 28 ++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 index 1234567..89abcdef 100644
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1085,6 +1085,37 @@ npu: npu@7122000 {
+@@ -1085,6 +1085,34 @@ npu: npu@7122000 {
  			clock-names = "bus", "core", "reg";
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
@@ -50,16 +50,15 @@ index 1234567..89abcdef 100644
 +				     "allwinner,sun55i-a527-rproc";
 +			reg = <0x07130000 0x1000>,
 +			      <0x07280000 0x40000>,
-+			      <0x00020000 0x20000>;
-+			reg-names = "cfg", "r_sram", "sram";
++			      <0x072c0000 0x40000>,
++			      <0x07010364 0x4>;
++			reg-names = "cfg", "r_sram", "r_sram1", "remap";
 +			clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
-+				 <&mcu_ccu CLK_MCU_RISCV>,
-+				 <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
-+			clock-names = "bus", "core", "sram";
++				 <&mcu_ccu CLK_MCU_RISCV>;
++			clock-names = "bus", "core";
 +			resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
-+				 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
-+				 <&mcu_ccu RST_BUS_MCU_PUBSRAM>;
-+			reset-names = "cfg", "core", "sram";
++				 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
++			reset-names = "cfg", "core";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
 +			status = "disabled";

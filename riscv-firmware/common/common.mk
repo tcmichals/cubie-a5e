@@ -5,38 +5,60 @@
 COMMON_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 # 1. Automatic Toolchain Detection
+
+ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
 CROSS_COMPILE ?= /home/tcmichals/.tools/xpack-riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-
-ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
-CROSS_COMPILE := /home/tcmichals/tools/Xilinx/2025.2/gnu/riscv/lin/bin/riscv64-unknown-elf-
-ifeq ($(wildcard $(CROSS_COMPILE)gcc),)
-CROSS_COMPILE := riscv-none-elf-
+
 endif
-endif
+
 
 CC      = $(CROSS_COMPILE)gcc
 CXX     = $(CROSS_COMPILE)g++
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
+GDB     = $(CROSS_COMPILE)gdb
 
 # 2. Target Architecture Flags (Allwinner T527 XuanTie E907)
 # RV32IMAFDC: 32 GPRs, Hardware Multiplier, Atomics, Double-Float FPU, Compressed Insts
-ARCH_FLAGS ?= -march=rv32imafdc_zicsr_zifencei -mabi=ilp32d -mcmodel=medany
-OPT_FLAGS  ?= -O2 -g
+ARCH_FLAGS ?= -march=rv32imafdc_zicsr_zifencei_zihintpause -mabi=ilp32d -mcmodel=medany
+OPT_FLAGS  ?= -Og -g
 
 # 3. Include Directories
 INCLUDES += -I. -I$(COMMON_DIR) -I$(COMMON_DIR)/include
 
 # 4. Compiler Flags
 COMMON_FLAGS = $(ARCH_FLAGS) $(OPT_FLAGS) $(INCLUDES) $(DEFINES) \
-               -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections -flto
+               -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections
 
 CFLAGS   += $(COMMON_FLAGS)
 CXXFLAGS += $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics
 
-# 5. Linker Flags & Script
-LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/firmware_t527.ld
-LDFLAGS  ?= $(ARCH_FLAGS) -T $(LDSCRIPT) -Wl,-Map=firmware.map -Wl,--gc-sections -flto -nostartfiles -lm
+# 5. Linker Script & Memory Layout Selection
+# Supported configurations (via MEM= or TARGET_MEM=):
+#   MEM=sram   (default) -> On-chip SRAM (0x00020000): e907_sram.ld
+#   MEM=ddr              -> Multi-bank SRAM & DDR Carveout: e907_ddr.ld
+#   MEM=qemu             -> QEMU virt machine (0x80000000): qemu.ld
+# Shortcut: 'make QEMU=1' sets MEM=qemu
+
+ifeq ($(QEMU),1)
+  MEM ?= qemu
+endif
+
+MEM ?= sram
+
+ifeq ($(MEM),sram)
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_sram.ld
+else ifeq ($(MEM),ddr)
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_ddr.ld
+else ifeq ($(MEM),qemu)
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/qemu.ld
+else
+  # Custom path specified in LDSCRIPT
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_sram.ld
+endif
+
+LDFLAGS  ?= $(ARCH_FLAGS) -T $(LDSCRIPT) -Wl,-Map=firmware.map -Wl,--gc-sections -nostartfiles -lm
 
 # 6. Default HAL Sources
 COMMON_SRCS_S   ?= $(COMMON_DIR)/arch_riscv/startup.S
@@ -46,7 +68,8 @@ COMMON_SRCS_CPP ?= $(COMMON_DIR)/hal/trace.cpp \
                    $(COMMON_DIR)/hal/crash.cpp \
                    $(COMMON_DIR)/hal/pmp.cpp \
                    $(COMMON_DIR)/hal/msgbox.cpp \
-                   $(COMMON_DIR)/hal/rpmsg.cpp
+                   $(COMMON_DIR)/hal/rpmsg.cpp \
+				   $(COMMON_DIR)/arch_riscv/irq_dispatcher.cpp
 
 
 
@@ -90,9 +113,22 @@ $(ELF): $(OBJS) $(LDSCRIPT)
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
 
+# 8. Emulation & Debug Targets
+QEMU_BIN   ?= qemu-system-riscv32
+QEMU_FLAGS ?= -M virt -cpu rv32 -smp 1 -m 128M -nographic -bios none
+
+qemu: $(ELF)
+	$(QEMU_BIN) $(QEMU_FLAGS) -kernel $(ELF) -s -S
+
+qemu-run: $(ELF)
+	$(QEMU_BIN) $(QEMU_FLAGS) -kernel $(ELF)
+
+gdb: $(ELF)
+	$(GDB) -ex "target remote localhost:1234" $(ELF)
+
 clean:
 	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
 
-.PHONY: all clean
+.PHONY: all clean qemu qemu-run gdb
 
 

@@ -187,7 +187,7 @@ During early bring-up of the XuanTie E907 co-processor, early attempts to use a 
 4. **Tooling & Build Disconnects**: Buildroot package compilation of `riscv-load` frequently fell out of sync with rootfs overlays and shell script fallback paths.
 
 ### 🛠️ The Architectural Resolution: Full Standardisation on `remoteproc`
-We officially retired the userspace loader approach in favor of the **Linux Mainline Remote Processor (`remoteproc`) Framework** via [`sunxi_rproc.c`](../ALLWINNER_RISCV_REMOTEPROC_GUIDE.md):
+We officially retired the userspace loader approach in favor of the **Linux Mainline Remote Processor (`remoteproc`) Framework** via [`sunxi_rproc.c`](HowToRISCV.md):
 
 1. **Kernel-Level ELF Parsing & Memory Routing**:
    - `sunxi_rproc` natively parses standard `firmware.elf` binaries from `/lib/firmware/`.

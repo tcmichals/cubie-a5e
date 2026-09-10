@@ -7,8 +7,7 @@ RISC-V remote processor found on A523, A527, and T527 SoCs.
 
 The remoteproc node manages the co-processor lifecycle (clocks, resets,
 boot vector) and IPC (hardware mailbox). Memory regions are expressed
-via reg entries named "cfg", "r_sram", and "sram"; TCM windows ("itcm",
-"dtcm") are optional and present only on T527.
+via reg entries named "cfg", "r_sram", "r_sram1", and "remap".
 
 Cc: Bjorn Andersson <andersson@kernel.org>
 Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
@@ -22,13 +21,13 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- .../remoteproc/allwinner,sun55i-rproc.yaml    | 156 ++++++++++++++++++
- 1 file changed, 156 insertions(+)
+ .../remoteproc/allwinner,sun55i-rproc.yaml    | 152 ++++++++++++++++++
+ 1 file changed, 152 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
 
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,152 @@
 +# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 +%YAML 1.2
 +---
@@ -48,9 +47,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +  cluster. The co-processor runs bare-metal firmware loaded and lifecycle-
 +  managed by the Linux remoteproc framework.
 +
-+  The driver controls CCU-integrated clocks (bus, core, SRAM) and resets
-+  (cfg, core, SRAM), programs the hardware boot-vector register, maps
-+  internal SRAM and optional TCM windows, and connects to the Allwinner
++  The driver controls CCU-integrated clocks (bus, core) and resets
++  (cfg, core), programs the hardware boot-vector register, maps
++  internal SRAM (SRAM_A3) windows, and connects to the Allwinner
 +  hardware mailbox (CPUX_MSGBOX) for VirtIO RPMsg IPC.
 +
 +properties:
@@ -62,29 +61,27 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +  reg:
 +    minItems: 1
-+    maxItems: 5
++    maxItems: 4
 +    description: |
 +      Memory-mapped register regions. The following named regions are
-+      supported (all optional except at least one of sram or r_sram):
++      supported (all optional except at least one of r_sram or r_sram1):
 +        "cfg"    - RISC-V core control and boot-vector registers (0x07130000)
-+        "r_sram" - Dedicated MCU SRAM (0x07280000, host view; 256 KB)
-+        "sram"   - Shared PubSRAM C (0x00020000; 128 KB)
-+        "itcm"   - Instruction TCM (T527 only; 0x07110000; 64 KB)
-+        "dtcm"   - Data TCM (T527 only; 0x07120000; 64 KB)
++        "r_sram" - Dedicated MCU SRAM Space 0 (0x07280000 / 0x07200000; 256-512 KB)
++        "r_sram1"- Switchable MCU SRAM Space 1 / SRAMA3_2 (0x072c0000 / 0x07280000; 256-512 KB)
++        "remap"  - Hardware Remap Control Register (offset 0x364)
 +
 +  reg-names:
 +    minItems: 1
-+    maxItems: 5
++    maxItems: 4
 +    items:
-+      enum: [cfg, r_sram, sram, itcm, dtcm]
++      enum: [cfg, r_sram, r_sram1, remap]
 +
 +  clocks:
 +    minItems: 1
 +    maxItems: 4
 +    description: |
 +      CCU clocks required for co-processor operation. Typical clocks are
-+      "parent" (PLL source), "bus" (interconnect gate), "core" (CPU gate),
-+      and "sram" (SRAM gate).
++      "parent" (PLL source), "bus" (interconnect gate), and "core" (CPU gate).
 +
 +  clock-names:
 +    minItems: 1
@@ -96,8 +93,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +    minItems: 1
 +    maxItems: 3
 +    description: |
-+      CCU reset lines. Typical resets are "cfg" (configuration block),
-+      "core" (CPU core), and "sram" (SRAM interconnect).
++      CCU reset lines. Typical resets are "cfg" (configuration block)
++      and "core" (CPU core).
 +
 +  reset-names:
 +    minItems: 1
@@ -170,16 +167,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +        compatible = "allwinner,sun55i-a523-rproc";
 +        reg = <0x07130000 0x1000>,
 +              <0x07280000 0x40000>,
-+              <0x00020000 0x20000>;
-+        reg-names = "cfg", "r_sram", "sram";
++              <0x072c0000 0x40000>,
++              <0x07010364 0x4>;
++        reg-names = "cfg", "r_sram", "r_sram1", "remap";
 +        clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
-+                 <&mcu_ccu CLK_MCU_RISCV>,
-+                 <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
-+        clock-names = "bus", "core", "sram";
++                 <&mcu_ccu CLK_MCU_RISCV>;
++        clock-names = "bus", "core";
 +        resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
-+                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
-+                 <&mcu_ccu RST_BUS_MCU_PUBSRAM>;
-+        reset-names = "cfg", "core", "sram";
++                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
++        reset-names = "cfg", "core";
 +        mboxes = <&msgbox 0>, <&msgbox 1>;
 +        mbox-names = "rx", "tx";
 +        firmware-name = "testBasic.elf";

@@ -41,8 +41,8 @@ For co-processor firmware development on the T527, developers have several clean
  ┌─────────────────────────────────────────────────────────────┐
  │              Shared Memory & Hardware Interconnect          │
  │                                                             │
- │  • RemoteProc Trace0 Buffer (DDR Carveout @ 0x48000000, 4KB) │
- │  • Dedicated MCU SRAM Ring Buffers (0x07280000/0x3FFC0000)  │
+ │  • RemoteProc Trace0 Buffer (On-Chip SRAM_A3 @ 0x40000000, 4KB) │
+ │  • Dedicated MCU SRAM Ring Buffers (0x07280000/0x40000000)  │
  │  • Hardware Mailbox Doorbell IRQs (0x03003000)              │
  └─────────────────────────────┬───────────────────────────────┘
                                │
@@ -51,14 +51,14 @@ For co-processor firmware development on the T527, developers have several clean
  │           XuanTie E907 Real-Time Co-Processor (200 MHz)     │
  │                                                             │
  │  • Dedicated S_UART0 Serial Console (0x07080000, 115.2k)    │
- │  • 128 KB PubSRAM C (0x00020000) + 256 KB Dedicated R_SRAM  │
+ │  • 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000)       │
  │  • External JTAG Test Interface (Physical Probe)            │
  └─────────────────────────────────────────────────────────────┘
 ```
 
-1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0` (phys `0x48000000`).
+1. **RemoteProc Trace Buffer (`trace0`)**: Real-time circular log buffer mapped into `/sys/kernel/debug/remoteproc/remoteproc0/trace0` (located in on-chip `SRAM_A3` at core DA `0x40000000`, host `0x07280000`).
 2. **Dedicated Hardware UART (`S_UART0`)**: Low-latency, non-blocking serial console at `0x07080000` (115200 baud).
-3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Dedicated MCU SRAM (`0x3FFC0000` Core / `0x07280000` Host) or PubSRAM C (`0x00020000`).
+3. **Lock-Free Shared SRAM Ring Buffers**: High-throughput shared memory telemetry in Dedicated SRAM_A3 (`0x40000000` / `0x40040000`).
 4. **Hardware Mailbox Doorbell IRQ & RPMsg**: Sub-microsecond inter-processor communication.
 5. **Physical Hardware JTAG Probe**: Standard JTAG header connection with external debug probes (CK-Link, J-Link, FTDI) for interactive hardware halting/stepping.
 
@@ -91,7 +91,7 @@ cat /sys/class/remoteproc/remoteproc0/state
 
 ### Step 3: Monitor Live Firmware Output via Trace Buffer
 
-The firmware resource table declares a 4 KB trace buffer in DDR carveout (`0x48000000`). The Linux kernel remoteproc driver automatically exposes this to debugfs:
+The firmware resource table declares a 4 KB trace buffer located directly in on-chip SRAM (`SRAM_A3`). The Linux kernel remoteproc driver automatically exposes this to debugfs:
 
 ```bash
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
@@ -156,14 +156,14 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 | Stop Firmware | `echo stop > /sys/class/remoteproc/remoteproc0/state` |
 | Read RemoteProc Trace | `cat /sys/kernel/debug/remoteproc/remoteproc0/trace0` |
 | Serial Diagnostics | Dedicated `S_UART0` @ `0x07080000` (115200 baud) |
-| Shared Memory Ring | Dedicated MCU SRAM (`0x3FFC0000`/`0x07280000`) / PubSRAM C (`0x00020000`) |
-| Doorbell IPC | Hardware Mailbox @ `0x03003000` |
+| Shared Memory Ring | Dedicated MCU SRAM_A3 (0x40000000 RISC-V / 0x07280000 Host) |
+| Doorbell IPC | Hardware Mailbox @ 0x03003000 |
 | Interactive Debugging | External JTAG probe + OpenOCD on host |
 
 ---
 
 ## Related Documentation
 
+- [HowToRISCV.md](HowToRISCV.md) — Comprehensive XuanTie E907 Co-Processor & RemoteProc Guide
 - [docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](/docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
-- [docs/common/RISCV_REMOTEPROC_GUIDE.md](/docs/common/RISCV_REMOTEPROC_GUIDE.md)
 - [OpenOCD_DMEM_RISCV_Architecture.md](OpenOCD_DMEM_RISCV_Architecture.md)

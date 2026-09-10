@@ -144,8 +144,8 @@ As of the current bring-up phase, here is the functional status of the flight st
 2. **[Heterogeneous Avionics Architecture & Bring-Up Guide](docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**:
    Comprehensive system architecture covering the Cortex-A76 isolated Core 7 flight loop, C++20 Coroutine Async Engine (`when_any`, `when_all`), 16-channel DMA partitioning, MSGBOX mailbox doorbells, and Dual-SPI FPGA TLP packet streaming.
 
-3. **[Allwinner XuanTie RISC-V Remote Processor (`sunxi_rproc`) Guide](docs/ALLWINNER_RISCV_REMOTEPROC_GUIDE.md)**:
-   Technical deep-dive into the mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, and `/sys/class/remoteproc/` user-space control.
+3. **[Allwinner XuanTie RISC-V Co-Processor & RemoteProc Guide](docs/buildroot/HowToRISCV.md)**:
+   Technical deep-dive into the XuanTie E907 co-processor, mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, on-chip SRAM memory mapping, and `/sys/class/remoteproc/` user-space control.
 
 4. **[Radxa Cubie A7A Platform Specification & Patch Roadmap](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
    Hardware specs, LPDDR5 dynamic training architecture, GICv3 interrupt controller mapping, and upstream patch series tracking ([`tools/watch_a733_upstream.py`](tools/watch_a733_upstream.py)).

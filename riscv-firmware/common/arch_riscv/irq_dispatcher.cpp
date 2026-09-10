@@ -1,17 +1,21 @@
-#include <cstdint>
-#include <stdint.h>
+#include "hal/crash.hpp"
 
 // -----------------------------------------------------------------------------
-// Panic & Default Fallback Handlers (ITCM)
+// Crash Dispatcher Implementation
 // -----------------------------------------------------------------------------
-__attribute__((section(".fastcode"), noinline))
-static void fatal_exception_panic(uint32_t mcause, uint32_t mepc, uint32_t mtval) noexcept {
-    (void)mcause; (void)mepc; (void)mtval;
+extern "C" __attribute__((section(".fastcode"), noinline))
+void hal_crash_dispatcher(const hal::CrashFrame* f) noexcept {
+    if (f) {
+        hal::CrashHandler::handle(*f);
+    }
     while (true) {
         __asm__ volatile("wfi");
     }
 }
 
+// -----------------------------------------------------------------------------
+// Panic & Default Fallback Handlers (ITCM)
+// -----------------------------------------------------------------------------
 __attribute__((section(".fastcode"), noinline))
 static void fatal_unhandled_irq_panic(uint32_t irq_id) noexcept {
     (void)irq_id;
@@ -20,14 +24,13 @@ static void fatal_unhandled_irq_panic(uint32_t irq_id) noexcept {
     }
 }
 
-// Target function with explicit noexcept
 extern "C" __attribute__((section(".fastcode")))
 void default_isr_ignore() noexcept {
     // No-op return
 }
 
 // -----------------------------------------------------------------------------
-// Weak C-Linkage ISR Declarations (Matching noexcept / nothrow attributes)
+// Weak C-Linkage ISR Declarations
 // -----------------------------------------------------------------------------
 extern "C" {
     void fc_msgbox_doorbell_isr() noexcept __attribute__((weak, alias("default_isr_ignore")));
@@ -50,7 +53,6 @@ namespace irq_id {
 }
 
 namespace plic {
-    // E907 Core Context 0 Claim/Complete Register on T527
     inline volatile uint32_t& claim_complete() noexcept {
         return *reinterpret_cast<volatile uint32_t*>(0x10000000 + 0x200004);
     }
@@ -87,6 +89,7 @@ static inline void dispatch_external_plic() noexcept {
 // -----------------------------------------------------------------------------
 extern "C" __attribute__((section(".fastcode")))
 void riscv_trap_dispatcher(uint32_t mcause, uint32_t mepc) noexcept {
+    (void)mepc;
     constexpr uint32_t INTERRUPT_FLAG = 0x80000000;
 
     // Asynchronous Interrupts (Bit 31 set)
@@ -110,11 +113,5 @@ void riscv_trap_dispatcher(uint32_t mcause, uint32_t mepc) noexcept {
                 fatal_unhandled_irq_panic(irq_type);
                 break;
         }
-    } 
-    // Synchronous Traps / CPU Exceptions (Bit 31 clear)
-    else {
-        uint32_t mtval;
-        __asm__ volatile("csrr %0, mtval" : "=r"(mtval));
-        fatal_exception_panic(mcause, mepc, mtval);
     }
 }

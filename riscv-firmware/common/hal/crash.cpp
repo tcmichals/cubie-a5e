@@ -1,7 +1,8 @@
 #include "crash.hpp"
 #include "trace.hpp"
+#include "include/memory_map.h"
 
-#define SRAM_CRASH_DUMP_LOC ((volatile uint32_t *)0x00020000UL)
+#define SRAM_CRASH_DUMP_LOC ((volatile uint32_t *)(SRAM_A3_BASE + IPC_CRASH_DUMP_OFFSET))
 
 namespace hal {
 
@@ -28,7 +29,7 @@ const char *CrashHandler::get_cause_name(uint32_t mcause) noexcept {
 }
 
 void CrashHandler::handle(const CrashFrame &frame) noexcept {
-    // 1. Write fatal signature to PubSRAM C (0x00020000)
+    // 1. Write fatal signature to SRAM A3 (0x4003FF00)
     SRAM_CRASH_DUMP_LOC[0] = 0xDEADF00D; // Fatal crash magic
     SRAM_CRASH_DUMP_LOC[1] = frame.mepc;
     SRAM_CRASH_DUMP_LOC[2] = frame.mcause;
@@ -60,14 +61,10 @@ void CrashHandler::handle(const CrashFrame &frame) noexcept {
     Trace::printf("  t6 (x31)= 0x%08x\n", frame.t6);
 
     Trace::puts("################################################################\n");
-    Trace::puts("  Core halted safely. Inspect /sys/.../trace0 or PubSRAM 0x00020000 \n");
+    Trace::puts("  Core halted safely. Inspect /sys/.../trace0 or SRAM_A3 (0x4003FF00)\n");
     Trace::puts("################################################################\n\n");
 }
 
 } // namespace hal
 
-extern "C" void hal_crash_dispatcher(const hal::CrashFrame *frame) {
-    if (frame) {
-        hal::CrashHandler::handle(*frame);
-    }
-}
+

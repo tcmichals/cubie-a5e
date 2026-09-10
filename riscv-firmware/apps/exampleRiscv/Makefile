@@ -25,7 +25,7 @@ else
 ARCH_FLAGS = -march=rv32imafdc_zicsr -mabi=ilp32d -mcmodel=medany
 endif
 
-LDSCRIPT  ?= ../../common/arch_riscv/firmware_t527.ld
+LDSCRIPT  ?= ../../common/arch_riscv/e907_sram.ld
 
 OPT_FLAGS  = -O2 -g
 

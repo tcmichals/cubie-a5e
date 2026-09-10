@@ -3,32 +3,36 @@
  */
 
     .section .vectors, "ax", @progbits
-    .align 6
-    .global _vectors
-    .type _vectors, @function
-
-_vectors:
-    j _start                /* Vector 0: Reset Entry */
-    .align 2
-    .rept 31
-    j default_trap_entry    /* Vectors 1..31: Hardware Traps & IRQs */
-    .endr
-
+    .align 4
     .global default_trap_entry
     .type default_trap_entry, @function
 
+/*
+ * =====================================================================
+ * Direct Mode Trap Entry Point
+ * =====================================================================
+ */
 default_trap_entry:
     /* Allocate 144 bytes on stack for CrashFrame */
     addi sp, sp, -144
 
-    /* Save GPRs x1..x31 */
+    /* Save caller-saved registers and critical GPRs */
     sw ra,   0(sp)
-    /* Save original sp before trap */
+    
+    /* -----------------------------------------------------------------
+     * FIX 1: Save original t0 BEFORE using it for scratch calculations.
+     * In the previous version, 'addi t0, sp, 144' overwrote t0, so
+     * saving it to 16(sp) dumped the computed SP instead of original t0.
+     * ----------------------------------------------------------------- */
+    sw t0,  16(sp)
+
+    /* Calculate and store the original sp prior to this trap entry */
     addi t0, sp, 144
     sw t0,   4(sp)
+
+    /* Save remaining GPRs x3..x31 */
     sw gp,   8(sp)
     sw tp,  12(sp)
-    sw t0,  16(sp)
     sw t1,  20(sp)
     sw t2,  24(sp)
     sw s0,  28(sp)
@@ -56,7 +60,7 @@ default_trap_entry:
     sw t5,  116(sp)
     sw t6,  120(sp)
 
-    /* Save CSRs */
+    /* Save RISC-V Machine Control and Status Registers (CSRs) */
     csrr t0, mepc
     sw t0,  124(sp)
     csrr t0, mcause
@@ -66,7 +70,14 @@ default_trap_entry:
     csrr t0, mstatus
     sw t0,  136(sp)
 
-    /* Pass pointer to CrashFrame in a0 to C++ crash dispatcher */
+    /* -----------------------------------------------------------------
+     * FIX 2: Check if this trap is an asynchronous interrupt (bit 31).
+     * If mcause < 0 (sign bit set), dispatch interrupt and return (mret).
+     * Only true synchronous exceptions/faults enter hal_crash_dispatcher.
+     * ----------------------------------------------------------------- */
+    bltz t0, .Lhandle_irq
+
+    /* Pass pointer to CrashFrame (sp) in a0 to C++ crash dispatcher */
     mv a0, sp
     call hal_crash_dispatcher
 
@@ -74,7 +85,56 @@ default_trap_entry:
     wfi
     j .Ltrap_hang
 
+.Lhandle_irq:
+    /* Call C++ interrupt dispatcher: void riscv_trap_dispatcher(mcause, mepc) */
+    lw a0, 128(sp) /* mcause */
+    lw a1, 124(sp) /* mepc */
+    call riscv_trap_dispatcher
+
+    /* Restore CSRs */
+    lw t0, 136(sp)
+    csrw mstatus, t0
+    lw t0, 124(sp)
+    csrw mepc, t0
+
+    /* Restore all GPRs */
+    lw ra,   0(sp)
+    lw gp,   8(sp)
+    lw tp,  12(sp)
+    lw t0,  16(sp)
+    lw t1,  20(sp)
+    lw t2,  24(sp)
+    lw s0,  28(sp)
+    lw s1,  32(sp)
+    lw a0,  36(sp)
+    lw a1,  40(sp)
+    lw a2,  44(sp)
+    lw a3,  48(sp)
+    lw a4,  52(sp)
+    lw a5,  56(sp)
+    lw a6,  60(sp)
+    lw a7,  64(sp)
+    lw s2,  68(sp)
+    lw s3,  72(sp)
+    lw s4,  76(sp)
+    lw s5,  80(sp)
+    lw s6,  84(sp)
+    lw s7,  88(sp)
+    lw s8,  92(sp)
+    lw s9,  96(sp)
+    lw s10, 100(sp)
+    lw s11, 104(sp)
+    lw t3,  108(sp)
+    lw t4,  112(sp)
+    lw t5,  116(sp)
+    lw t6,  120(sp)
+
+    /* Deallocate stack frame and return from trap */
+    addi sp, sp, 144
+    mret
+
     .size default_trap_entry, . - default_trap_entry
+
 
     /* ============================================================= */
     /* Core Reset Entry Point                                        */
@@ -84,7 +144,7 @@ default_trap_entry:
     .type _start, @function
 
 _start:
-    /* 1. Disable all interrupts */
+    /* 1. Disable all interrupts during early bring-up */
     csrw mie, zero
     csrw mip, zero
 
@@ -97,11 +157,17 @@ _start:
     la gp, __global_pointer$
 .option pop
 
-    /* 4. Set mtvec CSR to vector table in SRAM */
-    la t0, _vectors
+    /* 
+     * 4. Set mtvec CSR to Direct Mode Trap Handler 
+     */
+    la t0, default_trap_entry
     csrw mtvec, t0
 
-    /* 5. Enable FPU (mstatus.FS = 0b11) for hardware float/double */
+    /* 
+     * 5. Enable FPU (mstatus.FS = 0b11) for hardware float/double.
+     * Note: If running on an RV32IMAC core without FPU, remove this block
+     * or ensure compiler flags match -march=rv32imac -mabi=ilp32.
+     */
     li t0, (3 << 13)
     csrs mstatus, t0
 

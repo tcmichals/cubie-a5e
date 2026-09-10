@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <cstring>
 #include "hal/trace.hpp"
 #include "hal/timer.hpp"
 
@@ -56,7 +57,7 @@ static double compute_sin(double x) {
 
 int main(void) {
     // 1. Initialize HAL
-    hal::Trace::init(/*enable_serial_mirror=*/true);
+    hal::Trace::init(/*enable_serial_mirror=*/false);
     hal::Timer::init();
 
     hal::Trace::puts("================================================================\n");
@@ -101,12 +102,14 @@ int main(void) {
 
         // 3. Output raw binary packet directly into trace0 with framing tag
         hal::Trace::puts("BINARY:");
-        hal::Trace::write(&pkt, sizeof(pkt));
+        //hal::Trace::write(&pkt, sizeof(pkt));
         hal::Trace::putc('\n');
 
         // 4. Output human-readable hex dump of the binary struct into trace0
         hal::Trace::puts("HEXDUMP:\n");
-        hal::Trace::dump_hex(&pkt, sizeof(pkt), 0);
+        const char *start_addr = "hello world";
+        
+        hal::Trace::dump_hex(start_addr, strlen(start_addr), 0);
 
         // Delay 500ms
         hal::Timer::delay_ms(500);

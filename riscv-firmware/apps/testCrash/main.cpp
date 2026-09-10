@@ -9,7 +9,7 @@
  * 3. Deliberately triggering a hardware exception (Illegal Instruction / Fault).
  * 4. Formatting and outputting an exhaustive crash autopsy (mepc, mcause, mtval,
  *    and registers x1..x31) to /sys/kernel/debug/remoteproc/remoteproc0/trace0
- *    and S_UART0, and writing fatal signature 0xDEADF00D to Shared PubSRAM C (0x00020000).
+ *    and S_UART0, and writing fatal signature 0xDEADF00D to SRAM_A3 (0x40000000).
  */
 
 #include <stdint.h>

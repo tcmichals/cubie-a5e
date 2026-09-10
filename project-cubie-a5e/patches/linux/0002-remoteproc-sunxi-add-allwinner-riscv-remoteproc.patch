@@ -22,8 +22,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 709 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 718 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 751 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 761 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -51,7 +51,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,709 @@
+@@ -0,0 +1,751 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -80,13 +80,20 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
-+/* XuanTie core-local view of tightly coupled memories (when present) */
-+#define E906_ITCM_DA	0x00000000
-+#define E906_DTCM_DA	0x00080000
++/* Remap Control Register (offset 0x364 in DSP_CCU / PRCM_R_CCU) */
++#define SUNXI_REMAP_CTRL_OFFSET		0x0364
++#define SUNXI_REMAP_MCU_RAM_BIT		BIT(0) /* 0: DSP local RAM only for MCU_SYS; 1: share for system */
++#define SUNXI_REMAP_SRAMA3_2_BIT	BIT(1) /* 0: SRAMA3_2 not shared for MCU_SYS; 1: share for MCU_SYS */
 +
-+/* XuanTie E906 Control & Boot Address Registers (when CFG block is present) */
-+#define E906_CTRL_REG		0x0000
-+#define E906_STA_ADD_REG	0x0204
++/* XuanTie core-local view of dedicated SRAM Spaces (E906/E907) */
++#define E907_SRAM_C_DA			0x00020000
++#define E907_SRAM_SPACE0_DA		0x3ff80000
++#define E907_SRAM_SPACE0_DA_ALT		0x3ffc0000
++#define E907_SRAM_SPACE1_DA		0x40000000
++
++/* XuanTie E906/E907 Control & Boot Address Registers (when CFG block is present) */
++#define E906_CTRL_REG			0x0000
++#define E906_STA_ADD_REG		0x0204
 +
 +struct sunxi_rproc {
 +	struct rproc *rproc;
@@ -101,24 +108,20 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct reset_control *rst_core;
 +	struct reset_control *rst_sram;
 +
-+	/* Hardware Memory Windows (TCM, Dedicated SRAM & Shared System SRAM) */
++	/* Hardware Memory Windows (Dedicated SRAM, Switchable SRAM, Shared System SRAM & Remap Control) */
 +	void __iomem *cfg_va;
 +	phys_addr_t cfg_phys;
-+	void __iomem *itcm_va;
-+	phys_addr_t itcm_phys;
-+	size_t itcm_size;
 +
-+	void __iomem *dtcm_va;
-+	phys_addr_t dtcm_phys;
-+	size_t dtcm_size;
++	void __iomem *remap_va;
++	phys_addr_t remap_phys;
 +
 +	void __iomem *r_sram_va;
 +	phys_addr_t r_sram_phys;
 +	size_t r_sram_size;
 +
-+	void __iomem *sram_va;
-+	phys_addr_t sram_phys;
-+	size_t sram_size;
++	void __iomem *r_sram1_va;
++	phys_addr_t r_sram1_phys;
++	size_t r_sram1_size;
 +
 +	void *dram_va;
 +	phys_addr_t dram_phys;
@@ -214,24 +217,32 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +	/*
-+	 * 5. Cleanly clear TCM, Dedicated Local SRAM, and Shared SRAM.
++	 * 4b. Enable SRAMA3_2 for MCU_SYS (RISC-V/DSP) via REMAP_CTRL_REG bit 1.
++	 * NOTE: Bit 0 (MCU_RAM_REMAP) is left untouched (0) to ensure DSP local RAM
++	 * remains exclusive to the HiFi4 DSP domain.
++	 */
++	if (priv->remap_va) {
++		u32 remap_val = readl(priv->remap_va);
++
++		remap_val |= SUNXI_REMAP_SRAMA3_2_BIT;
++		writel(remap_val, priv->remap_va);
++		dev_dbg(priv->dev, "REMAP_CTRL_REG set to 0x%08x (SRAMA3_2 enabled)\n",
++			readl(priv->remap_va));
++	}
++
++	/*
++	 * 5. Cleanly clear Dedicated Local SRAM, Switchable SRAM, and Shared SRAM.
 +	 * Only clears regions that are actually mapped from Device Tree.
 +	 * Matches upstream patterns (e.g., imx_rproc / ti_k3_r5_remoteproc) to:
 +	 *  - Prevent ECC/parity noise on uninitialized memory banks.
 +	 *  - Ensure NOBITS / .bss sections start strictly at zero.
 +	 *  - Clear stale trace0 logs/telemetry from previous runs.
 +	 */
-+	if (priv->itcm_va && priv->itcm_size)
-+		memset_io(priv->itcm_va, 0, priv->itcm_size);
-+
-+	if (priv->dtcm_va && priv->dtcm_size)
-+		memset_io(priv->dtcm_va, 0, priv->dtcm_size);
-+
 +	if (priv->r_sram_va && priv->r_sram_size)
 +		memset_io(priv->r_sram_va, 0, priv->r_sram_size);
 +
-+	if (priv->sram_va && priv->sram_size)
-+		memset_io(priv->sram_va, 0, priv->sram_size);
++	if (priv->r_sram1_va && priv->r_sram1_size)
++		memset_io(priv->r_sram1_va, 0, priv->r_sram1_size);
 +
 +	if (priv->dram_va && priv->dram_size)
 +		memset(priv->dram_va, 0, priv->dram_size);
@@ -261,6 +272,13 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct sunxi_rproc *priv = rproc->priv;
 +
 +	/* Symmetrical CCU unwinding */
++	if (priv->remap_va) {
++		u32 remap_val = readl(priv->remap_va);
++
++		remap_val &= ~SUNXI_REMAP_SRAMA3_2_BIT;
++		writel(remap_val, priv->remap_va);
++	}
++
 +	if (priv->rst_core)
 +		reset_control_assert(priv->rst_core);
 +
@@ -355,49 +373,77 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
 +
-+	/* 1. Shared System SRAM C (Resource "sram" / "r_sram") */
-+	if (priv->sram_va) {
-+		if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
-+			return priv->sram_va + (da - priv->sram_phys);
-+		}
++	/*
++	 * Hardware Off-Limits & Protected Region Guards:
++	 * 1. Low Addresses / Fake TCM (< 0x00020000): No ITCM exists on E907.
++	 * 2. HiFi4 DSP Local Memory (0x00020000 - 0x0003FFFF): Dedicated DSP RAM.
++	 * 3. Secure SRAM A2 / OP-TEE (0x00040000 - 0x0006FFFF): Firewalled TrustZone memory.
++	 * 4. DSP Secondary IRAM/DRAM (0x00400000 - 0x0044FFFF): HiFi4 exclusive.
++	 */
++	if (da < 0x00020000) {
++		dev_err(priv->dev, "Rejecting load to invalid low address 0x%llx (no ITCM on E907)\n", da);
++		return NULL;
 +	}
 +
++	if (da >= 0x00020000 && da < 0x00040000) {
++		dev_err(priv->dev, "Rejecting load to 0x%llx: 0x00020000 is HiFi4 DSP local RAM!\n", da);
++		return NULL;
++	}
++
++	if (da >= 0x00040000 && da < 0x00070000) {
++		dev_err(priv->dev, "Rejecting load to 0x%llx: reserved for OP-TEE / TF-A (SRAM A2)\n", da);
++		return NULL;
++	}
++
++	if (da >= 0x00400000 && da < 0x00450000) {
++		dev_err(priv->dev, "Rejecting load to DSP local RAM region 0x%llx\n", da);
++		return NULL;
++	}
++
++	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram", Core DA 0x40000000) */
 +	if (priv->r_sram_va) {
++		/* Host physical address view (e.g., 0x07280000 or 0x07200000) */
 +		if (da >= priv->r_sram_phys &&
 +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
 +		}
++		/* Core DA view: 0x40000000 */
++		if (da >= 0x40000000 &&
++		    (da + len) <= (0x40000000 + priv->r_sram_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->r_sram_va + (da - 0x40000000);
++		}
++		/* High SRAM Space 0 fallback views (0x3ff80000 / 0x3ffc0000) */
++		if (da >= 0x3ff80000 && (da + len) <= (0x3ff80000 + priv->r_sram_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->r_sram_va + (da - 0x3ff80000);
++		}
++		if (da >= 0x3ffc0000 && (da + len) <= (0x3ffc0000 + priv->r_sram_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->r_sram_va + (da - 0x3ffc0000);
++		}
 +	}
 +
-+	/* 2. Instruction TCM (Resource "itcm" - Core VMA 0x00000000 / Host 0x07110000) */
-+	if (priv->itcm_va) {
-+		if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size)) {
++	/* 2. Switchable MCU Local SRAM Space 1 (Resource "r_sram1" / SRAMA3_2, Core DA 0x40040000) */
++	if (priv->r_sram1_va) {
++		/* Host physical address view (e.g., 0x072c0000 or 0x07280000) */
++		if (da >= priv->r_sram1_phys &&
++		    (da + len) <= (priv->r_sram1_phys + priv->r_sram1_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
-+			return priv->itcm_va + (da - priv->itcm_phys);
++			return priv->r_sram1_va + (da - priv->r_sram1_phys);
 +		}
-+		if (da >= E906_ITCM_DA && (da + len) <= (E906_ITCM_DA + priv->itcm_size)) {
++		/* Core DA view: contiguous bank at 0x40040000 */
++		if (da >= 0x40040000 &&
++		    (da + len) <= (0x40040000 + priv->r_sram1_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
-+			return priv->itcm_va + (da - E906_ITCM_DA);
-+		}
-+	}
-+
-+	/* 3. Data TCM (Resource "dtcm" - Core VMA 0x00080000 / Host 0x07120000) */
-+	if (priv->dtcm_va) {
-+		if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
-+			return priv->dtcm_va + (da - priv->dtcm_phys);
-+		}
-+		if (da >= E906_DTCM_DA && (da + len) <= (E906_DTCM_DA + priv->dtcm_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
-+			return priv->dtcm_va + (da - E906_DTCM_DA);
++			return priv->r_sram1_va + (da - 0x40040000);
 +		}
 +	}
 +
@@ -468,7 +514,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			dev_warn(dev, "failed to map 'cfg' registers\n");
 +	}
 +
-+	/* 2. Map Dedicated RISC-V Local SRAM ("r_sram") */
++	/* 2. Map Dedicated RISC-V Local SRAM Space 0 ("r_sram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram");
 +	if (res) {
 +		priv->r_sram_phys = res->start;
@@ -478,37 +524,35 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			return -ENOMEM;
 +	}
 +
-+	/* 3. Map Instruction TCM ("itcm") - Optional (T527 only) */
-+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "itcm");
++	/* 3. Map Switchable RISC-V Local SRAM Space 1 ("r_sram1" / SRAMA3_2) - Optional */
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram1");
 +	if (res) {
-+		priv->itcm_phys = res->start;
-+		priv->itcm_size = resource_size(res);
-+		priv->itcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		if (!priv->itcm_va)
-+			dev_warn(dev, "failed to map 'itcm' resource\n");
++		priv->r_sram1_phys = res->start;
++		priv->r_sram1_size = resource_size(res);
++		priv->r_sram1_va = devm_ioremap_wc(dev, res->start, resource_size(res));
++		if (!priv->r_sram1_va)
++			dev_warn(dev, "failed to map 'r_sram1' resource\n");
 +	}
 +
-+	/* 4. Map Data TCM ("dtcm") - Optional (T527 only) */
-+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dtcm");
++	/* 4. Map Remap Control Register ("remap" or "sram-for-cpux") - Optional */
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "remap");
++	if (!res)
++		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram-for-cpux");
 +	if (res) {
-+		priv->dtcm_phys = res->start;
-+		priv->dtcm_size = resource_size(res);
-+		priv->dtcm_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		if (!priv->dtcm_va)
-+			dev_warn(dev, "failed to map 'dtcm' resource\n");
++		priv->remap_phys = res->start;
++		if (resource_size(res) > SUNXI_REMAP_CTRL_OFFSET && (res->start & 0xfff) == 0) {
++			void __iomem *base = devm_ioremap(dev, res->start, resource_size(res));
++
++			if (base)
++				priv->remap_va = base + SUNXI_REMAP_CTRL_OFFSET;
++		} else {
++			priv->remap_va = devm_ioremap(dev, res->start, resource_size(res));
++		}
++		if (!priv->remap_va)
++			dev_warn(dev, "failed to map 'remap' register\n");
 +	}
 +
-+	/* 5. Map Shared System SRAM ("sram") */
-+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
-+	if (res) {
-+		priv->sram_phys = res->start;
-+		priv->sram_size = resource_size(res);
-+		priv->sram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
-+		if (!priv->sram_va)
-+			dev_warn(dev, "failed to map 'sram' resource\n");
-+	}
-+
-+	/* 5b. Map Boot DRAM Carveout ("dram" or memory-region "vram"/"dram") */
++	/* 4b. Map Boot DRAM Carveout ("dram" or memory-region "vram"/"dram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram");
 +	if (res) {
 +		priv->dram_phys = res->start;
@@ -547,13 +591,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
-+	dev_info(dev, "Memory resources: sram=%s, dram=%s, itcm=%s, dtcm=%s, r_sram=%s, cfg=%s\n",
-+		 priv->sram_va ? "yes" : "no",
-+		 priv->dram_va ? "yes" : "no",
-+		 priv->itcm_va ? "yes" : "no",
-+		 priv->dtcm_va ? "yes" : "no",
++	dev_info(dev, "Memory resources: r_sram=%s, r_sram1=%s, remap=%s, cfg=%s, dram=%s\n",
 +		 priv->r_sram_va ? "yes" : "no",
-+		 priv->cfg_va ? "yes" : "no");
++		 priv->r_sram1_va ? "yes" : "no",
++		 priv->remap_va ? "yes" : "no",
++		 priv->cfg_va ? "yes" : "no",
++		 priv->dram_va ? "yes" : "no");
 +
 +	/* 6. Map Trace Buffer / Reserved Memory from Device Tree */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "trace");
@@ -567,30 +610,29 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			 &priv->trace_phys, priv->trace_size);
 +	} else if (dev->of_node) {
 +		struct device_node *rmem_np;
-+		int idx = 0;
++		int idx;
 +
-+		/* Check memory-region phandle (by name 'trace' or index) */
++		/* Check memory-region phandle only if explicitly named 'trace' */
 +		idx = of_property_match_string(dev->of_node, "memory-region-names", "trace");
-+		if (idx < 0)
-+			idx = 0;
++		if (idx >= 0) {
++			rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
++			if (rmem_np) {
++				struct resource r;
 +
-+		rmem_np = of_parse_phandle(dev->of_node, "memory-region", idx);
-+		if (rmem_np) {
-+			struct resource r;
-+
-+			if (of_address_to_resource(rmem_np, 0, &r) == 0) {
-+				priv->trace_phys = r.start;
-+				priv->trace_size = resource_size(&r);
-+				priv->trace_va = devm_memremap(dev, r.start,
-+							       resource_size(&r),
-+							       MEMREMAP_WB);
-+				if (!priv->trace_va)
-+					priv->trace_va = devm_ioremap_wc(dev, r.start,
-+									 resource_size(&r));
-+				dev_info(dev, "mapped DT trace reserved-memory %pa+%zu\n",
-+					 &priv->trace_phys, priv->trace_size);
++				if (of_address_to_resource(rmem_np, 0, &r) == 0) {
++					priv->trace_phys = r.start;
++					priv->trace_size = resource_size(&r);
++					priv->trace_va = devm_memremap(dev, r.start,
++								       resource_size(&r),
++								       MEMREMAP_WB);
++					if (!priv->trace_va)
++						priv->trace_va = devm_ioremap_wc(dev, r.start,
++										 resource_size(&r));
++					dev_info(dev, "mapped DT trace reserved-memory %pa+%zu\n",
++						 &priv->trace_phys, priv->trace_size);
++				}
++				of_node_put(rmem_np);
 +			}
-+			of_node_put(rmem_np);
 +		}
 +	}
 +

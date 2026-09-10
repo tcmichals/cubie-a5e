@@ -27,11 +27,12 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 64 KB ITCM (0x00000000) & 64 KB DTCM (0x00080000) [E907 Zero-Wait-State Local]  |  |
-|  |  - 256 KB Dedicated MCU SRAM C (0x07130000) [Zero-Wait-State Low-Latency Control]  |  |
-|  |  - 4 KB DDR RemoteProc Trace Carveout (0x48000000)                                |  |
-|  |  - 1 MB DDR DMA Payload Pool (0x48100000)                                         |  |
-|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
+|  |  - 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000) [Exclusive E907 Firmware & Trace]  |  |
+|  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
+|  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
+|  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
+|  |  - 1 MB DDR DMA Payload Pool (0x48100000) [Non-Cacheable Streaming Payloads Only] |  |
+|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000 Host Physical)                    |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 ```

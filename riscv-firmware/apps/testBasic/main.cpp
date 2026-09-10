@@ -40,7 +40,6 @@ int main(void) {
     dtcm_scratch[1] = 0;
 
     // 2. Initialize In-Memory HAL Trace (disable unmapped S_UART0 mirror) and Timer
-    hal::Trace::init(false);
     hal::Timer::init();
 
     hal::Trace::puts("================================================================\n");
