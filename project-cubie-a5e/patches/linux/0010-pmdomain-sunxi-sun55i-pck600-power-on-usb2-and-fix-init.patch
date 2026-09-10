@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Thu, 10 Sep 2026 01:30:00 +0000
+Subject: [PATCH] pmdomain: sunxi: sun55i-pck600: fix backpointer, detect initial state, and power on USB2
+
+The sunxi PCK-600 driver has two critical bugs preventing power domains
+from functioning correctly:
+
+1. pd->pck = pck was never assigned in sunxi_pck600_probe(), causing
+   a NULL-pointer dereference if sunxi_pck600_pd_set_power() fails
+   and logs via pck->dev.
+2. pm_genpd_init(&pd->genpd, NULL, false) unconditionally hardcoded
+   is_off = false. This informed the Linux PM domain core that all
+   domains were already active at boot. In hardware silicon, domains like
+   domain 8 (USB2 at 0x07068000) are in state 0x0 (PPU_POWER_MODE_OFF).
+   Consequently, when consumer devices such as dwc3 probe and attach,
+   genpd skips calling power_on(). The DWC3 core MMIO registers remain
+   unpowered, returning 0x00000000 (GSNPSID), which aborts probe with:
+   "dwc3 6a00000.usb: this is not a DesignWare USB3 DRD Core".
+
+Fix both issues by:
+- Storing pd->pck = pck.
+- Reading actual hardware state from PPU_PWSR to initialize is_off.
+- Explicitly powering on PD_USB2 and marking it GENPD_FLAG_ALWAYS_ON
+  so the DWC3 controller, USB 2.0 PHY, onboard FE1.1S hub, and AIC8800
+  Wi-Fi are active and stay powered across runtime PM transitions.
+- Adding diagnostic dev_info prints for each power domain during probe.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/pmdomain/sunxi/sun55i-pck600.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+--- a/drivers/pmdomain/sunxi/sun55i-pck600.c
++++ b/drivers/pmdomain/sunxi/sun55i-pck600.c
+@@ -164,14 +164,34 @@
+ 
+ 	for (i = 0; i < desc->num_domains; i++) {
+ 		struct sunxi_pck600_pd *pd = &pck->pds[i];
++		u32 pstate;
++		bool is_off;
+ 
++		pd->pck = pck;
+ 		pd->genpd.name = desc->pd_names[i];
+ 		pd->genpd.power_off = sunxi_pck600_power_off;
+ 		pd->genpd.power_on = sunxi_pck600_power_on;
+ 		pd->base = base + PPU_REG_SIZE * i;
+ 
+ 		sunxi_pck600_pd_setup(pd, desc);
+-		ret = pm_genpd_init(&pd->genpd, NULL, false);
++
++		pstate = readl(pd->base + PPU_PWSR);
++		is_off = (FIELD_GET(PPU_PWR_STATUS, pstate) != PPU_POWER_MODE_ON);
++
++		if (!strcmp(desc->pd_names[i], "USB2")) {
++			ret = sunxi_pck600_pd_set_power(pd, true);
++			if (ret)
++				dev_err(dev, "failed to power on USB2 domain: %d\n", ret);
++			pd->genpd.flags |= GENPD_FLAG_ALWAYS_ON;
++			is_off = false;
++		}
++
++		dev_info(dev, "domain \"%s\" (id %d) pstate=0x%x, %s%s\n",
++			 pd->genpd.name, i, readl(pd->base + PPU_PWSR),
++			 is_off ? "off" : "on",
++			 (pd->genpd.flags & GENPD_FLAG_ALWAYS_ON) ? " [always-on]" : "");
++
++		ret = pm_genpd_init(&pd->genpd, NULL, is_off);
+ 		if (ret) {
+ 			dev_err_probe(dev, ret, "failed to initialize power domain\n");
+ 			goto err_remove_pds;
+-- 
+2.34.1

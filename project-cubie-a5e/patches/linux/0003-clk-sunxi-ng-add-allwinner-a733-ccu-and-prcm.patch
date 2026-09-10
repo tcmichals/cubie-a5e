@@ -219,7 +219,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/drivers/clk/sunxi-ng/ccu-sun60i-a733.c
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,415 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk-provider.h>
 +#include <linux/io.h>
@@ -339,7 +339,41 @@ V0.93 and critical clock definitions.
 +static SUNXI_CCU_GATE_HWS(usb_ohci0_clk, "usb-ohci0", ahb_hws, 0x1304, BIT(4), 0);
 +static SUNXI_CCU_GATE_HWS(bus_usb1_clk, "bus-usb1", ahb_hws, 0x130c, BIT(4) | BIT(0), 0);
 +static SUNXI_CCU_GATE_HWS(usb_ohci1_clk, "usb-ohci1", ahb_hws, 0x130c, BIT(4), 0);
-+static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws, 0x135c, BIT(0), CLK_IS_CRITICAL);
++/* USB2 (DWC3) core auxiliary, bus and transport clocks */
++static SUNXI_CCU_GATE_HWS(bus_usb2_clk, "bus-usb2", ahb_hws,
++			  0x135c, BIT(0), CLK_IS_CRITICAL);
++
++static const struct clk_parent_data usb2_ref_parents[] = {
++	{ .fw_name = "hosc" },
++};
++static SUNXI_CCU_MUX_DATA_WITH_GATE(usb2_u2_ref_clk, "usb2-u2-ref", usb2_ref_parents,
++				    0x1348,
++				    24, 3,	/* mux */
++				    BIT(31),	/* gate */
++				    0);
++
++static const struct clk_parent_data usb2_suspend_parents[] = {
++	{ .fw_name = "losc" },
++	{ .fw_name = "hosc" },
++};
++static SUNXI_CCU_M_DATA_WITH_MUX_GATE(usb2_suspend_clk, "usb2-suspend", usb2_suspend_parents,
++				      0x1350,
++				      0, 5,	/* M */
++				      24, 1,	/* mux */
++				      BIT(31),	/* gate */
++				      0);
++
++static const struct clk_parent_data usb2_mf_parents[] = {
++	{ .fw_name = "hosc" },
++	{ .hw = &pll_periph0_1x_clk.common.hw },
++	{ .fw_name = "hosc" },
++};
++static SUNXI_CCU_M_DATA_WITH_MUX_GATE(usb2_mf_clk, "usb2-mf", usb2_mf_parents,
++				      0x1354,
++				      0, 5,	/* M */
++				      24, 3,	/* mux */
++				      BIT(31),	/* gate */
++				      0);
 +
 +/*
 + * The MSI-Lite2 interconnect slice carries all CPU MMIO traffic to the
@@ -354,7 +388,7 @@ V0.93 and critical clock definitions.
 +			   0x1a00, BIT(3), CLK_IS_CRITICAL);
 +
 +/* USB reference and PHY clocks */
-+static SUNXI_CCU_GATE_DATA(usb_ref_clk, "usb-ref", osc24M, 0x1340, BIT(31) | BIT(16) | BIT(0), CLK_IS_CRITICAL);
++static SUNXI_CCU_GATE_DATA(usb_ref_clk, "usb-ref", osc24M, 0x1340, BIT(31), CLK_IS_CRITICAL);
 +static SUNXI_CCU_GATE_DATA(usb_phy0_clk, "usb-phy0", osc24M, 0x1300, BIT(31), 0);
 +static SUNXI_CCU_GATE_DATA(usb_phy1_clk, "usb-phy1", osc24M, 0x1308, BIT(31), 0);
 +
@@ -431,6 +465,9 @@ V0.93 and critical clock definitions.
 +	&bus_usb1_clk.common,
 +	&usb_ohci1_clk.common,
 +	&bus_usb2_clk.common,
++	&usb2_u2_ref_clk.common,
++	&usb2_suspend_clk.common,
++	&usb2_mf_clk.common,
 +	&bus_msi_lite2_clk.common,
 +	&res_dcap_24m_clk.common,
 +	&usb_ref_clk.common,
@@ -444,7 +481,7 @@ V0.93 and critical clock definitions.
 +	&spi1_clk.common,
 +};
 +
-+#define CLK_NUMBER (CLK_USB_REF + 1)
++#define CLK_NUMBER (CLK_USB2_MF + 1)
 +static struct {
 +	unsigned int num;
 +	struct clk_hw *hws[CLK_NUMBER];
@@ -484,6 +521,9 @@ V0.93 and critical clock definitions.
 +		[CLK_BUS_USB0]		= &bus_usb0_clk.common.hw,
 +		[CLK_BUS_USB1]		= &bus_usb1_clk.common.hw,
 +		[CLK_BUS_USB2]		= &bus_usb2_clk.common.hw,
++		[CLK_USB2_U2_REF]	= &usb2_u2_ref_clk.common.hw,
++		[CLK_USB2_SUSPEND]	= &usb2_suspend_clk.common.hw,
++		[CLK_USB2_MF]		= &usb2_mf_clk.common.hw,
 +		[CLK_USB_OHCI0]		= &usb_ohci0_clk.common.hw,
 +		[CLK_USB_OHCI1]		= &usb_ohci1_clk.common.hw,
 +		[CLK_MMC0]		= &mmc0_clk.common.hw,
@@ -496,7 +536,6 @@ V0.93 and critical clock definitions.
 +		[CLK_BUS_MSI_LITE2]	= &bus_msi_lite2_clk.common.hw,
 +		[CLK_RES_DCAP_24M]	= &res_dcap_24m_clk.common.hw,
 +		[CLK_GMAC_PTP]		= &gmac_ptp_clk.common.hw,
-+		[CLK_USB_REF]		= &usb_ref_clk.common.hw,
 +	},
 +};
 +
@@ -544,7 +583,6 @@ V0.93 and critical clock definitions.
 +
 +static int sun60i_a733_ccu_probe(struct platform_device *pdev)
 +{
-+	void __iomem *u2phy;
 +	void __iomem *reg = devm_platform_ioremap_resource(pdev, 0);
 +	if (IS_ERR(reg))
 +		return PTR_ERR(reg);
@@ -571,31 +609,12 @@ V0.93 and critical clock definitions.
 +	/* Enable GMAC0 PHY 25MHz fanout clock (150MHz / (5+1) = 25MHz) */
 +	writel(BIT(31) | 5, reg + 0x1410);
 +
-+	/* Enable USB subsystem AHB master gate & deassert MSI2 resets */
-+	writel(BIT(17) | BIT(16) | BIT(0), reg + 0x05A4);
-+
-+	/* Enable MSI_LITE2 bus clock & deassert reset, plus USB_REF 24M (0x1340) */
-+	writel(BIT(31) | BIT(16) | BIT(0), reg + 0x1340);
-+
-+	/* Enable USB2 (DWC3) core clock & deassert reset (0x135C: RST_BUS_USB2 | CLK_BUS_USB2) */
-+	writel(BIT(16) | BIT(0), reg + 0x135C);
-+
-+	/* Initialize USB2 PHY tuning register at 0x06B00000 */
-+	u2phy = ioremap(0x06B00000, 0x800);
-+	if (u2phy) {
-+		writel(0x143338D6, u2phy + 0x00);
-+		iounmap(u2phy);
-+	}
-+
-+	/* Diagnostic read of DWC3 registers directly */
-+	{
-+		void __iomem *dwc_test = ioremap(0x06A00000, 0x10000);
-+		if (dwc_test) {
-+			pr_info("sun60i-ccu: DWC3 test: 0x00=%08x, 0xc100=%08x, GSNPSID(0xc120)=%08x\n",
-+				readl(dwc_test + 0x00), readl(dwc_test + 0xc100), readl(dwc_test + 0xc120));
-+			iounmap(dwc_test);
-+		}
-+	}
++	/* Ensure USB2 transport and bus clocks are unmasked */
++	writel(readl(reg + 0x1340) | BIT(31), reg + 0x1340);
++	writel(readl(reg + 0x1348) | BIT(31), reg + 0x1348);
++	writel(readl(reg + 0x1350) | BIT(31), reg + 0x1350);
++	writel(readl(reg + 0x1354) | BIT(31), reg + 0x1354);
++	writel(readl(reg + 0x135c) | BIT(16) | BIT(0), reg + 0x135c);
 +
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);
 +}
@@ -629,7 +648,7 @@ V0.93 and critical clock definitions.
 +#endif
 --- /dev/null
 +++ b/include/dt-bindings/clock/sun60i-a733-ccu.h
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,95 @@
 +/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 +#ifndef _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
 +#define _DT_BINDINGS_CLK_SUN60I_A733_CCU_H_
@@ -720,7 +739,9 @@ V0.93 and critical clock definitions.
 +#define CLK_BUS_MSI_LITE2	83
 +#define CLK_RES_DCAP_24M	84
 +#define CLK_GMAC_PTP		85
-+#define CLK_USB_REF		86
++#define CLK_USB2_U2_REF		86
++#define CLK_USB2_SUSPEND	87
++#define CLK_USB2_MF		88
 +
 +#endif
 --- /dev/null

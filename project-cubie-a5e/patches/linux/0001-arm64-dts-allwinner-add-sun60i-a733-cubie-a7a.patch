@@ -31,7 +31,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,586 @@
+@@ -0,0 +1,595 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -61,7 +61,7 @@ index 0000000..1234567
 +	};
 +
 +	chosen {
-+		bootargs = "earlycon=uart8250,mmio32,0x02500000 console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 fw_devlink=permissive";
++		bootargs = "earlycon=uart8250,mmio32,0x02500000 console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8";
 +		stdout-path = "serial0:115200n8";
 +	};
 +
@@ -427,7 +427,7 @@ index 0000000..1234567
 +			reset-names = "usb0_reset",
 +				      "usb1_reset";
 +			usb0_vbus-supply = <&reg_usb0_vbus>;
-+			usb1_vbus-supply = <&reg_usb0_vbus>;
++			usb1_vbus-supply = <&reg_usb1_vbus>;
 +			#phy-cells = <1>;
 +			status = "okay";
 +		};
@@ -440,7 +440,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -452,7 +451,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -464,7 +462,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -476,7 +473,15 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			dr_mode = "host";
++			status = "okay";
++		};
++
++		u2phy: phy@6b00000 {
++			compatible = "allwinner,sun60i-a733-usb2-phy";
++			reg = <0x06b00000 0x800>;
++			power-domains = <&pck600 PD_USB2>;
++			aw,phy_tune_param = <0x143338d6>;
++			#phy-cells = <0>;
 +			status = "okay";
 +		};
 +
@@ -484,12 +489,16 @@ index 0000000..1234567
 +			compatible = "snps,dwc3";
 +			reg = <0x06a00000 0x100000>;
 +			interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
-+			clocks = <&ccu CLK_BUS_USB2>,
-+				 <&ccu CLK_USB_REF>,
-+				 <&osc24M>;
-+			clock-names = "bus_early", "ref", "suspend";
++			clocks = <&ccu CLK_USB2_MF>,
++				 <&ccu CLK_USB2_U2_REF>,
++				 <&ccu CLK_USB2_SUSPEND>;
++			clock-names = "bus_clk", "ref", "suspend";
++			assigned-clocks = <&ccu CLK_USB2_SUSPEND>;
++			assigned-clock-rates = <24000000>;
 +			resets = <&ccu RST_BUS_USB2>;
 +			power-domains = <&pck600 PD_USB2>;
++			phys = <&u2phy>;
++			phy-names = "usb2-phy";
 +			dr_mode = "host";
 +			maximum-speed = "high-speed";
 +			phy_type = "utmi";
@@ -609,7 +618,7 @@ index 0000000..1234567
 +			pinctrl-0 = <&r_i2c0_pins>;
 +			#address-cells = <1>;
 +			#size-cells = <0>;
-+			status = "disabled";
++			status = "okay";
 +
 +			axp8191: pmic@3a3 {
 +				compatible = "x-powers,axp8191";
@@ -623,7 +632,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7z.dts
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,445 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -975,7 +984,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -987,7 +995,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB0>;
 +			phys = <&usbphy 0>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -999,7 +1006,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +
@@ -1011,7 +1017,6 @@ index 0000000..1234567
 +			resets = <&ccu RST_BUS_USB1>;
 +			phys = <&usbphy 1>;
 +			phy-names = "usb";
-+			dr_mode = "host";
 +			status = "okay";
 +		};
 +

@@ -1,0 +1,156 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Mon, 24 Aug 2026 12:00:00 +0000
+Subject: [PATCH] phy: allwinner: add sun60i-a733-usb2-phy driver for DWC3
+
+The Allwinner A733 SoC integrates a dedicated USB 2.0 PHY for its DWC3
+controller at 0x06B00000. It requires analog calibration tuning
+(aw,phy_tune_param = 0x143338d6) to adjust squelch detection,
+disconnect threshold, and signal eye pre-emphasis for downstream
+High-Speed USB communication.
+
+Add a lightweight platform PHY driver that binds to "allwinner,sun60i-a733-usb2-phy"
+or "allwinner,sunxi-plat-phy" and writes the tuning value upon phy_init()
+under active PM runtime (PD_USB2 power domain).
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/phy/allwinner/Kconfig           | 10 ++++
+ drivers/phy/allwinner/Makefile          |  1 +
+ drivers/phy/allwinner/phy-sun60i-usb2.c | 75 +++++++++++++++++++++++++
+ 3 files changed, 86 insertions(+)
+ create mode 100644 drivers/phy/allwinner/phy-sun60i-usb2.c
+
+diff --git a/drivers/phy/allwinner/Kconfig b/drivers/phy/allwinner/Kconfig
+index 5594b29..44e8371 100644
+--- a/drivers/phy/allwinner/Kconfig
++++ b/drivers/phy/allwinner/Kconfig
+@@ -21,6 +21,16 @@ config PHY_SUN4I_USB
+ 	  This driver controls the entire USB PHY block, both the USB OTG
+ 	  parts, as well as the 2 regular USB 2 host PHYs.
+ 
++config PHY_SUN60I_USB2
++	tristate "Allwinner sun60i A733 USB 2.0 PHY driver"
++	depends on ARCH_SUNXI || COMPILE_TEST
++	depends on HAS_IOMEM
++	select GENERIC_PHY
++	default y if ARCH_SUNXI
++	help
++	  Enable this to support the USB 2.0 PHY transceiver dedicated to the
++	  DWC3 controller on Allwinner A733 (sun60iw2) SoCs.
++
+ config PHY_SUN6I_MIPI_DPHY
+ 	tristate "Allwinner A31 MIPI D-PHY Support"
+ 	depends on ARCH_SUNXI || COMPILE_TEST
+diff --git a/drivers/phy/allwinner/Makefile b/drivers/phy/allwinner/Makefile
+index 923588f..f19e481 100644
+--- a/drivers/phy/allwinner/Makefile
++++ b/drivers/phy/allwinner/Makefile
+@@ -3,3 +3,4 @@ obj-$(CONFIG_PHY_SUN4I_USB)		+= phy-sun4i-usb.o
+ obj-$(CONFIG_PHY_SUN6I_MIPI_DPHY)	+= phy-sun6i-mipi-dphy.o
+ obj-$(CONFIG_PHY_SUN9I_USB)		+= phy-sun9i-usb.o
+ obj-$(CONFIG_PHY_SUN50I_USB3)		+= phy-sun50i-usb3.o
++obj-$(CONFIG_PHY_SUN60I_USB2)		+= phy-sun60i-usb2.o
+diff --git a/drivers/phy/allwinner/phy-sun60i-usb2.c b/drivers/phy/allwinner/phy-sun60i-usb2.c
+new file mode 100644
+index 0000000..c1d2e3f
+--- /dev/null
++++ b/drivers/phy/allwinner/phy-sun60i-usb2.c
+@@ -0,0 +1,95 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Allwinner A733 (sun60iw2) USB 2.0 PHY driver for DWC3
++ */
++
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/phy/phy.h>
++#include <linux/platform_device.h>
++#include <linux/pm_runtime.h>
++
++#define SUN60I_DEFAULT_PHY_TUNE	0x143338d6
++
++struct sun60i_usb2_phy {
++	void __iomem *base;
++	u32 tune_param;
++};
++
++static int sun60i_usb2_phy_init(struct phy *phy)
++{
++	struct sun60i_usb2_phy *priv = phy_get_drvdata(phy);
++
++	/* Tune squelch threshold, disconnect threshold, pre-emphasis & DCAP */
++	writel(priv->tune_param, priv->base + 0x00);
++	return 0;
++}
++
++static const struct phy_ops sun60i_usb2_phy_ops = {
++	.init		= sun60i_usb2_phy_init,
++	.owner		= THIS_MODULE,
++};
++
++static int sun60i_usb2_phy_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct sun60i_usb2_phy *priv;
++	struct phy_provider *provider;
++	struct phy *phy;
++
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	priv->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(priv->base))
++		return PTR_ERR(priv->base);
++
++	if (of_property_read_u32(dev->of_node, "aw,phy_tune_param", &priv->tune_param))
++		priv->tune_param = SUN60I_DEFAULT_PHY_TUNE;
++
++	pm_runtime_enable(dev);
++
++	phy = devm_phy_create(dev, NULL, &sun60i_usb2_phy_ops);
++	if (IS_ERR(phy)) {
++		pm_runtime_disable(dev);
++		return PTR_ERR(phy);
++	}
++
++	phy_set_drvdata(phy, priv);
++
++	provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
++	if (IS_ERR(provider)) {
++		pm_runtime_disable(dev);
++		return PTR_ERR(provider);
++	}
++
++	/* Apply analog tuning immediately */
++	writel(priv->tune_param, priv->base + 0x00);
++
++	dev_info(dev, "Allwinner A733 USB 2.0 PHY initialized at %pr (tune=0x%08x)\n",
++		 platform_get_resource(pdev, IORESOURCE_MEM, 0), priv->tune_param);
++
++	return 0;
++}
++
++static const struct of_device_id sun60i_usb2_phy_of_match[] = {
++	{ .compatible = "allwinner,sun60i-a733-usb2-phy" },
++	{ .compatible = "allwinner,sunxi-plat-phy" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, sun60i_usb2_phy_of_match);
++
++static struct platform_driver sun60i_usb2_phy_driver = {
++	.probe	= sun60i_usb2_phy_probe,
++	.driver	= {
++		.name		= "sun60i-a733-usb2-phy",
++		.of_match_table	= sun60i_usb2_phy_of_match,
++	},
++};
++module_platform_driver(sun60i_usb2_phy_driver);
++
++MODULE_DESCRIPTION("Allwinner A733 USB 2.0 PHY driver");
++MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
++MODULE_LICENSE("GPL");
+-- 
+2.34.1

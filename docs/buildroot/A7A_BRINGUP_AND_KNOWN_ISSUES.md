@@ -143,6 +143,33 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ---
 
+### Issue 11: DWC3 Core Reachability, Transport Clocks & USB2 Analog PHY Tuning
+- **Symptom**:
+  ```text
+  [ 2.345678] dwc3 6a00000.usb: this is not a DesignWare USB3 DRD Core
+  [ 2.345710] dwc3 6a00000.usb: failed to initialize core: -19
+  ```
+  Direct register probing showed writes to CCU `0x1340` dropping bits 16 and 0, `0x1350` returning 0, and DWC3 `GSNPSID` (`0x06A0C120`) returning all zeros. Downstream FE1.1S 4-port USB 2.0 hub and AIC8800 Wi-Fi 6 failed to enumerate.
+- **Root Cause**:
+  1. **Power Domain Driver Bugs (`drivers/pmdomain/sunxi/sun55i-pck600.c`)**:
+     - `sunxi_pck600_probe()` failed to initialize `pd->pck = pck;`, risking NULL-pointer dereference during error handling.
+     - `pm_genpd_init(&pd->genpd, NULL, false)` hardcoded `is_off = false`, misleading Linux genpd into assuming all domains were already active at boot.
+     - In real silicon, `PD_USB2` (domain 8 at `0x07068000`) boots in state `0x00` (`PPU_POWER_MODE_OFF`).
+     - When `dwc3` attached, genpd saw `genpd_status_on() == true` and skipped calling `.power_on()`. The physical power switch remained open, stalling register reads at `0x06A00000` (returning `0x00000000` for `GSNPSID`).
+  2. **Phantom CCU Clock at `0x135C`**: The CCU driver incorrectly defined `CLK_BUS_USB2` as a gate on `0x135C BIT(0)`. Hardware register `0x135C` only contains reset `RST_BUS_USB2` (`BIT(16)`). The actual DWC3 transport clocks live across three separate registers:
+     - `CLK_USB2_U2_REF` (`0x1340`, Ref clock, 24 MHz)
+     - `CLK_USB2_SUSPEND` (`0x1348`, Suspend / PHY clock, 24 MHz)
+     - `CLK_USB2_MF` (`0x1350`, Master bus clock, 400 MHz from `PLL_PERIPH0`)
+  3. **Dedicated Sun60i USB 2.0 PHY & Calibration**: The DWC3 controller uses a dedicated USB 2.0 PHY at `0x06B00000` (completely omitted from the A733 Datasheet V0.93). The PHY requires analog tuning word `0x143338d6` (`aw,phy_tune_param`) written to `u2_base + 0x00` while `PD_USB2` is awake to calibrate HS squelch, disconnect thresholds, TX pre-emphasis eye opening, and DCAP impedance.
+  4. **Hub Bus Toplogy**: The DWC3 UTMI DP/DM lines wire directly to the Genesys Logic FE1.1S USB 2.0 hub (`U6`), with Port 4 wired to AIC8800 Wi-Fi 6 (`U3`). The Cadence Combo PHY 0/1 SerDes lines route to PCIe headers, not USB. Locking DWC3 to `maximum-speed = "high-speed"` is required to match hardware routing.
+- **Fix**:
+  - Added `0010-pmdomain-sunxi-sun55i-pck600-power-on-usb2-and-fix-init.patch`: assigns `pd->pck`, reads actual `PPU_PWSR` power state, and explicitly powers on `PD_USB2` as `GENPD_FLAG_ALWAYS_ON`.
+  - Implemented `drivers/phy/allwinner/phy-sun60i-usb2.c` (`CONFIG_PHY_SUN60I_USB2=y`) with runtime PM and `aw,phy_tune_param` calibration via patch `0009`.
+  - Implemented `CLK_USB2_MF`, `CLK_USB2_U2_REF`, and `CLK_USB2_SUSPEND` in `ccu-sun60i-a733.c` and DT bindings via patch `0003`.
+  - Bound `snps,dwc3` directly to `u2phy: phy@6b00000`, attached the three clocks, `power-domains = <&pck600 PD_USB2>`, and set `maximum-speed = "high-speed"` via patch `0001`.
+
+---
+
 ## 3. Upstream Patch Tracking & Mainline Integration Roadmap
 
 The fundamental blockers to running vanilla mainline on the A733 are currently being reviewed in the Linux kernel and U-Boot communities:

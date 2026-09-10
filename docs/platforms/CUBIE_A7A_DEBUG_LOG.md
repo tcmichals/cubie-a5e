@@ -522,4 +522,48 @@ The table below documents the full line-by-line cross-reference comparing the ve
 - **Verification**:
   - Executed `git apply --check` across `0001`, `0003`, and `0006` against the Linux 7.1 kernel source tree; all patches verified and cleanly apply with 0 errors.
 
+### DWC3 Core Reachability, Transport Clocks & USB2 Analog PHY Tuning (Sep 10, 2026)
+- **Problem Statement**:
+  - On Linux 7.1 PREEMPT_RT, DWC3 at `0x06A00000` failed to initialize (`this is not a DesignWare USB3 DRD Core`).
+  - `GSNPSID` (`0x06A0C120`) read all zeros.
+  - Probing CCU `0x1340` showed writes dropped bits 16 and 0; `0x1350` returned 0.
+  - The onboard Genesys Logic FE1.1S USB 2.0 Hub (`U6`) and AIC8800 Wi-Fi 6 (`U3`) failed to enumerate.
+
+- **Root Cause & Architectural Discovery**:
+  1. **Power Domain Gating (`PD_USB2`)**: The DWC3 controller and its dedicated PHY reside in power domain `PD_USB2` (PCK600 PD8 at `0x07060000`). MMIO accesses while `PD_USB2` is unpowered stall the fabric and return zero.
+  2. **Three DWC3 Transport Clocks**: The original CCU definition mapped `CLK_BUS_USB2` to a non-existent gate at `0x135C BIT(0)`. In hardware, `0x135C` is purely `RST_BUS_USB2` (`BIT(16)`). The genuine transport clocks are:
+     - `CLK_USB2_U2_REF` (`0x1340`, 24 MHz Ref clock)
+     - `CLK_USB2_SUSPEND` (`0x1348`, 24 MHz Suspend / PHY clock)
+     - `CLK_USB2_MF` (`0x1350`, 400 MHz Master core clock from `PLL_PERIPH0`)
+  3. **Dedicated Sun60i USB 2.0 PHY (`0x06B00000`) & Analog Tuning**:
+     - Allwinner A733 has a separate USB 2.0 PHY at `0x06B00000` (completely omitted from the published datasheet V0.93).
+     - The PHY requires analog calibration parameter `0x143338d6` (`aw,phy_tune_param`) written to `u2_base + 0x00`:
+       * `[2:0] = 0x6`: HS squelch detection threshold.
+       * `[5:3] = 0x2`: HS disconnect threshold.
+       * `[9:8] = 0x3`: TX pre-emphasis eye opening boost.
+       * `[18:16] = 0x3` and `[28:24] = 0x14`: DCAP impedance calibration.
+  4. **Schematic & Bus Routing**:
+     - DWC3 UTMI DP/DM pins wire directly to the Genesys Logic FE1.1S USB 2.0 hub (`U6`).
+     - Downstream Port 4 wires to the AIC8800 Wi-Fi 6 / BT 5.2 module (`U3`).
+     - Board power: `PM5` (5V VBUS), `PM0` (Wi-Fi 3.3V power), `PM1` (Wi-Fi chip enable).
+     - Cadence Combo PHY SerDes lines route to PCIe headers. DWC3 is correctly configured with `maximum-speed = "high-speed"`.
+
+- **Implementation**:
+  - Added `drivers/phy/allwinner/phy-sun60i-usb2.c` (`CONFIG_PHY_SUN60I_USB2=y`) via patch `0009`.
+  - Added transport clocks `CLK_USB2_MF`, `CLK_USB2_U2_REF`, `CLK_USB2_SUSPEND` to CCU and header bindings via patch `0003`.
+  - Updated `sun60i-a733-cubie-a7a.dts` via patch `0001` with `u2phy: phy@6b00000`, `snps,dwc3` node, and `maximum-speed = "high-speed"`.
+  - Added patch `0010-pmdomain-sunxi-sun55i-pck600-power-on-usb2-and-fix-init.patch`:
+    * Assigned `pd->pck = pck;` to fix missing backpointer causing NULL-pointer dereferences on error logging.
+    * Read `PPU_PWSR` register to determine true silicon power status (`is_off`) instead of hardcoding `is_off = false`.
+    * Explicitly energized `PD_USB2` (domain 8 at `0x07068000`) at boot and marked `GENPD_FLAG_ALWAYS_ON` so DWC3 and the USB 2.0 PHY remain powered across runtime PM transitions.
+    * Added diagnostic logging to report domain status during boot.
+
+- **Verification**:
+  - Clean build from scratch (`make linux-dirclean` -> `make linux-patch` -> `make linux`): exit code 0.
+  - All 11 patches (0001 through 0010) apply cleanly with zero rejects.
+  - Symbols `sun60i_usb2_phy_driver`, `sun60i_a733_ccu_driver`, `sunxi_pck600_driver_init` confirmed in `vmlinux`.
+  - `Image` (43MB) and `sun60i-a733-cubie-a7a.dtb` (14KB) updated in `bld.a7a/images/`.
+
+
+
 
