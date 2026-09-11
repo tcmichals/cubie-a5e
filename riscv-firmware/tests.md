@@ -281,3 +281,51 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 cat /sys/class/remoteproc/remoteproc0/state
 # Output: running
 ```
+
+---
+
+## 7. Silicon Core Identification (E906 vs E907 Verification)
+
+### Background: Why Both Names Appear
+* **Board & Marketing Layer**: Radxa Cubie A5E promotional specs, product briefs, and technical writeups refer to the co-processor as the **T-Head XuanTie E907**.
+* **Silicon RTL & Vendor BSP Layer**: Allwinner's internal hardware register maps (`0x07130000`), device trees (`sun55iw3p1.dtsi`), and Linux 5.15 BSP drivers refer to it as the **XuanTie E906** (`E906_VER_REG`, `E906_STA_ADD_REG`, `CONFIG_AW_REMOTEPROC_E906_BOOT`).
+* **Binary Compatibility**: Both cores share the same 32-bit RV32IMAFDC 5-stage pipeline architecture. Binaries compiled with `-march=rv32imafdc -mabi=ilp32d` execute identically on both.
+
+To verify the exact silicon core implemented on physical hardware, run the following tests:
+
+### Method 1: Query the `misa` CSR (Bit 15 — 'P' Extension)
+The primary architectural difference between an E906 and an E907 is the presence of T-Head's packed-SIMD / DSP extension (**`P`**):
+* **E906**: Implements `RV32IMAFDC` (Standard Integer, Multiply, Atomic, Float, Double, Compressed; bit 15 is 0).
+* **E907**: Implements `RV32IMAFDCP` (Adds T-Head Packed-SIMD / DSP math; bit 15 is 1).
+
+In bare-metal C/C++ firmware:
+```cpp
+uint32_t misa;
+asm volatile("csrr %0, misa" : "=r"(misa));
+
+if (misa & (1 << 15)) {
+    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E907 (DSP / 'P' extension enabled)\n", misa);
+} else {
+    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E906 (RV32IMAFDC standard without 'P')\n", misa);
+}
+```
+
+### Method 2: Query Machine Architecture ID (`marchid`) & T-Head Model (`mprid`)
+Standard RISC-V and Alibaba T-Head custom identification CSRs can be read directly:
+```cpp
+uint32_t marchid, mprid;
+asm volatile("csrr %0, marchid" : "=r"(marchid));
+asm volatile("csrr %0, 0xfc0"   : "=r"(mprid)); // T-Head custom CPU ID register
+
+hal::Trace::printf("[CPU-ID] marchid=0x%08x | mprid=0x%08x\n", marchid, mprid);
+```
+Alibaba T-Head encodes the core family and silicon revision in `mprid` bits `[23:16]` and `[15:0]`.
+
+### Method 3: Query Allwinner Silicon Version Register via Linux Host
+From the Linux terminal on the Radxa Cubie A5E board:
+```bash
+# Read offset 0x0000 (E906_VER_REG) in the RISC-V CFG block:
+devmem2 0x07130000 w
+```
+The register value identifies the Allwinner synthesis version of the RISC-V configuration block.
+
