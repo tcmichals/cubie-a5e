@@ -27,6 +27,19 @@ riscv-firmware/apps/
 
 ---
 
+## 1.1 Upstream Linux Kernel Submission (`linux-sunxi`) Validation Sequence
+
+When proposing the `sunxi_rproc.c` driver to upstream maintainers (e.g., `linux-sunxi`, `linux-remoteproc`), submitters must prove driver compliance across four tiers:
+
+| Tier | Test App | Upstream Driver Capability Verified | Expected Kernel / Diagnostic Output |
+| :--- | :--- | :--- | :--- |
+| **Tier 1: Lifecycle & ELF Loading** | `testBasic` | Clean `start` $\rightarrow$ `stop` cycle, SRAM Space 0 loading (`0x3FFC0000`), no bus lockups (`WORK_MODE_REG = 0x00000003`) | `[testBasic] Heartbeat #N \| MISA=0x40901125` via debugfs `trace0` |
+| **Tier 2: Sustained Streaming & FPU** | `testStringBinaryTrace0` | Sustained `trace0` ring buffer streaming without memory corruption; hardware single-precision FPU math | Live sine telemetry via `monitor_trace.py` or debugfs `trace0` |
+| **Tier 3: Standard VirtIO RPMsg (Gold Standard)** | `testPingRpmsg` | `virtio_rpmsg_bus` probing, vring parsing from `.resource_table`, Name Service announcement, `/dev/rpmsg0` | `dmesg`: `registered virtio0 (type 7)` and `ping_rpmsg -n 1000` succeeds |
+| **Tier 4: Crash Isolation** | `testCrash` | Post-mortem register autopsy captured in SRAM; ARM host kernel remains stable without panicking | `trace0`: `mcause=0x00000002` dump; Linux OS continues running |
+
+---
+
 ## 2. Hardware Memory Map for Firmware Tests
 
 All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memory regions `0x00020000` (HiFi4 DSP) and `0x00044000` (OP-TEE TrustZone) are strictly off-limits:
