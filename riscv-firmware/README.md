@@ -26,20 +26,20 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 |  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E907 RISC-V Co-Processor  |  |  |
 |  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
 |  |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
-|  +-------------------------------------+   |  +-----------------------------------+  |  |
-|  |             NPU Engine              |   |  +-----------------------------------+  |  |
-|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
-|  +-------------------------------------+   +-----------------------------------------+  |
-|                                                                                         |
-|  +-----------------------------------------------------------------------------------+  |
-|  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000) [Exclusive E907 Firmware]  |  |
-|  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
-|  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
-|  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
-|  |  - 1 MB DDR DMA Payload Pool (0x48100000) [Non-Cacheable Streaming Payloads Only] |  |
-|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000 Host Physical)                    |  |
-|  +-----------------------------------------------------------------------------------+  |
+|  |  +-------------------------------------+   |  +-----------------------------------+  |  |
+|  |  |             NPU Engine              |   |  +-----------------------------------+  |  |
+|  |  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
+|  |  +-------------------------------------+   |  +-----------------------------------------+  |
+|  |                                                                                         |
+|  |  +-----------------------------------------------------------------------------------+  |
+|  |  |                           Memory Hierarchy & Interconnect                         |  |
+|  |  |  - 512 KB Dual-Bank On-Chip SRAM (0x3FFC0000 & 0x40000000) [Exclusive E907 Firmware]  |  |
+|  |  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
+|  |  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
+|  |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
+|  |  |  - 1 MB DDR DMA Payload Pool (0x48100000) [Non-Cacheable Streaming Payloads Only] |  |
+|  |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000 Host Physical)                    |  |
+|  |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 ```
 
@@ -64,18 +64,43 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 
 | Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address | Size | Latency & Usage |
 | :--- | :--- | :--- | :--- | :--- |
-| **SRAM_A3 Slice 0 (`r_sram`)** | **`0x07280000` (A527) / `0x07200000` (T527)** | **`0x40000000`** | **256 KB / 512 KB** | **Primary E907 Boot & Execution Pool** (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`). Zero wait states. |
-| **SRAM_A3 Slice 1 (`r_sram1`)** | **`0x072c0000` (A527) / `0x07280000` (T527)** | **`0x40040000`** | **256 KB / 512 KB** | **Secondary High-Speed SRAM Bank** enabled via `REMAP_CTRL_REG[1] = 1`. Shared IPC/buffers. |
-| **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector), `0x0248` (`WORK_MODE_REG`) |
+| **SRAM Space 0 (`r_sram`)** | **`0x07280000`** | **`0x3FFC0000`** | **256 KB** | **Primary E907 Boot & Execution Pool** (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`). Zero wait states. |
+| **SRAM Space 1 (`r_sram1`)** | **`0x072c0000`** | **`0x40000000`** | **256 KB** | **Secondary High-Speed SRAM Bank** enabled via `REMAP_CTRL_REG[1] = 1`. Shared IPC/buffers. |
+| **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector defaults to `0x3FFC0000`), `0x0248` (`WORK_MODE_REG`) |
 | **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
 
 > [!IMPORTANT]
 > ### TRACE BUFFER LOCATION: STRICTLY ON-CHIP SRAM, NEVER DDR
-> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x40000000` in `e907_sram.ld` or `0x40040000` in `e907_ddr.ld`):
+> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x3FFC0000` in `e907_sram.ld` or `0x40000000` in `e907_ddr.ld`):
 > 1. **Early Boot & Determinism**: The E907 logs boot vectors, clock status, and peripheral bring-up immediately upon reset—long before DDR is initialized, or even when DDR is powered down in low-power sleep.
 > 2. **Zero Wait States**: On-chip SRAM guarantees single-cycle logging latency without DRAM bus contention, page misses, or memory refresh stalls.
 > 3. **Crash Survivability**: When a fatal exception or illegal instruction trap occurs (`testCrash`), crash register dumps (`mepc`, `mcause`, `sp`) are safely preserved into SRAM even if the DDR controller has locked up or crashed.
 > 4. **Host Read Access**: Linux `sunxi_rproc.c` maps `r_sram` via `devm_ioremap_wc` (normal non-cacheable memory on ARM64), allowing debugfs `rproc_trace_read()` to perform byte-level reads directly without external aborts.
+
+> [!TIP]
+> ### 🔍 STEP-BY-STEP: MOUNTING DEBUGFS TO ACCESS `trace0`
+> On minimal root filesystems (such as Buildroot), `debugfs` is not always mounted automatically on boot. If `/sys/kernel/debug/remoteproc/` does not exist or appears empty:
+> 
+> 1. **Check if `debugfs` is mounted**:
+>    ```bash
+>    mount | grep debugfs
+>    ```
+> 2. **Mount `debugfs`**:
+>    ```bash
+>    mount -t debugfs none /sys/kernel/debug
+>    ```
+> 3. **Verify `trace0` is available**:
+>    ```bash
+>    ls -l /sys/kernel/debug/remoteproc/remoteproc0/trace0
+>    ```
+> 4. **Read co-processor log output**:
+>    ```bash
+>    cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+>    ```
+> 5. *(Optional)* **Persist mount across reboots via `/etc/fstab`**:
+>    ```text
+>    debugfs  /sys/kernel/debug  debugfs  defaults  0  0
+>    ```
 
 ### 2.2 Silicon Hardware Ownership & Off-Limits Regions
 
@@ -83,7 +108,7 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 > ### HARDWARE TRUTH: 0x00020000 IS HIFI4 DSP MEMORY
 > 1. **`0x00020000` (128 KB) is HiFi4 DSP Memory**: This physical silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. If the E907 attempts to boot or execute from here, it will collide with the DSP and corrupt DSP audio algorithms.
 > 2. **`0x00044000` (160 KB) is OP-TEE / TrustZone Memory (`SRAM A2`)**: This memory is locked by the hardware firewall for secure booting, TF-A BL31, and OP-TEE.
-> 3. **E907 Firmware Lives in SRAM_A3**: Primary window is `0x40000000` (Slice 0) and `0x40040000` (Slice 1).
+> 3. **E907 Firmware Lives in On-Chip SRAM**: Continuous 512 KB SRAM window: Space 0 (`0x3FFC0000`) and Space 1 (`0x40000000`).
 
 ### 2.3 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
 
@@ -92,8 +117,8 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 | **`BROM`** | `0x00000000` | Unmapped | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (BootROM) |
 | **`DSP RAM` (`PubSRAM C`)** | `0x00020000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **DSP Instruction/Data RAM**. Host IPC peek only via `REMAP_CTRL_REG[0]`. | ❌ **STRICTLY PROHIBITED** (DSP Collision) |
 | **`SRAM A2`** | `0x00044000` | Unmapped | 160 KB | **Secure EL3 (TF-A) / OP-TEE** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug)** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
-| **`SRAM_A3 Space 0` (`r_sram`)** | `0x07280000` (A527) / `0x07200000` (T527) | `0x40000000` | 256 KB / 512 KB | **XuanTie E907** | **Primary zero-wait-state execution window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)** | ✅ **YES (Primary E907 Pool)** |
-| **`SRAM_A3 Space 1` (`r_sram1`)** | `0x072c0000` (A527) / `0x07280000` (T527) | `0x40040000` | 256 KB / 512 KB | **XuanTie E907 / Shared** | **Secondary zero-wait-state SRAMA3_2 bank enabled via REMAP_CTRL_REG[1]=1** | ✅ **YES (Secondary E907 Pool)** |
+| **`SRAM Space 0` (`r_sram`)** | `0x07280000` | `0x3FFC0000` | 256 KB | **XuanTie E907** | **Primary zero-wait-state execution window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)** | ✅ **YES (Primary E907 Pool)** |
+| **`SRAM Space 1` (`r_sram1`)** | `0x072c0000` | `0x40000000` | 256 KB | **XuanTie E907 / Shared** | **Secondary zero-wait-state SRAM bank enabled via REMAP_CTRL_REG[1]=1** | ✅ **YES (Secondary E907 Pool)** |
 | **`DSP IRAM/DRAM`**| `0x00400000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **Private DSP Execution & Audio Buffers** | ❌ **STRICTLY PROHIBITED** (DSP Local RAM) |
 | **`CFG Regs`** | `0x07130000` | `0x07130000` | 4 KB | **Host & E907 Control** | Hardware version (`0x00`), Boot entry vector (`0x204`), Work Mode / Lockup status (`0x248`) | ✅ **YES (Registers Only, Not SRAM)** |
 | **`dram_dma`**| `0x48100000`| `0x48100000` | 1 MB | Linux RemoteProc | Non-cacheable DDR DMA payload buffer pool strictly for streaming IPC payloads (`testDRAMMsg`) | ✅ **YES (Streaming Carveout Only)** |
@@ -107,11 +132,11 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 
   LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
   ================================                  =============================
-  0x07280000 - 0x072BFFFF [ 256 KB ] ─────────────> 0x40000000 - 0x4003FFFF (SRAM_A3 Space 0)
+  0x07280000 - 0x072BFFFF [ 256 KB ] ─────────────> 0x3FFC0000 - 0x3FFFFFFF (SRAM Space 0)
     (Mapped via RemoteProc "r_sram")                  (E907 Primary Boot, .vectors, .text, .data, stack, .trace_buffer)
 
-  0x072C0000 - 0x072FFFFF [ 256 KB ] ─────────────> 0x40040000 - 0x4007FFFF (SRAM_A3 Space 1)
-    (Mapped via RemoteProc "r_sram1")                 (SRAMA3_2 via REMAP_CTRL_REG[1] = 1, IPC, .trace_buffer)
+  0x072C0000 - 0x072FFFFF [ 256 KB ] ─────────────> 0x40000000 - 0x4003FFFF (SRAM Space 1)
+    (Mapped via RemoteProc "r_sram1")                 (SRAM Space 1 via REMAP_CTRL_REG[1] = 1, IPC, .trace_buffer)
 
   0x00020000 - 0x0003FFFF [ 128 KB ] ─────────────> [ CADENCE HIFI4 DSP ONLY - FORBIDDEN TO E907 ]
     (DSP Local Instruction/Data RAM)                  (Host IPC peek only via REMAP_CTRL_REG[0] = 1)
@@ -130,14 +155,14 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 ### 2.5 How Linux RemoteProc (`sunxi_rproc.c`) Routes Firmware ELFs
 
 When Linux RemoteProc loads a firmware ELF:
-1. **Dedicated SRAM Space 0 (`0x40000000`)**:
-   Core Device Address `0x40000000` is translated by `sunxi_rproc_da_to_va()` directly into `priv->r_sram_va` (host physical `0x07280000` / `0x07200000`). This is where all `.vectors`, `.text`, `.rodata`, `.data`, `.bss`, `.stack`, and `.trace_buffer` reside.
-2. **Dedicated SRAM Space 1 (`0x40040000`)**:
-   Core Device Address `0x40040000` is translated directly into `priv->r_sram1_va` (host physical `0x072c0000` / `0x07280000`). RemoteProc un-gates this bank by writing `1` to `REMAP_CTRL_REG` Bit 1 prior to loading segments.
+1. **Dedicated SRAM Space 0 (`0x3FFC0000`)**:
+   Core Device Address `0x3FFC0000` is translated by `sunxi_rproc_da_to_va()` directly into `priv->r_sram_va` (host physical `0x07280000`). This is where all `.vectors`, `.text`, `.rodata`, `.data`, `.bss`, `.stack`, and `.trace_buffer` reside.
+2. **Dedicated SRAM Space 1 (`0x40000000`)**:
+   Core Device Address `0x40000000` is translated directly into `priv->r_sram1_va` (host physical `0x072c0000`). RemoteProc un-gates this bank by writing `1` to `REMAP_CTRL_REG` Bit 1 prior to loading segments.
 3. **Hard Error Guards for Forbidden Memory**:
    `sunxi_rproc_da_to_va()` rejects any attempt to load into `< 0x00020000` (BROM/fake TCM), `0x00020000`–`0x0003FFFF` (HiFi4 DSP memory), `0x00040000`–`0x00067FFF` (OP-TEE SRAM A2), or `0x00400000`–`0x0044FFFF` (DSP secondary RAM).
 4. **RISC-V CFG Controller (`0x07130000`)**:
-   Hardware control registers (not writable SRAM). On start, the driver writes the ELF entry point (`0x40000000`) to `STA_ADD_REG` (`0x07130204`). Core status and lockup can be checked at `WORK_MODE_REG` (`0x07130248`).
+   Hardware control registers (not writable SRAM). On start, the driver writes the ELF entry point (`0x3FFC0000`) to `STA_ADD_REG` (`0x07130204`). Core status and lockup can be checked at `WORK_MODE_REG` (`0x07130248`).
 5. **DDR Streaming DMA Carveout (`0x48100000`)**:
    Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings. Reserved strictly for bulk streaming payload transfers (`testDRAMMsg`). Control blocks, descriptors, and trace buffers (`trace0`) MUST NEVER be in DDR; they reside in deterministic on-chip SRAM.
 
@@ -145,7 +170,7 @@ When Linux RemoteProc loads a firmware ELF:
 
 1. **Zero TCM in Silicon**: Unlike older Allwinner chips (such as Allwinner D1 / V853) that had tightly-coupled memories at `0x00000000` (ITCM) and `0x00080000` (DTCM), the XuanTie E907 on the T527 / A527 **implements NO ITCM and NO DTCM**. Addresses `0x07110000` and `0x07120000` do not exist in silicon.
 2. **Hardware Lockup Reality**: Setting `STA_ADD_REG` to `0x00000000` or legacy TCM addresses causes an immediate bus abort on instruction fetch, double-faulting into silicon **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
-3. **Execution Windows**: The E907 runs exclusively out of **SRAM_A3 Space 0 (`0x40000000`)** and **SRAM_A3 Space 1 (`0x40040000`)**.
+3. **Execution Windows**: The E907 runs out of continuous 512 KB on-chip SRAM: **Space 0 (`0x3FFC0000`)** and **Space 1 (`0x40000000`)**.
 
 ---
 
@@ -158,7 +183,7 @@ The firmware test suite follows a progressive **"Walk -> Run"** architecture, st
 ```text
 apps/
 ├── [PHASE 1: WALK - BOOT, TRACE & TELEMETRY]
-│   ├── testBasic/               # Minimal boot in on-chip SRAM_A3 (0x40000000) & live counter increment
+│   ├── testBasic/               # Minimal boot in on-chip SRAM (0x3FFC0000) & live counter increment
 │   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, mixed ASCII text + packed binary telemetry + FPU
 │   ├── testCrash/               # Hardware exception trapping (mtvec), 0xDEADF00D signature & crash dump
 │   └── exampleRiscv/            # Minimal reference template with HAL timer delay
@@ -177,8 +202,8 @@ apps/
 ### App 1: `testBasic`
 * **Purpose**: Basic bring-up, memory sanity, and linker-script layout validation.
 * **Functionality**:
-  - Boots into on-chip SRAM_A3 `0x40000000` (`e907_sram.ld`), configures stack at top of SRAM.
-  - Maps variables into dedicated linker sections (`.sram_c_loc1`, `.sram_c_loc2`) within SRAM_A3.
+  - Boots into on-chip SRAM Space 0 `0x3FFC0000` (`e907_sram.ld`), configures stack at top of SRAM.
+  - Maps variables into dedicated linker sections (`.sram_c_loc1`, `.sram_c_loc2`) within SRAM.
   - Continuously increments counters so host Linux can verify life via debugfs `trace0` or `devmem2 0x07287100 w` (Host physical on A527).
 
 ---
@@ -186,24 +211,27 @@ apps/
 ### App 2: `testStringBinaryTrace0` (Mixed String & Binary Telemetry)
 * **Purpose**: Demonstrates structured telemetry streaming over `trace0` combining formatted ASCII strings with packed binary structures and hardware FPU computation.
 * **Functionality**:
-  - Declares `.resource_table` section exporting `trace0` buffer in on-chip SRAM_A3 (`0x40000000` + offset).
+  - Declares `.resource_table` section exporting `trace0` buffer in on-chip SRAM Space 0 (`0x3FFC0000` + offset).
   - Completely eliminates DDR caching issues—trace writes are immediately visible to Linux without software cache flushes.
   - Utilizes single-precision (`float`) and double-precision (`double`) hardware FPU math (sine wave computation).
-  - Populates a 36-byte packed binary `TelemetryPacket` in SRAM_A3 (`.sram_c`).
+  - Populates a 36-byte packed binary `TelemetryPacket` in SRAM (`.sram_c`).
   - Interleaves three data streams directly into the `trace0` buffer:
     1. **ASCII String Log (`STRING:`)**: Human-readable log line with formatted float values.
     2. **Framed Binary Struct (`BINARY:`)**: Raw packed binary struct (`TelemetryPacket`) for high-speed programmatic ingestion.
     3. **Hex Dump (`HEXDUMP:`)**: Terminal-inspectable formatted hex dump of the binary packet.
 
 #### Standard RemoteProc Python Monitor (`apps/testStringBinaryTrace0/monitor_trace.py`)
-Run the standard debugfs monitor on the Linux host to stream and decode the mixed trace:
+Run the standard debugfs monitor on the Linux host to stream and decode the mixed trace (requires debugfs mounted: `mount -t debugfs none /sys/kernel/debug`):
 
 ```bash
+# Mount debugfs if not already mounted:
+mount -t debugfs none /sys/kernel/debug 2>/dev/null || true
+
 python3 /usr/local/bin/monitor_trace.py /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ```
 
 #### Lite / Fast Direct SRAM Python Monitor (`apps/testStringBinaryTrace0/fast_sram_telemetry.py`)
-For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` reads SRAM_A3 directly via physical mmap:
+For ultra-high-rate telemetry (>1,000 Hz) bypassing the kernel filesystem layer, `fast_sram_telemetry.py` reads SRAM directly via physical mmap:
 
 ```bash
 python3 /usr/local/bin/fast_sram_telemetry.py
@@ -217,7 +245,7 @@ python3 /usr/local/bin/fast_sram_telemetry.py
   - Configures `mtvec` to `default_trap_entry` in `startup.S`.
   - Emits 3 normal heartbeats before intentionally triggering an illegal instruction trap (`asm volatile(".word 0x00000000")` at `main.cpp:51`).
   - Trap handler captures `mepc`, `mcause`, `mtval`, `mstatus`, and full GPR dump (`ra`, `sp`, `gp`, `a0`..`a7`, `t0`..`t6`, `s0`..`s11`).
-  - Writes fatal signature `0xDEADF00D` to the top 256 bytes of SRAM_A3 Space 0 (`0x4003FF00` Core DA / `0x072BFF00` Host physical on A527).
+  - Writes fatal signature `0xDEADF00D` to the top 256 bytes of SRAM Space 0 (`0x3FFFFF00` Core DA / `0x072BFF00` Host physical on A527).
   - Formats an exhaustive crash autopsy and dumps it directly into `trace0`:
     ```text
     ################################################################
@@ -233,7 +261,7 @@ python3 /usr/local/bin/fast_sram_telemetry.py
       ra (x1) = 0x40000812  sp (x2) = 0x4003fea0  gp (x3) = 0x40008400
       ...
     ################################################################
-      Core halted safely. Inspect /sys/.../trace0 or SRAM_A3 (0x4003FF00)
+      Core halted safely. Inspect /sys/.../trace0 or SRAM (0x3FFFFF00)
     ################################################################
     ```
 
@@ -242,7 +270,7 @@ python3 /usr/local/bin/fast_sram_telemetry.py
 ### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal UIO Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` in on-chip SRAM_A3 `0x40000000`).
+  - Direct lock-free shared SRAM channel (`ShmPingChannel` in on-chip SRAM Space 0 `0x3FFC0000`).
   - Dual operational modes:
     1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E907 pulses GIC SPI 147 interrupt to wake host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via kernel UIO mapping and polls on memory flags for theoretical raw bus latency measurements.
@@ -285,7 +313,7 @@ ping_rpmsg -n 1000
 |                          HYBRID MEMORY IPC ARCHITECTURE                     |
 |                                                                             |
 |   +---------------------------------------------------------------------+   |
-|   |         ON-CHIP SRAM_A3 (0x40000000 / 0x40040000) - CONTROL PATH    |   |
+|   |         ON-CHIP SRAM (0x3FFC0000 / 0x40000000) - CONTROL PATH        |   |
 |   |  - SPSC Head & Tail Pointers (Atomic single-word updates)           |   |
 |   |  - Producer/Consumer Doorbells & Monotonic Sequence Counters        |   |
 |   |  - 16-slot TX/RX Descriptor Rings (Holds DRAM Buffer Offsets & Len) |   |
@@ -303,7 +331,7 @@ ping_rpmsg -n 1000
 +-----------------------------------------------------------------------------+
 ```
 * **Functionality**:
-  - Control block (`DramSpscControlBlock`) in fast on-chip SRAM_A3.
+  - Control block (`DramSpscControlBlock`) in fast on-chip SRAM.
   - 1 MB payload buffer pool in DDR DRAM Carveout (`0x48100000`).
   - Configures RISC-V Physical Memory Protection (PMP) and XuanTie Cache maintenance (`mhcr`, `mcor`, `dcache.iva`, `dcache.cpa`) for DMA-coherent uncached/strongly-ordered access.
 * **Linux Companion Tool**: `ping_dram`
@@ -321,7 +349,7 @@ ping_dram -n 10000 -s 1024
 | IPC Category | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Dedicated MCU SRAM + UIO (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via C++ `std::atomic` in SRAM_A3 | Lock-Free SPSC in SRAM_A3 (`0x40000000`) | Lock-Free SPSC in SRAM_A3 (`0x40000000`) |
+| **Control Path** | VirtIO vrings via C++ `std::atomic` in SRAM | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) |
 | **Data Path** | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU Dedicated SRAM (64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | `uio_pdrv_genirq` (`/dev/uio0`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Event-driven `ping_uio.py` (`select.epoll()`) / `ping_shm` |
@@ -395,7 +423,16 @@ U-Boot automatically loads `/boot/config.txt`, parses `dtoverlay`, resolves `.dt
 
 ### Live Firmware Switching on Target (Cubie A5E)
 
-Once logged into the board (via serial or SSH), all tools and ELFs are in your system `$PATH`:
+Once logged into the board (via serial or SSH), all tools and ELFs are in your system `$PATH`.
+
+#### Step 0: Ensure `debugfs` is Mounted (Required to Access `trace0`)
+On minimal root filesystems (like Buildroot), `debugfs` must be mounted to access RemoteProc trace logs:
+```bash
+# Check if debugfs is already mounted; mount it if not:
+mount | grep debugfs || mount -t debugfs none /sys/kernel/debug
+```
+
+#### Step 1: Switch and Run Firmware Applications
 
 ```bash
 # 1. Run Lite-libmetal Shared SRAM Ping (testPing)
@@ -429,6 +466,9 @@ ping_rpmsg -n 5000
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testStringBinaryTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
+
+# View raw trace0 buffer directly:
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 # Stream and decode via standard RemoteProc debugfs trace:
 monitor_trace.py

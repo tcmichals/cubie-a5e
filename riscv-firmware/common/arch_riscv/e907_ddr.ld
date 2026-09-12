@@ -1,26 +1,26 @@
 /*
- * e907_ddr.ld - SRAM A3 & DDR Linker Script for Allwinner T527 / A523 XuanTie E907
+ * e907_ddr.ld - SRAM & DDR Linker Script for Allwinner T527 / A523 XuanTie E907
  *
  * Target: Allwinner XuanTie E907 / E906 RISC-V Co-Processor
- * Memory: Fast Dedicated SRAM A3 Pool 0 (256 KB @ 0x40000000),
- *         Dedicated SRAM A3 Pool 1 (256 KB @ 0x40040000),
+ * Memory: Fast Dedicated SRAM Pool 0 (256 KB @ 0x3FFC0000),
+ *         Dedicated SRAM Pool 1 (256 KB @ 0x40000000),
  *         Reserved Non-Cacheable DDR DRAM Carveout (1 MB @ 0x48100000).
  *
  * HARDWARE TRUTHS:
  * - 0x00020000 (128 KB) is HiFi4 DSP Memory! DO NOT USE for E907!
  * - 0x00044000 (160 KB) is OP-TEE / TrustZone Memory (SRAM A2)! DO NOT USE!
- * - E907 firmware lives exclusively in SRAM A3 (0x40000000 / 0x40040000).
+ * - E907 firmware lives in on-chip SRAM (0x3FFC0000 / 0x40000000) and DDR.
  */
 
 OUTPUT_ARCH("riscv")
-ENTRY(_start)
+ENTRY(_vectors)
 
 MEMORY
 {
-    /* Dedicated Fast SRAM A3 (Pool 0) */
-    SRAM_FAST (rwx) : ORIGIN = 0x40000000, LENGTH = 256K
-    /* Switchable SRAM A3 (Pool 1 / SRAMA3_2 via REMAP_CTRL_REG[1]=1) */
-    SRAM_A3_2 (rwx) : ORIGIN = 0x40040000, LENGTH = 256K
+    /* Dedicated Fast SRAM (Space 0) */
+    SRAM_FAST (rwx) : ORIGIN = 0x3FFC0000, LENGTH = 256K
+    /* Switchable SRAM (Space 1 / SRAMA3_2 via REMAP_CTRL_REG[1]=1) */
+    SRAM_A3_2 (rwx) : ORIGIN = 0x40000000, LENGTH = 256K
     /* Non-cacheable DDR DMA Carveout */
     DRAM      (rwx) : ORIGIN = 0x48100000, LENGTH = 1M
 }

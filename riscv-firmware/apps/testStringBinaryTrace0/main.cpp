@@ -57,7 +57,7 @@ static double compute_sin(double x) {
 
 int main(void) {
     // 1. Initialize HAL
-    hal::Trace::init(/*enable_serial_mirror=*/false);
+    hal::Trace::init();
     hal::Timer::init();
 
     hal::Trace::puts("================================================================\n");

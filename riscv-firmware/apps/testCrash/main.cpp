@@ -23,7 +23,7 @@ static volatile uint32_t sram_heartbeat[2];
 
 int main(void) {
     // 1. Initialize HAL
-    hal::Trace::init(/*enable_serial_mirror=*/true);
+    hal::Trace::init();
     hal::Timer::init();
 
     hal::Trace::puts("================================================================\n");

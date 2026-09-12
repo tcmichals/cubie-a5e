@@ -3,13 +3,24 @@
  */
 
     .section .vectors, "ax", @progbits
-    .align 4
+    .align 6
+    .global _vectors
+    .type _vectors, @function
     .global default_trap_entry
     .type default_trap_entry, @function
 
 /*
  * =====================================================================
- * Direct Mode Trap Entry Point
+ * Vector 0 (Reset Vector): Branch immediately to _start
+ * =====================================================================
+ */
+_vectors:
+    j _start
+    .align 4
+
+/*
+ * =====================================================================
+ * Direct Mode Trap Entry Point (mtvec)
  * =====================================================================
  */
 default_trap_entry:
@@ -63,19 +74,15 @@ default_trap_entry:
     /* Save RISC-V Machine Control and Status Registers (CSRs) */
     csrr t0, mepc
     sw t0,  124(sp)
-    csrr t0, mcause
-    sw t0,  128(sp)
+    csrr t1, mcause
+    sw t1,  128(sp)
     csrr t0, mtval
     sw t0,  132(sp)
     csrr t0, mstatus
     sw t0,  136(sp)
 
-    /* -----------------------------------------------------------------
-     * FIX 2: Check if this trap is an asynchronous interrupt (bit 31).
-     * If mcause < 0 (sign bit set), dispatch interrupt and return (mret).
-     * Only true synchronous exceptions/faults enter hal_crash_dispatcher.
-     * ----------------------------------------------------------------- */
-    bltz t0, .Lhandle_irq
+    /* Check if this trap is an asynchronous interrupt (mcause bit 31). */
+    bltz t1, .Lhandle_irq
 
     /* Pass pointer to CrashFrame (sp) in a0 to C++ crash dispatcher */
     mv a0, sp
@@ -144,32 +151,32 @@ default_trap_entry:
     .type _start, @function
 
 _start:
-    /* 1. Disable all interrupts during early bring-up */
-    csrw mie, zero
-    csrw mip, zero
+    /* 1. Set mtvec FIRST before any other instruction can fault */
+    la t0, default_trap_entry
+    csrw mtvec, t0
 
-    /* 2. Setup Hardware Stack Pointer in SRAM */
+    /* 2. Disable interrupt generation (mie only, mip is read-only status) */
+    csrw mie, zero
+
+    /* 3. Write diagnostic signature (0xDEADBEEF) directly from ASM */
+    /* This proves the core is executing instructions at reset */
+    la t0, __sram_c_start
+    li t1, 0xdeadbeef
+    sw t1, 0(t0)
+
+    /* 4. Setup Hardware Stack Pointer in SRAM */
     la sp, _stack_top
 
-    /* 3. Setup Global Pointer */
+    /* 5. Setup Global Pointer */
 .option push
 .option norelax
     la gp, __global_pointer$
 .option pop
 
-    /* 
-     * 4. Set mtvec CSR to Direct Mode Trap Handler 
-     */
-    la t0, default_trap_entry
-    csrw mtvec, t0
-
-    /* 
-     * 5. Enable FPU (mstatus.FS = 0b11) for hardware float/double.
-     * Note: If running on an RV32IMAC core without FPU, remove this block
-     * or ensure compiler flags match -march=rv32imac -mabi=ilp32.
-     */
-    li t0, (3 << 13)
+    /* 5b. Enable FPU in mstatus (mstatus.FS = 0b01 Initial) */
+    li t0, (1 << 13) | (1 << 14)
     csrs mstatus, t0
+    csrw fcsr, zero
 
     /* 6. Copy .data from LMA to VMA if separate */
     la a0, _sdata

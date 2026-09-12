@@ -14,7 +14,7 @@ BIN_DIR="${FIRMWARE_DIR}/bin"
 
 # Target IP from argument or environment
 TARGET_IP="${1:-$TARGET_IP}"
-DEFAULT_FW="${2:-testStringBinaryTrace0.elf}"
+DEFAULT_FW="${2:-testBasic.elf}"
 
 echo "========================================================"
 echo "  Deploying All XuanTie E907 RISC-V Firmware ELFs"
@@ -38,8 +38,8 @@ for board in cubie_a5e; do
     cp -v "${BIN_DIR}"/*.elf "${overlay_dir}/"
     cp -v "${BIN_DIR}/${DEFAULT_FW}" "${overlay_dir}/riscv-firmware.elf"
     
-    # Copy host tools & python telemetry scripts to rootfs overlay /usr/bin and /usr/local/bin
-    for sub in usr/bin usr/local/bin; do
+    # Copy host tools & python telemetry scripts to rootfs overlay /usr/bin
+    for sub in usr/bin; do
         tools_dir="${WORKSPACE_ROOT}/cubie-a5e/project-cubie-a5e/board/radxa/${board}/rootfs-overlay/${sub}"
         mkdir -p "${tools_dir}"
         [ -f "${BIN_DIR}/ping_shm" ] && cp -v "${BIN_DIR}/ping_shm" "${tools_dir}/"
@@ -56,6 +56,11 @@ for board in cubie_a5e; do
             cp -v "${BIN_DIR}/fast_sram_telemetry.py" "${tools_dir}/"
             chmod +x "${tools_dir}/fast_sram_telemetry.py"
         fi
+        if [ -f "${BIN_DIR}/e907_mem.py" ]; then
+            cp -v "${BIN_DIR}/e907_mem.py" "${tools_dir}/"
+            chmod +x "${tools_dir}/e907_mem.py"
+        fi
+        cp -v "${BIN_DIR}"/*_devmem.* "${tools_dir}/" 2>/dev/null || true
     done
 done
 
@@ -103,6 +108,8 @@ if [ -n "${TARGET_IP}" ]; then
         "${BIN_DIR}/ping_dram" \
         "${BIN_DIR}/monitor_trace.py" \
         "${BIN_DIR}/fast_sram_telemetry.py" \
+        "${BIN_DIR}/e907_mem.py" \
+        ${BIN_DIR}/*_devmem.* \
         "root@${TARGET_IP}:/usr/bin/" 2>/dev/null || true
     scp -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
         "${BIN_DIR}/ping_shm" \
@@ -113,6 +120,8 @@ if [ -n "${TARGET_IP}" ]; then
         "${BIN_DIR}/ping_dram" \
         "${BIN_DIR}/monitor_trace.py" \
         "${BIN_DIR}/fast_sram_telemetry.py" \
+        "${BIN_DIR}/e907_mem.py" \
+        ${BIN_DIR}/*_devmem.* \
         "root@${TARGET_IP}:/usr/local/bin/" 2>/dev/null || true
 
     

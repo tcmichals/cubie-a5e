@@ -26,8 +26,13 @@ stage-bin: $(APPS) host-tools
 		if [ -f $$app/$$app.elf ]; then \
 			cp -v $$app/$$app.elf $(BIN_DIR)/; \
 			cp -v $$app/$$app.bin $(BIN_DIR)/; \
+			if [ -f $$app/$$app\_devmem.md ]; then cp -v $$app/$$app\_devmem.md $(BIN_DIR)/; fi; \
 		fi \
 	done
+	@if [ -f ../tools/e907_mem.py ]; then \
+		cp -v ../tools/e907_mem.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/e907_mem.py; \
+	fi
 	@if [ -f testPing/linux/ping_shm ]; then \
 		cp -v testPing/linux/ping_shm $(BIN_DIR)/; \
 	fi

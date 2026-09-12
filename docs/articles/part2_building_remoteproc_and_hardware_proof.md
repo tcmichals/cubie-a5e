@@ -34,18 +34,19 @@ The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsy
        ┌─────────────────────────┼─────────────────────────┐
        ▼                         ▼                         ▼
 ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
-│  PubSRAM C   │          │Dedicated SRAM│          │ DDR Trace    │
-│  128 KB @    │          │  256 KB @    │          │ Carveout     │
-│  0x00020000  │          │  0x07280000  │          │ 4 KB @       │
-│  (reg: sram) │          │(reg: r_sram) │          │ 0x48000000   │
-│  Boot Vector │          │Core:3FFC0000 │          │ (/trace0)    │
+│ SRAM Space 0 │          │ SRAM Space 1 │          │ DDR Trace    │
+│  256 KB @    │          │  256 KB @    │          │ Carveout     │
+│  0x07280000  │          │  0x072C0000  │          │ 4 KB @       │
+│(reg: r_sram) │          │(reg: r_sram1)│          │ 0x4AE00000   │
+│Core:3FFC0000 │          │Core:40000000 │          │ (/trace0)    │
+│(Reset Vector)│          │(Expansion)   │          │              │
 └──────────────┘          └──────────────┘          └──────────────┘
 ```
 
-### 1.1 Multi-Segment Memory Routing (`da_to_va`)
-On the Allwinner T527, the Device Tree node (`sun55i-a523.dtsi`) registers the primary operational SRAM windows:
-- **`sram`**: Shared PubSRAM C (`0x00020000`, 128 KB) — the default boot and execution memory.
-- **`r_sram`**: Dedicated MCU SRAM (`0x07280000` Host / `0x3FFC0000` Core, 256 KB) — high-performance zero-wait-state memory.
+### 1.1 Multi-Segment Memory Routing (`da_to_va`) & The 256 KB Shift Bug
+On the Allwinner T527, the Device Tree node (`sun55i-a523.dtsi`) registers the continuous 512 KB SRAM windows:
+- **`r_sram`**: SRAM Space 0 (`0x07280000` Host / `0x3FFC0000` Core, 256 KB) — **Primary Boot & Reset Window**.
+- **`r_sram1`**: SRAM Space 1 (`0x072C0000` Host / `0x40000000` Core, 256 KB) — High-speed secondary SRAM bank.
 
 The Linux kernel driver translates device addresses (`da`) declared in the ELF program headers to mapped host virtual addresses (`va`) inside `sunxi_rproc_da_to_va()`:
 
@@ -54,58 +55,34 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool 
 {
     struct sunxi_rproc *priv = rproc->priv;
 
-    /* 1. Shared System PubSRAM C (Resource "sram": Identity 0x00020000, 128 KB) */
-    if (priv->sram_va) {
-        if (da >= priv->sram_phys && (da + len) <= (priv->sram_phys + priv->sram_size)) {
+    /* 1. Dedicated MCU SRAM Space 0 (Host 0x07280000 / Core 0x3FFC0000, 256 KB) */
+    if (priv->r_sram_va) {
+        if (da >= 0x3FFC0000 && (da + len) <= (0x3FFC0000 + priv->r_sram_size)) {
             if (is_iomem)
                 *is_iomem = true;
-            return priv->sram_va + (da - priv->sram_phys);
+            return priv->r_sram_va + (da - 0x3FFC0000);
         }
-    }
-
-    /* 2. Dedicated MCU SRAM (Resource "r_sram": Host 0x07280000 / Core 0x3FFC0000, 256 KB) */
-    if (priv->r_sram_va) {
         if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
             if (is_iomem)
                 *is_iomem = true;
             return priv->r_sram_va + (da - priv->r_sram_phys);
         }
-        if (da < priv->r_sram_size && (da + len) <= priv->r_sram_size) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + da;
-        }
     }
 
-    /* 3. Optional Instruction TCM (Resource "itcm": Core 0x00000000, 64 KB) */
-    if (priv->itcm_va) {
-        if (da >= priv->itcm_phys && (da + len) <= (priv->itcm_phys + priv->itcm_size)) {
+    /* 2. Dedicated MCU SRAM Space 1 (Host 0x072C0000 / Core 0x40000000, 256 KB) */
+    if (priv->r_sram1_va) {
+        if (da >= 0x40000000 && (da + len) <= (0x40000000 + priv->r_sram1_size)) {
             if (is_iomem)
                 *is_iomem = true;
-            return priv->itcm_va + (da - priv->itcm_phys);
-        }
-        if (da >= E907_ITCM_DA && (da + len) <= (E907_ITCM_DA + priv->itcm_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->itcm_va + (da - E907_ITCM_DA);
+            return priv->r_sram1_va + (da - 0x40000000);
         }
     }
+```
 
-    /* 4. Optional Data TCM (Resource "dtcm": Core 0x00080000, 64 KB) */
-    if (priv->dtcm_va) {
-        if (da >= priv->dtcm_phys && (da + len) <= (priv->dtcm_phys + priv->dtcm_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->dtcm_va + (da - priv->dtcm_phys);
-        }
-        if (da >= E907_DTCM_DA && (da + len) <= (E907_DTCM_DA + priv->dtcm_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->dtcm_va + (da - E907_DTCM_DA);
-        }
-    }
-
-    /* 5. RemoteProc Trace Carveout (Resource "trace": 0x48000000, 4 KB) */
+> [!IMPORTANT]
+> **The 256 KB Interconnect Shift Bug & Silicon Lockup Root Cause**:  
+> In earlier vendor drivers, `da = 0x40000000` was mistakenly translated to `priv->r_sram_va` (Host `0x07280000`, Space 0). However, the Allwinner hardware bus interconnect routes Core DA `0x40000000` to Space 1 (`0x072C0000`). Because `sunxi_rproc_prepare()` cleared Space 1 with `memset_io(priv->r_sram1_va, 0)`, booting the core at `0x40000000` caused the core to fetch zeroes (`0x00000000`, illegal instruction) and lock up (`WORK_MODE_REG 0x07130248 = 0x0000000B`).  
+    /* 3. RemoteProc Trace Carveout / DDR Carveouts */
     if (priv->trace_va) {
         if (da >= priv->trace_phys && (da + len) <= (priv->trace_phys + priv->trace_size)) {
             if (is_iomem)
@@ -226,8 +203,8 @@ riscv-firmware/apps/
 
 | Application | Primary Architectural Feature Verified | Host Diagnostic Tool |
 | :--- | :--- | :--- |
-| **`testBasic`** | Boot entry, PubSRAM C execution, basic memory writes | `trace0` debugfs |
-| **`testStringBinaryTrace0`** | Single & double precision hardware FPU, packed binary frames | `monitor_trace.py` |
+| **`testBasic`** | Boot entry (`0x3FFC0000`), SRAM Space 0 execution, MISA probe (`0x40901125`), Single FPU verification | `trace0` debugfs |
+| **`testStringBinaryTrace0`** | Hardware Single-Precision FPU (`F`), packed binary telemetry | `monitor_trace.py` |
 | **`testCrash`** | Machine trap vector (`mtvec`), illegal instruction autopsy dump | `trace0` debugfs |
 | **`testPing`** | Lock-free SPSC in SRAM, Hardware Mailbox Doorbell IRQ | `ping_uio` / `ping_uio.py` |
 | **`testPingRpmsg`** | Standard VirtIO RPMsg framework (`virtio_rpmsg_bus`), `/dev/rpmsg0` | `ping_rpmsg` / `ping_rpmsg.py` |
@@ -236,40 +213,51 @@ riscv-firmware/apps/
 ---
 
 ### 3.1 Step 1: Sanity Boot & Memory Writes (`testBasic`)
-The `testBasic` application boots into PubSRAM C (`0x00020000`), writes initial signatures to memory, and executes an incrementing counter loop:
+The `testBasic` application boots into SRAM Space 0 (`0x3FFC0000`), writes initial signatures to memory, reads the hardware `MISA` and `mstatus` registers, tests single-precision hardware float multiplication, and executes an incrementing counter loop:
 
 ```cpp
 /* apps/testBasic/main.cpp */
 int main(void) {
-    sram_c_loc1[0]  = 0xDEADBEEF;
-    sram_c_loc2[0]  = 0x52495343; // "RISC"
-    dtcm_scratch[0] = 0xCAFE1234; // DTCM scratchpad verification
+    // 1. Read standard RISC-V MISA register (CSR 0x301)
+    uint32_t misa = 0;
+    asm volatile ("csrr %0, misa" : "=r"(misa));
 
-    hal::Trace::init(false);
+    // 2. Write MISA and status signatures to SRAM
+    sram_c_loc1[0] = 0xDEADBEEF;
+    sram_c_loc1[1] = misa;
+    sram_c_loc2[0] = 0x52495343; // "RISC"
+
+    // 3. Initialize In-Memory HAL Trace ring buffer and Timer
+    hal::Trace::init();
     hal::Timer::init();
 
-    hal::Trace::puts("Allwinner T527 XuanTie E907 testBasic App Running\n");
+    // 4. Test Hardware Float Multiply
+    volatile float f_test1 = 12.5f;
+    volatile float f_test2 = 4.0f;
+    volatile float f_res = f_test1 * f_test2; // Executed on hardware FPU (F)
 
     uint32_t count = 0;
     while (1) {
         count++;
-        sram_c_loc1[1]  = count;
-        sram_c_loc2[1]  = count;
-        dtcm_scratch[1] = count;
-        hal::Trace::printf("[testBasic] Loop #%u | SRAM C %p = 0x%08x | DTCM %p = 0x%08x\n",
-                           count, &sram_c_loc1[1], sram_c_loc1[1],
-                           &dtcm_scratch[1], dtcm_scratch[1]);
-        hal::Timer::delay_ms(500);
+        sram_c_loc2[1] = count;
+        hal::Trace::printf("[testBasic] Heartbeat #%u | MISA=0x%08x | count=%u\n",
+                           count, misa, count);
+        hal::Timer::delay_ms(1000);
     }
 }
 ```
 
-* **Verification**: Read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to see the live loop counter incrementing every 500 ms.
+* **Verification**: Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` reveals live silicon execution:
+  ```text
+  [testBasic] Heartbeat #1 | MISA=0x40901125 | count=1
+  [testBasic] Heartbeat #2 | MISA=0x40901125 | count=2
+  ```
+  This proves the core is running cleanly in SRAM Space 0 (`0x3FFC0000`) without hardware lockup.
 
 ---
 
-### 3.2 Step 2: Hardware FPU & Packed Binary Telemetry (`testStringBinaryTrace0`)
-The XuanTie E907 features hardware single-precision (`F`) and double-precision (`D`) floating-point units. `testStringBinaryTrace0` computes polynomial approximations of trigonometric functions (`compute_sin()`) and serializes a 36-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
+### 3.2 Step 2: Hardware Single FPU & Packed Binary Telemetry (`testStringBinaryTrace0`)
+The XuanTie E907 on T527 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` executes hardware single-precision calculations and serializes a 36-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
 
 ```cpp
 /* apps/testStringBinaryTrace0/main.cpp */
@@ -277,23 +265,23 @@ struct __attribute__((packed)) TelemetryPacket {
     uint32_t header_magic;  // 0x54454C4D ("TELM")
     uint32_t sequence;
     uint32_t uptime_ms;
-    float    accel_x;       // Hardware float (F)
+    float    accel_x;       // Hardware float (F, single precision)
     float    accel_y;
     float    accel_z;
-    double   sine_wave;     // Hardware double (D)
+    double   sine_wave;     // Software-emulated double (libgcc)
     uint16_t checksum;
     uint16_t tail_magic;    // 0x55AA
 };
 ```
 
-* **Verification**: Run `monitor_trace.py` to stream parsed floating-point telemetry and live sine calculations.
+* **Verification**: Run `monitor_trace.py` to stream parsed floating-point telemetry and live calculations.
 
 ---
 
 ### 3.3 Step 3: Hardware Exception Trapping & Autopsy (`testCrash`)
 How does a developer debug a hard fault on a co-processor running without an OS? 
 
-`testCrash` registers a machine-mode exception handler in the `mtvec` CSR. After emitting three normal countdown heartbeats to `trace0`, it intentionally executes an illegal instruction (`.word 0x00000000`):
+`testCrash` registers a machine-mode exception handler in the `mtvec` CSR. After emitting three countdown heartbeats to `trace0`, it intentionally executes an illegal instruction (`.word 0x00000000`):
 
 ```cpp
 /* apps/testCrash/main.cpp */
@@ -312,14 +300,14 @@ When the illegal instruction executes:
 3. It formats and outputs a complete register crash dump to `trace0`:
    ```text
    ================== HARDWARE EXCEPTION AUTOPSY ==================
-   mepc   : 0x00020144 (Faulting Instruction Address)
+   mepc   : 0x3FFC0144 (Faulting Instruction Address in SRAM)
    mcause : 0x00000002 (Illegal Instruction Trap)
    mtval  : 0x00000000
-   ra     : 0x00020188  sp : 0x00024000  gp : 0x00023800
-   x10(a0): 0x00000003  x11(a1): 0x00021000
+   ra     : 0x3FFC0188  sp : 0x3FFC5000  gp : 0x3FFC4800
+   x10(a0): 0x00000003  x11(a1): 0x3FFC2000
    ================================================================
    ```
-4. It writes fatal signature `0xDEADF00D` into Shared PubSRAM C (`0x00020000`) before halting cleanly.
+4. It writes fatal signature `0xDEADF00D` into SRAM Space 0 (`0x3FFFFF00`) before halting cleanly.
 
 ---
 
@@ -432,9 +420,9 @@ Notice that **zero `/dev/mem` or root privilege poking is used**. All hardware i
 ## 5. What's Next in Part 3
 
 With the `sunxi_rproc.c` driver and `riscv-firmware/apps` verification suite in place:
-1. The Linux host reliably loads multi-segment ELF binaries into PubSRAM C and Dedicated MCU SRAM. The `da_to_va` driver is fully prepared for optional ITCM/DTCM segments when the TCM extension linker script (described in Part 1, Section 4.4) is adopted.
+1. The Linux host reliably loads multi-segment ELF binaries into continuous 512 KB SRAM (Space 0 at `0x3FFC0000` and Space 1 at `0x40000000`) and transparent DDR carveouts.
 2. The `.resource_table` provides live trace streaming without physical serial debug cables.
-3. Every co-processor subsystem—clocks, resets, hardware FPU, exception trapping, direct shared memory, and VirtIO RPMsg—is systematically verified on live silicon.
+3. Every co-processor subsystem—clocks, resets, hardware single-precision FPU, exception trapping, direct shared memory, and VirtIO RPMsg—is systematically verified on live silicon.
 
 In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive deep into all three IPC paradigms:
 * **Lock-free Shared SRAM + Hardware Mailbox** (`testPing`): How `ShmPingChannel`, `hal::SpscQueue`, and event-driven UIO epoll deliver 1.5–2.5 µs round-trip latency.

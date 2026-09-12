@@ -17,7 +17,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
-|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
+|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E907 RISC-V Core          |  |  |
 |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
 |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  +-------------------------------------+   |  +-----------------------------------+  |  |
@@ -27,7 +27,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000) [Exclusive E907 Firmware & Trace]  |  |
+|  |  - 512 KB Dual-Bank On-Chip SRAM (0x3FFC0000 & 0x40000000) [Exclusive E907 Firmware]  |  |
 |  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
 |  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
 |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
@@ -41,7 +41,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 (`sun55iw3`) | 8× ARM Cortex-A55 Cores (Octa-core) |
 | **RAM** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | Dynamic probing via U-Boot `dram_init` |
-| **Co-Processors** | **XuanTie E906/E907 RISC-V** (up to 200 MHz) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | Managed via `mcu_ccu` @ `0x07102000` (ITCM @ `0x07110000`, DTCM @ `0x07120000`) |
+| **Co-Processors** | **XuanTie E907 RISC-V** (up to 200 MHz, RV32IMAFDC) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | RISC-V wrapped in legacy `e906-cfg` (`0x07130000`); Pure SRAM architecture (no ITCM/DTCM) |
 | **NPU** | **2.0 TOPS VeriSilicon VIP9000** | VIPLite / Galcore kernel driver (`0x07122000`) |
 | **Camera Subsystem** | **Allwinner Gen-4 Video In (VIN)** | 4× MIPI CSI-2 receivers + ISP + Multi-scalers |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Base MMIO at `0x03400000` / `0x03460000` |
@@ -148,8 +148,8 @@ The Cubie A5E platform supports four distinct inter-processor communication opti
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in PubSRAM C (`0x00020000`) | Lock-Free SPSC in PubSRAM C (`0x00020000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct PubSRAM C (`0x00020000`, 64B frames) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM (`0x3FFC0000`, 64B frames) |
 | **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | Kernel UIO / Shared SRAM (`sunxi_rproc`) |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
 | **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
@@ -159,6 +159,8 @@ The Cubie A5E platform supports four distinct inter-processor communication opti
 | **Throughput Bandwidth**| Moderate (~10–20 MB/s) | Moderate (~10–20 MB/s) | **High Bandwidth (>100 MB/s)** | High Packet Rate (Low Payload) |
 | **Target Use Case**     | Generic standard OS interop | Lightweight standard Linux RPMsg | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
 
+> 📖 **Vendor Driver Architecture & Hardware Archaeology**:  
+> For the complete technical record of how the co-processor hardware mapping was extracted from Allwinner vendor BSP code, device trees, and live register probing, see [**`RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md`**](RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md).
 
 ---
 

@@ -11,7 +11,7 @@ The firmware test suite follows a progressive **"Walk -> Run"** methodology, val
 ```text
 riscv-firmware/apps/
 ├── [PHASE 1: WALK - BOOT, TRACE & DIAGNOSTICS]
-│   ├── testBasic/               # Minimal boot in on-chip SRAM_A3 (0x40000000) & live counter increment
+│   ├── testBasic/               # Minimal boot in on-chip SRAM (0x3FFC0000) & live counter increment
 │   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, mixed ASCII text + packed binary telemetry + hardware FPU
 │   ├── testCrash/               # Hardware exception trapping (mtvec), 0xDEADF00D signature & crash dump
 │   └── exampleRiscv/            # Minimal reference template with HAL timer delay
@@ -29,13 +29,13 @@ riscv-firmware/apps/
 
 ## 2. Hardware Memory Map for Firmware Tests
 
-All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. Memory regions `0x00020000` (HiFi4 DSP) and `0x00044000` (OP-TEE TrustZone) are strictly off-limits:
+All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memory regions `0x00020000` (HiFi4 DSP) and `0x00044000` (OP-TEE TrustZone) are strictly off-limits:
 
 | Memory Region | Core Address (DA) | Host Address (A527) | Host Address (T527) | Size | Usage in Test Suite |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **SRAM_A3 Space 0** | `0x40000000` | `0x07280000` | `0x07200000` | 256 KB | Primary boot, `.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer` |
-| **SRAM_A3 Space 1** | `0x40040000` | `0x072c0000` | `0x07280000` | 256 KB | Secondary SRAM bank enabled via `REMAP_CTRL_REG[1]=1`, shared IPC |
-| **Crash Signature** | `0x4003FF00` | `0x072BFF00` | `0x0723FF00` | 256 B | Top 256 bytes of SRAM_A3 Space 0 (`0xDEADF00D` post-mortem block) |
+| **SRAM Space 0** | `0x3FFC0000` | `0x07280000` | `0x07200000` | 256 KB | Primary boot, `.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer` |
+| **SRAM Space 1** | `0x40000000` | `0x072c0000` | `0x07280000` | 256 KB | Secondary SRAM bank enabled via `REMAP_CTRL_REG[1]=1`, shared IPC |
+| **Crash Signature** | `0x3FFFFF00` | `0x072BFF00` | `0x0723FF00` | 256 B | Top 256 bytes of SRAM Space 0 (`0xDEADF00D` post-mortem block) |
 | **DDR DMA Pool**    | `0x48100000` | `0x48100000` | `0x48100000` | 1 MB | Non-cacheable payload buffer pool for bulk streaming (`testDRAMMsg`) |
 
 ---
@@ -46,12 +46,15 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
 * **Directory**: `riscv-firmware/apps/testBasic/`
 * **Purpose**: Validates toolchain output, linker script layout, core reset de-assertion, and memory bus access.
 * **Firmware Behavior**:
-  - Boots cleanly at `0x40000000` using `e907_sram.ld`.
+  - Boots cleanly at `0x3FFC0000` using `e907_sram.ld`.
   - Initializes the HAL trace subsystem (`hal::Trace::init()`).
-  - Sets up two 32-bit heartbeat counters in `.sram_c_loc1` and `.sram_c_loc2` within SRAM_A3.
+  - Sets up two 32-bit heartbeat counters in `.sram_c_loc1` and `.sram_c_loc2` within SRAM.
   - Enters an infinite loop incrementing the heartbeat counters and logging counter values every second.
 * **Host Verification Commands**:
   ```bash
+  # Ensure debugfs is mounted to access trace0:
+  mount | grep debugfs || mount -t debugfs none /sys/kernel/debug
+
   # Deploy and boot
   echo stop > /sys/class/remoteproc/remoteproc0/state
   echo "testBasic.elf" > /sys/class/remoteproc/remoteproc0/firmware
@@ -102,7 +105,7 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
   - Emits 3 normal countdown heartbeats.
   - Purposely triggers an illegal instruction exception (`asm volatile(".word 0x00000000")` at `main.cpp:51`).
   - Exception pipeline captures `mepc`, `mcause`, `mtval`, `mstatus`, and all 31 GPRs (`ra`, `sp`, `gp`, `tp`, `t0`-`t6`, `s0`-`s11`, `a0`-`a7`).
-  - `hal::CrashHandler::handle()` writes persistent signature `0xDEADF00D`, `mepc`, `mcause`, `mtval` to the top 256 bytes of SRAM_A3 Space 0 (`0x4003FF00`).
+  - `hal::CrashHandler::handle()` writes persistent signature `0xDEADF00D`, `mepc`, `mcause`, `mtval` to the top 256 bytes of SRAM Space 0 (`0x3FFFFF00`).
   - Streams full autopsy report to `trace0` and halts in a permanent `wfi` loop.
 * **Host Verification & Crash Debugging**:
   ```bash
@@ -117,11 +120,11 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
   # 1. Read autopsy report from debugfs
   cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
-  # 2. Inspect physical crash signature in SRAM_A3 (Host 0x072BFF00 on A527 / 0x0723FF00 on T527):
+  # 2. Inspect physical crash signature in SRAM (Host 0x072BFF00 on A527 / 0x0723FF00 on T527):
   devmem2 0x072BFF00 w 4
 
   # 3. Resolve exact faulting source line with addr2line (resolves to main.cpp:51):
-  riscv-none-elf-addr2line -e testCrash.elf -a -f -C 0x4000080e
+  riscv-none-elf-addr2line -e testCrash.elf -a -f -C 0x3ffc080e
 
   # 4. Confirm clean HAL parking (WORK_MODE_REG 0x07130248 = 0x00000003, Bit 3 lockup = 0):
   devmem2 0x07130248 w
@@ -144,7 +147,7 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
 * **Directory**: `riscv-firmware/apps/testPing/`
 * **Purpose**: Deterministic, zero-copy, sub-3 microsecond inter-processor communication over on-chip SRAM.
 * **Architecture**:
-  - Lock-free Single-Producer Single-Consumer (SPSC) circular ring buffers in on-chip SRAM_A3 (`0x40000000`).
+  - Lock-free Single-Producer Single-Consumer (SPSC) circular ring buffers in on-chip SRAM (`0x3FFC0000`).
   - Two operational modes:
     1. **Event-Driven UIO Doorbell Mode (Recommended)**: Converts the hardware Message Box (`0x03003000`) into a generic UIO device (`/dev/uio0`). Host blocks asynchronously on `select.epoll()` with **0% idle CPU utilization**; E907 pulses GIC SPI 147 interrupt to wake host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via physical mmap, achieving theoretical maximum bus transfer rate.
@@ -198,7 +201,7 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
 |                          HYBRID MEMORY IPC ARCHITECTURE                     |
 |                                                                             |
 |   +---------------------------------------------------------------------+   |
-|   |         ON-CHIP SRAM_A3 (0x40000000 / 0x40040000) - CONTROL PATH    |   |
+|   |         ON-CHIP SRAM (0x3FFC0000 / 0x40000000) - CONTROL PATH       |   |
 |   |  - SPSC Head & Tail Pointers (Atomic single-word updates)           |   |
 |   |  - Producer/Consumer Doorbells & Monotonic Sequence Counters        |   |
 |   |  - 16-slot TX/RX Descriptor Rings (Holds DRAM Buffer Offsets & Len) |   |
@@ -216,7 +219,7 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
 +-----------------------------------------------------------------------------+
 ```
 * **Firmware Behavior**:
-  - Control block (`DramSpscControlBlock`) mapped in fast on-chip SRAM_A3.
+  - Control block (`DramSpscControlBlock`) mapped in fast on-chip SRAM.
   - 1 MB payload pool in DDR DRAM Carveout (`0x48100000`).
   - Configures RISC-V Physical Memory Protection (PMP) and XuanTie Cache maintenance (`mhcr`, `mcor`, `dcache.iva`, `dcache.cpa`) for DMA-coherent access without software cache flushes.
 * **Host Benchmark Tool (`ping_dram`)**:
@@ -237,7 +240,7 @@ All tests execute strictly from on-chip `SRAM_A3` and dedicated DDR carveouts. M
 
 | IPC Mechanism | **[STANDARDS-BASED]**<br>Standard VirtIO RPMsg (`testPingRpmsg`) | **[CUSTOM STREAMING]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>SRAM SPSC + UIO (`testPing`) |
 | :--- | :--- | :--- | :--- |
-| **Control Path** | VirtIO vrings in SRAM_A3 | Lock-Free SPSC in SRAM_A3 (`0x40000000`) | Lock-Free SPSC in SRAM_A3 (`0x40000000`) |
+| **Control Path** | VirtIO vrings in SRAM | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) |
 | **Data Path** | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU SRAM_A3 (64 B frames) |
 | **Linux Driver / Stack** | `virtio_rpmsg_bus` + `rpmsg_char` | UIO / Non-cacheable reserved memory | `uio_pdrv_genirq` (`/dev/uio0`) |
 | **User Space API** | `/dev/rpmsg0` | `ping_dram` companion tool | `ping_uio.py` (`select.epoll()`) / `ping_shm` |

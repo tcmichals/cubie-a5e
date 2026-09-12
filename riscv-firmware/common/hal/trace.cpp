@@ -5,28 +5,20 @@
 
 namespace hal {
 
-// RemoteProc trace buffer in on-chip SRAM A3 (matches resource_table trace carving)
-static constexpr size_t    TRACE_BUFFER_SIZE = 0x4000; // 16 KB trace ring/linear buffer
-
-// S_UART0 base on Allwinner T527 for optional mirror
-static constexpr uintptr_t S_UART0_THR = 0x07080000;
-static constexpr uintptr_t S_UART0_LSR = 0x07080014;
-
-__attribute__((section(".trace_buffer"))) char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
+// RemoteProc trace buffer size, tied directly to g_rproc_trace_buffer defined in resource_table.c
+static constexpr size_t TRACE_BUFFER_SIZE = sizeof(::g_rproc_trace_buffer);
 
 static volatile uint32_t g_trace_head = 0;
-static bool g_mirror_uart           = false;
 
-void Trace::init(bool enable_uart_mirror) noexcept {
-    g_mirror_uart = enable_uart_mirror;
-    g_trace_head  = 0;
+void Trace::init() noexcept {
+    g_trace_head = 0;
     
     // Clear initial byte so buffer can be read safely immediately
     ::g_rproc_trace_buffer[0] = '\0';
 }
 
 void Trace::putc(char c) noexcept {
-    // 1. Write to memory trace buffer for Linux remoteproc trace0
+    // Write to memory trace buffer for Linux remoteproc trace0
     uint32_t idx = g_trace_head;
     if (idx < (TRACE_BUFFER_SIZE - 1)) {
         ::g_rproc_trace_buffer[idx]     = c;
@@ -38,18 +30,6 @@ void Trace::putc(char c) noexcept {
         ::g_rproc_trace_buffer[0] = c;
         ::g_rproc_trace_buffer[1] = '\0';
     }
-
-    // 2. Optional S_UART0 hardware mirror
-    if (g_mirror_uart) {
-        volatile uint32_t* lsr = reinterpret_cast<volatile uint32_t*>(S_UART0_LSR);
-        volatile uint32_t* thr = reinterpret_cast<volatile uint32_t*>(S_UART0_THR);
-
-        // Wait until Transmit Holding Register Empty (THRE / bit 5) is set
-        while (!(*lsr & (1 << 5))) {
-            __asm__ volatile("" : : : "memory");
-        }
-        *thr = static_cast<uint32_t>(c);
-    }
 }
 
 void Trace::puts(const char* s) noexcept {
@@ -57,6 +37,18 @@ void Trace::puts(const char* s) noexcept {
     while (*s) {
         putc(*s++);
     }
+}
+
+void Trace::write(const void* data, size_t len) noexcept {
+    if (!data || len == 0) return;
+    const char* p = reinterpret_cast<const char*>(data);
+    for (size_t i = 0; i < len; ++i) {
+        putc(p[i]);
+    }
+}
+
+uint32_t Trace::get_pos() noexcept {
+    return g_trace_head;
 }
 
 // -----------------------------------------------------------------------------

@@ -41,14 +41,25 @@ extern "C" {
 #define RPMSG_PING_EPT_ADDR            1024
 #define RPMSG_BUFFER_SIZE              512
 
+/*
+ * RemoteProc Trace Buffer Definitions
+ */
+#define RPROC_TRACE_LEN                4096UL       /* 4 KB Trace Buffer */
+#define RPROC_TRACE_NAME               "trace0"
+
+/* Compatibility aliases for build overrides */
 #ifndef CONFIG_RPROC_TRACE0_LEN
-#define CONFIG_RPROC_TRACE0_LEN     4096UL       /* 4 KB Trace Buffer */
+#define CONFIG_RPROC_TRACE0_LEN        RPROC_TRACE_LEN
 #endif
 
 #ifndef CONFIG_RPROC_TRACE0_NAME
-#define CONFIG_RPROC_TRACE0_NAME    "trace0"
+#define CONFIG_RPROC_TRACE0_NAME       RPROC_TRACE_NAME
 #endif
 
+/*
+ * Shared trace buffer placed in .trace_buffer section.
+ * Defined in resource_table.c and exported for firmware logging (hal::Trace).
+ */
 extern char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
 extern char __trace_start[];
 extern char __trace_end[];

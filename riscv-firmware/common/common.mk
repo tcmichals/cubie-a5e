@@ -20,8 +20,7 @@ SIZE    = $(CROSS_COMPILE)size
 GDB     = $(CROSS_COMPILE)gdb
 
 # 2. Target Architecture Flags (Allwinner T527 XuanTie E907)
-# RV32IMAFDC: 32 GPRs, Hardware Multiplier, Atomics, Double-Float FPU, Compressed Insts
-ARCH_FLAGS ?= -march=rv32imafdc_zicsr_zifencei_zihintpause -mabi=ilp32d -mcmodel=medany
+ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany
 OPT_FLAGS  ?= -Og -g
 
 # 3. Include Directories
@@ -109,6 +108,9 @@ $(ELF): $(OBJS) $(LDSCRIPT)
 	$(CC) $(OBJS) $(LDFLAGS) -Wl,-Map=$(MAP) -o $@
 	@echo "--- Memory Footprint ($@) ---"
 	$(SIZE) $@
+	@if [ -f $(COMMON_DIR)/../tools/generate_devmem_map.py ]; then \
+		python3 $(COMMON_DIR)/../tools/generate_devmem_map.py $(ELF) $(MAP) $(TARGET) $(CROSS_COMPILE) 2>/dev/null || true; \
+	fi
 
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -127,7 +129,7 @@ gdb: $(ELF)
 	$(GDB) -ex "target remote localhost:1234" $(ELF)
 
 clean:
-	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
+	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map $(TARGET)_devmem.md
 
 .PHONY: all clean qemu qemu-run gdb
 

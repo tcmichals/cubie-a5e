@@ -23,7 +23,7 @@
 
 int main(void) {
     // 1. Initialize HAL
-    hal::Trace::init(/*enable_serial_mirror=*/true);
+    hal::Trace::init();
     hal::Timer::init();
 
     // 2. Configure PMP & XuanTie Cache Maintenance for DDR Carveout

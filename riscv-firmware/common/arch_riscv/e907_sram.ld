@@ -11,11 +11,11 @@
  */
 
 OUTPUT_ARCH("riscv")
-ENTRY(_start)
+ENTRY(_vectors)
 
 MEMORY
 {
-    SRAM (rwx) : ORIGIN = 0x40000000, LENGTH = 256K
+    SRAM (rwx) : ORIGIN = 0x3FFC0000, LENGTH = 256K
 }
 
 SECTIONS

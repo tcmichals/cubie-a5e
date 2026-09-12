@@ -6,16 +6,16 @@ In this final article (**Part 4**), we take the **[AbstractX](https://github.com
 1. **What is AbstractX**: A modern C++20 framework designed for zero-allocation, deterministic asynchronous execution on embedded microcontrollers.
 2. **The HALO Speedup**: How AbstractX triggers Heap Allocation eLision Optimization to achieve zero-cost coroutines.
 3. **Hardware Interfacing**: Non-blocking timers, Mailbox doorbell events, and shared SRAM ring buffers in AbstractX.
-4. **Hard Benchmarks**: AbstractX vs. FreeRTOS on the XuanTie E907 @ 600 MHz.
+4. **Hard Benchmarks**: AbstractX vs. FreeRTOS on the XuanTie E907 @ 200 MHz.
 5. **Deployment**: Building and booting the AbstractX payload via Linux `remoteproc`.
 
 ---
 
 ## 1. Why AbstractX on Heterogeneous RISC-V?
 
-When writing firmware for an auxiliary real-time core (like the XuanTie E907 with 64 KB ITCM / 64 KB DTCM), developers usually choose between:
+When writing firmware for an auxiliary real-time core (like the XuanTie E907 executing out of 512 KB continuous zero-wait SRAM), developers usually choose between:
 1. **Super-loops with manual switch-case state machines**: Fast, but difficult to maintain as asynchronous complexity grows.
-2. **Traditional RTOSes (FreeRTOS, Zephyr)**: Structured, but each thread requires a 1 KB–4 KB stack, burning up to 30% of total DTCM just on idle stack memory!
+2. **Traditional RTOSes (FreeRTOS, Zephyr)**: Structured, but each thread requires a 1 KB–4 KB stack, burning up substantial SRAM just on idle stack memory!
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -44,7 +44,7 @@ AbstractX is designed from the ground up for bare-metal microcontrollers where d
 ┌─────────────────────────────────────────────────────────────┐
 │                 AbstractX Task Architecture                 │
 ├─────────────────────────────────────────────────────────────┤
-│ 1. Static Coroutine Arena in DTCM (Zero Dynamic Allocations)│
+│ 1. Static Coroutine Arena in SRAM Space 0 (Zero Allocations)│
 │ 2. Intrusive Task Scheduler (Zero-Cost Linked List)         │
 │ 3. HALO Optimization Target (Elides Nested Frame Overhead)  │
 │ 4. Type-Safe Hardware Awaiters (Timers, IPC, SPI)           │
@@ -52,7 +52,7 @@ AbstractX is designed from the ground up for bare-metal microcontrollers where d
 ```
 
 ### The Custom Zero-Allocation Promise
-In AbstractX, the coroutine `promise_type` overrides `operator new` to draw from a statically allocated memory pool in DTCM (`0x00080000`):
+In AbstractX, the coroutine `promise_type` overrides `operator new` to draw from a statically allocated memory pool in SRAM Space 0 (`0x3FFC0000`):
 
 ```cpp
 #include <coroutine>
@@ -71,7 +71,7 @@ public:
     static void deallocate(void*, size_t) {}
     static void reset() { offset_ = 0; }
 private:
-    static inline uint8_t pool_[PoolSize] __attribute__((section(".dtcm")));
+    static inline uint8_t pool_[PoolSize] __attribute__((section(".sram_c")));
     static inline size_t offset_ = 0;
 };
 
@@ -142,8 +142,8 @@ struct WaitForMicroseconds {
     uint32_t target_ticks;
     
     explicit WaitForMicroseconds(uint32_t us) {
-        // XuanTie 600 MHz: 600 ticks per microsecond
-        target_ticks = read_mcycle() + (us * 600);
+        // XuanTie 200 MHz: 200 ticks per microsecond (TICKS_PER_US = 200)
+        target_ticks = read_mcycle() + (us * 200);
     }
 
     bool await_ready() const noexcept {
@@ -211,7 +211,7 @@ Benchmark: 10,000 Consecutive Task Resumptions / Switches
 | **Code Readability** | High (Sequential) | Low (Fragmented) | High (Sequential) |
 
 * **Context Switching**: AbstractX switches tasks **19x faster than FreeRTOS**.
-* **RAM Footprint**: 8 concurrent AbstractX tasks consume **less than 400 bytes** of DTCM, freeing over 95% of memory for actual application data.
+* **RAM Footprint**: 8 concurrent AbstractX tasks consume **less than 400 bytes** of SRAM, freeing over 95% of memory for actual application data.
 
 ---
 

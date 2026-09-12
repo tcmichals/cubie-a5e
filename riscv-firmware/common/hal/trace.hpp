@@ -10,8 +10,12 @@ namespace hal {
 
 class Trace {
 public:
-    // Initialize trace buffer in memory and optional serial console mirror
-    static void init(bool enable_serial_mirror = false) noexcept;
+    // Buffer access and properties
+    static constexpr size_t BUFFER_SIZE = RPROC_TRACE_LEN;
+    static char *buffer() noexcept { return ::g_rproc_trace_buffer; }
+
+    // Initialize trace buffer in memory
+    static void init() noexcept;
 
     // Direct character and string outputs
     static void putc(char c) noexcept;
@@ -33,10 +37,6 @@ public:
 
     // Buffer position query
     static uint32_t get_pos() noexcept;
-
-private:
-    static volatile uint32_t s_pos;
-    static bool s_serial_mirror;
 };
 
 } // namespace hal

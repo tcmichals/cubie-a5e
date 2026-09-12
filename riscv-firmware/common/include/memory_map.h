@@ -16,9 +16,10 @@
  *    E907 must never boot or run from here!
  * 3. 0x00044000 (160 KB) IS OP-TEE / TRUSTZONE MEMORY (SRAM A2): Firewalled for secure boot.
  * 4. STAY OUT OF DSP SECONDARY RAM: 0x00400000 - 0x0044FFFF belongs to HiFi4 DSP.
- * 5. E907 FIRMWARE LIVES IN SRAM A3:
- *    - SRAM A3 Space 0: 0x40000000 (256 KB)
- *    - SRAM A3 Space 1: 0x40040000 (256 KB, enabled via REMAP_CTRL_REG[1]=1)
+ * 5. E907 FIRMWARE LIVES IN SRAM:
+ *    - SRAM Space 0: 0x3FFC0000 (256 KB, r_sram @ 0x07280000)
+ *    - SRAM Space 1: 0x40000000 (256 KB, r_sram1 @ 0x072C0000, enabled via REMAP_CTRL_REG[1]=1)
+ *    - Continuous 512 KB on-chip SRAM from 0x3FFC0000 to 0x40040000.
  */
 
 /* Forbidden Non-E907 Regions (DO NOT USE FOR E907!) */
@@ -27,11 +28,11 @@
 #define OPTEE_SRAM_A2_BASE          0x00044000  /* 160 KB OP-TEE / TrustZone SRAM A2 */
 #define OPTEE_SRAM_A2_SIZE          0x00028000
 
-/* Verified Hardware Memory Windows for E907 (SRAM A3 Pools) */
-#define SRAM_A3_BASE                0x40000000  /* Primary E907 Execution Window */
-#define SRAM_A3_SPACE0_BASE         0x40000000  /* 256 KB Dedicated SRAM A3 Slice 0 */
+/* Verified Hardware Memory Windows for E907 (SRAM Pools) */
+#define SRAM_A3_BASE                0x3FFC0000  /* Primary E907 Execution Window (Space 0) */
+#define SRAM_A3_SPACE0_BASE         0x3FFC0000  /* 256 KB Dedicated SRAM Slice 0 */
 #define SRAM_A3_SPACE0_SIZE         0x00040000
-#define SRAM_A3_SPACE1_BASE         0x40040000  /* 256 KB Switchable SRAM A3 Slice 1 (SRAMA3_2) */
+#define SRAM_A3_SPACE1_BASE         0x40000000  /* 256 KB Switchable SRAM Slice 1 (r_sram1) */
 #define SRAM_A3_SPACE1_SIZE         0x00040000
 
 /* Default E907 SRAM Aliases */
@@ -50,9 +51,9 @@
 #define REMAP_CTRL_MCU_RAM_REMAP_BIT      (1U << 0) /* 0: DSP local RAM only for MCU_SYS; 1: share for system */
 #define REMAP_CTRL_SRAMA3_2_RAM_REMAP_BIT (1U << 1) /* 0: SRAMA3_2 not shared for MCU_SYS; 1: shares for MCU_SYS */
 
-/* IPC & Diagnostics Memory Layout within SRAM A3 (0x40000000) */
-#define IPC_SHARED_MEM_BASE         0x40000000
-#define IPC_CRASH_DUMP_OFFSET       0x0003FF00  /* 256 B  - Fatal Trap Dump Area (Top of SRAM_A3 Space 0) */
+/* IPC & Diagnostics Memory Layout within SRAM (0x3FFC0000) */
+#define IPC_SHARED_MEM_BASE         0x3FFC0000
+#define IPC_CRASH_DUMP_OFFSET       0x0003FF00  /* 256 B  - Fatal Trap Dump Area (Top of SRAM Space 0: 0x3FFFFF00) */
 #define IPC_CRASH_DUMP_SIZE         0x0100
 #define IPC_TX_RING_OFFSET          0x0100      /* 16 KB  - RISC-V -> Linux Queue (128B slots) */
 #define IPC_TX_RING_SIZE            0x4000

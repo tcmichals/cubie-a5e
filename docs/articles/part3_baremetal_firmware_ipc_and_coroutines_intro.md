@@ -380,6 +380,7 @@ All three paradigms share the same underlying hardware: the **Allwinner Hardware
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
 * **Part 3: Inter-Processor Communication (IPC) Deep Dive** *(You are here)*
+* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
 
 ---
 

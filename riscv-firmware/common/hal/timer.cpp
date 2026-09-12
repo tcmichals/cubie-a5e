@@ -3,14 +3,9 @@
 namespace hal {
 
 void Timer::init() noexcept {
-#if defined(__riscv)
-    // Enable mcycle/minstret hardware counters (clear mcountinhibit)
-    asm volatile (
-        "csrw 0x320, zero\n"   // mcountinhibit = 0 (allow all counters to increment)
-        "csrw 0x306, %0\n"     // mcounteren = 0xFFFFFFFF (enable access)
-        :: "r"(-1)
-    );
-#endif
+    // E907 Machine-mode hardware counters (mcycle/minstret) run automatically.
+    // Avoid writing optional CSRs (0x320 mcountinhibit, 0x306 mcounteren)
+    // which trigger Illegal Instruction exceptions on XuanTie cores.
 }
 
 uint64_t Timer::get_ticks() noexcept {
