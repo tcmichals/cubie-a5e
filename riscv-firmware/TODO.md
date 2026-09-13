@@ -66,3 +66,24 @@ This document tracks active accomplishments, hardware proofs, and upcoming testi
   - [ ] Add HiFi4 DSP memory window mapping (`0x00020000`, 320 KB) and clock/reset controls.
   - [ ] Add DT binding for DSP remoteproc instance.
   - [ ] Compile and validate minimal DSP bring-up ELF.
+
+---
+
+## 3. Upstream Linux Kernel Submission Gate (`linux-remoteproc`, `linux-mailbox`, `linux-sunxi`)
+
+- [ ] **1. Devicetree YAML Binding Schemas (`dt-schema` Validation)**:
+  - [ ] Create `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-msgbox.yaml` (`#mbox-cells = <1>`, clocks, resets, interrupts).
+  - [ ] Create `Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml` (memory-region references, mailboxes, clocks, resets).
+  - [ ] Validate both schemas pass `make dt_binding_check` and `make dtbs_check` with **0 warnings**.
+- [ ] **2. Device Tree `memory-region` Refactoring**:
+  - [ ] Replace hardcoded carveout addresses in `sunxi_rproc.c` with standard `rproc_of_resm_mem_entry_init()`.
+  - [ ] Define reserved-memory nodes (`<&rproc_vring0>`, `<&rproc_vring1>`, `<&rproc_dram>`) in `sun55i-a523.dtsi`.
+- [ ] **3. Mailbox Driver Justification for Cover Letter**:
+  - [ ] Document technical rationale for standalone `sun55i-msgbox.c` vs `sun6i-msgbox.c` (4-port multi-processor architecture with $0x100$-strided registers and dynamic routing vs older 2-core fixed layout).
+- [ ] **4. 5-Patch Upstream Submission Series Formatting**:
+  - [ ] `[PATCH 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema`
+  - [ ] `[PATCH 2/5] mailbox: sun55i: add Allwinner sun55i/A523 msgbox driver`
+  - [ ] `[PATCH 3/5] dt-bindings: remoteproc: add Allwinner sun55i rproc schema`
+  - [ ] `[PATCH 4/5] remoteproc: sunxi: add Allwinner XuanTie RISC-V driver`
+  - [ ] `[PATCH 5/5] arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes`
+  - [ ] Attach live silicon test logs from `tests.md` and automated dry-run proof from `tools/validate_kernel_patches.py`.
