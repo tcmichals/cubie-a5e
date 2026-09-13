@@ -1,0 +1,29 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *           RADXA CUBIE A5E — PURE ON-CHIP SRAM VIRTIO RPMSG OVERLAY
+ * ============================================================================
+ * Redirects the Linux RemoteProc DMA memory-region from DDR DRAM (0x48000000)
+ * to on-chip MCU Local SRAM Space 1 (0x072c0000, 256 KB).
+ *
+ * When applied, virtio_rpmsg_bus and dma_alloc_coherent() allocate both
+ * vrings and payload message buffers directly from on-chip SRAM.
+ *
+ * To enable in /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram
+ * ============================================================================
+ */
+
+&{/reserved-memory} {
+    rproc_sram1: sram1@72c0000 {
+        compatible = "shared-dma-pool";
+        reg = <0x0 0x072c0000 0x0 0x40000>;
+        no-map;
+    };
+};
+
+&rproc {
+    memory-region = <&rproc_sram1>;
+};

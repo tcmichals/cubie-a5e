@@ -40,6 +40,73 @@ When proposing the `sunxi_rproc.c` driver to upstream maintainers (e.g., `linux-
 
 ---
 
+## 1.2 Hardware Overlay Configuration & Manual Test Execution via `/boot/config.txt`
+
+> **CRITICAL RULE**: Swapping `.elf` firmware images via sysfs without changing the Device Tree invalidates memory-topology tests. In upstream Linux RemoteProc, DMA memory allocations (DDR CMA vs on-chip SRAM Space 1) are strictly governed by the active Devicetree `memory-region` node. Any test switching memory topologies requires applying the matching overlay in `/boot/config.txt` and performing a clean reboot.
+
+### Hardware Overlay Configuration Profiles
+
+The Radxa Cubie A5E bootloader (`U-Boot 2024`) merges overlays declared in `/boot/config.txt` (or `/boot/uEnv.txt`) into the kernel Device Tree before handover:
+
+| Test Profile | Active Overlay in `/boot/config.txt` | Target `memory-region` | Intended Test Suite Scope |
+| :--- | :--- | :--- | :--- |
+| **Profile 1: Standard DDR VirtIO RPMsg (Default)** | `dtoverlay=cubie-a5e-flight-stack` | `vdev@48000000`<br>(1 MB DDR DRAM carveout) | `testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf` |
+| **Profile 2: Pure On-Chip SRAM VirtIO** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` | `sram1@72c0000`<br>(256 KB on-chip SRAM Space 1) | `testPingRpmsgSram.elf` (VirtIO vrings & message buffers locked to on-chip SRAM) |
+| **Profile 3: Userspace UIO Direct SPSC Queue** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` | None (Mailbox owned by `generic-uio`) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
+
+---
+
+### Step-by-Step Manual Test Procedure by Hand
+
+#### Step 1: Configure the Target Profile in `/boot/config.txt`
+Connect to the board over SSH or serial console and set the desired overlay line:
+```bash
+# Example: Switch to Pure On-Chip SRAM VirtIO mode:
+sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram/' /boot/config.txt
+
+# Or restore Standard DDR RPMsg default mode:
+sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-flight-stack/' /boot/config.txt
+```
+
+#### Step 2: Reboot the Board
+A reboot is mandatory so U-Boot merges the `.dtbo` and the Linux kernel initializes the matching reserved-memory DMA pool:
+```bash
+reboot
+```
+
+#### Step 3: Verify the Live Kernel Device Tree Post-Boot
+Confirm that the active memory region matches the intended test:
+```bash
+# Check the active memory-region phandle:
+hexdump -C /sys/firmware/devicetree/base/soc/remoteproc@7130000/memory-region
+
+# Check kernel dmesg for carveout initialization:
+dmesg | grep -i -E "remoteproc|reserved|sram"
+```
+
+#### Step 4: Manually Deploy and Run Tests via Sysfs
+All tests are executed manually using the standard Linux RemoteProc sysfs interface:
+```bash
+# 1. Ensure core is stopped
+echo stop > /sys/class/remoteproc/remoteproc0/state
+
+# 2. Select firmware ELF
+echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
+
+# 3. Start remote processor
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# 4. Check core status and trace0 telemetry
+cat /sys/class/remoteproc/remoteproc0/state
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+
+# 5. Run companion userspace benchmark tool (for RPMsg)
+/usr/bin/ping_rpmsg -n 1000 -s 496
+
+# 6. Cleanly stop core post-test
+echo stop > /sys/class/remoteproc/remoteproc0/state
+```
+
 ## 2. Hardware Memory Map for Firmware Tests
 
 All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memory regions `0x00020000` (HiFi4 DSP) and `0x00044000` (OP-TEE TrustZone) are strictly off-limits:

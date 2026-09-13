@@ -83,10 +83,13 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 - [ ] **Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
   - [x] Declared configurable `.da = CONFIG_VRING0_DA` (`0x40040000`) and `.da = CONFIG_VRING1_DA` (`0x40042000`) in `resource_table.c` / `resource_table.h`.
-  - [x] Built and deployed `testPingRpmsgSram.elf` to live target silicon.
-  - [x] Identified Linux kernel requirement: Without pre-registered carveouts in `rproc->carveouts`, Linux `rproc_alloc_vring()` falls back to `dma_alloc_coherent()`, causing `"Allocated carveout doesn't fit device address request"` and writing unreachable host DDR addresses into `desc->addr`.
-  - [ ] Add static SRAM carveouts (`"vdev0vring0"`, `"vdev0vring1"`, `"vdev0buffer"`) in `sunxi_rproc.c` using `rproc_mem_entry_init(dev, priv->r_sram1_va, priv->r_sram1_phys, ...)` to eliminate `dma_alloc_coherent()` fallback.
-  - [ ] Run benchmark `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM and record latency (projected ~40–50 $\mu$s).
+  - [x] Built `testPingRpmsgSram.elf` and verified memory layout.
+  - [x] **Enforce Device Tree Parity Rule**: Static driver carveouts rejected. Pure SRAM VirtIO must be dynamically governed by Devicetree overlays without hardcoding in C.
+  - [x] Created `cubie-a5e-rpmsg-sram.dtso` defining `rproc_sram1: sram1@72c0000` (`0x072c0000`, 256 KB) and overriding `&rproc { memory-region = <&rproc_sram1>; };`.
+  - [x] Compiled `cubie-a5e-rpmsg-sram.dtbo` and deployed to `/boot/` on target.
+  - [ ] Implement dynamic `memory-region` parsing (`rproc_of_resm_mem_entry_init`) in `sunxi_rproc.c` to support multi-region Devicetree configurations.
+  - [ ] Configure `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` in `/boot/config.txt`, reboot target board, and verify live kernel binding.
+  - [ ] Benchmark `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM on live hardware.
   - [ ] Complete the 4-tier architectural performance comparison matrix:
     - Pure SRAM SPSC Polling (`ping_shm`): **14.59 $\mu\text{s}$** avg RTT
     - VirtIO RPMsg in On-Chip SRAM (Projected): **~40–50 $\mu\text{s}$** avg RTT
