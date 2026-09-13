@@ -22,6 +22,12 @@ inline constexpr uint32_t FIFO_STATUS_EMPTY = (1U << 0);
 
 void MsgBox::init() noexcept
 {
+    // Configure hardware Message Box channel directions:
+    // Channel 0: Host CPU RX (E907 TX) -> BIT(0)
+    // Channel 1: Host CPU TX (E907 RX) -> BIT(12)
+    // Required by Linux sun6i-msgbox driver (drivers/mailbox/sun6i-msgbox.c)
+    MSGBOX_CTRL_REG(0) = (1U << 0) | (1U << 12);
+
     // Disable interrupts and clear pending status
     MSGBOX_LOCAL_IRQ_EN_REG = 0x00000000U;
     MSGBOX_LOCAL_IRQ_STA_REG = 0xFFFFFFFFU;

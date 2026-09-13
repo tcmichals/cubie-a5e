@@ -257,7 +257,7 @@ int main(void) {
 ---
 
 ### 3.2 Step 2: Hardware Single FPU & Packed Binary Telemetry (`testStringBinaryTrace0`)
-The XuanTie E907 on T527 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` executes hardware single-precision calculations and serializes a 36-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
+The XuanTie E907 on T527 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` executes hardware single-precision calculations and serializes a 32-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
 
 ```cpp
 /* apps/testStringBinaryTrace0/main.cpp */
@@ -268,7 +268,7 @@ struct __attribute__((packed)) TelemetryPacket {
     float    accel_x;       // Hardware float (F, single precision)
     float    accel_y;
     float    accel_z;
-    double   sine_wave;     // Software-emulated double (libgcc)
+    float    sine_wave;     // Hardware float (F, single precision)
     uint16_t checksum;
     uint16_t tail_magic;    // 0x55AA
 };

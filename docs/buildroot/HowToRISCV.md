@@ -465,7 +465,7 @@ apps/
 ### Application Details
 
 1. **`testBasic`**: Boots into SRAM Space 0 `0x3FFC0000` and continuously writes magic counters to SRAM (`0x3FFC1000`, `0x3FFC1004`) for sanity testing.
-2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in SRAM. Combines double-precision hardware FPU math (sine wave computation) with a 36-byte packed binary `TelemetryPacket` in SRAM (`0x3FFC1000`) and formatted ASCII log output in `trace0`.
+2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in SRAM. Executes single-precision hardware FPU math (sine wave computation) with a 32-byte packed binary `TelemetryPacket` in SRAM (`0x3FFC1000`) and formatted ASCII log output in `trace0`.
    > **Note on `epoll` & Polling**: Upstream Linux debugfs `trace0` (`drivers/remoteproc/remoteproc_debugfs.c`) does **not** implement `.poll` or attach a wait queue; calling `epoll_ctl()` returns `EPERM`. Thus, companion scripts (`monitor_trace.py`) poll in a loop. Hardware Mailbox doorbells and `/dev/rpmsg0` provide event-driven notifications with full `epoll` support for 0% host CPU wait.
 3. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to SRAM (`0x3FFFFF00`).
 4. **`testPing`**: Ultra-low-latency direct shared SRAM SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.

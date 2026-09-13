@@ -42,14 +42,14 @@ const struct rpmsg_resource_table global_resource_table = {
         .reserved      = {0, 0},
         .vring = {
             {
-                .da       = 0, /* Host allocates dynamic buffer/da */
+                .da       = FW_RSC_ADDR_ANY, /* Host allocates dynamic DMA carveout */
                 .align    = VRING_ALIGN,
                 .num      = VRING_NUM_DESCS,
                 .notifyid = 0,
                 .reserved = 0,
             },
             {
-                .da       = 0, /* Host allocates dynamic buffer/da */
+                .da       = FW_RSC_ADDR_ANY, /* Host allocates dynamic DMA carveout */
                 .align    = VRING_ALIGN,
                 .num      = VRING_NUM_DESCS,
                 .notifyid = 1,

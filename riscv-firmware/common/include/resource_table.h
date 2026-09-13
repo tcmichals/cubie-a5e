@@ -19,6 +19,7 @@ extern "C" {
 /*
  * VirtIO RemoteProc Constants
  */
+#define FW_RSC_ADDR_ANY                0xFFFFFFFFUL
 #define VIRTIO_ID_RPMSG                7
 #define VIRTIO_RPMSG_F_NS              0   /* Bit 0: Name Service Announcement */
 

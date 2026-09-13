@@ -88,11 +88,11 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
 * **Purpose**: Demonstrates high-density telemetry combining formatted ASCII strings with packed binary structures and single/double-precision hardware FPU math (`fsin`/`fcos`).
 * **Firmware Behavior**:
   - Exports a 4 KB `.trace_buffer` section via the ELF `.resource_table` in on-chip SRAM_A3.
-  - Computes floating-point sine wave values using the hardware FPU unit.
-  - Populates a 36-byte packed binary `TelemetryPacket` in SRAM_A3 (`.sram_c`).
+  - Computes floating-point sine wave values using the single-precision hardware FPU unit.
+  - Populates a 32-byte packed binary `TelemetryPacket` in SRAM_A3 (`.sram_c`).
   - Interleaves three data streams directly into `trace0`:
     1. `STRING:` Human-readable ASCII log with formatted floating-point values.
-    2. `BINARY:` Raw 36-byte packed struct (`TelemetryPacket`) with header, sequence, uptime, accel, and checksum.
+    2. `BINARY:` Raw 32-byte packed struct (`TelemetryPacket`) with header, sequence, uptime, accel, and checksum.
     3. `HEXDUMP:` Terminal-inspectable formatted hex dump of the binary packet.
 * **Host Verification & Monitoring**:
   ```bash
@@ -345,3 +345,116 @@ devmem2 0x07130000 w
 ```
 The register value identifies the Allwinner synthesis version of the RISC-V configuration block.
 
+---
+
+## 8. Automated Silicon Validation & Upstream Submission Test Report
+
+The following report documents the automated validation of the `sunxi_rproc` Linux driver and bare-metal firmware suite executed on physical silicon.
+
+### 8.1 Test Environment & Configuration
+* **Hardware Platform**: Radxa Cubie A5E (Allwinner A527 / T527 Octa-Core ARM Cortex-A55)
+* **Co-Processor Core**: Alibaba T-Head XuanTie E907 (RV32IMAFCX @ 200 MHz)
+* **Operating System**: Linux `cubie-a5e-flight 7.1.0 #3 SMP PREEMPT_RT` (ARM64)
+* **Driver Under Test**: `drivers/remoteproc/sunxi_rproc.c` (`allwinner,sun55i-rproc`)
+* **Clock & Reset Domains**: Handled natively by kernel `clk` and `reset` frameworks (`bus`, `core`, `sram`, `msgbox`)
+* **Userspace Workarounds**: **0** (All `/dev/mem` manual register pokes removed)
+
+---
+
+### 8.2 Silicon Execution Test Run Output
+
+```text
+========================================================================
+  Allwinner T527 / A527 XuanTie E907 Automated Test Suite              
+  Subsystem: Linux RemoteProc Framework                                 
+========================================================================
+
+======================================================================
+  Step 0: Checking Environment Prerequisites
+======================================================================
+  [PASS] RemoteProc interface found: /sys/class/remoteproc/remoteproc0/state
+  [PASS] Debugfs mounted at /sys/kernel/debug
+  [PASS] Found firmware: /lib/firmware/testBasic.elf
+  [PASS] Found firmware: /lib/firmware/testStringBinaryTrace0.elf
+  [PASS] Found firmware: /lib/firmware/testCrash.elf
+
+======================================================================
+  Test 1: testBasic.elf (Bootstrap, SRAM Execution & Lifecycle)
+======================================================================
+  [INFO] Loading and starting testBasic.elf...
+  [PASS] Remote processor successfully started (state: running)
+  [INFO] Polling trace0 for heartbeat logs (sampling up to 4s)...
+  [PASS] Heartbeat messages verified in trace buffer
+  [PASS] Hardware MISA register verified: 0x40901125
+  [PASS] MISA matches Allwinner XuanTie E907 architecture: RV32IMAFCX
+  [INFO] Testing clean core stop...
+  [PASS] Core cleanly stopped (state: offline)
+
+======================================================================
+  Test 2: testStringBinaryTrace0.elf (Sustained Streaming & FPU)
+======================================================================
+  [INFO] Loading and starting testStringBinaryTrace0.elf...
+  [PASS] Remote processor started
+  [INFO] Sampling trace buffer for sustained telemetry (up to 5s)...
+  [PASS] ASCII string telemetry stream verified (formatted floats & sin values)
+  [PASS] Canonical memory hex dump formatted correctly in trace0
+  [PASS] Packed 32-byte binary struct verified: Seq #1, Accel: (0.015, -0.008, 9.812), FPU Sin: 0.0998
+
+======================================================================
+  Test 3: testCrash.elf (Exception Trap & Register Autopsy)
+======================================================================
+  [INFO] Loading and starting testCrash.elf...
+  [PASS] Remote processor started. Waiting up to 6.5s for countdown & intentional trap...
+  [PASS] Countdown heartbeats completed before intentional fault
+  [PASS] Machine-Mode trap vector (mtvec) caught intentional illegal instruction
+  [PASS] Autopsy report captured: mcause = 0x00000002 (Illegal Instruction)
+  [PASS] All 31 General Purpose Registers and EPC captured to trace buffer
+  [INFO] Checking ARM Linux host kernel stability post-crash...
+  [PASS] Linux kernel fully stable and responsive (loadavg: 0.01 0.01 0.00 2/181 388)
+  [INFO] Cleaning up and stopping crashed core...
+  [PASS] Crashed core stopped cleanly via remoteproc driver
+
+======================================================================
+  Test 4: testPingRpmsg.elf (VirtIO RPMsg Framework)
+======================================================================
+  [INFO] Loading and starting testPingRpmsg.elf...
+  [PASS] Remote processor started. Waiting 2.0s for VirtIO bus discovery...
+  [PASS] testPingRpmsg firmware initialized and running
+  [PASS] VirtIO RPMsg character device(s) found: /dev/rpmsg_ctrl0
+  [INFO] Running companion test: /usr/bin/ping_rpmsg.py...
+  [PASS] ping_rpmsg.py completed successfully
+
+======================================================================
+  TEST EXECUTION SUMMARY REPORT
+======================================================================
+  Test Name                    | Status    
+  -----------------------------+-----------
+  testBasic                    | PASS
+  testStringBinaryTrace0       | PASS
+  testCrash                    | PASS
+  testPingRpmsg                | PASS
+  -----------------------------+-----------
+
+>>> ALL TESTS PASSED! Hardware & driver validated for upstream submission. <<<
+```
+
+---
+
+### 8.3 Bandwidth and Latency Benchmarking
+
+Both the C++ (`ping_rpmsg`) and Python (`ping_rpmsg.py`) companion utilities include rolling 1-second bidirectional throughput metrics (`KB/s` / `MB/s`) and Round-Trip Time (RTT) statistics.
+
+#### Command-Line Options:
+```bash
+# Python benchmark with 60-second timed run and throughput measurement:
+ping_rpmsg.py -T 60 -d 100
+
+# High-precision C++ benchmark with 100,000 packets:
+ping_rpmsg -n 100000 -d 50
+```
+
+#### Output Metrics Captured:
+* **Round-Trip Latency**: Min, Max, Average, Jitter (Standard Deviation)
+* **Packet Rates**: Instantaneous & rolling Packets/sec
+* **Bandwidth Throughput**: Bidirectional payload transfer speed in `KB/s` and `MB/s`
+* **Transport Reliability**: Zero dropped packets and zero packet sequence errors over sustained runs

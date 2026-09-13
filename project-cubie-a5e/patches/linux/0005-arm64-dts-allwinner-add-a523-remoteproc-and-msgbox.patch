@@ -21,14 +21,14 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 30 ++++++++++++++++++++++++++++++
- 1 file changed, 30 insertions(+)
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 index 1234567..89abcdef 100644
 --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
 +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
-@@ -1085,6 +1085,36 @@ npu: npu@7122000 {
+@@ -1085,6 +1085,40 @@ npu: npu@7122000 {
  			clock-names = "bus", "core", "reg";
  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
  			power-domains = <&ppu PD_NPU>;
@@ -54,11 +54,15 @@ index 1234567..89abcdef 100644
 +			      <0x07010364 0x4>;
 +			reg-names = "cfg", "r_sram", "r_sram1", "remap";
 +			clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
-+				 <&mcu_ccu CLK_MCU_RISCV>;
-+			clock-names = "bus", "core";
++				 <&mcu_ccu CLK_MCU_RISCV>,
++				 <&mcu_ccu CLK_BUS_MCU_PUBSRAM>,
++				 <&mcu_ccu CLK_BUS_MCU_RISCV_MSGBOX>;
++			clock-names = "bus", "core", "sram", "msgbox";
 +			resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
-+				 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
-+			reset-names = "cfg", "core";
++				 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
++				 <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
++				 <&mcu_ccu RST_BUS_MCU_RISCV_MSGBOX>;
++			reset-names = "cfg", "core", "sram", "msgbox";
 +			mboxes = <&msgbox 0>, <&msgbox 1>;
 +			mbox-names = "rx", "tx";
 +			status = "disabled";

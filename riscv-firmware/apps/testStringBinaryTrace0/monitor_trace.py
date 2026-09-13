@@ -33,15 +33,15 @@ import argparse
 
 DEFAULT_TRACE_PATH = "/sys/kernel/debug/remoteproc/remoteproc0/trace0"
 
-# Matches: struct __attribute__((packed)) TelemetryPacket (36 bytes total)
+# Matches: struct __attribute__((packed)) TelemetryPacket (32 bytes total)
 # uint32_t header_magic  (0x54454C4D = "TELM")
 # uint32_t sequence
 # uint32_t uptime_ms
 # float    accel_x, accel_y, accel_z
-# double   sine_wave
+# float    sine_wave
 # uint16_t checksum
 # uint16_t tail_magic    (0x55AA)
-PKT_FMT = "<IIIfff d HH"
+PKT_FMT = "<IIIffffHH"
 PKT_SIZE = struct.calcsize(PKT_FMT)
 
 ANSI_GREEN  = "\033[92m"
@@ -53,20 +53,34 @@ ANSI_RESET  = "\033[0m"
 ANSI_BOLD   = "\033[1m"
 
 def parse_binary_packet(raw_bytes):
-    if len(raw_bytes) < PKT_SIZE:
-        return None
-    try:
-        magic, seq, uptime, ax, ay, az, sin_val, csum, tail = struct.unpack(PKT_FMT, raw_bytes[:PKT_SIZE])
-        if magic == 0x54454C4D and tail == 0x55AA:
-            return {
-                "seq": seq,
-                "uptime_ms": uptime,
-                "accel": (ax, ay, az),
-                "sin": sin_val,
-                "csum": csum
-            }
-    except Exception:
-        pass
+    # Try 32-byte single-precision packet
+    if len(raw_bytes) >= 32:
+        try:
+            magic, seq, uptime, ax, ay, az, sin_val, csum, tail = struct.unpack("<IIIffffHH", raw_bytes[:32])
+            if magic == 0x54454C4D and tail == 0x55AA:
+                return {
+                    "seq": seq,
+                    "uptime_ms": uptime,
+                    "accel": (ax, ay, az),
+                    "sin": sin_val,
+                    "csum": csum
+                }
+        except Exception:
+            pass
+    # Fallback to 36-byte double-precision packet
+    if len(raw_bytes) >= 36:
+        try:
+            magic, seq, uptime, ax, ay, az, sin_val, csum, tail = struct.unpack("<IIIfff d HH", raw_bytes[:36])
+            if magic == 0x54454C4D and tail == 0x55AA:
+                return {
+                    "seq": seq,
+                    "uptime_ms": uptime,
+                    "accel": (ax, ay, az),
+                    "sin": sin_val,
+                    "csum": csum
+                }
+        except Exception:
+            pass
     return None
 
 def main():
@@ -103,7 +117,11 @@ def main():
                 last_content = content
 
                 lines = chunk.split(b"\n")
-                for line in lines:
+                skip_next = False
+                for idx, line in enumerate(lines):
+                    if skip_next:
+                        skip_next = False
+                        continue
                     if not line:
                         continue
 
@@ -117,7 +135,16 @@ def main():
                         print(f"{ANSI_GREEN}[ASCII]  {ANSI_RESET} {text}")
                     elif line.startswith(b"BINARY:"):
                         bin_data = line[7:]
-                        pkt = parse_binary_packet(bin_data)
+                        if len(bin_data) < 32 and idx + 1 < len(lines):
+                            # Next line contains binary struct
+                            candidate = bin_data + lines[idx + 1]
+                            pkt = parse_binary_packet(candidate)
+                            if pkt:
+                                bin_data = candidate
+                                skip_next = True
+                        else:
+                            pkt = parse_binary_packet(bin_data)
+
                         if pkt:
                             print(f"{ANSI_BLUE}[STRUCT] {ANSI_RESET} "
                                   f"Seq #{pkt['seq']:<5} | "
@@ -125,8 +152,18 @@ def main():
                                   f"Accel: ({pkt['accel'][0]:+6.3f}, {pkt['accel'][1]:+6.3f}, {pkt['accel'][2]:+6.3f}) | "
                                   f"FPU Sin: {pkt['sin']:+.4f} | "
                                   f"Csum: 0x{pkt['csum']:04X}")
-                        else:
+                        elif len(bin_data) > 0:
                             print(f"{ANSI_YELLOW}[BIN-RAW]{ANSI_RESET} {len(bin_data)} bytes: {bin_data[:16].hex()}...")
+                    elif b"MLET" in line:
+                        m_pos = line.find(b"MLET")
+                        pkt = parse_binary_packet(line[m_pos:])
+                        if pkt:
+                            print(f"{ANSI_BLUE}[STRUCT] {ANSI_RESET} "
+                                  f"Seq #{pkt['seq']:<5} | "
+                                  f"Up: {pkt['uptime_ms']:<6}ms | "
+                                  f"Accel: ({pkt['accel'][0]:+6.3f}, {pkt['accel'][1]:+6.3f}, {pkt['accel'][2]:+6.3f}) | "
+                                  f"FPU Sin: {pkt['sin']:+.4f} | "
+                                  f"Csum: 0x{pkt['csum']:04X}")
                     elif line.startswith(b"HEXDUMP:"):
                         print(f"{ANSI_CYAN}[HEXDUMP]{ANSI_RESET}")
                     elif line.startswith(b"0x"):

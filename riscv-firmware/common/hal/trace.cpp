@@ -91,6 +91,61 @@ static void print_signed(int32_t val, uint32_t width, bool pad_zero) noexcept {
     }
 }
 
+void Trace::print_float(float val, int decimals) noexcept {
+    // Check for NaN
+    if (val != val) {
+        puts("NaN");
+        return;
+    }
+    // Check for Inf
+    if (val > 1e38f || val < -1e38f) {
+        puts("Inf");
+        return;
+    }
+    if (val < 0.0f) {
+        putc('-');
+        val = -val;
+    }
+
+    // Rounding offset based on decimals
+    double round = 0.5;
+    for (int i = 0; i < decimals; ++i) {
+        round /= 10.0;
+    }
+    double dval = static_cast<double>(val) + round;
+
+    uint32_t int_part = static_cast<uint32_t>(dval);
+    print_unsigned(int_part, 10, false, 0, false);
+
+    if (decimals > 0) {
+        putc('.');
+        double frac = dval - static_cast<double>(int_part);
+        for (int i = 0; i < decimals; ++i) {
+            frac *= 10.0;
+            uint32_t digit = static_cast<uint32_t>(frac);
+            if (digit > 9) digit = 9;
+            putc('0' + digit);
+            frac -= digit;
+        }
+    }
+}
+
+void Trace::print_uint(uint32_t val) noexcept {
+    print_unsigned(val, 10, false, 0, false);
+}
+
+void Trace::print_int(int32_t val) noexcept {
+    print_signed(val, 0, false);
+}
+
+void Trace::print_hex(uint32_t val, bool prefix) noexcept {
+    if (prefix) {
+        putc('0');
+        putc('x');
+    }
+    print_unsigned(val, 16, false, 8, true);
+}
+
 // -----------------------------------------------------------------------------
 // Formatted Output Engine
 // -----------------------------------------------------------------------------
@@ -117,8 +172,24 @@ void Trace::vprintf(const char* fmt, va_list args) noexcept {
             fmt++;
         }
 
+        // 2b. Parse precision (.prec)
+        uint32_t precision = 6;
+        if (*fmt == '.') {
+            fmt++;
+            precision = 0;
+            while (*fmt >= '0' && *fmt <= '9') {
+                precision = (precision * 10) + (*fmt - '0');
+                fmt++;
+            }
+        }
+
         // 3. Match specifier
         switch (*fmt) {
+            case 'f': {
+                double val = va_arg(args, double);
+                print_float(val, precision);
+                break;
+            }
             case 'x': {
                 uint32_t val = va_arg(args, uint32_t);
                 print_unsigned(val, 16, false, width, pad_zero);
@@ -215,3 +286,41 @@ void Trace::dump_hex(const void* data, unsigned int len, unsigned long base_addr
 }
 
 } // namespace hal
+
+/*
+ * C Linkage Wrappers for C Source Files
+ */
+extern "C" {
+
+void trace_init(void) {
+    hal::Trace::init();
+}
+
+void trace_putc(char c) {
+    hal::Trace::putc(c);
+}
+
+void trace_puts(const char *s) {
+    hal::Trace::puts(s);
+}
+
+void trace_printf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    hal::Trace::vprintf(fmt, args);
+    va_end(args);
+}
+
+void trace_put_uint(uint32_t val) {
+    hal::Trace::print_uint(val);
+}
+
+void trace_put_hex(uint32_t val) {
+    hal::Trace::print_hex(val);
+}
+
+void trace_put_float(float val, int decimals) {
+    hal::Trace::print_float(val, decimals);
+}
+
+} // extern "C"

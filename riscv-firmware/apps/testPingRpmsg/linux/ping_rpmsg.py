@@ -83,6 +83,7 @@ def main():
     parser = argparse.ArgumentParser(description="Standard Linux RPMsg Ping-Pong Host Benchmark (Python)")
     parser.add_argument("-d", "--dev", default="", help="RPMsg device path (default: auto-detect)")
     parser.add_argument("-n", "--count", type=int, default=1000, help="Number of pings (default: 1000, 0=continuous)")
+    parser.add_argument("-T", "--duration", type=float, default=0.0, help="Run duration in seconds (e.g. 60 for 1 min; overrides -n if > 0)")
     parser.add_argument("-s", "--sleep", type=int, default=1000, help="Sleep between pings in microseconds (default: 1000)")
     parser.add_argument("-p", "--payload", default="Ping from Linux RPMsg Python", help="Custom payload string")
     parser.add_argument("-t", "--timeout", type=float, default=1000.0, help="Pong timeout in milliseconds (default: 1000)")
@@ -92,6 +93,8 @@ def main():
     print(f"{C_CYAN}{C_BOLD}  Allwinner T527 Linux VirtIO RPMsg Ping-Pong Benchmark (Python){C_RESET}")
     print(f"{C_CYAN}  Protocol: Linux kernel virtio_rpmsg_bus (/dev/rpmsg0)         {C_RESET}")
     print(f"{C_CYAN}  Channel : rpmsg-ping-channel (Endpoint Addr: 1024)            {C_RESET}")
+    if args.duration > 0:
+        print(f"{C_CYAN}  Mode    : Timed run for {args.duration:.1f} seconds (live rate display) {C_RESET}")
     print(f"{C_CYAN}{C_BOLD}================================================================{C_RESET}\n")
 
     dev_path = args.dev if args.dev else auto_find_device()
@@ -120,18 +123,35 @@ def main():
     latencies_us: List[float] = []
     seq = 0
     timeouts = 0
+    total_tx_bytes = 0
+    total_rx_bytes = 0
     bench_start_ns = time.monotonic_ns()
+    last_report_ns = bench_start_ns
+    last_report_seq = 0
+    last_report_tx_bytes = 0
+    last_report_rx_bytes = 0
 
-    print(f"[INFO] Starting benchmark: count={args.count}, delay={args.sleep}us, timeout={args.timeout}ms...\n")
+    mode_str = f"{args.duration:.1f}s duration" if args.duration > 0 else f"{args.count} pings"
+    print(f"[INFO] Starting benchmark ({mode_str}, delay={args.sleep}us, timeout={args.timeout}ms)...\n")
 
     try:
-        while args.count == 0 or seq < args.count:
+        while True:
+            now_ns = time.monotonic_ns()
+            elapsed_sec = (now_ns - bench_start_ns) / 1_000_000_000.0
+
+            if args.duration > 0:
+                if elapsed_sec >= args.duration:
+                    break
+            elif args.count > 0 and seq >= args.count:
+                break
+
             seq += 1
             tx_ns = time.monotonic_ns()
             tx_pkt = struct.pack(RPMSG_PAYLOAD_FMT, seq, tx_ns, payload_bytes)
 
             try:
                 os.write(fd, tx_pkt)
+                total_tx_bytes += len(tx_pkt)
             except OSError as e:
                 print(f"{C_RED}[ERROR] write() failed on seq={seq}: {e}{C_RESET}")
                 break
@@ -144,6 +164,7 @@ def main():
                 try:
                     rx_data = os.read(fd, 512)
                     if rx_data:
+                        total_rx_bytes += len(rx_data)
                         rtt_us = (rx_ns - tx_ns) / 1000.0
                         latencies_us.append(rtt_us)
                     else:
@@ -159,9 +180,29 @@ def main():
             if sleep_sec > 0:
                 time.sleep(sleep_sec)
 
-            if seq % 200 == 0 and latencies_us:
-                sys.stdout.write(f"  Progress: {seq} sent | Last RTT: {latencies_us[-1]:.2f} us | Timeouts: {timeouts}\r")
+            # Live 1-second rolling rate & latency display
+            if (now_ns - last_report_ns) >= 1_000_000_000:
+                window_dt = (now_ns - last_report_ns) / 1_000_000_000.0
+                window_pings = seq - last_report_seq
+                rate = window_pings / window_dt
+                window_bytes = (total_tx_bytes - last_report_tx_bytes) + (total_rx_bytes - last_report_rx_bytes)
+                bw_kb = (window_bytes / window_dt) / 1024.0
+                bw_str = f"{bw_kb/1024.0:5.2f} MB/s" if bw_kb >= 1024.0 else f"{bw_kb:5.1f} KB/s"
+                last_rtt = latencies_us[-1] if latencies_us else 0.0
+                recent_avg = sum(latencies_us[-window_pings:]) / max(1, min(window_pings, len(latencies_us))) if latencies_us else 0.0
+
+                time_str = f"[{elapsed_sec:04.1f}s / {args.duration:04.1f}s]" if args.duration > 0 else f"[{elapsed_sec:04.1f}s]"
+                sys.stdout.write(
+                    f"\r  {C_BOLD}{C_GREEN}{time_str}{C_RESET} Rate: {C_BOLD}{rate:6.1f} pkts/s{C_RESET} | "
+                    f"Speed: {C_BOLD}{C_CYAN}{bw_str}{C_RESET} | Total: {seq:,} | "
+                    f"Last RTT: {last_rtt:6.1f} us | Avg RTT: {recent_avg:6.1f} us | "
+                    f"Timeouts: {timeouts}  "
+                )
                 sys.stdout.flush()
+                last_report_ns = now_ns
+                last_report_seq = seq
+                last_report_tx_bytes = total_tx_bytes
+                last_report_rx_bytes = total_rx_bytes
 
     except KeyboardInterrupt:
         print(f"\n{C_YELLOW}[INFO] Interrupted by user.{C_RESET}")
@@ -195,7 +236,16 @@ def main():
         p99 = sorted_lat[int(len(sorted_lat) * 0.99)]
         throughput = (len(latencies_us) / (total_elapsed_ms / 1000.0)) if total_elapsed_ms > 0 else 0
 
-        print(f"  Throughput         : {C_BOLD}{throughput:.1f} msgs/sec{C_RESET}")
+        total_bytes = total_tx_bytes + total_rx_bytes
+        bw_kb_sec = (total_bytes / (total_elapsed_ms / 1000.0)) / 1024.0 if total_elapsed_ms > 0 else 0.0
+        bw_summary_str = f"{bw_kb_sec/1024.0:.2f} MB/s ({bw_kb_sec:.1f} KB/s)" if bw_kb_sec >= 1024.0 else f"{bw_kb_sec:.1f} KB/s"
+        tx_kb_sec = (total_tx_bytes / (total_elapsed_ms / 1000.0)) / 1024.0 if total_elapsed_ms > 0 else 0.0
+        rx_kb_sec = (total_rx_bytes / (total_elapsed_ms / 1000.0)) / 1024.0 if total_elapsed_ms > 0 else 0.0
+
+        print(f"  Packet Rate        : {C_BOLD}{throughput:.1f} msgs/sec{C_RESET}")
+        print(f"  Bandwidth (Total)  : {C_BOLD}{C_CYAN}{bw_summary_str}{C_RESET} (bidirectional)")
+        print(f"  Bandwidth (TX)     : {tx_kb_sec:.1f} KB/s ({total_tx_bytes:,} bytes)")
+        print(f"  Bandwidth (RX)     : {rx_kb_sec:.1f} KB/s ({total_rx_bytes:,} bytes)")
         print(f"----------------------------------------------------------------")
         print(f"  Min Latency        : {C_GREEN}{min_lat:.2f} us{C_RESET}")
         print(f"  Average Latency    : {C_BOLD}{avg_lat:.2f} us{C_RESET}")

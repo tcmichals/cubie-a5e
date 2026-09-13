@@ -228,6 +228,12 @@ int main(int argc, char *argv[]) {
     std::cout << "Total Duration : " << std::fixed << std::setprecision(3) << total_time_sec << " s\n";
     std::cout << "Throughput     : " << std::fixed << std::setprecision(1)
               << ((double)latencies_us.size() / total_time_sec) << " msgs/sec\n";
+    double total_bytes = (double)(latencies_us.size() * sizeof(RpmsgPingPayload) * 2);
+    double kb_sec = (total_bytes / 1024.0) / total_time_sec;
+    double mb_sec = kb_sec / 1024.0;
+    std::cout << "Bandwidth      : " << std::fixed << std::setprecision(2)
+              << (kb_sec >= 1024.0 ? mb_sec : kb_sec)
+              << (kb_sec >= 1024.0 ? " MB/s (bi-directional)\n" : " KB/s (bi-directional)\n");
 
     if (!latencies_us.empty()) {
         std::sort(latencies_us.begin(), latencies_us.end());

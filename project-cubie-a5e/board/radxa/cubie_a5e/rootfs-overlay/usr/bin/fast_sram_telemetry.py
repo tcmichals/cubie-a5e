@@ -30,8 +30,8 @@ SRAM_C_BASE = 0x07130000
 TELEMETRY_OFFSET = 0x1000       # 0x07131000 (directly after 4KB trace_buffer)
 MAP_SIZE = 0x2000               # 8 KB window
 
-# Matches: struct __attribute__((packed)) TelemetryPacket (36 bytes)
-PKT_FMT = "<IIIfff d HH"
+# Matches: struct __attribute__((packed)) TelemetryPacket (32 bytes)
+PKT_FMT = "<IIIffffHH"
 PKT_SIZE = struct.calcsize(PKT_FMT)
 
 ANSI_GREEN  = "\033[92m"

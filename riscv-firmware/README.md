@@ -213,8 +213,8 @@ apps/
 * **Functionality**:
   - Declares `.resource_table` section exporting `trace0` buffer in on-chip SRAM Space 0 (`0x3FFC0000` + offset).
   - Completely eliminates DDR caching issues—trace writes are immediately visible to Linux without software cache flushes.
-  - Utilizes single-precision (`float`) and double-precision (`double`) hardware FPU math (sine wave computation).
-  - Populates a 36-byte packed binary `TelemetryPacket` in SRAM (`.sram_c`).
+  - Utilizes single-precision (`float`) hardware FPU math (sine wave computation).
+  - Populates a 32-byte packed binary `TelemetryPacket` in SRAM (`.sram_c`).
   - Interleaves three data streams directly into the `trace0` buffer:
     1. **ASCII String Log (`STRING:`)**: Human-readable log line with formatted float values.
     2. **Framed Binary Struct (`BINARY:`)**: Raw packed binary struct (`TelemetryPacket`) for high-speed programmatic ingestion.

@@ -61,6 +61,10 @@ stage-bin: $(APPS) host-tools
 		cp -v testStringBinaryTrace0/fast_sram_telemetry.py $(BIN_DIR)/; \
 		chmod +x $(BIN_DIR)/fast_sram_telemetry.py; \
 	fi
+	@if [ -f ../tools/run_tests.py ]; then \
+		cp -v ../tools/run_tests.py $(BIN_DIR)/; \
+		chmod +x $(BIN_DIR)/run_tests.py; \
+	fi
 	@echo "================================================================"
 	@echo " All RISC-V Firmware ELFs staged in $(BIN_DIR):"
 	@ls -la $(BIN_DIR)/*.elf

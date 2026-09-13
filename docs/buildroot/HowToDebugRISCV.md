@@ -69,8 +69,8 @@ For co-processor firmware development on the T527, developers have several clean
 ### Step 1: Deploy the Firmware ELF to the Target
 
 ```bash
-# On your development host:
-scp cubie-a5e/riscv-firmware/bin/testStringBinaryTrace0.elf root@cubie-a5e:/lib/firmware/testStringBinaryTrace0.elf
+# On your development host (use -O for Dropbear compatibility):
+scp -O cubie-a5e/riscv-firmware/bin/testStringBinaryTrace0.elf root@cubie-a5e:/lib/firmware/testStringBinaryTrace0.elf
 ```
 
 ### Step 2: Boot the Co-Processor from Linux

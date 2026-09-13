@@ -78,29 +78,30 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +  clocks:
 +    minItems: 1
-+    maxItems: 4
++    maxItems: 5
 +    description: |
 +      CCU clocks required for co-processor operation. Typical clocks are
-+      "parent" (PLL source), "bus" (interconnect gate), and "core" (CPU gate).
++      "parent" (PLL source), "bus" (interconnect gate), "core" (CPU gate),
++      "sram" (SRAM interconnect gate), and "msgbox" (mailbox interconnect gate).
 +
 +  clock-names:
 +    minItems: 1
-+    maxItems: 4
++    maxItems: 5
 +    items:
-+      enum: [parent, bus, core, sram]
++      enum: [parent, bus, core, sram, msgbox]
 +
 +  resets:
 +    minItems: 1
-+    maxItems: 3
++    maxItems: 4
 +    description: |
-+      CCU reset lines. Typical resets are "cfg" (configuration block)
-+      and "core" (CPU core).
++      CCU reset lines. Typical resets are "cfg" (configuration block),
++      "core" (CPU core), "sram" (SRAM interconnect), and "msgbox" (mailbox interconnect).
 +
 +  reset-names:
 +    minItems: 1
-+    maxItems: 3
++    maxItems: 4
 +    items:
-+      enum: [cfg, core, sram]
++      enum: [cfg, core, sram, msgbox]
 +
 +  mboxes:
 +    minItems: 2
