@@ -13,15 +13,22 @@ without manual intervention or source code changes:
 import sys
 import time
 import subprocess
+import re
 
 TARGET_IP = "192.168.1.19"
 TARGET_USER = "root"
 
+def strip_ansi(text: str) -> str:
+    return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+
 def run_ssh(cmd, timeout=30):
     ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                f"{TARGET_USER}@{TARGET_IP}", cmd]
-    res = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
-    return res.returncode, res.stdout.strip(), res.stderr.strip()
+    try:
+        res = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
+        return res.returncode, res.stdout.strip(), res.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 1, "", "timeout"
 
 def wait_for_target(max_attempts=30):
     print("  Waiting for target board to come online...", end="", flush=True)
@@ -77,14 +84,16 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
-    p1_cpp_pass = (c == 0 and "Data Integrity : PASS" in out and "100.00% success" in out)
+    clean_out = strip_ansi(out)
+    p1_cpp_pass = (c == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
     results.append(("Profile 1", "C++ ping_rpmsg (1000 pkts)", "PASS" if p1_cpp_pass else "FAIL"))
 
     # 1.3 Python ping_rpmsg.py
     print("\n--- 1.3 Running Python ping_rpmsg.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -s 0", timeout=30)
     print(out)
-    p1_py_pass = (c == 0 and "Data Integrity     : PASS" in out and "Successful Replies : 1000" in out)
+    clean_out = strip_ansi(out)
+    p1_py_pass = (c == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
     results.append(("Profile 1", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p1_py_pass else "FAIL"))
 
     # 1.4 Python monitor_trace.py
@@ -111,14 +120,16 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsgSram.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
-    p2_cpp_pass = (c == 0 and "Data Integrity : PASS" in out and "100.00% success" in out)
+    clean_out = strip_ansi(out)
+    p2_cpp_pass = (c == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
     results.append(("Profile 2", "C++ ping_rpmsg (1000 pkts)", "PASS" if p2_cpp_pass else "FAIL"))
 
     # 2.3 Python ping_rpmsg.py
     print("\n--- 2.3 Running Python ping_rpmsg.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -s 0", timeout=30)
     print(out)
-    p2_py_pass = (c == 0 and "Data Integrity     : PASS" in out and "Successful Replies : 1000" in out)
+    clean_out = strip_ansi(out)
+    p2_py_pass = (c == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
     results.append(("Profile 2", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p2_py_pass else "FAIL"))
 
     # -------------------------------------------------------------------------
@@ -138,21 +149,24 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
     c, out, _ = run_ssh("/usr/bin/ping_shm -n 1000 -d 0", timeout=30)
     print(out)
-    p3_shm_pass = (c == 0 and "Data Integrity : PASS" in out and "100% success" in out)
+    clean_out = strip_ansi(out)
+    p3_shm_pass = (c == 0 and "Data Integrity : PASS" in clean_out and "100% success" in clean_out)
     results.append(("Profile 3", "C++ ping_shm (1000 pkts)", "PASS" if p3_shm_pass else "FAIL"))
 
     # 3.3 C++ ping_uio
     print("\n--- 3.3 Running C++ ping_uio (1,000 pings) ---")
     c, out, _ = run_ssh("/usr/bin/ping_uio -n 1000 -d 0", timeout=30)
     print(out)
-    p3_uio_cpp_pass = (c == 0 and "Data Integrity      : PASS" in out and "100.00%" in out)
+    clean_out = strip_ansi(out)
+    p3_uio_cpp_pass = (c == 0 and "Data Integrity      : PASS" in clean_out and "100.00%" in clean_out)
     results.append(("Profile 3", "C++ ping_uio (1000 pkts)", "PASS" if p3_uio_cpp_pass else "FAIL"))
 
     # 3.4 Python ping_uio.py
     print("\n--- 3.4 Running Python ping_uio.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_uio.py -n 1000 -d 0", timeout=30)
     print(out)
-    p3_uio_py_pass = (c == 0 and "Data Integrity      : PASS" in out and "100.00%" in out)
+    clean_out = strip_ansi(out)
+    p3_uio_py_pass = (c == 0 and "Data Integrity      : PASS" in clean_out and "100.00%" in clean_out)
     results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", "PASS" if p3_uio_py_pass else "FAIL"))
 
     # -------------------------------------------------------------------------
