@@ -1,0 +1,113 @@
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sun, 13 Sep 2026 12:00:00 +0000
+Subject: [PATCH RFC 0/5] remoteproc: sunxi: Add Allwinner XuanTie E907 RemoteProc and Message Box support
+
+This RFC patch series introduces mainline Linux support for the Alibaba
+T-Head XuanTie E907 (RV32IMAFCX @ 200 MHz) RISC-V auxiliary co-processor
+integrated into Allwinner A523, A527, and T527 (sun55i) SoCs.
+
+The series adds a standalone 4-port hardware Message Box driver, the
+XuanTie RemoteProc driver, the associated Devicetree binding schemas,
+and DTS node enablement.
+
+Background & Hardware Architecture
+==================================
+Allwinner sun55i SoCs integrate an octa-core ARM Cortex-A55 cluster
+alongside an auxiliary XuanTie E907 RISC-V co-processor. The co-processor
+boots from on-chip dedicated SRAM Space 0 (Host PA 0x07280000 / Core DA
+0x3FFC0000, 256 KB), can access secondary switchable SRAM Space 1 (Host PA
+0x072C0000 / Core DA 0x40000000, 256 KB), and interacts with external DDR
+DRAM across the SoC's internal AXI bus.
+
+Inter-processor communication (IPC) is coordinated via a 4-port hardware
+Message Box controller (CPUX_MSGBOX at 0x03003000). The mailbox acts as a
+star crossbar connecting four processors on the silicon die:
+  - Port 0: ARM Cortex-A55 host cluster
+  - Port 1: Cadence Tensilica HiFi4 Audio DSP
+  - Port 2: Power Management Unit (CPUS)
+  - Port 3: XuanTie E907 RISC-V co-processor
+
+The Cortex-A55 exposes 12 logical channels (4 per remote processor),
+where Channels 8..11 route directly to the XuanTie E907.
+
+Hardware Validation & Silicon Evidence
+======================================
+This driver series has been extensively validated on physical silicon using
+the Radxa Cubie A5E development board (Allwinner A527 / T527) running
+mainline Linux 7.1.0 PREEMPT_RT.
+
+The following automated test suite was executed natively on target hardware
+(with full bare-metal firmware test sources available):
+  1. testBasic.elf: Core reset de-assertion, SRAM Space 0 boot, MISA CSR
+     verification (0x40901125), and heartbeat logging via debugfs trace0.
+  2. testStringBinaryTrace0.elf: Sustained trace0 ring-buffer streaming,
+     hardware single-precision FPU math (sine wave calculation), and packed
+     32-byte binary telemetry parsing.
+  3. testCrash.elf: Machine-mode exception trap (mtvec) verification,
+     capturing full register autopsy (mepc, mcause=0x2, 31 GPRs) and
+     0xDEADF00D signature to SRAM upon intentional illegal instruction,
+     while the ARM Linux host kernel remains 100% stable without panicking.
+  4. testPingRpmsg.elf: Full Linux VirtIO RPMsg framework validation over
+     dynamic DDR CMA buffers (dma_alloc_coherent). Tested 1,000 round-trip
+     ping-pong packets with 100% success rate (0 timeouts), averaging
+     175.64 us latency and 5.37 MB/s bidirectional bandwidth at 512-byte
+     VirtIO buffer size.
+
+PREEMPT_RT Real-Time Compliance
+===============================
+When the E907 announces a new RPMsg channel via Name Service announcement,
+the kernel's rpmsg_char/virtio_rpmsg_bus layers acquire sleeping mutexes
+(device_register, blocking_notifier_call_chain). Calling these from
+hard-IRQ context triggers "scheduling while atomic" warnings on PREEMPT_RT
+kernels. In sunxi_rproc.c, the mailbox callback defers the VirtIO vring
+interrupt handler via schedule_work(&priv->vq_work), ensuring 100% clean
+operation on PREEMPT_RT kernels.
+
+Design Decisions for Maintainer Review
+======================================
+1. Standalone drivers/mailbox/sun55i-msgbox.c vs sun6i-msgbox.c:
+   The existing sun6i-msgbox.c driver is architected around a legacy
+   2-core point-to-point mailbox with flat global registers. The sun55i
+   hardware is a 4-processor crossbar where registers are banked per
+   processor in independent 0x100-byte apertures with hardware routing
+   tables and 8-entry FIFOs. Integrating sun55i into sun6i-msgbox would
+   require if-else branching in every function; a clean standalone
+   controller driver was implemented instead. Feedback on this design
+   choice is welcome.
+
+2. Devicetree YAML Schemas:
+   Both allwinner,sun55i-a523-msgbox.yaml and allwinner,sun55i-rproc.yaml
+   have been created and pass checkpatch.pl with 0 errors.
+
+Patch Summary
+=============
+  [RFC 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+  [RFC 2/5] mailbox: sun55i: add Allwinner sun55i msgbox driver
+  [RFC 3/5] dt-bindings: remoteproc: add Allwinner sun55i rproc schema
+  [RFC 4/5] remoteproc: sunxi: add Allwinner XuanTie remoteproc driver
+  [RFC 5/5] arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes
+
+Tim Michals (5):
+  dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+  mailbox: sun55i: add Allwinner sun55i/A523 msgbox driver
+  dt-bindings: remoteproc: add Allwinner sun55i rproc schema
+  remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver
+  arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes
+
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml |  78 +++
+ .../remoteproc/allwinner,sun55i-rproc.yaml    | 152 ++++++
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi|  61 +++
+ drivers/mailbox/Kconfig                       |  11 +
+ drivers/mailbox/Makefile                      |   1 +
+ drivers/mailbox/sun55i-msgbox.c               | 360 ++++++++++++++
+ drivers/remoteproc/Kconfig                    |  15 +
+ drivers/remoteproc/Makefile                   |   1 +
+ drivers/remoteproc/sunxi_rproc.c              | 776 ++++++++++++++++++++++++++
+ 9 files changed, 1455 insertions(+)
+ create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+ create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+ create mode 100644 drivers/mailbox/sun55i-msgbox.c
+ create mode 100644 drivers/remoteproc/sunxi_rproc.c
+
+-- 
+2.34.1

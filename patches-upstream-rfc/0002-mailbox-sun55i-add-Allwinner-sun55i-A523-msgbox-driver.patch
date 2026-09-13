@@ -1,6 +1,6 @@
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
+Subject: [PATCH RFC 2/5] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
 
 Add support for the 4-port hardware Message Box present on Allwinner
 A523/A527/T527 (sun55i) and A733 (sun60i) SoCs. This hardware block

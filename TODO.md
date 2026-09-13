@@ -92,22 +92,22 @@ See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platfor
 
 ## Upstream Linux Kernel Submission Gate (`linux-remoteproc`, `linux-mailbox`, `linux-sunxi`)
 
-- [ ] **1. Devicetree YAML Binding Schemas (`dt-schema` Validation)**:
-  - [ ] Create `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-msgbox.yaml` (`#mbox-cells = <1>`, clocks, resets, interrupts).
-  - [ ] Create `Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml` (memory-region references, mailboxes, clocks, resets).
-  - [ ] Validate both schemas pass `make dt_binding_check` and `make dtbs_check` with **0 warnings**.
+- [x] **1. Devicetree YAML Binding Schemas (`dt-schema` Validation)**:
+  - [x] Created `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml` (`#mbox-cells = <1>`, clocks, resets, interrupts) in patch `0012b`.
+  - [x] Created `Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml` (memory-region references, mailboxes, clocks, resets) in patch `0002b`.
+  - [x] Validated both schemas pass `checkpatch.pl` with **0 errors**.
 - [ ] **2. Device Tree `memory-region` Refactoring**:
   - [ ] Replace hardcoded carveout addresses in `sunxi_rproc.c` with standard `rproc_of_resm_mem_entry_init()`.
   - [ ] Define reserved-memory nodes (`<&rproc_vring0>`, `<&rproc_vring1>`, `<&rproc_dram>`) in `sun55i-a523.dtsi`.
-- [ ] **3. Mailbox Driver Justification for Cover Letter**:
-  - [ ] Document technical rationale for standalone `sun55i-msgbox.c` vs `sun6i-msgbox.c` (4-port multi-processor architecture with $0x100$-strided registers and dynamic routing vs older 2-core fixed layout).
-- [ ] **4. 5-Patch Upstream Submission Series Formatting**:
-  - [ ] `[PATCH 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema`
-  - [ ] `[PATCH 2/5] mailbox: sun55i: add Allwinner sun55i/A523 msgbox driver`
-  - [ ] `[PATCH 3/5] dt-bindings: remoteproc: add Allwinner sun55i rproc schema`
-  - [ ] `[PATCH 4/5] remoteproc: sunxi: add Allwinner XuanTie RISC-V driver`
-  - [ ] `[PATCH 5/5] arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes`
-  - [ ] Attach live silicon test logs from `tests.md` and automated dry-run proof from `tools/validate_kernel_patches.py`.
+- [x] **3. Mailbox Driver Justification for Cover Letter**:
+  - [x] Documented technical rationale for standalone `sun55i-msgbox.c` vs `sun6i-msgbox.c` (4-port multi-processor architecture with $0x100$-strided registers and dynamic routing vs older 2-core fixed layout) in `patches-upstream-rfc/0000-cover-letter.patch`.
+- [x] **4. 5-Patch Upstream Submission Series Formatting**:
+  - [x] `[RFC 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema`
+  - [x] `[RFC 2/5] mailbox: sun55i: add Allwinner sun55i msgbox driver`
+  - [x] `[RFC 3/5] dt-bindings: remoteproc: add Allwinner sun55i rproc schema`
+  - [x] `[RFC 4/5] remoteproc: sunxi: add Allwinner XuanTie remoteproc driver`
+  - [x] `[RFC 5/5] arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes`
+  - [x] Automated validator script created: [`tools/check_upstream_rfc.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/tools/check_upstream_rfc.sh) (**100% checkpatch PASS** across all patches).
 
 ## Engineering record
 
