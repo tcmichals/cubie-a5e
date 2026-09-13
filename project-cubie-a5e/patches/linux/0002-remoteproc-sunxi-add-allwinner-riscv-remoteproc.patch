@@ -51,7 +51,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,882 @@
+@@ -0,0 +1,886 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -702,17 +702,21 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		if (name && (strstr(name, "trace") || of_node_name_eq(rmem_np, "trace"))) {
 +			priv->trace_phys = res.start;
 +			priv->trace_size = resource_size(&res);
-+			priv->trace_va = devm_memremap(dev, res.start, resource_size(&res), MEMREMAP_WB);
++			priv->trace_va = devm_memremap(dev, res.start, resource_size(&res),
++						       MEMREMAP_WB);
 +			if (!priv->trace_va)
-+				priv->trace_va = devm_ioremap_wc(dev, res.start, resource_size(&res));
++				priv->trace_va = devm_ioremap_wc(dev, res.start,
++								 resource_size(&res));
 +			dev_info(dev, "registered trace carveout %pa+%zu (%s)\n",
 +				 &priv->trace_phys, priv->trace_size, name);
 +		} else if (name && (strstr(name, "dram") || strstr(name, "vram"))) {
 +			priv->dram_phys = res.start;
 +			priv->dram_size = resource_size(&res);
-+			priv->dram_va = devm_memremap(dev, res.start, resource_size(&res), MEMREMAP_WB);
++			priv->dram_va = devm_memremap(dev, res.start, resource_size(&res),
++						      MEMREMAP_WB);
 +			if (!priv->dram_va)
-+				priv->dram_va = devm_ioremap_wc(dev, res.start, resource_size(&res));
++				priv->dram_va = devm_ioremap_wc(dev, res.start,
++								resource_size(&res));
 +			dev_info(dev, "registered dram carveout %pa+%zu (%s)\n",
 +				 &priv->dram_phys, priv->dram_size, name);
 +		}

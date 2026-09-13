@@ -22,8 +22,37 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 776 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 785 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 886 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 895 insertions(+)
+ create mode 100644 drivers/remoteproc/sunxi_rproc.c
+
+
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 21 Aug 2026 12:00:00 +0000
+Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
+
+Add remoteproc driver for the XuanTie E906/E907 RISC-V remote processors
+found on Allwinner A523, A527, and T527 SoCs.
+
+The driver integrates with the Common Clock Framework (CCF) and Reset
+Framework to manage co-processor clocks (bus, core, sram) and resets
+(cfg, core, sram), programs the core boot vector (STA_ADD_REG), maps
+internal TCM and dedicated SRAM windows, and connects with hardware
+mailboxes (CPUX_MSGBOX) for standard VirtIO RPMsg IPC.
+
+Cc: Bjorn Andersson <andersson@kernel.org>
+Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
+Cc: Jernej Skrabec <jernej.skrabec@gmail.com>
+Cc: Samuel Holland <samuel@sholland.org>
+Cc: linux-remoteproc@vger.kernel.org
+Cc: linux-arm-kernel@lists.infradead.org
+Cc: linux-sunxi@lists.linux.dev
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/remoteproc/Kconfig       |   8 +
+ drivers/remoteproc/Makefile      |   1 +
+ drivers/remoteproc/sunxi_rproc.c | 882 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 892 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -51,7 +80,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,776 @@
+@@ -0,0 +1,886 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -449,7 +478,13 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +				*is_iomem = true;
 +			return priv->r_sram1_va + (da - priv->r_sram1_phys);
 +		}
-+		/* Core DA view: contiguous bank at 0x40040000 */
++		/* Core DA view: 0x40000000 (Space 1) and 0x40040000 */
++		if (da >= 0x40000000 &&
++		    (da + len) <= (0x40000000 + priv->r_sram1_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->r_sram1_va + (da - 0x40000000);
++		}
 +		if (da >= 0x40040000 &&
 +		    (da + len) <= (0x40040000 + priv->r_sram1_size)) {
 +			if (is_iomem)
@@ -651,6 +686,93 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	return 0;
 +}
 +
++static int sunxi_rproc_parse_memory_regions(struct rproc *rproc)
++{
++	struct device *dev = rproc->dev.parent;
++	struct device_node *np = dev->of_node;
++	struct sunxi_rproc *priv = rproc->priv;
++	int num_rmems;
++	int i;
++
++	if (!np)
++		return 0;
++
++	num_rmems = of_count_phandle_with_args(np, "memory-region", NULL);
++	if (num_rmems <= 0)
++		return 0;
++
++	/* Bind default DMA pool for dynamic allocations (e.g. vdev0 vrings/buffers) */
++	if (of_reserved_mem_device_init(dev) == 0)
++		priv->has_reserved_mem = true;
++	else
++		dev_dbg(dev, "no dedicated DMA pool assigned from reserved-memory\n");
++
++	/* Register all reserved-memory regions as formal remoteproc carveouts */
++	for (i = 0; i < num_rmems; i++) {
++		struct device_node *rmem_np;
++		struct resource res;
++		const char *name = NULL;
++		struct rproc_mem_entry *mem;
++		void *va;
++
++		rmem_np = of_parse_phandle(np, "memory-region", i);
++		if (!rmem_np)
++			continue;
++
++		if (of_address_to_resource(rmem_np, 0, &res)) {
++			of_node_put(rmem_np);
++			continue;
++		}
++
++		of_property_read_string_index(np, "memory-region-names", i, &name);
++		if (!name)
++			name = rmem_np->name;
++
++		if (name && (strstr(name, "trace") || of_node_name_eq(rmem_np, "trace"))) {
++			priv->trace_phys = res.start;
++			priv->trace_size = resource_size(&res);
++			priv->trace_va = devm_memremap(dev, res.start, resource_size(&res),
++						       MEMREMAP_WB);
++			if (!priv->trace_va)
++				priv->trace_va = devm_ioremap_wc(dev, res.start,
++								 resource_size(&res));
++			dev_info(dev, "registered trace carveout %pa+%zu (%s)\n",
++				 &priv->trace_phys, priv->trace_size, name);
++		} else if (name && (strstr(name, "dram") || strstr(name, "vram"))) {
++			priv->dram_phys = res.start;
++			priv->dram_size = resource_size(&res);
++			priv->dram_va = devm_memremap(dev, res.start, resource_size(&res),
++						      MEMREMAP_WB);
++			if (!priv->dram_va)
++				priv->dram_va = devm_ioremap_wc(dev, res.start,
++								resource_size(&res));
++			dev_info(dev, "registered dram carveout %pa+%zu (%s)\n",
++				 &priv->dram_phys, priv->dram_size, name);
++		}
++
++		/* Reuse existing SRAM mapping if region overlaps, else ioremap */
++		if (priv->r_sram1_va && res.start == priv->r_sram1_phys)
++			va = priv->r_sram1_va;
++		else if (priv->r_sram_va && res.start == priv->r_sram_phys)
++			va = priv->r_sram_va;
++		else
++			va = devm_ioremap_wc(dev, res.start, resource_size(&res));
++
++		if (va) {
++			mem = rproc_mem_entry_init(dev, va, (dma_addr_t)res.start,
++						   resource_size(&res), (u32)res.start,
++						   NULL, NULL, "%s", name);
++			if (mem) {
++				mem->is_iomem = true;
++				rproc_add_carveout(rproc, mem);
++			}
++		}
++		of_node_put(rmem_np);
++	}
++
++	return 0;
++}
++
 +static int sunxi_rproc_probe(struct platform_device *pdev)
 +{
 +	struct device *dev = &pdev->dev;
@@ -719,12 +841,10 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (ret)
 +		return ret;
 +
-+	/* 4. Optional Reserved Memory Carveouts (for VirtIO/RPMsg DMA) */
-+	ret = of_reserved_mem_device_init(dev);
-+	if (ret == 0)
-+		priv->has_reserved_mem = true;
-+	else
-+		dev_dbg(dev, "no dedicated DMA pool assigned from reserved-memory (%d)\n", ret);
++	/* 4. Dynamic Reserved Memory Carveouts & DMA Pools from Device Tree */
++	ret = sunxi_rproc_parse_memory_regions(rproc);
++	if (ret)
++		return ret;
 +
 +	/* 5. Optional Hardware Crash Notification IRQ */
 +	crash_irq = platform_get_irq_byname_optional(pdev, "crash");
@@ -742,6 +862,24 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	priv->cl.rx_callback = sunxi_rproc_mb_rx_callback;
 +	priv->cl.tx_block = false;
 +	priv->cl.knows_txdone = false;
++
++	/*
++	 * If the hardware mailbox is assigned to userspace (generic-uio) or
++	 * lacks #mbox-cells, run RemoteProc in standalone mode.
++	 */
++	if (dev->of_node) {
++		struct device_node *mb_node = of_parse_phandle(dev->of_node, "mboxes", 0);
++
++		if (mb_node) {
++			if (of_device_is_compatible(mb_node, "generic-uio") ||
++			    !of_property_read_bool(mb_node, "#mbox-cells")) {
++				dev_info(dev, "Mailbox assigned to UIO; running standalone mode\n");
++				of_node_put(mb_node);
++				goto skip_mbox;
++			}
++			of_node_put(mb_node);
++		}
++	}
 +
 +	priv->tx_chan = mbox_request_channel_byname(&priv->cl, "tx");
 +	if (IS_ERR(priv->tx_chan)) {
@@ -765,6 +903,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
++skip_mbox:
 +	INIT_WORK(&priv->vq_work, sunxi_rproc_vq_work);
 +	platform_set_drvdata(pdev, rproc);
 +
