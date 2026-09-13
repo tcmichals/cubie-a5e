@@ -895,3 +895,30 @@ During the hardware validation process on the Radxa Cubie A5E silicon, four crit
 * **Problem**: Calling custom XuanTie cache invalidation opcodes (`.insn r 0x0b, 0, 0, x0, %0, x0`) on DDR memory triggered an illegal instruction exception (`mcause=0x00000002` at `0x3ffc099e`).
 * **Root Cause**: The synthesized E907 silicon revision on Allwinner T527 implements hardware cache-coherent AXI interfaces or does not expose vendor cache maintenance opcodes in Machine mode for the DRAM region.
 * **Resolution**: Replaced the custom opcodes with standard RISC-V memory barriers (`fence rw, rw` and `fence.i`), achieving rock-solid memory synchronization across 1,000+ packet streaming runs.
+
+### 9.5 Python UIO Device Memory Alignment (SIGBUS 135) & RPMsg Drain
+* **Problem**: In `ping_uio.py`, slice assignments (`sram_mmap[...] = ...`) and composite `struct.pack_into("<IIQQI10I", ...)` triggered immediate fatal Bus Errors (`EXIT=135`), while `ping_rpmsg.py` observed sequence mismatches if an earlier run was aborted mid-stream.
+* **Root Cause**: Python's `mmap` slice assignment and CPython's standard-size `struct` packing delegate to `memcpy()`, which glibc optimizes with 128-bit NEON vector instructions. On ARM64, `PROT_DEVICE_nGnRnE` (applied by UIO) strictly prohibits vector instructions. Separately, Linux RPMsg sockets buffer pending unread packets in the virtqueue until read.
+* **Resolution**:
+  - Rewrote `ping_uio.py` using `ctypes.Structure.from_buffer()`, ensuring 100% scalar native 32-bit/64-bit memory accesses that never trigger vector faults.
+  - Implemented non-blocking drain loops (`O_NONBLOCK` read until `EAGAIN`) upon opening `/dev/rpmsg0` in both `ping_rpmsg.cpp` and `ping_rpmsg.py`.
+
+---
+
+## 10. Multi-Profile Silicon Test Sweep & Companion App Verification
+
+The following results were recorded across all 3 hardware profiles on live silicon without code changes between tests:
+
+### 10.1 Comparative Performance Summary (512-Byte Buffers, 1,000 Packets)
+
+| Profile / Paradigm | Tool | Language | Avg RTT | Throughput | Integrity | Status |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: |
+| **Profile 1: DDR VirtIO** | `ping_rpmsg` | C++ | 182.43 $\mu\text{s}$ | 5,457 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 1: DDR VirtIO** | `ping_rpmsg.py` | Python | 126.54 $\mu\text{s}$ | 5,982 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 1: DDR VirtIO** | `ping_dram` | C++ | 191.84 $\mu\text{s}$ | 4,710 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 2: SRAM Space 1 VirtIO** | `ping_rpmsg` | C++ | 144.56 $\mu\text{s}$ | 6,880 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 2: SRAM Space 1 VirtIO** | `ping_rpmsg.py` | Python | 110.80 $\mu\text{s}$ | 6,464 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 3: Direct SRAM SPSC** | `ping_shm` | C++ | 14.47 $\mu\text{s}$ | 63,139 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 3: Userspace UIO** | `ping_uio` | C++ | 14.55 $\mu\text{s}$ | 60,498 msgs/s | PASS (0 errors) | **PASS** |
+| **Profile 3: Userspace UIO** | `ping_uio.py` | Python | 180.79 $\mu\text{s}$ | 4,480 msgs/s | PASS (0 errors) | **PASS** |
+
