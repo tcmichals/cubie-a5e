@@ -1,0 +1,1 @@
+#include "../testPingRpmsg/main.cpp"

@@ -57,6 +57,14 @@ extern "C" {
 #define CONFIG_RPROC_TRACE0_NAME       RPROC_TRACE_NAME
 #endif
 
+#ifndef CONFIG_VRING0_DA
+#define CONFIG_VRING0_DA               FW_RSC_ADDR_ANY
+#endif
+
+#ifndef CONFIG_VRING1_DA
+#define CONFIG_VRING1_DA               FW_RSC_ADDR_ANY
+#endif
+
 /*
  * Shared trace buffer placed in .trace_buffer section.
  * Defined in resource_table.c and exported for firmware logging (hal::Trace).

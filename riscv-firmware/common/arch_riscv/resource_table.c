@@ -42,14 +42,14 @@ const struct rpmsg_resource_table global_resource_table = {
         .reserved      = {0, 0},
         .vring = {
             {
-                .da       = FW_RSC_ADDR_ANY,
+                .da       = CONFIG_VRING0_DA,
                 .align    = VRING_ALIGN,
                 .num      = VRING_NUM_DESCS,
                 .notifyid = 0,
                 .reserved = 0,
             },
             {
-                .da       = FW_RSC_ADDR_ANY,
+                .da       = CONFIG_VRING1_DA,
                 .align    = VRING_ALIGN,
                 .num      = VRING_NUM_DESCS,
                 .notifyid = 1,

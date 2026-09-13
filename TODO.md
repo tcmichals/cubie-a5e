@@ -82,9 +82,11 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 ## 4. XuanTie E907 Advanced RemoteProc & IPC Tasks
 
 - [ ] **Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
-  - [ ] Set fixed `.da = 0x40000000` in SRAM Space 1 in `resource_table.c` for vrings and payload message buffers (instead of dynamic DDR CMA `FW_RSC_ADDR_ANY`).
-  - [ ] Verify `sunxi_rproc.c` handles SRAM mapping without invoking `dma_alloc_coherent()`.
-  - [ ] Run benchmark `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM on live hardware.
+  - [x] Declared configurable `.da = CONFIG_VRING0_DA` (`0x40040000`) and `.da = CONFIG_VRING1_DA` (`0x40042000`) in `resource_table.c` / `resource_table.h`.
+  - [x] Built and deployed `testPingRpmsgSram.elf` to live target silicon.
+  - [x] Identified Linux kernel requirement: Without pre-registered carveouts in `rproc->carveouts`, Linux `rproc_alloc_vring()` falls back to `dma_alloc_coherent()`, causing `"Allocated carveout doesn't fit device address request"` and writing unreachable host DDR addresses into `desc->addr`.
+  - [ ] Add static SRAM carveouts (`"vdev0vring0"`, `"vdev0vring1"`, `"vdev0buffer"`) in `sunxi_rproc.c` using `rproc_mem_entry_init(dev, priv->r_sram1_va, priv->r_sram1_phys, ...)` to eliminate `dma_alloc_coherent()` fallback.
+  - [ ] Run benchmark `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM and record latency (projected ~40–50 $\mu$s).
   - [ ] Complete the 4-tier architectural performance comparison matrix:
     - Pure SRAM SPSC Polling (`ping_shm`): **14.59 $\mu\text{s}$** avg RTT
     - VirtIO RPMsg in On-Chip SRAM (Projected): **~40–50 $\mu\text{s}$** avg RTT
