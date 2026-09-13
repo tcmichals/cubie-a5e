@@ -22,7 +22,20 @@ This document tracks active accomplishments, hardware proofs, and upcoming testi
 
 ## 2. Additional Testing Scope & Driver Enhancements (TODO)
 
-### Task 1: Automatic Crash Recovery (`rproc_report_crash`)
+### Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)
+* **Goal**: Configure VirtIO vrings and payload buffers to reside directly in on-chip SRAM Space 1 (`0x40000000` Core DA / `0x072C0000` Host PA) instead of dynamic DDR CMA allocation (`da = FW_RSC_ADDR_ANY`).
+* **Purpose**: Establish a complete 4-tier architectural performance comparison:
+  1. Bare-metal SRAM polling (`ping_shm`): **14.59 $\mu\text{s}$**
+  2. Linux VirtIO RPMsg in On-Chip SRAM (Projected): **~40 – 50 $\mu\text{s}$**
+  3. Linux VirtIO RPMsg in DDR CMA (`ping_rpmsg`): **175.64 $\mu\text{s}$**
+  4. Hybrid SRAM / DDR Carveout (`ping_dram`): **191.84 $\mu\text{s}$**
+* **Action Items**:
+  - [ ] Update `resource_table.c` to declare explicit `.da = 0x40000000` in SRAM Space 1 for Vring 0, Vring 1, and VirtIO payload message buffers.
+  - [ ] Ensure `sunxi_rproc.c` handles SRAM mapping without invoking `dma_alloc_coherent()`.
+  - [ ] Execute `ping_rpmsg -n 1000 -s 496` over SRAM VirtIO and measure latency, jitter, throughput, and bandwidth on physical silicon.
+  - [ ] Update comparison tables in `tests.md` and Part 2/3 articles.
+
+### Task 2: Automatic Crash Recovery (`rproc_report_crash`)
 * **Goal**: Enable automatic kernel detection and core restart when the E907 suffers a hardware exception or watchdog timeout.
 * **Current State**: `testCrash.elf` captures register autopsy to SRAM and halts in low-power `wfi`. Automatic recovery is disabled (`echo disabled > recovery`) to permit manual post-mortem inspection.
 * **Action Items**:
@@ -30,7 +43,7 @@ This document tracks active accomplishments, hardware proofs, and upcoming testi
   - [ ] Connect the notification to `rproc_report_crash(priv->rproc, RPROC_FATAL_ERROR)` in `sunxi_rproc.c`.
   - [ ] Verify that with `recovery = enabled`, Linux automatically reboots the E907 and restarts the default firmware.
 
-### Task 2: System Power Management (`pm_runtime` & Suspend/Resume)
+### Task 3: System Power Management (`pm_runtime` & Suspend/Resume)
 * **Goal**: Enable SoC deep sleep (suspend-to-RAM / S3) without crashing or corrupting running E907 firmware.
 * **Current State**: System suspend with active remoteproc is untested.
 * **Action Items**:
@@ -38,7 +51,7 @@ This document tracks active accomplishments, hardware proofs, and upcoming testi
   - [ ] Test `echo mem > /sys/power/state` while E907 is running.
   - [ ] Verify that on-chip SRAM retention preserves firmware state or cleanly reboots post-wake.
 
-### Task 3: Multi-Channel Concurrency & High-Load Stress Testing
+### Task 4: Multi-Channel Concurrency & High-Load Stress Testing
 * **Goal**: Stress test VirtIO RPMsg under heavy concurrent workload and multi-threading.
 * **Current State**: Benchmarked with a single active channel (`rpmsg-ping-channel`) and single-threaded ping loops.
 * **Action Items**:
@@ -46,7 +59,7 @@ This document tracks active accomplishments, hardware proofs, and upcoming testi
   - [ ] Build a multi-threaded stress utility running 10+ concurrent threads writing and reading `/dev/rpmsg0`..`/dev/rpmsgN`.
   - [ ] Measure lock contention, PREEMPT_RT latency degradation, and vring buffer exhaustion.
 
-### Task 4: Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up
+### Task 5: Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up
 * **Goal**: Extend RemoteProc support to the secondary DSP co-processor on Allwinner T527 / A527.
 * **Current State**: Driver currently targets XuanTie E907 core.
 * **Action Items**:

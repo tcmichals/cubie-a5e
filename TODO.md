@@ -65,19 +65,28 @@ See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platfor
 - [x] **VirtIO RPMsg over DDR DRAM**: Verified `dma_alloc_coherent()` DDR CMA buffers (`0xf2f80000`), mailbox doorbells, PREEMPT_RT deferred workqueue, and 1,000 round-trip 512B packets at 100% success (0 timeouts).
 - [x] **Standardized 512-Byte Apples-to-Apples Benchmarks**: Tested `ping_shm` (14.6 us RTT, 61.5 MB/s), `ping_dram` (191.8 us RTT, 4.6 MB/s), and `ping_rpmsg` (175.6 us RTT, 5.37 MB/s).
 - [x] **Exception Trapping & Isolation**: Verified `testCrash` captures register autopsy in SRAM while ARM host kernel remains stable.
-- [ ] **1. Automatic Crash Recovery (`rproc_report_crash`)**:
+- [ ] **1. Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
+  - [ ] Update firmware `.resource_table` with fixed Device Addresses (`.da = 0x40000000` in SRAM Space 1) for Vring 0, Vring 1, and VirtIO payload message buffers instead of dynamic DDR CMA (`FW_RSC_ADDR_ANY`).
+  - [ ] Ensure `sunxi_rproc.c` handles SRAM mapping for vrings and buffers without calling `dma_alloc_coherent()`.
+  - [ ] Benchmark `ping_rpmsg` with 512-byte buffer length over pure on-chip SRAM.
+  - [ ] Complete the 4-way architectural comparison matrix:
+    - Pure SRAM Polling (`ping_shm`): **14.59 $\mu\text{s}$**
+    - VirtIO in On-Chip SRAM (Projected): **~40 – 50 $\mu\text{s}$**
+    - VirtIO in DDR DRAM (`ping_rpmsg`): **175.64 $\mu\text{s}$**
+    - Hybrid SRAM/DDR Carveout (`ping_dram`): **191.84 $\mu\text{s}$**
+- [ ] **2. Automatic Crash Recovery (`rproc_report_crash`)**:
   - [ ] Implement mailbox/interrupt notification from E907 trap handler to ARM Linux host.
   - [ ] Wire `rproc_report_crash()` in `sunxi_rproc.c` to trigger automatic core recovery/reboot when `recovery = enabled`.
   - [ ] Test automatic recovery cycle on target silicon when `testCrash.elf` fires an illegal instruction.
-- [ ] **2. System Power Management (Suspend / Resume / `pm_runtime`)**:
+- [ ] **3. System Power Management (Suspend / Resume / `pm_runtime`)**:
   - [ ] Add runtime PM / system suspend callbacks to `sunxi_rproc.c`.
   - [ ] Test system deep sleep (`echo mem > /sys/power/state`) while XuanTie E907 is running.
   - [ ] Verify core state retention, SRAM memory persistence, and clean resume without bus lockup or clock stall.
-- [ ] **3. Multi-Channel Concurrency & High-Load Stress Testing**:
+- [ ] **4. Multi-Channel Concurrency & High-Load Stress Testing**:
   - [ ] Create multiple concurrent RPMsg channels (e.g., `rpmsg-ping-channel`, `rpmsg-telemetry`, `rpmsg-control`) multiplexed over VirtIO vrings.
   - [ ] Multi-threaded user-space stress test with 10+ concurrent worker threads hammering `/dev/rpmsg0`..`/dev/rpmsgN`.
   - [ ] Evaluate lock contention, ring buffer saturation, and PREEMPT_RT latency degradation under 100% CPU load.
-- [ ] **4. Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up**:
+- [ ] **5. Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up**:
   - [ ] Add HiFi4 DSP compatible string and memory window (`0x00020000`) in `sunxi_rproc.c` / Device Tree.
   - [ ] Validate DSP clock/reset domain sequencing and firmware loading.
 
