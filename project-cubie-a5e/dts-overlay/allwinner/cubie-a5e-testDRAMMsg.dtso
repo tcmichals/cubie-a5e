@@ -1,0 +1,19 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *                RADXA CUBIE A5E — TESTDRAMMSG OVERLAY
+ * ============================================================================
+ * Hardware Overlay for testDRAMMsg firmware application:
+ * High-throughput Hybrid SRAM SPSC control + 1 MB DDR DRAM DMA carveout.
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testDRAMMsg
+ * ============================================================================
+ */
+
+&rproc {
+    memory-region = <&rproc_vdev>;
+    status = "okay";
+};

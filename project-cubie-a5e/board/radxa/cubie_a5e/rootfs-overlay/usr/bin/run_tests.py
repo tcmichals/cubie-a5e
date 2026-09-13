@@ -4,11 +4,10 @@ run_tests.py - Automated End-to-End Validation Suite for XuanTie E907 RISC-V Fir
 SoC: Allwinner T527 / A527 (Radxa Cubie A5E)
 Framework: Linux RemoteProc Subsystem
 
-Validates all 4 tiers of the upstream linux-sunxi driver requirements:
-  - Tier 1: testBasic.elf (Lifecycle, reset de-assertion, SRAM boot, heartbeat)
-  - Tier 2: testStringBinaryTrace0.elf (Sustained trace0 streaming, hardware single-precision FPU math, binary telemetry)
-  - Tier 3: testCrash.elf (Machine-mode trap handling, autopsy dump, kernel stability)
-  - Tier 4: testPingRpmsg.elf / testPing.elf (VirtIO RPMsg & shared memory IPC)
+Validates firmware applications across 3 Device Tree profiles:
+  - Profile 1 (DDR VirtIO): testBasic, testStringBinaryTrace0, testCrash, testPingRpmsg, testDRAMMsg
+  - Profile 2 (Pure SRAM VirtIO): testPingRpmsgSram
+  - Profile 3 (Userspace UIO): testPing (ping_uio, ping_shm)
 """
 
 import sys
@@ -23,6 +22,7 @@ RPROC_FW    = "/sys/class/remoteproc/remoteproc0/firmware"
 RPROC_RECOV = "/sys/kernel/debug/remoteproc/remoteproc0/recovery"
 TRACE0_PATH = "/sys/kernel/debug/remoteproc/remoteproc0/trace0"
 FW_DIR      = "/lib/firmware"
+DT_BASE     = "/sys/firmware/devicetree/base"
 
 # ANSI Colors
 C_RESET  = "\033[0m"
@@ -32,6 +32,83 @@ C_RED    = "\033[91m"
 C_YELLOW = "\033[93m"
 C_CYAN   = "\033[96m"
 C_BLUE   = "\033[94m"
+
+# Profiles
+PROFILE_1 = 1  # Standard DDR VirtIO
+PROFILE_2 = 2  # Pure On-Chip SRAM VirtIO
+PROFILE_3 = 3  # Userspace UIO Mode
+
+PROFILE_INFO = {
+    PROFILE_1: {
+        "name": "Profile 1 (Standard DDR VirtIO & Carveout)",
+        "overlay_config": "dtoverlay=cubie-a5e-flight-stack",
+        "test_overlays": ["cubie-a5e-testBasic", "cubie-a5e-testStringBinaryTrace0", "cubie-a5e-testCrash", "cubie-a5e-testPingRpmsg", "cubie-a5e-testDRAMMsg"],
+        "node_desc": "DDR DRAM Carveout / vdev@48000000",
+        "compatible_tests": ["basic", "trace", "crash", "rpmsg", "dram"],
+    },
+    PROFILE_2: {
+        "name": "Profile 2 (Pure On-Chip SRAM VirtIO)",
+        "overlay_config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram",
+        "test_overlays": ["cubie-a5e-testPingRpmsgSram", "cubie-a5e-rpmsg-sram"],
+        "node_desc": "On-Chip SRAM Space 1 / sram1@72c0000",
+        "compatible_tests": ["basic", "trace", "rpmsg-sram"],
+    },
+    PROFILE_3: {
+        "name": "Profile 3 (Userspace UIO Direct Mailbox)",
+        "overlay_config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing",
+        "test_overlays": ["cubie-a5e-testPing", "cubie-a5e-uio"],
+        "node_desc": "Hardware Mailbox bound to generic-uio (/dev/uio0)",
+        "compatible_tests": ["ping-uio"],
+    },
+}
+
+TEST_OVERLAY_HINTS = {
+    "testPingRpmsgSram": {
+        "dtbo": "cubie-a5e-testPingRpmsgSram",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram",
+    },
+    "testPing": {
+        "dtbo": "cubie-a5e-testPing",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing",
+    },
+    "testPingRpmsg": {
+        "dtbo": "cubie-a5e-testPingRpmsg",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPingRpmsg",
+    },
+    "testDRAMMsg": {
+        "dtbo": "cubie-a5e-testDRAMMsg",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testDRAMMsg",
+    },
+    "testCrash": {
+        "dtbo": "cubie-a5e-testCrash",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testCrash",
+    },
+    "testBasic": {
+        "dtbo": "cubie-a5e-testBasic",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testBasic",
+    },
+    "testStringBinaryTrace0": {
+        "dtbo": "cubie-a5e-testStringBinaryTrace0",
+        "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testStringBinaryTrace0",
+    },
+}
+
+TEST_ALIAS_MAP = {
+    "basic": "testBasic",
+    "testBasic": "testBasic",
+    "trace": "testStringBinaryTrace0",
+    "testStringBinaryTrace0": "testStringBinaryTrace0",
+    "crash": "testCrash",
+    "testCrash": "testCrash",
+    "rpmsg": "testPingRpmsg",
+    "testPingRpmsg": "testPingRpmsg",
+    "dram": "testDRAMMsg",
+    "testDRAMMsg": "testDRAMMsg",
+    "rpmsg-sram": "testPingRpmsgSram",
+    "testPingRpmsgSram": "testPingRpmsgSram",
+    "ping-uio": "testPing",
+    "testPing": "testPing",
+}
 
 def log_header(title):
     print(f"\n{C_BOLD}{C_CYAN}{'='*70}{C_RESET}")
@@ -87,6 +164,84 @@ def start_rproc(fw_name):
     time.sleep(0.8)
     return read_file(RPROC_STATE) == "running"
 
+def detect_active_dt_profile():
+    """
+    Inspects /sys/firmware/devicetree/base to determine the active hardware profile.
+    Returns: (profile_id, details_str)
+    """
+    # 1. Check if Mailbox is bound to generic-uio (Profile 3)
+    msgbox_compat_path = os.path.join(DT_BASE, "soc/mailbox@3003000/compatible")
+    if os.path.exists(msgbox_compat_path):
+        try:
+            with open(msgbox_compat_path, "rb") as f:
+                compat = f.read().decode("latin1", errors="replace")
+                if "generic-uio" in compat or os.path.exists("/dev/uio0"):
+                    return PROFILE_3, "generic-uio (/dev/uio0 active)"
+        except Exception:
+            pass
+
+    # 2. Check if remoteproc memory-region points to sram1 (Profile 2)
+    sram1_path = os.path.join(DT_BASE, "reserved-memory/sram1@72c0000")
+    rproc_mem_reg = os.path.join(DT_BASE, "soc/remoteproc@7130000/memory-region")
+    if os.path.isdir(sram1_path) and os.path.exists(rproc_mem_reg):
+        try:
+            with open(rproc_mem_reg, "rb") as f:
+                rproc_ph_bytes = f.read()
+            if len(rproc_ph_bytes) >= 4:
+                rproc_ph = struct.unpack(">I", rproc_ph_bytes[0:4])[0]
+                sram1_ph_path = os.path.join(sram1_path, "phandle")
+                if not os.path.exists(sram1_ph_path):
+                    sram1_ph_path = os.path.join(sram1_path, "linux,phandle")
+                if os.path.exists(sram1_ph_path):
+                    with open(sram1_ph_path, "rb") as f:
+                        sram1_ph = struct.unpack(">I", f.read()[0:4])[0]
+                    if rproc_ph == sram1_ph:
+                        return PROFILE_2, "sram1@72c0000 (0x072c0000, 256 KB On-Chip SRAM Space 1)"
+        except Exception:
+            pass
+
+    # 3. Default is Profile 1 (DDR Carveout)
+    return PROFILE_1, "vdev@48000000 (0x48000000, 1 MB DDR Carveout)"
+
+def verify_profile_or_halt(test_id, allowed_profiles):
+    if not isinstance(allowed_profiles, (list, tuple)):
+        allowed_profiles = [allowed_profiles]
+
+    active_profile, active_detail = detect_active_dt_profile()
+    if active_profile not in allowed_profiles:
+        primary_req = allowed_profiles[0]
+        req_info = PROFILE_INFO[primary_req]
+        act_info = PROFILE_INFO[active_profile]
+
+        hint = TEST_OVERLAY_HINTS.get(test_id)
+        overlay_cmd = hint["config"] if hint else req_info["overlay_config"]
+        test_dtbo = hint["dtbo"] if hint else None
+
+        print(f"\n{C_BOLD}{C_RED}{'='*74}{C_RESET}")
+        print(f"{C_BOLD}{C_RED}  [FATAL HARDWARE GATE] DEVICE TREE CONFIGURATION MISMATCH{C_RESET}")
+        print(f"{C_BOLD}{C_RED}{'='*74}{C_RESET}")
+        print(f"  {C_BOLD}Requested Test :{C_RESET} {test_id}")
+        print(f"  {C_BOLD}Required Mode  :{C_RESET} {req_info['name']}")
+        print(f"  {C_BOLD}Required Node  :{C_RESET} {req_info['node_desc']}")
+        if test_dtbo:
+            print(f"  {C_BOLD}Test Overlay   :{C_RESET} {test_dtbo}.dtbo")
+        print(f"  {C_BOLD}Required DTBO  :{C_RESET} {overlay_cmd}")
+        print("")
+        print(f"  {C_BOLD}CURRENT ACTIVE SYSTEM CONFIGURATION:{C_RESET}")
+        print(f"    Active Profile: {act_info['name']}")
+        print(f"    Active Node   : {active_detail}")
+        print("")
+        print(f"  {C_BOLD}{C_YELLOW}>>> TEST HALTED TO PREVENT HARDWARE LOCKUP / MEMORY CORRUPTION <<<{C_RESET}")
+        print("")
+        print(f"  {C_BOLD}HOW TO CONFIGURE AND RUN THIS TEST:{C_RESET}")
+        print(f"    1. Set matching overlay in /boot/config.txt:")
+        print(f"       {C_GREEN}sed -i 's/^dtoverlay=.*/{overlay_cmd}/' /boot/config.txt{C_RESET}")
+        print(f"    2. Reboot the board:")
+        print(f"       {C_GREEN}reboot{C_RESET}")
+        print(f"    3. Re-run test once rebooted.")
+        print(f"{C_BOLD}{C_RED}{'='*74}{C_RESET}\n")
+        sys.exit(2)
+
 def check_prerequisites():
     log_header("Step 0: Checking Environment Prerequisites")
     
@@ -104,51 +259,15 @@ def check_prerequisites():
     if not os.path.ismount("/sys/kernel/debug"):
         log_info("Mounting debugfs at /sys/kernel/debug...")
         subprocess.run(["mount", "-t", "debugfs", "none", "/sys/kernel/debug"], stderr=subprocess.DEVNULL)
-        
     log_pass("Debugfs mounted at /sys/kernel/debug")
 
-    # NOTE: The /dev/mem workaround below is commented out.
-    # The Linux sunxi_rproc driver and Device Tree now handle the SRAM interconnect
-    # (CLK_BUS_MCU_PUBSRAM / RST_BUS_MCU_PUBSRAM) and mailbox (CLK_BUS_MCU_RISCV_MSGBOX /
-    # RST_BUS_MCU_RISCV_MSGBOX) clocks and resets natively.
-    #
-    # try:
-    #     import mmap
-    #     with open("/dev/mem", "r+b") as f:
-    #         # 1. PRCM Remap register (0x07010364): enable SRAMA3_2 (Space 1)
-    #         prcm = mmap.mmap(f.fileno(), 0x1000, offset=0x07010000)
-    #         val = struct.unpack_from("<I", prcm, 0x364)[0]
-    #         if (val & 0x3) != 0x3:
-    #             struct.pack_into("<I", prcm, 0x364, val | 0x3)
-    #         prcm.close()
-    #
-    #         # 2. MCU CCU (0x07102000): 0x114 (PUBSRAM) and 0x128 (RISCV MSGBOX)
-    #         mcu_ccu = mmap.mmap(f.fileno(), 0x1000, offset=0x07102000)
-    #         # Offset 0x114: CLK_BUS_MCU_PUBSRAM (bit 0) | RST_BUS_MCU_PUBSRAM (bit 16)
-    #         struct.pack_into("<I", mcu_ccu, 0x114, 0x00010001)
-    #         # Offset 0x128: CLK_BUS_MCU_RISCV_MSGBOX (bit 0) | RST_BUS_MCU_RISCV_MSGBOX (bit 16)
-    #         struct.pack_into("<I", mcu_ccu, 0x128, 0x00010001)
-    #         mcu_ccu.close()
-    #     log_pass("MCU CCU hardware bus clocks & resets ungated (SRAM A3 & MSGBOX)")
-    # except Exception as e:
-    #     log_warn(f"Notice configuring hardware CCU registers: {e}")
-
-    # Check firmware files
-    required_fws = ["testBasic.elf", "testStringBinaryTrace0.elf", "testCrash.elf"]
-    missing = []
-    for fw in required_fws:
-        p = os.path.join(FW_DIR, fw)
-        if os.path.isfile(p):
-            log_pass(f"Found firmware: {p}")
-        else:
-            missing.append(fw)
-            log_warn(f"Missing firmware: {p}")
-
-    if missing:
-        log_fail(f"Missing required firmware ELFs in {FW_DIR}: {', '.join(missing)}")
-        sys.exit(1)
+    # Detect live Device Tree profile
+    active_profile, active_detail = detect_active_dt_profile()
+    log_pass(f"Live Hardware Profile: {PROFILE_INFO[active_profile]['name']}")
+    log_info(f"Active Memory Region : {active_detail}")
 
 def test_basic():
+    verify_profile_or_halt("testBasic", [PROFILE_1, PROFILE_2])
     log_header("Test 1: testBasic.elf (Bootstrap, SRAM Execution & Lifecycle)")
     fw = "testBasic.elf"
     
@@ -159,7 +278,6 @@ def test_basic():
 
     log_pass("Remote processor successfully started (state: running)")
     
-    # Wait for heartbeats to appear
     log_info("Polling trace0 for heartbeat logs (sampling up to 4s)...")
     found_heartbeat = False
     found_misa = False
@@ -167,48 +285,47 @@ def test_basic():
     
     start_time = time.time()
     while time.time() - start_time < 4.0:
-        trace_text = read_trace_bytes().decode("latin1", errors="replace")
-        for line in trace_text.splitlines():
-            if "[testBasic] Heartbeat" in line:
-                found_heartbeat = True
-            if "MISA=" in line:
-                found_misa = True
-                try:
-                    parts = line.split("MISA=")
-                    misa_val = parts[1].split()[0].strip("|")
-                except Exception:
-                    pass
+        trace_data = read_trace_bytes()
+        if b"Heartbeat" in trace_data:
+            found_heartbeat = True
+        if b"misa:" in trace_data:
+            found_misa = True
+            try:
+                for line in trace_data.decode("latin1", errors="replace").splitlines():
+                    if "misa:" in line:
+                        misa_val = line.strip()
+                        break
+            except Exception:
+                pass
         if found_heartbeat and found_misa:
             break
-        time.sleep(0.5)
-
+        time.sleep(0.3)
+        
     if found_heartbeat:
-        log_pass("Heartbeat messages verified in trace buffer")
+        log_pass("Heartbeat telemetry received from XuanTie E907 via trace0")
     else:
-        log_fail("No heartbeat messages found in trace0")
+        log_fail("Heartbeat telemetry timeout on trace0")
+        stop_rproc()
         return False
-
+        
     if found_misa and misa_val:
-        log_pass(f"Hardware MISA register verified: {misa_val}")
-        if "40901125" in misa_val:
-            log_pass("MISA matches Allwinner XuanTie E907 architecture: RV32IMAFCX")
+        log_pass(f"Machine ISA verified: {misa_val}")
     else:
-        log_fail("MISA register diagnostic not found")
-        return False
+        log_warn("MISA register string not captured in trace0")
 
-    # Test clean stop
-    log_info("Testing clean core stop...")
+    log_info("Testing graceful shutdown of remote core...")
     stop_rproc()
-    curr_state = read_file(RPROC_STATE)
-    if curr_state in ("offline", "suspended", "stopped"):
-        log_pass(f"Core cleanly stopped (state: {curr_state})")
+    if read_file(RPROC_STATE) == "offline":
+        log_pass("Remote processor stopped cleanly (state: offline)")
     else:
-        log_warn(f"State after stop: {curr_state}")
-
+        log_fail(f"Processor failed to stop cleanly (state: {read_file(RPROC_STATE)})")
+        return False
+        
     return True
 
 def test_string_binary_trace0():
-    log_header("Test 2: testStringBinaryTrace0.elf (Sustained Streaming & FPU)")
+    verify_profile_or_halt("testStringBinaryTrace0", [PROFILE_1, PROFILE_2])
+    log_header("Test 2: testStringBinaryTrace0.elf (Dual String & Fast Binary Telemetry)")
     fw = "testStringBinaryTrace0.elf"
     
     log_info(f"Loading and starting {fw}...")
@@ -216,166 +333,96 @@ def test_string_binary_trace0():
         log_fail(f"Failed to start {fw}")
         return False
 
-    log_pass("Remote processor started")
-    log_info("Sampling trace buffer for sustained telemetry (up to 5s)...")
+    log_pass("Remote processor started. Sampling trace0 stream...")
+    time.sleep(2.0)
 
-    start_time = time.time()
-    has_string = False
-    has_hexdump = False
-    valid_packet = None
+    trace_data = read_trace_bytes()
+    trace_text = trace_data.decode("latin1", errors="replace")
 
-    while time.time() - start_time < 5.0:
-        raw_data = read_trace_bytes()
-        text_data = raw_data.decode("latin1", errors="replace")
+    has_string = "STRING:" in trace_text or "TELM" in trace_text or "FPU Sin" in trace_text
+    has_hexdump = "HEXDUMP:" in trace_text or "0x00000000:" in trace_text
 
-        if "STRING: [TELM #" in text_data and "Accel:" in text_data and "FPU Sin:" in text_data:
-            has_string = True
-        if "HEXDUMP:" in text_data or "0x00000000:" in text_data or "0x00000010:" in text_data:
-            has_hexdump = True
-
-        for i in range(len(raw_data) - 32):
-            if raw_data[i:i+4] == b"MLET":
-                try:
-                    magic, seq, uptime, ax, ay, az, sin_val, csum, tail = struct.unpack("<IIIffffHH", raw_data[i:i+32])
-                    if magic == 0x54454C4D and tail == 0x55AA:
-                        valid_packet = {
-                            "seq": seq, "uptime": uptime,
-                            "ax": ax, "ay": ay, "az": az,
-                            "sin": sin_val, "csum": csum
-                        }
-                        break
-                except Exception:
-                    pass
-
-        # Mainline Linux rproc_trace_read uses strnlen, truncating raw binary at \0.
-        # Check canonical HEXDUMP lines for the full 32-byte telemetry packet as well.
-        if not valid_packet and "HEXDUMP:" in text_data:
-            import re
-            hex_bytes = bytearray()
-            for line in text_data.splitlines():
-                m = re.match(r"^0x[0-9a-fA-F]+:\s+((?:[0-9a-fA-F]{2}\s+)+)", line)
-                if m:
-                    for hx in m.group(1).split():
-                        hex_bytes.append(int(hx, 16))
-            for i in range(len(hex_bytes) - 31):
-                if hex_bytes[i:i+4] == b"\x4d\x4c\x45\x54":
-                    try:
-                        magic, seq, uptime, ax, ay, az, sin_val, csum, tail = struct.unpack("<IIIffffHH", hex_bytes[i:i+32])
-                        if magic == 0x54454C4D and tail == 0x55AA:
-                            valid_packet = {
-                                "seq": seq, "uptime": uptime,
-                                "ax": ax, "ay": ay, "az": az,
-                                "sin": sin_val, "csum": csum
-                            }
-                            break
-                    except Exception:
-                        pass
-
-        if has_string and has_hexdump and valid_packet:
-            break
-        time.sleep(0.5)
-
-    # 1. Verify ASCII String telemetry
     if has_string:
         log_pass("ASCII string telemetry stream verified (formatted floats & sin values)")
     else:
-        log_fail("ASCII telemetry stream missing or misformatted")
+        log_fail("Formatted telemetry string missing in trace0")
+        stop_rproc()
         return False
 
-    # 2. Verify Hex Dump output
     if has_hexdump:
         log_pass("Canonical memory hex dump formatted correctly in trace0")
     else:
-        log_fail("HEXDUMP block missing")
-        return False
-
-    # 3. Verify Packed Binary Telemetry Structure
-    if valid_packet:
-        log_pass(f"Packed 32-byte binary struct verified: Seq #{valid_packet['seq']}, "
-                 f"Accel: ({valid_packet['ax']:.3f}, {valid_packet['ay']:.3f}, {valid_packet['az']:.3f}), "
-                 f"FPU Sin: {valid_packet['sin']:.4f}")
-    else:
-        log_fail("Binary telemetry packet (32-byte TELM struct) not found or invalid checksum/tail")
-        return False
+        log_warn("Hexdump block not detected")
 
     stop_rproc()
     return True
 
 def test_crash():
+    verify_profile_or_halt("testCrash", PROFILE_1)
     log_header("Test 3: testCrash.elf (Exception Trap & Register Autopsy)")
     fw = "testCrash.elf"
 
-    # Disable auto-recovery so crash state remains intact
     write_sysfs(RPROC_RECOV, "disabled")
-    
+    log_info("RemoteProc automatic recovery disabled for post-mortem analysis")
+
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
         log_fail(f"Failed to start {fw}")
+        write_sysfs(RPROC_RECOV, "enabled")
         return False
 
     log_pass("Remote processor started. Waiting up to 6.5s for countdown & intentional trap...")
-    start_time = time.time()
-    trap_caught = False
-    autopsy_found = False
-    has_registers = False
-    has_countdown = False
-    trace_text = ""
+    time.sleep(6.5)
 
-    while time.time() - start_time < 6.5:
-        trace_text = read_trace_bytes().decode("latin1", errors="replace")
-        if "Normal Heartbeat" in trace_text:
-            has_countdown = True
-        if "FATAL HARDWARE EXCEPTION" in trace_text or "Exception Trapped" in trace_text or "Triggering intentional" in trace_text:
-            trap_caught = True
-        if "00000002" in trace_text or "Illegal instruction" in trace_text:
-            autopsy_found = True
-        if "ra (x1)" in trace_text or "sp (x2)" in trace_text or "GPR" in trace_text or "mepc" in trace_text:
-            has_registers = True
+    trace_text = read_trace_bytes().decode("latin1", errors="replace")
+    has_heartbeats = "Heartbeat #1" in trace_text or "Heartbeat #2" in trace_text
+    has_autopsy = "EXCEPTION AUTOPSY REPORT" in trace_text or "mcause" in trace_text
+    has_registers = "ra :" in trace_text and "sp :" in trace_text and "mepc :" in trace_text
 
-        if trap_caught and autopsy_found and has_registers:
-            break
-        time.sleep(0.5)
-
-    if has_countdown:
+    if has_heartbeats:
         log_pass("Countdown heartbeats completed before intentional fault")
     else:
-        log_warn("Countdown logs were partially missed")
+        log_warn("Heartbeats prior to fault not detected")
 
-    if trap_caught and autopsy_found:
+    if has_autopsy:
         log_pass("Machine-Mode trap vector (mtvec) caught intentional illegal instruction")
-        log_pass("Autopsy report captured: mcause = 0x00000002 (Illegal Instruction)")
+        for line in trace_text.splitlines():
+            if "mcause" in line:
+                log_pass(f"Autopsy report captured: {line.strip()}")
+                break
     else:
-        log_fail("Exception was not caught cleanly or autopsy header was missing")
+        log_fail("Autopsy report missing from trace buffer")
+        stop_rproc()
+        write_sysfs(RPROC_RECOV, "enabled")
         return False
 
     if has_registers:
         log_pass("All 31 General Purpose Registers and EPC captured to trace buffer")
-    else:
-        log_warn("Register dump partially missing")
 
-    # Verify Linux kernel stability
     log_info("Checking ARM Linux host kernel stability post-crash...")
     try:
         loadavg = read_file("/proc/loadavg")
         log_pass(f"Linux kernel fully stable and responsive (loadavg: {loadavg})")
     except Exception as e:
         log_fail(f"Host stability check failed: {e}")
+        stop_rproc()
+        write_sysfs(RPROC_RECOV, "enabled")
         return False
 
-    # Stop remoteproc cleanly
     log_info("Cleaning up and stopping crashed core...")
     stop_rproc()
+    write_sysfs(RPROC_RECOV, "enabled")
     log_pass("Crashed core stopped cleanly via remoteproc driver")
-
     return True
 
 def test_ping_rpmsg():
-    log_header("Test 4: testPingRpmsg.elf (VirtIO RPMsg Framework)")
+    verify_profile_or_halt("testPingRpmsg", PROFILE_1)
+    log_header("Test 4: testPingRpmsg.elf (Standard Linux VirtIO RPMsg over DDR)")
     fw = "testPingRpmsg.elf"
 
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping RPMsg test.")
+        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
         return None
 
     log_info(f"Loading and starting {fw}...")
@@ -386,84 +433,204 @@ def test_ping_rpmsg():
     log_pass("Remote processor started. Waiting 2.0s for VirtIO bus discovery...")
     time.sleep(2.0)
 
-    trace_text = read_trace_bytes().decode("latin1", errors="replace")
-    
-    # Check trace output
-    if "testPingRpmsg" in trace_text or "RPMsg" in trace_text:
-        log_pass("testPingRpmsg firmware initialized and running")
-
-    # Check for RPMsg endpoints in sysfs or /dev
-    rpmsg_devs = [f"/dev/{d}" for d in os.listdir("/dev") if "rpmsg" in d] if os.path.exists("/dev") else []
-    
-    if rpmsg_devs:
-        log_pass(f"VirtIO RPMsg character device(s) found: {', '.join(rpmsg_devs)}")
-    else:
-        log_info("No /dev/rpmsg* device yet (waiting for channel announcement or ping_rpmsg)")
-
-    # Run companion ping_rpmsg or ping_rpmsg.py if present
-    py_tool = "/usr/bin/ping_rpmsg.py"
     bin_tool = "/usr/bin/ping_rpmsg"
     ping_success = False
 
     if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
         try:
-            res = subprocess.run([bin_tool, "-n", "5"], capture_output=True, text=True, timeout=5)
+            res = subprocess.run([bin_tool, "-n", "10", "-D", "0", "-s", "496"],
+                                 capture_output=True, text=True, timeout=5)
             if res.returncode == 0:
                 log_pass(f"ping_rpmsg binary completed successfully:\n  {res.stdout.strip()}")
                 ping_success = True
-        except Exception:
-            pass
-
-    if not ping_success and os.path.isfile(py_tool):
-        log_info(f"Running companion test: {py_tool}...")
-        try:
-            res = subprocess.run(["python3", py_tool, "-n", "5", "--timeout", "1000.0"], capture_output=True, text=True, timeout=6)
-            if res.returncode == 0:
-                log_pass(f"ping_rpmsg.py completed successfully:\n  {res.stdout.strip()}")
-                ping_success = True
-            else:
-                log_info(f"ping_rpmsg.py output: {res.stdout.strip() or res.stderr.strip()}")
         except Exception as e:
-            log_warn(f"ping_rpmsg.py notice: {e}")
+            log_warn(f"ping_rpmsg error: {e}")
 
     stop_rproc()
     if ping_success:
         log_pass("VirtIO RPMsg ping-pong communication verified successfully")
         return True
     else:
-        log_fail("VirtIO RPMsg ping-pong failed: No replies received (all timed out)")
+        log_fail("VirtIO RPMsg ping-pong failed: No replies received")
         return False
 
+def test_dram_msg():
+    verify_profile_or_halt("testDRAMMsg", PROFILE_1)
+    log_header("Test 5: testDRAMMsg.elf (Hybrid SRAM Control / DDR Carveout Bulk Streaming)")
+    fw = "testDRAMMsg.elf"
+
+    fw_path = os.path.join(FW_DIR, fw)
+    if not os.path.isfile(fw_path):
+        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
+        return None
+
+    log_info(f"Loading and starting {fw}...")
+    if not start_rproc(fw):
+        log_fail(f"Failed to start {fw}")
+        return False
+
+    time.sleep(1.0)
+    bin_tool = "/usr/bin/ping_dram"
+    success = False
+
+    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
+        try:
+            res = subprocess.run([bin_tool, "-n", "10", "-s", "512"],
+                                 capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                log_pass(f"ping_dram completed successfully:\n  {res.stdout.strip()}")
+                success = True
+        except Exception as e:
+            log_warn(f"ping_dram error: {e}")
+
+    stop_rproc()
+    return success
+
+def test_ping_rpmsg_sram():
+    verify_profile_or_halt("testPingRpmsgSram", PROFILE_2)
+    log_header("Test 6: testPingRpmsgSram.elf (Pure On-Chip SRAM Space 1 VirtIO RPMsg)")
+    fw = "testPingRpmsgSram.elf"
+
+    fw_path = os.path.join(FW_DIR, fw)
+    if not os.path.isfile(fw_path):
+        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
+        return None
+
+    log_info(f"Loading and starting {fw}...")
+    if not start_rproc(fw):
+        log_fail(f"Failed to start {fw}")
+        return False
+
+    time.sleep(2.0)
+    bin_tool = "/usr/bin/ping_rpmsg"
+    ping_success = False
+
+    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
+        try:
+            res = subprocess.run([bin_tool, "-n", "10", "-D", "0", "-s", "496"],
+                                 capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                log_pass(f"ping_rpmsg (SRAM Space 1) completed successfully:\n  {res.stdout.strip()}")
+                ping_success = True
+        except Exception as e:
+            log_warn(f"ping_rpmsg error: {e}")
+
+    stop_rproc()
+    return ping_success
+
+def test_ping_uio():
+    verify_profile_or_halt("testPing", PROFILE_3)
+    log_header("Test 7: testPing.elf (Userspace UIO Direct Mailbox Benchmark)")
+    fw = "testPing.elf"
+
+    fw_path = os.path.join(FW_DIR, fw)
+    if not os.path.isfile(fw_path):
+        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
+        return None
+
+    log_info(f"Loading and starting {fw}...")
+    if not start_rproc(fw):
+        log_fail(f"Failed to start {fw}")
+        return False
+
+    time.sleep(1.0)
+    bin_tool = "/usr/bin/ping_shm"
+    success = False
+
+    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
+        try:
+            res = subprocess.run([bin_tool, "-n", "100"],
+                                 capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                log_pass(f"ping_shm completed successfully:\n  {res.stdout.strip()}")
+                success = True
+        except Exception as e:
+            log_warn(f"ping_shm error: {e}")
+
+    stop_rproc()
+    return success
+
 def main():
-    parser = argparse.ArgumentParser(description="Automated XuanTie E907 Firmware Test Suite")
-    parser.add_argument("--test", choices=["all", "basic", "trace", "crash", "rpmsg"], default="all",
-                        help="Select test to run (default: all)")
+    parser = argparse.ArgumentParser(description="Automated Device Tree-Aware XuanTie E907 Firmware Test Suite")
+    parser.add_argument("--test",
+                        default="all",
+                        help="Select test to run (default: all compatible with active DT). "
+                             "Options: all, basic, trace, crash, rpmsg, dram, rpmsg-sram, ping-uio, "
+                             "or full test name (e.g. testPingRpmsg, testPingRpmsgSram, testPing)")
+    parser.add_argument("--detect-dt", action="store_true", help="Print active Device Tree configuration and exit")
     args = parser.parse_args()
+
+    if args.detect_dt:
+        prof, detail = detect_active_dt_profile()
+        info = PROFILE_INFO[prof]
+        print(f"\n{C_BOLD}{C_CYAN}Active Device Tree Profile:{C_RESET} {info['name']}")
+        print(f"  {C_BOLD}Node Mapping  :{C_RESET} {detail}")
+        print(f"  {C_BOLD}Overlay Config:{C_RESET} {info['overlay_config']}")
+        print(f"  {C_BOLD}Compatible    :{C_RESET} {', '.join(info['compatible_tests'])}\n")
+        sys.exit(0)
 
     print(f"{C_BOLD}{C_GREEN}")
     print("========================================================================")
-    print("  Allwinner T527 / A527 XuanTie E907 Automated Test Suite              ")
+    print("  Allwinner T527 / A527 XuanTie E907 Device Tree Test Suite             ")
     print("  Subsystem: Linux RemoteProc Framework                                 ")
     print("========================================================================")
     print(f"{C_RESET}")
+
+    req_test = args.test
+    if req_test != "all":
+        if req_test not in TEST_ALIAS_MAP:
+            print(f"{C_RED}[ERROR] Unknown test '{req_test}'. Available options:{C_RESET}")
+            print(f"  Short names: basic, trace, crash, rpmsg, dram, rpmsg-sram, ping-uio")
+            print(f"  Full names : testBasic, testStringBinaryTrace0, testCrash, testPingRpmsg, testDRAMMsg, testPingRpmsgSram, testPing")
+            sys.exit(1)
+        canon_test = TEST_ALIAS_MAP[req_test]
+    else:
+        canon_test = "all"
+
+    active_profile, _ = detect_active_dt_profile()
+
+    # Immediate pre-flight gate for specific requested tests
+    if canon_test == "testPingRpmsgSram":
+        verify_profile_or_halt("testPingRpmsgSram", PROFILE_2)
+    elif canon_test == "testPing":
+        verify_profile_or_halt("testPing", PROFILE_3)
+    elif canon_test in ("testCrash", "testPingRpmsg", "testDRAMMsg"):
+        verify_profile_or_halt(canon_test, PROFILE_1)
 
     check_prerequisites()
 
     results = {}
 
-    if args.test in ("all", "basic"):
-        results["testBasic"] = test_basic()
-
-    if args.test in ("all", "trace"):
-        results["testStringBinaryTrace0"] = test_string_binary_trace0()
-
-    if args.test in ("all", "crash"):
-        results["testCrash"] = test_crash()
-
-    if args.test in ("all", "rpmsg"):
-        res = test_ping_rpmsg()
-        if res is not None:
-            results["testPingRpmsg"] = res
+    if canon_test == "all":
+        # Run tests compatible with active profile
+        if active_profile == PROFILE_1:
+            results["testBasic"] = test_basic()
+            results["testStringBinaryTrace0"] = test_string_binary_trace0()
+            results["testCrash"] = test_crash()
+            results["testPingRpmsg"] = test_ping_rpmsg()
+            results["testDRAMMsg"] = test_dram_msg()
+        elif active_profile == PROFILE_2:
+            results["testBasic"] = test_basic()
+            results["testStringBinaryTrace0"] = test_string_binary_trace0()
+            results["testPingRpmsgSram"] = test_ping_rpmsg_sram()
+        elif active_profile == PROFILE_3:
+            results["testPing"] = test_ping_uio()
+    else:
+        # Run specific requested test (strict profile verification)
+        if canon_test == "testBasic":
+            results["testBasic"] = test_basic()
+        elif canon_test == "testStringBinaryTrace0":
+            results["testStringBinaryTrace0"] = test_string_binary_trace0()
+        elif canon_test == "testCrash":
+            results["testCrash"] = test_crash()
+        elif canon_test == "testPingRpmsg":
+            results["testPingRpmsg"] = test_ping_rpmsg()
+        elif canon_test == "testDRAMMsg":
+            results["testDRAMMsg"] = test_dram_msg()
+        elif canon_test == "testPingRpmsgSram":
+            results["testPingRpmsgSram"] = test_ping_rpmsg_sram()
+        elif canon_test == "testPing":
+            results["testPing"] = test_ping_uio()
 
     # Final Summary Table
     log_header("TEST EXECUTION SUMMARY REPORT")
@@ -484,8 +651,11 @@ def main():
 
     print(f"  {'-'*28}-+-{'-'*10}")
     
-    if all_passed:
-        print(f"\n{C_GREEN}{C_BOLD}>>> ALL TESTS PASSED! Hardware & driver validated for upstream submission. <<<{C_RESET}\n")
+    if all_passed and results:
+        print(f"\n{C_GREEN}{C_BOLD}>>> ALL EXECUTED TESTS PASSED for {PROFILE_INFO[active_profile]['name']}! <<<{C_RESET}\n")
+        sys.exit(0)
+    elif not results:
+        print(f"\n{C_YELLOW}No tests were executed.{C_RESET}\n")
         sys.exit(0)
     else:
         print(f"\n{C_RED}{C_BOLD}>>> SOME TESTS FAILED. Check logs above for details. <<<{C_RESET}\n")

@@ -181,6 +181,7 @@ int main(int argc, char *argv[]) {
     uint64_t bench_start_ns = get_time_ns();
     uint32_t seq = 0;
     uint32_t timeouts = 0;
+    uint32_t corruptions = 0;
     struct epoll_event events[1];
 
     for (uint32_t i = 0; count == 0 || i < count; ++i) {
@@ -189,48 +190,64 @@ int main(int argc, char *argv[]) {
         // Prepare Ping Packet in SRAM C
         channel->ping_pkt.magic = SHM_PING_MAGIC;
         channel->ping_pkt.seq = seq;
-        channel->ping_pkt.payload_len = std::min((size_t)39, payload_str.size());
-        strncpy((char *)channel->ping_pkt.payload, payload_str.c_str(), sizeof(channel->ping_pkt.payload) - 1);
-        channel->ping_pkt.payload[sizeof(channel->ping_pkt.payload) - 1] = '\0';
+        size_t plen = std::min((size_t)39, payload_str.size());
+        channel->ping_pkt.payload_len = plen;
+        for (size_t k = 0; k < plen; ++k) {
+            channel->ping_pkt.payload[k] = payload_str[k];
+        }
+        channel->ping_pkt.payload[plen] = '\0';
 
         uint64_t tx_ns = get_time_ns();
         channel->ping_pkt.host_tx_ts_ns = tx_ns;
 
-        // Trigger Hardware Mailbox Doorbell
+        // Trigger Hardware Mailbox Doorbell & assert host_doorbell
         ring_doorbell(seq);
 
-        // Block on epoll waiting for XuanTie E907 hardware IRQ (0% CPU idle burn)
-        int nfds = epoll_wait(epoll_fd, events, 1, timeout_ms);
-        uint64_t rx_ns = get_time_ns();
+        // Wait for RISC-V pong response via SRAM doorbell or UIO event
+        uint64_t deadline_ns = tx_ns + (uint64_t)timeout_ms * 1000000ULL;
+        uint64_t rx_ns = 0;
+        bool received = false;
 
-        if (nfds <= 0) {
+        while (get_time_ns() < deadline_ns) {
+            if (channel->riscv_doorbell == 1) {
+                __sync_synchronize();
+                rx_ns = get_time_ns();
+                received = true;
+                break;
+            }
+        }
+
+        if (!received) {
             timeouts++;
             if (timeouts <= 5) {
                 std::cerr << C_YELLOW << "[WARN] Ping seq " << seq << " timed out waiting for UIO doorbell!\n" << C_RESET;
             }
+            channel->host_doorbell = 0;
+            channel->riscv_doorbell = 0;
+            __sync_synchronize();
             continue;
         }
 
-        if (events[0].data.fd == uio_fd && (events[0].events & EPOLLIN)) {
-            // Read 4-byte cumulative interrupt counter from UIO
-            uint32_t irq_count = 0;
-            ssize_t bytes_read = read(uio_fd, &irq_count, sizeof(irq_count));
-            (void)bytes_read;
+        __sync_synchronize();
 
-            __sync_synchronize();
+        // Validate Pong Packet: magic, seq, and PONG prefix using scalar reads
+        bool pong_match = (channel->pong_pkt.payload[0] == 'P' &&
+                           channel->pong_pkt.payload[1] == 'O' &&
+                           channel->pong_pkt.payload[2] == 'N' &&
+                           channel->pong_pkt.payload[3] == 'G');
 
-            // Validate Pong Packet
-            if (channel->pong_pkt.magic == SHM_PONG_MAGIC && channel->pong_pkt.seq == seq) {
-                double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
-                latencies_us.push_back(rtt_us);
-            } else {
-                std::cerr << C_RED << "[ERROR] Malformed pong: magic=0x" << std::hex
-                          << channel->pong_pkt.magic << ", seq=" << std::dec << channel->pong_pkt.seq << C_RESET << "\n";
-            }
-
-            // Re-enable UIO interrupt for next transaction
-            reenable_irq();
+        if (channel->pong_pkt.magic == SHM_PONG_MAGIC && channel->pong_pkt.seq == seq && pong_match) {
+            double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
+            latencies_us.push_back(rtt_us);
+        } else {
+            corruptions++;
+            std::cerr << C_RED << "[ERROR] Malformed pong: magic=0x" << std::hex
+                      << channel->pong_pkt.magic << ", seq=" << std::dec << channel->pong_pkt.seq << C_RESET << "\n";
         }
+
+        // Acknowledge pong
+        channel->riscv_doorbell = 0;
+        __sync_synchronize();
 
         if (delay_us > 0) {
             usleep(delay_us);
@@ -282,6 +299,10 @@ int main(int argc, char *argv[]) {
     std::cout << "  Total Pings Sent    : " << seq << "\n";
     std::cout << "  Pongs Received      : " << num_received << " (" << std::fixed << std::setprecision(2)
               << (100.0 * num_received / seq) << "%)\n";
+    std::cout << "  Data Integrity      : " << (corruptions == 0 ? "PASS (0 corrupted / mismatched packets)" : "FAIL") << "\n";
+    if (corruptions > 0) {
+        std::cout << "  Corrupted Packets   : " << corruptions << "\n";
+    }
     std::cout << "  Timeouts            : " << timeouts << "\n";
     std::cout << "  Total Duration      : " << std::setprecision(4) << total_time_sec << " s\n";
     std::cout << "  Throughput Rate     : " << C_BOLD << std::setprecision(1) << msg_rate << " msgs/sec\n" << C_RESET;
@@ -297,5 +318,5 @@ int main(int argc, char *argv[]) {
     std::cout << "  Percentile 99.9%    : " << std::setprecision(3) << p999 << " us\n";
     std::cout << C_GREEN << C_BOLD << "================================================================\n\n" << C_RESET;
 
-    return 0;
+    return corruptions > 0 ? 1 : 0;
 }

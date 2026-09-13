@@ -1,0 +1,18 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *           RADXA CUBIE A5E — TESTSTRINGBINARYTRACE0 OVERLAY
+ * ============================================================================
+ * Hardware Overlay for testStringBinaryTrace0 firmware application:
+ * RemoteProc trace0 ring buffer and hardware single-precision FPU validation.
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testStringBinaryTrace0
+ * ============================================================================
+ */
+
+&rproc {
+    status = "okay";
+};

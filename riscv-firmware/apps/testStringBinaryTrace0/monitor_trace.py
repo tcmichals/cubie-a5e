@@ -87,6 +87,7 @@ def main():
     parser = argparse.ArgumentParser(description="Monitor RemoteProc Trace0 with Mixed ASCII/Binary Decoding")
     parser.add_argument("--trace", "-t", default=DEFAULT_TRACE_PATH, help=f"Path to trace0 (default: {DEFAULT_TRACE_PATH})")
     parser.add_argument("--poll", "-p", type=float, default=0.05, help="Polling interval in seconds (default: 0.05)")
+    parser.add_argument("--count", "-n", type=int, default=0, help="Number of records to display before exiting (0 = continuous)")
     parser.add_argument("--raw", "-r", action="store_true", help="Print raw lines without formatting")
     args = parser.parse_args()
 
@@ -102,6 +103,7 @@ def main():
     print(f"{ANSI_YELLOW}Note: debugfs polling eats CPU cycles. Phase 2 introduces hardware Mailboxes for 0% CPU wait.{ANSI_RESET}\n")
 
     last_content = b""
+    displayed_count = 0
 
     try:
         while True:
@@ -171,6 +173,10 @@ def main():
                     else:
                         text = line.decode("latin1", errors="replace")
                         print(f"  {text}")
+
+                    displayed_count += 1
+                    if args.count > 0 and displayed_count >= args.count:
+                        return
 
             time.sleep(args.poll)
 

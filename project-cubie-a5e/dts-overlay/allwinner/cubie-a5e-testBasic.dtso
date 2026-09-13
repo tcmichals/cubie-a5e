@@ -1,0 +1,18 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *                 RADXA CUBIE A5E — TESTBASIC OVERLAY
+ * ============================================================================
+ * Hardware Overlay for testBasic firmware application:
+ * RemoteProc core bootstrap and clean start/stop lifecycle validation.
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testBasic
+ * ============================================================================
+ */
+
+&rproc {
+    status = "okay";
+};

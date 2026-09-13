@@ -1,0 +1,36 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *                 RADXA CUBIE A5E — TESTPING OVERLAY
+ * ============================================================================
+ * Hardware Overlay for testPing firmware application:
+ * Converts the Allwinner T527 hardware message box into a generic Userspace
+ * I/O (UIO) device using uio_pdrv_genirq for sub-15us event-driven doorbells.
+ *
+ * Memory Maps exposed under /sys/class/uio/uio0/maps/:
+ *   map0: Allwinner MSGBOX MMIO @ 0x03003000 (4 KB) - For Host Doorbell TX
+ *   map1: MCU Dedicated SRAM    @ 0x072B0000 (4 KB) - For Shared Ringbuffer / Ping
+ *
+ * Hardware IRQ:
+ *   GIC SPI 147 (Allwinner Hardware Message Box IRQ)
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
+ *   cmdline=uio_pdrv_genirq.of_id=generic-uio
+ * ============================================================================
+ */
+
+&msgbox {
+    compatible = "generic-uio";
+    reg = <0x03003000 0x1000>,
+          <0x072b0000 0x1000>;
+    reg-names = "msgbox", "sram";
+    status = "okay";
+};
+
+&rproc {
+    /* Standalone lifecycle mode: core managed by remoteproc, IPC via UIO */
+    status = "okay";
+};

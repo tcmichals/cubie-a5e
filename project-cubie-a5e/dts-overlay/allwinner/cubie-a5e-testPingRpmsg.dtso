@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *               RADXA CUBIE A5E — TESTPINGRPMSG OVERLAY
+ * ============================================================================
+ * Hardware Overlay for testPingRpmsg firmware application:
+ * Standard Linux kernel VirtIO RPMsg over dedicated DDR DRAM DMA carveout.
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPingRpmsg
+ * ============================================================================
+ */
+
+&rproc {
+    memory-region = <&rproc_vdev>;
+    status = "okay";
+};
+
+&msgbox {
+    status = "okay";
+};

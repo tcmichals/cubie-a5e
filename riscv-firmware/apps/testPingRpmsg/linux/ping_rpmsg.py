@@ -34,7 +34,7 @@ C_CYAN    = "\033[36m"
 # struct rpmsg_endpoint_info: char name[32], u32 src, u32 dst
 RPMSG_CREATE_EPT_IOCTL = 0x4028B501   # _IOW(0xb5, 0x1, struct rpmsg_endpoint_info)
 RPMSG_PING_EPT_ADDR    = 1024
-RPMSG_PAYLOAD_FMT      = "<IQ48s"      # uint32 seq, uint64 ts_ns, char text[48]
+RPMSG_PAYLOAD_FMT      = "<4sIQ48s"   # 4s tag ("PING"), uint32 seq, uint64 ts_ns, char text[48]
 RPMSG_PAYLOAD_LEN      = struct.calcsize(RPMSG_PAYLOAD_FMT)
 
 def create_endpoint_from_ctrl(ctrl_path: str, name: str = "rpmsg-ping-channel",
@@ -116,6 +116,13 @@ def main():
         print(f"{C_YELLOW}[HINT] Ensure remoteproc is started and /sys/class/remoteproc/remoteproc0/state is 'running'.{C_RESET}")
         sys.exit(1)
 
+    # Drain any stale packets from previous runs
+    while True:
+        try:
+            os.read(fd, 512)
+        except (BlockingIOError, OSError):
+            break
+
     payload_bytes = args.payload.encode('utf-8')[:47].ljust(48, b'\x00')
     timeout_sec = args.timeout / 1000.0
     sleep_sec = args.sleep / 1_000_000.0
@@ -123,6 +130,7 @@ def main():
     latencies_us: List[float] = []
     seq = 0
     timeouts = 0
+    corruptions = 0
     total_tx_bytes = 0
     total_rx_bytes = 0
     bench_start_ns = time.monotonic_ns()
@@ -147,7 +155,7 @@ def main():
 
             seq += 1
             tx_ns = time.monotonic_ns()
-            tx_pkt = struct.pack(RPMSG_PAYLOAD_FMT, seq, tx_ns, payload_bytes)
+            tx_pkt = struct.pack(RPMSG_PAYLOAD_FMT, b"PING", seq, tx_ns, payload_bytes)
 
             try:
                 os.write(fd, tx_pkt)
@@ -163,10 +171,20 @@ def main():
             if rlist:
                 try:
                     rx_data = os.read(fd, 512)
-                    if rx_data:
-                        total_rx_bytes += len(rx_data)
-                        rtt_us = (rx_ns - tx_ns) / 1000.0
-                        latencies_us.append(rtt_us)
+                    if len(rx_data) >= 16:
+                        rx_tag, rx_seq, _ = struct.unpack_from("<4sIQ", rx_data, 0)
+                        if rx_tag == b"PONG" and rx_seq == seq:
+                            total_rx_bytes += len(rx_data)
+                            rtt_us = (rx_ns - tx_ns) / 1000.0
+                            latencies_us.append(rtt_us)
+                        else:
+                            corruptions += 1
+                            if corruptions <= 5:
+                                print(f"{C_RED}[WARN] Ping seq={seq} integrity error: tag={rx_tag}, rx_seq={rx_seq}{C_RESET}")
+                    elif rx_data:
+                        corruptions += 1
+                        if corruptions <= 5:
+                            print(f"{C_RED}[WARN] Ping seq={seq} short packet: {len(rx_data)} bytes{C_RESET}")
                     else:
                         timeouts += 1
                 except OSError as e:
@@ -196,7 +214,7 @@ def main():
                     f"\r  {C_BOLD}{C_GREEN}{time_str}{C_RESET} Rate: {C_BOLD}{rate:6.1f} pkts/s{C_RESET} | "
                     f"Speed: {C_BOLD}{C_CYAN}{bw_str}{C_RESET} | Total: {seq:,} | "
                     f"Last RTT: {last_rtt:6.1f} us | Avg RTT: {recent_avg:6.1f} us | "
-                    f"Timeouts: {timeouts}  "
+                    f"Timeouts: {timeouts} | Corrupt: {corruptions}  "
                 )
                 sys.stdout.flush()
                 last_report_ns = now_ns
@@ -218,10 +236,11 @@ def main():
     print(f"{C_CYAN}{C_BOLD}================================================================{C_RESET}")
     print(f"  Total Packets Sent : {C_BOLD}{seq}{C_RESET}")
     print(f"  Successful Replies : {C_GREEN}{len(latencies_us)}{C_RESET}")
+    print(f"  Data Integrity     : {C_GREEN if corruptions == 0 else C_RED}{'PASS (0 corrupted / mismatched packets)' if corruptions == 0 else f'FAIL ({corruptions} errors)'}{C_RESET}")
     print(f"  Timed Out Packets  : {C_RED if timeouts else C_GREEN}{timeouts}{C_RESET}")
     print(f"  Total Test Time    : {total_elapsed_ms:.2f} ms")
 
-    if latencies_us:
+    if latencies_us and corruptions == 0:
         min_lat = min(latencies_us)
         max_lat = max(latencies_us)
         avg_lat = sum(latencies_us) / len(latencies_us)
@@ -255,6 +274,9 @@ def main():
         print(f"  Percentile p50     : {p50:.2f} us")
         print(f"  Percentile p90     : {p90:.2f} us")
         print(f"  Percentile p99     : {p99:.2f} us")
+    elif corruptions > 0:
+        print(f"{C_RED}[FAIL] Data integrity violations detected during benchmark run!{C_RESET}")
+        sys.exit(1)
     else:
         print(f"{C_RED}[FAIL] No pong replies received! All packets timed out.{C_RESET}")
         sys.exit(1)

@@ -41,6 +41,7 @@ struct rpmsg_endpoint_info {
 #include "../../common/include/resource_table.h"
 
 struct RpmsgPingPayload {
+    char     tag[4];         // "PING" from host, "PONG" from firmware
     uint32_t seq;
     uint64_t host_tx_ts_ns;
     char     text[48];
@@ -107,6 +108,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  Channel : rpmsg-ping-channel (Endpoint Addr: 1024)           \n";
     std::cout << "  Payload : " << payload_size << " bytes (" << (payload_size + 16)
               << "-byte VirtIO buffer) | Count: " << count << " iterations\n";
+    std::cout << "  Check   : Lightweight tag (PONG) & seq integrity matching   \n";
     std::cout << "================================================================\n";
 
     // Auto-discover RPMsg device if not provided
@@ -174,24 +176,31 @@ int main(int argc, char *argv[]) {
     std::vector<uint8_t> tx_buf(payload_size);
     std::vector<uint8_t> rx_buf(512);
 
+    // Drain any stale packets from previous runs
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+    while (read(fd, rx_buf.data(), rx_buf.size()) > 0) {}
+    fcntl(fd, F_SETFL, 0);
+
     uint64_t bench_start_ns = get_time_ns();
     uint32_t seq = 0;
     uint32_t timeouts = 0;
+    uint32_t corruptions = 0;
 
     for (uint32_t i = 0; count == 0 || i < count; ++i) {
         seq++;
 
-        // Header: seq (uint32) @ offset 0, host_tx_ts_ns (uint64) @ offset 4
-        memcpy(tx_buf.data(), &seq, sizeof(seq));
+        // Header: "PING" tag (4B) @ offset 0, seq (uint32) @ offset 4, host_tx_ts_ns (uint64) @ offset 8
+        memcpy(tx_buf.data(), "PING", 4);
+        memcpy(tx_buf.data() + 4, &seq, sizeof(seq));
         uint64_t tx_ns = get_time_ns();
-        memcpy(tx_buf.data() + 4, &tx_ns, sizeof(tx_ns));
+        memcpy(tx_buf.data() + 8, &tx_ns, sizeof(tx_ns));
 
         // Remaining bytes filled with payload_str and padded
-        size_t text_max = payload_size - 12;
+        size_t text_max = payload_size - 16;
         size_t copy_len = std::min(payload_str.size(), text_max);
-        memcpy(tx_buf.data() + 12, payload_str.data(), copy_len);
+        memcpy(tx_buf.data() + 16, payload_str.data(), copy_len);
         if (copy_len < text_max) {
-            memset(tx_buf.data() + 12 + copy_len, 'X', text_max - copy_len);
+            memset(tx_buf.data() + 16 + copy_len, 'X', text_max - copy_len);
         }
 
         // Send RPMsg Ping
@@ -211,9 +220,27 @@ int main(int argc, char *argv[]) {
             ssize_t bytes_read = read(fd, rx_buf.data(), rx_buf.size());
             uint64_t rx_ns = get_time_ns();
 
-            if (bytes_read > 0) {
-                double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
-                latencies_us.push_back(rtt_us);
+            if (bytes_read >= 16) {
+                uint32_t rx_seq = 0;
+                memcpy(&rx_seq, rx_buf.data() + 4, sizeof(rx_seq));
+
+                // Middle ground verification: 4-byte "PONG" tag + sequence number match
+                if (memcmp(rx_buf.data(), "PONG", 4) == 0 && rx_seq == seq) {
+                    double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
+                    latencies_us.push_back(rtt_us);
+                } else {
+                    corruptions++;
+                    if (corruptions <= 5) {
+                        char tag[5] = {0};
+                        memcpy(tag, rx_buf.data(), 4);
+                        std::cerr << "[WARN] Ping seq=" << seq << " integrity error: tag='"
+                                  << tag << "' (expected 'PONG'), rx_seq=" << rx_seq
+                                  << " (expected " << seq << ")\n";
+                    }
+                }
+            } else if (bytes_read > 0) {
+                corruptions++;
+                std::cerr << "[WARN] Ping seq=" << seq << " short reply: " << bytes_read << " bytes\n";
             } else {
                 timeouts++;
                 std::cerr << "[WARN] Ping seq=" << seq << " read() error: " << strerror(errno) << "\n";
@@ -243,6 +270,10 @@ int main(int argc, char *argv[]) {
     std::cout << "Packets Sent   : " << seq << "\n";
     std::cout << "Packets Recv   : " << latencies_us.size() << " ("
               << (seq > 0 ? (double)latencies_us.size() * 100.0 / seq : 0.0) << "% success)\n";
+    std::cout << "Data Integrity : " << (corruptions == 0 ? "PASS (0 corrupted / mismatched packets)" : "FAIL") << "\n";
+    if (corruptions > 0) {
+        std::cout << "Corrupted Pkts : " << corruptions << "\n";
+    }
     std::cout << "Timeouts       : " << timeouts << "\n";
     std::cout << "Total Duration : " << std::fixed << std::setprecision(3) << total_time_sec << " s\n";
     std::cout << "Throughput     : " << std::fixed << std::setprecision(1)
@@ -288,5 +319,5 @@ int main(int argc, char *argv[]) {
     }
 
     close(fd);
-    return (latencies_us.empty() || timeouts == seq) ? 1 : 0;
+    return (latencies_us.empty() || timeouts == seq || corruptions > 0) ? 1 : 0;
 }

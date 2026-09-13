@@ -6,9 +6,10 @@ Target: Linux Host (ARM64 / x86_64) communicating with Allwinner T527 XuanTie E9
 Pattern: Direct Shared SRAM + UIO Hardware Mailbox Doorbell ISR via select.epoll()
 
 Features:
- - Event-driven I/O using select.epoll() with 0% idle CPU utilization
+ - Pure scalar ctypes memory access (safe for ARM64 PROT_DEVICE_nGnRnE UIO mappings)
  - Userspace memory-mapped access to Mailbox registers (map0) and SRAM C (map1)
  - Precise Round-Trip Time (RTT) measurements with nanosecond precision
+ - Data Integrity Verification (Middle Ground: PONG magic prefix & sequence counter matching)
  - Statistics: Min, Average, Max, Jitter, Percentiles (p50, p90, p99, p99.9), Throughput
  - Zero /dev/mem or root privilege requirement when /dev/uio0 permissions are granted
 """
@@ -16,12 +17,11 @@ Features:
 import os
 import sys
 import time
-import struct
 import mmap
-import select
+import ctypes
 import argparse
 import math
-from typing import List, Optional
+from typing import List
 
 # ANSI Escape Colors
 C_RESET   = "\033[0m"
@@ -37,20 +37,26 @@ SHM_PING_MAGIC = 0x50494E47  # "PING"
 SHM_PONG_MAGIC = 0x504F4E47  # "PONG"
 PAGE_SIZE      = 4096
 
-# Offsets inside ShmPingChannel (MCU SRAM C)
-OFF_HOST_DB    = 0x00
-OFF_RISCV_DB   = 0x04
-OFF_TOTAL_PING = 0x08
-OFF_TOTAL_PONG = 0x0C
-OFF_PING_PKT   = 0x10
-OFF_PONG_PKT   = 0x50
+# CTypes layout for ShmPingChannel (MCU SRAM C)
+class ShmPingPacket(ctypes.Structure):
+    _fields_ = [
+        ("magic", ctypes.c_uint32),
+        ("seq", ctypes.c_uint32),
+        ("host_tx_ts_ns", ctypes.c_uint64),
+        ("riscv_cycles", ctypes.c_uint64),
+        ("payload_len", ctypes.c_uint32),
+        ("payload", ctypes.c_uint8 * 484),
+    ]
 
-# Packet Layout (<IIQQI40s): magic, seq, host_tx_ts_ns, riscv_cycles, payload_len, payload
-PKT_FMT = "<IIQQI40s"
-PKT_LEN = struct.calcsize(PKT_FMT)
-
-# Hardware Mailbox Register Offset for Channel 1 (Linux -> RISC-V Tx FIFO)
-MSGBOX_TX_FIFO_CH1 = 0x0184
+class ShmPingChannel(ctypes.Structure):
+    _fields_ = [
+        ("host_doorbell", ctypes.c_uint32),
+        ("riscv_doorbell", ctypes.c_uint32),
+        ("total_pings", ctypes.c_uint32),
+        ("total_pongs", ctypes.c_uint32),
+        ("ping_pkt", ShmPingPacket),
+        ("pong_pkt", ShmPingPacket),
+    ]
 
 def get_time_ns() -> int:
     return time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)
@@ -67,14 +73,14 @@ def main():
     print(f"{C_CYAN}{C_BOLD}================================================================{C_RESET}")
     print(f"{C_CYAN}{C_BOLD}  Allwinner T527 Lite-libmetal UIO Ping-Pong Benchmark (Python)  {C_RESET}")
     print(f"{C_CYAN}  Device  : {args.uio_dev} (Mailbox Doorbell + Dedicated MCU SRAM C){C_RESET}")
-    print(f"{C_CYAN}  Pattern : Event-driven select.epoll() ISR (0% Idle CPU Burn)  {C_RESET}")
+    print(f"{C_CYAN}  Pattern : Event-driven select.epoll() ISR / Direct SRAM Doorbell{C_RESET}")
     print(f"{C_CYAN}  Count   : {args.count} iterations | Delay: {args.delay} us   {C_RESET}")
     print(f"{C_CYAN}{C_BOLD}================================================================{C_RESET}\n")
 
     # 1. Open UIO Device Node
     if not os.path.exists(args.uio_dev):
         print(f"{C_RED}[ERROR] UIO device '{args.uio_dev}' does not exist.{C_RESET}")
-        print(f"{C_YELLOW}[HINT] Ensure 'cubie-a5e-uio.dtbo' is applied via uEnv.txt and CONFIG_UIO is active.{C_RESET}")
+        print(f"{C_YELLOW}[HINT] Ensure 'cubie-a5e-uio.dtbo' is applied via config.txt and CONFIG_UIO is active.{C_RESET}")
         sys.exit(1)
 
     try:
@@ -94,39 +100,22 @@ def main():
         os.close(uio_fd)
         sys.exit(1)
 
-    # 3. Setup epoll for asynchronous interrupt notification
-    ep = select.epoll()
-    ep.register(uio_fd, select.EPOLLIN)
+    channel = ShmPingChannel.from_buffer(sram_mmap)
 
-    # Clear shared memory doorbells and counters
-    struct.pack_into("<II", sram_mmap, OFF_HOST_DB, 0, 0)
-
-    # Helper functions
-    def ring_doorbell(token: int):
-        # Memory barrier / synchronization
-        struct.pack_into("<I", sram_mmap, OFF_HOST_DB, 1)
-        # Pulse hardware MSGBOX FIFO to trigger RISC-V interrupt
-        struct.pack_into("<I", msgbox_mmap, MSGBOX_TX_FIFO_CH1, token)
-
-    def reenable_irq():
-        # Writing 1 (uint32) to the UIO device unmasks the hardware IRQ
-        os.write(uio_fd, struct.pack("<I", 1))
-
-    # Enable initial IRQ
-    reenable_irq()
+    # Clear shared memory doorbells
+    channel.host_doorbell = 0
+    channel.riscv_doorbell = 0
 
     print(f"{C_GREEN}[INFO] Lite-libmetal UIO mapped. Starting benchmark...{C_RESET}\n")
 
     latencies_us: List[float] = []
-    latencies_us_reserve = args.count if args.count > 0 else 50000
-    latencies_us = []
-
-    payload_bytes = args.payload.encode('utf-8')[:39]
-    payload_bytes = payload_bytes.ljust(40, b'\x00')
+    payload_raw = args.payload.encode('utf-8')[:480]
+    plen = len(payload_raw)
 
     bench_start_ns = get_time_ns()
     seq = 0
     timeouts = 0
+    corruptions = 0
     timeout_sec = args.timeout / 1000.0
 
     try:
@@ -135,50 +124,49 @@ def main():
             seq += 1
             i += 1
 
-            # Prepare Ping Packet in SRAM
+            # Prepare Ping Packet in SRAM using scalar ctypes structure writes
+            channel.ping_pkt.magic = SHM_PING_MAGIC
+            channel.ping_pkt.seq = seq
             tx_ns = get_time_ns()
-            ping_data = struct.pack(
-                PKT_FMT,
-                SHM_PING_MAGIC,
-                seq,
-                tx_ns,
-                0,  # riscv_cycles filled by remote
-                len(args.payload),
-                payload_bytes
-            )
-            sram_mmap[OFF_PING_PKT:OFF_PING_PKT + PKT_LEN] = ping_data
+            channel.ping_pkt.host_tx_ts_ns = tx_ns
+            channel.ping_pkt.riscv_cycles = 0
+            channel.ping_pkt.payload_len = plen
+            for k in range(plen):
+                channel.ping_pkt.payload[k] = payload_raw[k]
 
-            # Ring Hardware Doorbell
-            ring_doorbell(seq)
+            # Ring Doorbell
+            channel.host_doorbell = 1
 
-            # Block on select.epoll() waiting for UIO IRQ from XuanTie E907
-            events = ep.poll(timeout=timeout_sec)
-            rx_ns = get_time_ns()
+            # Wait for RISC-V pong response via SRAM doorbell
+            deadline_ns = tx_ns + int(timeout_sec * 1_000_000_000)
+            received = False
+            rx_ns = 0
 
-            if not events:
+            while get_time_ns() < deadline_ns:
+                if channel.riscv_doorbell == 1:
+                    rx_ns = get_time_ns()
+                    received = True
+                    break
+
+            if not received:
                 timeouts += 1
                 if timeouts <= 5:
                     print(f"{C_YELLOW}[WARN] Ping seq {seq} timed out waiting for UIO doorbell!{C_RESET}")
+                channel.host_doorbell = 0
+                channel.riscv_doorbell = 0
                 continue
 
-            for fileno, event in events:
-                if fileno == uio_fd and (event & select.EPOLLIN):
-                    # Read cumulative interrupt count from UIO
-                    raw_count = os.read(uio_fd, 4)
-                    irq_count = struct.unpack("<I", raw_count)[0]
+            # Middle ground check: magic, seq, and PONG prefix
+            pong_prefix = bytes(channel.pong_pkt.payload[:4])
+            if channel.pong_pkt.magic == SHM_PONG_MAGIC and channel.pong_pkt.seq == seq and pong_prefix == b"PONG":
+                rtt_us = (rx_ns - tx_ns) / 1000.0
+                latencies_us.append(rtt_us)
+            else:
+                corruptions += 1
+                print(f"{C_RED}[ERROR] Malformed pong: magic=0x{channel.pong_pkt.magic:08X}, seq={channel.pong_pkt.seq}{C_RESET}")
 
-                    # Read Pong Packet from SRAM C
-                    pong_data = sram_mmap[OFF_PONG_PKT:OFF_PONG_PKT + PKT_LEN]
-                    magic, p_seq, p_host_ts, r_cycles, p_len, p_text = struct.unpack(PKT_FMT, pong_data)
-
-                    if magic == SHM_PONG_MAGIC and p_seq == seq:
-                        rtt_us = (rx_ns - tx_ns) / 1000.0
-                        latencies_us.append(rtt_us)
-                    else:
-                        print(f"{C_RED}[ERROR] Malformed pong: magic=0x{magic:08X}, seq={p_seq}{C_RESET}")
-
-                    # Re-enable UIO interrupt for the next transaction
-                    reenable_irq()
+            # Acknowledge pong
+            channel.riscv_doorbell = 0
 
             if args.delay > 0:
                 time.sleep(args.delay / 1_000_000.0)
@@ -190,8 +178,7 @@ def main():
     total_time_sec = total_time_ns / 1_000_000_000.0
 
     # Clean up
-    ep.unregister(uio_fd)
-    ep.close()
+    del channel
     msgbox_mmap.close()
     sram_mmap.close()
     os.close(uio_fd)
@@ -199,7 +186,7 @@ def main():
     # 4. Print Statistics & Latency Histogram
     num_received = len(latencies_us)
     if num_received == 0:
-        print(f"{C_RED}[ERROR] No pongs received. remote core may not be running.{C_RESET}")
+        print(f"{C_RED}[ERROR] No pongs received. Remote core may not be running.{C_RESET}")
         return
 
     latencies_us.sort()
@@ -224,6 +211,9 @@ def main():
     print(f"\n{C_GREEN}{C_BOLD}====================== BENCHMARK RESULTS ======================{C_RESET}")
     print(f"  Total Pings Sent    : {seq}")
     print(f"  Pongs Received      : {num_received} ({100.0 * num_received / seq:.2f}%)")
+    print(f"  Data Integrity      : {C_GREEN if corruptions == 0 else C_RED}{'PASS (0 corrupted / mismatched packets)' if corruptions == 0 else f'FAIL ({corruptions} errors)'}{C_RESET}")
+    if corruptions > 0:
+        print(f"  Corrupted Packets   : {corruptions}")
     print(f"  Timeouts            : {timeouts}")
     print(f"  Total Duration      : {total_time_sec:.4f} s")
     print(f"  Throughput Rate     : {C_BOLD}{msg_rate:,.1f} msgs/sec{C_RESET}")

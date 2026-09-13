@@ -60,20 +60,37 @@ namespace {
     VirtQueueLayout s_tx_vq; // vring[0]: Remote -> Host (TX)
     VirtQueueLayout s_rx_vq; // vring[1]: Host -> Remote (RX)
 
+    inline uintptr_t translate_da(uint32_t da) {
+        // SRAM Space 1 on Allwinner A527 (Host 0x072c0000 -> E907 0x40000000)
+        if (da >= 0x072c0000 && da < 0x07300000) {
+            return static_cast<uintptr_t>(da - 0x072c0000 + 0x40000000);
+        }
+        // SRAM Space 0 on Allwinner A527 (Host 0x07280000 -> E907 0x3ffc0000)
+        if (da >= 0x07280000 && da < 0x072c0000) {
+            return static_cast<uintptr_t>(da - 0x07280000 + 0x3ffc0000);
+        }
+        // SRAM Space 0 on Allwinner T527 (Host 0x07200000 -> E907 0x3ffc0000)
+        if (da >= 0x07200000 && da < 0x07240000) {
+            return static_cast<uintptr_t>(da - 0x07200000 + 0x3ffc0000);
+        }
+        // DDR DRAM and direct E907 local addresses
+        return static_cast<uintptr_t>(da);
+    }
+
     void setup_vq(VirtQueueLayout &vq, uint32_t da, uint32_t num, uint32_t align) {
         vq.da = da;
         vq.num = num;
         vq.align = align;
         vq.last_avail_idx = 0;
 
-        if (da == 0) {
+        if (da == 0 || da == 0xFFFFFFFFUL) {
             vq.desc = nullptr;
             vq.avail = nullptr;
             vq.used = nullptr;
             return;
         }
 
-        uint8_t *base = reinterpret_cast<uint8_t *>(da);
+        uint8_t *base = reinterpret_cast<uint8_t *>(translate_da(da));
         vq.desc = reinterpret_cast<volatile struct VirtioDesc *>(base);
 
         size_t avail_offset = sizeof(struct VirtioDesc) * num;
@@ -154,7 +171,7 @@ bool Rpmsg::announce_service(const char *name, uint32_t addr) noexcept {
     uint16_t desc_idx = s_tx_vq.avail->ring[avail_slot];
     volatile struct VirtioDesc *desc = &s_tx_vq.desc[desc_idx];
 
-    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(static_cast<uintptr_t>(desc->addr));
+    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(static_cast<uint32_t>(desc->addr)));
     hdr->src = addr;
     hdr->dst = 53; // RPMSG_NS_ADDR
     hdr->len = sizeof(ns_msg);
@@ -201,7 +218,7 @@ bool Rpmsg::poll() noexcept {
         volatile struct VirtioDesc *desc = &s_rx_vq.desc[desc_idx];
 
         if (desc->addr != 0 && desc->len >= sizeof(struct rpmsg_hdr)) {
-            volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(static_cast<uintptr_t>(desc->addr));
+            volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(static_cast<uint32_t>(desc->addr)));
 
             RpmsgMessage msg;
             msg.src = hdr->src;
@@ -257,7 +274,7 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
     volatile struct VirtioDesc *desc = &s_tx_vq.desc[desc_idx];
     if (desc->addr == 0) return false;
 
-    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(static_cast<uintptr_t>(desc->addr));
+    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(static_cast<uint32_t>(desc->addr)));
 
     hdr->dst = incoming.src;
     hdr->src = incoming.dst;

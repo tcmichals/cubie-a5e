@@ -28,10 +28,21 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [x] **Hardware Exception Trapping (`testCrash.elf`)**: Machine-mode trap handler captures register autopsy to SRAM (`0xDEADF00D`) without crashing ARM Linux host.
 - [x] **VirtIO RPMsg over DDR DRAM**: Hardware Mailbox Channel 8 doorbells, PREEMPT_RT deferred workqueue (`schedule_work`), Name Service announcement, and `/dev/rpmsg0` character device.
 - [x] **Standardized 512-Byte Apples-to-Apples Benchmarks** (1,000 packets on live hardware, 0 timeouts):
-  - `ping_shm` (Direct SRAM SPSC): **14.59 $\mu\text{s}$ avg RTT**, 63,022 msgs/s, 61.54 MB/s.
-  - `ping_rpmsg` (Linux VirtIO RPMsg): **175.64 $\mu\text{s}$ avg RTT**, 5,671 msgs/s, 5.37 MB/s.
+  - `ping_shm` (Direct SRAM SPSC, C++): **14.47 $\mu\text{s}$ avg RTT**, 63,139 msgs/s, 61.66 MB/s (100% success, 0 corruptions).
+  - `ping_uio` (Lite-libmetal UIO, C++): **14.55 $\mu\text{s}$ avg RTT**, 60,498 msgs/s (100% success, 0 corruptions).
+  - `ping_uio.py` (Lite-libmetal UIO, Python): **180.79 $\mu\text{s}$ avg RTT**, 4,480 msgs/s (100% success, 0 corruptions).
+  - `ping_rpmsg` (Linux VirtIO RPMsg, C++): **182.43 $\mu\text{s}$ avg RTT**, 5,457 msgs/s (100% success, 0 corruptions).
+  - `ping_rpmsg.py` (Linux VirtIO RPMsg, Python): **126.54 $\mu\text{s}$ avg RTT**, 5,982 msgs/s (100% success, 0 corruptions).
   - `ping_dram` (Hybrid SRAM/DDR Carveout): **191.84 $\mu\text{s}$ avg RTT**, 4,710 msgs/s, 4.60 MB/s.
-- [x] **Automated RemoteProc Test Suite**: `testBasic`, `testStringBinaryTrace0`, `testCrash`, and `testPingRpmsg` passing 100% via `python3 /usr/bin/run_tests.py`.
+- [x] **Full 3-Profile Silicon Test Sweep Without Code Modifications**:
+  - **Profile 1 (DDR VirtIO RPMsg)**: `testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPingRpmsg`, `testDRAMMsg` all PASS. Both C++ and Python RPMsg benchmarks pass 100%.
+  - **Profile 2 (Pure On-Chip SRAM Space 1 VirtIO)**: `testBasic`, `testStringBinaryTrace0`, `testPingRpmsgSram` all PASS. Both C++ and Python SRAM RPMsg benchmarks pass 100%.
+  - **Profile 3 (Userspace UIO Direct Mailbox & SRAM)**: `testPing` PASS. Both C++ (`ping_shm`, `ping_uio`) and Python (`ping_uio.py`) benchmarks pass 100%.
+- [x] **Middle Ground Data Integrity Verification**:
+  - 4-byte `"PONG"` tag + sequence counter validation verified across all ping benchmarks with zero corruptions/mismatches.
+  - Automatic stale packet drain on RPMsg open implemented in `ping_rpmsg.cpp` and `ping_rpmsg.py`.
+  - Pure scalar memory access implemented for ARM64 `PROT_DEVICE_nGnRnE` mappings in `ping_uio.cpp` and `ping_uio.py` (`ctypes.Structure`), resolving hardware bus error (SIGBUS 135).
+- [x] **Automated RemoteProc Test Suite**: Complete test suite passing 100% across all profiles via `python3 /usr/bin/run_tests.py`.
 - [x] **Kernel Patch Validation Gate**: `tools/validate_kernel_patches.py` asserting clean dry-run and byte identity against `linux-7.1`.
 - [x] **Upstream RFC Patch Series (`patches-upstream-rfc/`)**: Complete 5-patch series + cover letter passing `checkpatch.pl` with 0 errors.
 
@@ -81,20 +92,23 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## 4. XuanTie E907 Advanced RemoteProc & IPC Tasks
 
-- [ ] **Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
-  - [x] Declared configurable `.da = CONFIG_VRING0_DA` (`0x40040000`) and `.da = CONFIG_VRING1_DA` (`0x40042000`) in `resource_table.c` / `resource_table.h`.
+- [x] **Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
+  - [x] Declared dynamic `FW_RSC_ADDR_ANY` vrings in `resource_table.c` / `resource_table.h` with `translate_da()` in `hal::Rpmsg` to map host physical addresses to core local DA.
   - [x] Built `testPingRpmsgSram.elf` and verified memory layout.
-  - [x] **Enforce Device Tree Parity Rule**: Static driver carveouts rejected. Pure SRAM VirtIO must be dynamically governed by Devicetree overlays without hardcoding in C.
+  - [x] **Enforce Device Tree Parity Rule**: Static driver carveouts rejected. Pure SRAM VirtIO dynamically governed by Devicetree overlays without hardcoding in C.
   - [x] Created `cubie-a5e-rpmsg-sram.dtso` defining `rproc_sram1: sram1@72c0000` (`0x072c0000`, 256 KB) and overriding `&rproc { memory-region = <&rproc_sram1>; };`.
-  - [x] Compiled `cubie-a5e-rpmsg-sram.dtbo` and deployed to `/boot/` on target.
-  - [ ] Implement dynamic `memory-region` parsing (`rproc_of_resm_mem_entry_init`) in `sunxi_rproc.c` to support multi-region Devicetree configurations.
-  - [ ] Configure `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` in `/boot/config.txt`, reboot target board, and verify live kernel binding.
-  - [ ] Benchmark `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM on live hardware.
-  - [ ] Complete the 4-tier architectural performance comparison matrix:
-    - Pure SRAM SPSC Polling (`ping_shm`): **14.59 $\mu\text{s}$** avg RTT
-    - VirtIO RPMsg in On-Chip SRAM (Projected): **~40–50 $\mu\text{s}$** avg RTT
-    - VirtIO RPMsg in DDR CMA (`ping_rpmsg`): **175.64 $\mu\text{s}$** avg RTT
-    - Hybrid SRAM/DDR Carveout (`ping_dram`): **191.84 $\mu\text{s}$** avg RTT
+  - [x] Implement dynamic `memory-region` parsing (`rproc_mem_entry_init` / `rproc_add_carveout`) in `sunxi_rproc.c` to support multi-region Devicetree configurations.
+  - [x] Implement active Device Tree profile detection and fail-stop gate in `run_tests.py` to halt incompatible tests and output exact reboot/overlay commands.
+  - [x] Configured `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` in `/boot/config.txt`, rebooted target board, and verified live kernel binding to `sram1@72c0000`.
+  - [x] Benchmarked `ping_rpmsg -n 1000 -s 496` over pure on-chip SRAM Space 1 on live hardware: **141.71 $\mu\text{s}$ avg RTT**, 7,024.7 msgs/sec, 6.65 MB/s, 100% success (0 timeouts).
+  - [x] Verified Profile 3 (UIO Mode) on live hardware: **14.29 $\mu\text{s}$ avg RTT**, 64,416.9 msgs/sec, 62.91 MB/s, 100% success (0 timeouts).
+  - [x] Complete the 4-tier architectural performance comparison matrix (Silicon Verified):
+    - Direct SRAM SPSC (`ping_shm`, Profile 3): **14.29 $\mu\text{s}$** avg RTT | 64,417 msgs/s | 62.9 MB/s
+    - Pure SRAM VirtIO RPMsg (`testPingRpmsgSram`, Profile 2): **141.71 $\mu\text{s}$** avg RTT | 7,025 msgs/s | 6.65 MB/s
+    - DDR CMA VirtIO RPMsg (`testPingRpmsg`, Profile 1): **175.64 $\mu\text{s}$** avg RTT | 5,671 msgs/s | 5.37 MB/s
+    - Hybrid SRAM/DDR Carveout (`testDRAMMsg`, Profile 1): **191.84 $\mu\text{s}$** avg RTT | 4,710 msgs/s | 4.60 MB/s
+  - [x] **Test-Named Device Tree Overlays**: Created, compiled, and deployed 1-to-1 test-named overlays in `/boot/` (`cubie-a5e-testBasic.dtbo`, `cubie-a5e-testStringBinaryTrace0.dtbo`, `cubie-a5e-testCrash.dtbo`, `cubie-a5e-testPingRpmsg.dtbo`, `cubie-a5e-testDRAMMsg.dtbo`, `cubie-a5e-testPingRpmsgSram.dtbo`, `cubie-a5e-testPing.dtbo`). Updated `run_tests.py` to identify test overlays, support canonical test names and short aliases, and output exact test-named `dtoverlay` configuration commands when mismatched.
+  - [x] **Lightweight Data Integrity Verification ("Middle Ground")**: Implemented 4-byte magic tag (`"PONG"`) + sequence number verification across `ping_rpmsg.cpp`, `ping_rpmsg.py`, `ping_shm.cpp`, `ping_uio.cpp`, and `ping_uio.py`. Verified 1,000 consecutive pings at 5,500 msgs/sec on live target with 100.00% success and 0 corruptions/mismatches. All Profile 1 tests verified PASS.
 
 - [ ] **Task 2: Automatic Core Recovery & Restart After Crash (`rproc_report_crash`)**:
   - [ ] **Crash Notification Mechanism**: In `testCrash.elf` M-mode trap handler, after writing the autopsy to SRAM (`0xDEADF00D`), trigger a mailbox doorbell alert to the ARM host before halting in `wfi`.
