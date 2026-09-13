@@ -37,7 +37,7 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 |  |  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
 |  |  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
 |  |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
-|  |  |  - 1 MB DDR DMA Payload Pool (0x48100000) [Non-Cacheable Streaming Payloads Only] |  |
+|  |  |  - 1 MB DDR DMA Payload Pool (0x48000000) [Non-Cacheable Streaming Payloads Only] |  |
 |  |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000 Host Physical)                    |  |
 |  |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
@@ -65,9 +65,9 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
 | Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address | Size | Latency & Usage |
 | :--- | :--- | :--- | :--- | :--- |
 | **SRAM Space 0 (`r_sram`)** | **`0x07280000`** | **`0x3FFC0000`** | **256 KB** | **Primary E907 Boot & Execution Pool** (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`). Zero wait states. |
-| **SRAM Space 1 (`r_sram1`)** | **`0x072c0000`** | **`0x40000000`** | **256 KB** | **Secondary High-Speed SRAM Bank** enabled via `REMAP_CTRL_REG[1] = 1`. Shared IPC/buffers. |
+| **SRAM Space 1 (`r_sram1`)** | **`0x072C0000`** | **`0x40000000`** | **256 KB** | **Secondary High-Speed SRAM Bank** enabled via `REMAP_CTRL_REG[1] = 1`. Shared IPC/buffers. |
 | **RISC-V CFG Control Block** | **`0x07130000`** | **`0x07130000`** | **4 KB** | Hardware registers: `0x0000` (`VER_REG`), `0x0204` (`STA_ADD_REG` Boot vector defaults to `0x3FFC0000`), `0x0248` (`WORK_MODE_REG`) |
-| **DDR DRAM DMA Carveout** | **`0x48100000`** | **`0x48100000`** | **1 MB** | PMP non-cacheable high-bandwidth payload pool (`testDRAMMsg`) |
+| **DDR DRAM DMA Carveout** | **`0x48000000`** | **`0x48000000`** | **1 MB** | Dedicated high-bandwidth payload pool (`testDRAMMsg`, Device Tree `vdev@48000000`) |
 
 > [!IMPORTANT]
 > ### TRACE BUFFER LOCATION: STRICTLY ON-CHIP SRAM, NEVER DDR
@@ -288,15 +288,16 @@ ping_shm -n 100000
 
 ---
 
-### App 5: `testPingRpmsg` (Standard Linux VirtIO RPMsg)
-* **Purpose**: Standard Linux kernel RPMsg framework communication (`virtio_rpmsg_bus`).
+### App 5: `testPingRpmsg` (Standard Linux VirtIO RPMsg over Coherent DDR Buffers)
+* **Purpose**: Standard Linux kernel RPMsg framework communication (`virtio_rpmsg_bus`) using hardware Mailbox Channel 8 doorbells.
 * **Functionality**:
-  - RemoteProc resource table with `RSC_VDEV` (VirtIO ID 7) and 2 vrings (16 descriptors each) in SRAM_A3.
-  - Announces Name Service endpoint `"rpmsg-ping-channel"` (address 1024).
-  - Processes incoming RPMsg packets from Linux `/dev/rpmsg0` and responds with pong packets.
+  - RemoteProc resource table declares `RSC_VDEV` (VirtIO ID 7) with 2 vrings (16 descriptors each) using `.da = FW_RSC_ADDR_ANY`.
+  - Allocated dynamically by Linux kernel (`dma_alloc_coherent`) in **physical DDR DRAM** (`0xf2f80000` Vring 0, `0xf2f82000` Vring 1, `0xf2f84000` payload buffers).
+  - Dynamically announces Name Service endpoint `"rpmsg-ping-channel"` (address 1024), automatically spawning `/dev/rpmsg0`.
+  - Processes incoming ping packets from Linux `/dev/rpmsg0` and responds with pong packets in DDR buffers.
 * **Linux Companion Tool**: `ping_rpmsg`
   - Connects to `/dev/rpmsg0` or creates endpoint via `/dev/rpmsg_ctrl0`.
-  - Evaluates standard kernel RPMsg driver latency and throughput.
+  - Evaluates standard kernel RPMsg driver latency and throughput (116.68 $\mu$s avg RTT, 3,207 msgs/sec).
 
 ```bash
 # Run 1,000 iterations over Linux RPMsg
@@ -305,15 +306,15 @@ ping_rpmsg -n 1000
 
 ---
 
-### App 6: `testDRAMMsg` (Hybrid SRAM SPSC Queue / DDR DRAM Payload Buffers)
-* **Purpose**: High-throughput message streaming moving payload buffers to DDR DRAM while keeping SPSC control structures in ultra-low-latency on-chip SRAM.
+### App 6: `testDRAMMsg` (Hybrid SRAM SPSC Queue / DDR DRAM Carveout Streaming)
+* **Purpose**: High-throughput message streaming moving large payload buffers to dedicated DDR DRAM while keeping SPSC control structures in ultra-low-latency on-chip SRAM.
 * **Architecture**:
 ```text
 +-----------------------------------------------------------------------------+
 |                          HYBRID MEMORY IPC ARCHITECTURE                     |
 |                                                                             |
 |   +---------------------------------------------------------------------+   |
-|   |         ON-CHIP SRAM (0x3FFC0000 / 0x40000000) - CONTROL PATH        |   |
+|   |         ON-CHIP SRAM (0x3FFF2000 / 0x072B2000) - CONTROL PATH       |   |
 |   |  - SPSC Head & Tail Pointers (Atomic single-word updates)           |   |
 |   |  - Producer/Consumer Doorbells & Monotonic Sequence Counters        |   |
 |   |  - 16-slot TX/RX Descriptor Rings (Holds DRAM Buffer Offsets & Len) |   |
@@ -322,43 +323,44 @@ ping_rpmsg -n 1000
 |                                     │ (Payload pointers & offsets)          |
 |                                     ▼                                       |
 |   +---------------------------------------------------------------------+   |
-|   |             DDR DRAM CARVEOUT (0x48100000) - DATA PATH              |   |
+|   |             DDR DRAM CARVEOUT (0x48000000) - DATA PATH              |   |
 |   |  - Non-Cacheable DMA Carveout / Reserved Memory Window (1 MB)       |   |
 |   |  - 16x Host->RISC-V Payload Buffers (Up to 4 KB each)               |   |
 |   |  - 16x RISC-V->Host Payload Buffers (Up to 4 KB each)               |   |
-|   |  - PMP / XuanTie Cache attributes configured for zero cache stalls  |   |
+|   |  - PMP / Memory Fences configured for zero cache stalls             |   |
 |   +---------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------+
 ```
 * **Functionality**:
-  - Control block (`DramSpscControlBlock`) in fast on-chip SRAM.
-  - 1 MB payload buffer pool in DDR DRAM Carveout (`0x48100000`).
-  - Configures RISC-V Physical Memory Protection (PMP) and XuanTie Cache maintenance (`mhcr`, `mcor`, `dcache.iva`, `dcache.cpa`) for DMA-coherent uncached/strongly-ordered access.
+  - Control block (`DramSpscControlBlock`) in fast on-chip SRAM Space 0 (`0x3FFF2000`).
+  - 1 MB payload buffer pool in dedicated DDR DRAM Carveout (`0x48000000`).
+  - Configures RISC-V Physical Memory Protection (PMP) and memory barriers (`fence rw, rw`) for DMA-coherent access.
 * **Linux Companion Tool**: `ping_dram`
   - Measures throughput (MB/sec), latency, and jitter for variable payload sizes (64B to 4096B).
 
 ```bash
-# Run 10,000 iterations with 1024-byte payloads over DDR DRAM
-ping_dram -n 10000 -s 1024
+# Run 1,000 iterations with 2048-byte payloads over DDR DRAM
+ping_dram -n 1000 -s 2048
 ```
 
 ---
 
 ## 4. Communication Paradigm & IPC Architecture Comparison
 
-| IPC Category | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Dedicated MCU SRAM + UIO (`testPing` / `hal::SpscQueue`) |
+| IPC Category | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM STREAMING]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Dedicated MCU SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via C++ `std::atomic` in SRAM | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | MCU Dedicated SRAM (64B frames) |
-| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | `uio_pdrv_genirq` (`/dev/uio0`) |
+| **Control Path** | VirtIO vrings in DDR DRAM (`0xf2f80000` / `0xf2f82000`) | Lock-Free SPSC in SRAM (`0x3FFF2000` / `0x072B2000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x07280000`) |
+| **Data Path** | **RPMsg DMA buffers in DDR (`0xf2f84000`)** | **DDR DRAM Carveout (`0x48000000`, 1 MB)** | MCU Dedicated SRAM (64B frames) |
+| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | Direct memory mmap / `uio_pdrv_genirq` |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Event-driven `ping_uio.py` (`select.epoll()`) / `ping_shm` |
-| **Firmware Code Size**  | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
-| **Typical RTT Latency** | **~50 – 90 $\mu\text{s}$** | **~3.0 – 6.0 $\mu\text{s}$** (DDR bus latency) | **~1.5 – 2.5 $\mu\text{s}$** (Zero-wait-state SRAM) |
-| **Jitter (StdDev)**     | Moderate (Kernel context switches) | **Ultra-Low (<0.5 $\mu\text{s}$)** | **Ultra-Low (<0.2 $\mu\text{s}$)** |
-| **Max Payload Size**    | Medium (512 B default) | Medium (512 B default) | **Large (Up to 4 KB per frame, MBs pool)** | Small (40–64 B, SRAM capacity bounded) |
-| **Throughput Bandwidth**| Moderate (~10–20 MB/s) | Moderate (~10–20 MB/s) | **High Bandwidth (>100 MB/s)** | High Packet Rate (Low Payload) |
-| **Target Use Case**     | Generic standard OS interop | Lightweight standard Linux RPMsg | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
+| **Firmware Code Size**  | **~3 KB** (zero dynamic allocation) | **~3 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
+| **Typical RTT Latency** | **116.68 $\mu\text{s}$ avg** (Min: 107.5 $\mu\text{s}$) | **381.84 $\mu\text{s}$** (2 KB payload) | **3.985 $\mu\text{s}$ avg** (Min: 3.54 $\mu\text{s}$) |
+| **Jitter (StdDev)**     | **13.91 $\mu\text{s}$** (PREEMPT_RT kernel) | **58.20 $\mu\text{s}$** | **1.12 $\mu\text{s}$** (Hardware SRAM determinism) |
+| **Max Payload Size**    | Medium (512 B default) | **Large (Up to 4 KB per frame, 1 MB pool)** | Small (44–64 B, SRAM capacity bounded) |
+| **Throughput Bandwidth**| **3,207.2 msgs/sec** (~376 KB/s) | **2,374.2 msgs/sec** (4.64 MB/s @ 2KB) | **189,733.8 msgs/sec** (8.35 MB/s) |
+| **Success Rate (1,000 pings)** | **100% (0 timeouts)** | **100% (0 timeouts)** | **100% (0 timeouts)** |
+| **Target Use Case**     | Generic standard OS interop | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
 
 ---
 

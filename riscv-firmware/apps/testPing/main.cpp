@@ -63,12 +63,17 @@ int main(void) {
             SHM_CHANNEL->pong_pkt.seq           = seq;
             SHM_CHANNEL->pong_pkt.host_tx_ts_ns = host_ts;
             SHM_CHANNEL->pong_pkt.riscv_cycles  = current_cycles;
-            SHM_CHANNEL->pong_pkt.payload_len   = 24;
+            SHM_CHANNEL->pong_pkt.payload_len   = sizeof(SHM_CHANNEL->pong_pkt.payload);
 
-            const char pong_msg[] = "PONG from XuanTie E907!";
-            for (size_t i = 0; i < sizeof(pong_msg); ++i) {
-                SHM_CHANNEL->pong_pkt.payload[i] = pong_msg[i];
+            // Copy full payload buffer in 4-byte words (512B packet total)
+            for (size_t i = 0; i < sizeof(SHM_CHANNEL->pong_pkt.payload); i += 4) {
+                *(volatile uint32_t *)(&SHM_CHANNEL->pong_pkt.payload[i]) =
+                    *(volatile uint32_t *)(&SHM_CHANNEL->ping_pkt.payload[i]);
             }
+            SHM_CHANNEL->pong_pkt.payload[0] = 'P';
+            SHM_CHANNEL->pong_pkt.payload[1] = 'O';
+            SHM_CHANNEL->pong_pkt.payload[2] = 'N';
+            SHM_CHANNEL->pong_pkt.payload[3] = 'G';
 
             // Memory barrier & Acknowledge host ping, assert RISC-V pong doorbell
             asm volatile("fence rw, rw" ::: "memory");

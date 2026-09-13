@@ -22,15 +22,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 723 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 733 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 776 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 785 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
 @@ -381,5 +381,13 @@ config XLNX_R5_REMOTEPROC
  	  It's safe to say N if not interested in using RPU r5f cores.
- 
+
 +config SUNXI_REMOTEPROC
 +	tristate "Allwinner XuanTie RISC-V remoteproc support"
 +	depends on (ARCH_SUNXI || COMPILE_TEST) && MAILBOX
@@ -40,7 +40,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	  remote processor framework.
 +
  endif # REMOTEPROC
- 
+
  endmenu
 --- a/drivers/remoteproc/Makefile
 +++ b/drivers/remoteproc/Makefile
@@ -51,7 +51,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,723 @@
+@@ -0,0 +1,776 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -141,15 +141,22 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct mbox_client cl;
 +	struct mbox_chan *tx_chan;
 +	struct mbox_chan *rx_chan;
++	struct work_struct vq_work;
 +};
++
++static void sunxi_rproc_vq_work(struct work_struct *work)
++{
++	struct sunxi_rproc *priv = container_of(work, struct sunxi_rproc, vq_work);
++
++	rproc_vq_interrupt(priv->rproc, 0);
++	rproc_vq_interrupt(priv->rproc, 1);
++}
 +
 +static void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)
 +{
 +	struct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);
 +
-+	/* Signal remoteproc virtqueues on incoming mailbox doorbell */
-+	rproc_vq_interrupt(priv->rproc, 0);
-+	rproc_vq_interrupt(priv->rproc, 1);
++	schedule_work(&priv->vq_work);
 +}
 +
 +static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
@@ -371,6 +378,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +static int sunxi_rproc_stop(struct rproc *rproc)
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
++
++	cancel_work_sync(&priv->vq_work);
 +
 +	dev_info(priv->dev, "Halting XuanTie RISC-V core...\n");
 +
@@ -756,6 +765,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
++	INIT_WORK(&priv->vq_work, sunxi_rproc_vq_work);
 +	platform_set_drvdata(pdev, rproc);
 +
 +	ret = rproc_add(rproc);
@@ -768,6 +778,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	return 0;
 +
 +err_mbox_release:
++	cancel_work_sync(&priv->vq_work);
 +	if (priv->rx_chan)
 +		mbox_free_channel(priv->rx_chan);
 +	if (priv->tx_chan)
@@ -783,6 +794,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct rproc *rproc = platform_get_drvdata(pdev);
 +	struct sunxi_rproc *priv = rproc->priv;
 +
++	cancel_work_sync(&priv->vq_work);
 +	rproc_del(rproc);
 +
 +	if (priv->rx_chan)

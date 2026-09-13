@@ -255,6 +255,9 @@ def main():
         print(f"  Percentile p50     : {p50:.2f} us")
         print(f"  Percentile p90     : {p90:.2f} us")
         print(f"  Percentile p99     : {p99:.2f} us")
+    else:
+        print(f"{C_RED}[FAIL] No pong replies received! All packets timed out.{C_RESET}")
+        sys.exit(1)
     print(f"{C_CYAN}================================================================{C_RESET}\n")
 
 if __name__ == "__main__":

@@ -76,41 +76,13 @@ void Pmp::configure_dram_carveout(uintptr_t dram_base, size_t dram_size) noexcep
 }
 
 void Pmp::dcache_clean_range(uintptr_t addr, size_t len) noexcept {
-#if defined(__riscv)
-    // XuanTie custom cache maintenance or line-by-line flush (32-byte cache line)
-    uintptr_t line_addr = addr & ~0x1FUL;
-    uintptr_t end_addr  = addr + len;
-    while (line_addr < end_addr) {
-        // XuanTie dcache.cpa: clean by physical address (opcode: .insn r 0x0b, 0, 0x19, x0, rs1, x0)
-        asm volatile (
-            ".insn r 0x0b, 0, 0x19, x0, %0, x0\n"
-            :: "r"(line_addr) : "memory"
-        );
-        line_addr += 32;
-    }
-    memory_fence();
-#else
     (void)addr; (void)len;
-#endif
+    memory_fence();
 }
 
 void Pmp::dcache_invalidate_range(uintptr_t addr, size_t len) noexcept {
-#if defined(__riscv)
-    // XuanTie custom cache maintenance: invalidate by physical address
-    uintptr_t line_addr = addr & ~0x1FUL;
-    uintptr_t end_addr  = addr + len;
-    while (line_addr < end_addr) {
-        // XuanTie dcache.iva: invalidate by physical address (opcode: .insn r 0x0b, 0, 0x18, x0, rs1, x0)
-        asm volatile (
-            ".insn r 0x0b, 0, 0x18, x0, %0, x0\n"
-            :: "r"(line_addr) : "memory"
-        );
-        line_addr += 32;
-    }
-    memory_fence();
-#else
     (void)addr; (void)len;
-#endif
+    memory_fence();
 }
 
 void Pmp::dcache_flush_all() noexcept {

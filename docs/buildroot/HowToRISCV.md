@@ -367,7 +367,7 @@ SECTIONS
 ```
 
 2. **`e907_ddr.ld` (Multi-Bank SRAM + DDR)**:
-   Places fast code (`.fastcode`) and critical stack in zero-wait-state `SRAM_FAST` (`0x3FFC0000`), resource tables and IPC structures in `SRAM_A3_2` (`0x40000000`), and large VirtIO packet pools in non-cacheable DDR (`0x48100000`).
+   Places fast code (`.fastcode`) and critical stack in zero-wait-state `SRAM_FAST` (`0x3FFC0000`), resource tables and IPC structures in `SRAM_A3_2` (`0x40000000`), and large payload pools in dedicated DDR (`0x48000000`).
 
 3. **`qemu.ld` (QEMU virt Emulation)**:
    Places all code, data, and stack in QEMU virt machine DRAM (`0x80000000`, 128 MB) with `_start` aligned at the base of memory.
@@ -461,33 +461,35 @@ apps/
 └── testDRAMMsg/             # Hybrid SRAM SPSC Queue + DDR DRAM Payload Buffers + PMP non-cacheable
     └── linux/               # ping_dram Linux host companion benchmark tool
 ```
+## 5. Firmware Test Suite (Walk $\rightarrow$ Run)
 
-### Application Details
+The firmware repository (`riscv-firmware/apps/`) provides a structured sequence of standalone test applications:
 
-1. **`testBasic`**: Boots into SRAM Space 0 `0x3FFC0000` and continuously writes magic counters to SRAM (`0x3FFC1000`, `0x3FFC1004`) for sanity testing.
-2. **`testStringBinaryTrace0`**: Registers a `.resource_table` with a 4 KB `trace0` buffer in SRAM. Executes single-precision hardware FPU math (sine wave computation) with a 32-byte packed binary `TelemetryPacket` in SRAM (`0x3FFC1000`) and formatted ASCII log output in `trace0`.
-   > **Note on `epoll` & Polling**: Upstream Linux debugfs `trace0` (`drivers/remoteproc/remoteproc_debugfs.c`) does **not** implement `.poll` or attach a wait queue; calling `epoll_ctl()` returns `EPERM`. Thus, companion scripts (`monitor_trace.py`) poll in a loop. Hardware Mailbox doorbells and `/dev/rpmsg0` provide event-driven notifications with full `epoll` support for 0% host CPU wait.
+1. **`testBasic`**: Minimal bootstrap test executing in on-chip SRAM (`0x3FFC0000`), incrementing two 32-bit heartbeat counters and streaming status to `trace0`.
+2. **`testStringBinaryTrace0`**: Verifies hardware single-precision FPU math (`fsin`) and concurrent ASCII text plus packed binary telemetry serialization in `trace0`.
 3. **`testCrash`**: Verifies machine-mode exception trapping (`mtvec`). After emitting heartbeats, it executes an illegal instruction, triggering a full register autopsy dump to `trace0` and writing `0xDEADF00D` to SRAM (`0x3FFFFF00`).
-4. **`testPing`**: Ultra-low-latency direct shared SRAM SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to ~1.5–2.5 $\mu\text{s}$.
-5. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg`. Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg`.
-6. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state SRAM SPSC control queues with a 1 MB DDR DRAM payload buffer pool (`0x48100000`) configured as non-cacheable via `hal::Pmp`. Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers up to 4 KB per frame.
+4. **`testPing`**: Ultra-low-latency direct shared SRAM SPSC communication using `hal::SpscQueue`. Linux companion tool `ping_shm` measures round-trip time latency down to 14.59 $\mu\text{s}$ avg at 512-byte buffer length (63,022 msgs/sec, 61.54 MB/s).
+5. **`testPingRpmsg`**: Standard Linux kernel VirtIO RPMsg framework (`virtio_rpmsg_bus`) using `hal::Rpmsg` over coherent DDR buffers (`0xf2f80000`). Interacts with `/dev/rpmsg0` via companion tool `ping_rpmsg` (175.64 $\mu\text{s}$ avg latency, 5,671 msgs/sec, 5.37 MB/s at 512-byte buffer length).
+6. **`testDRAMMsg`**: Hybrid memory architecture combining zero-wait-state SRAM SPSC control queues with a 1 MB DDR DRAM payload buffer pool (`0x48000000`). Linux companion tool `ping_dram` benchmarks high-bandwidth payload transfers (191.84 $\mu\text{s}$ avg latency, 4,710 msgs/sec, 4.60 MB/s at 512 bytes; up to 4 KB per frame).
 
 ---
 
-## 6. Communication Paradigm & IPC Architecture Comparison
+## 6. Communication Paradigm & IPC Architecture Comparison (Standardized 512-Byte Buffers)
 
-| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
+| IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM STREAMING]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Dedicated SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Architecture Family** | **Standards-Based (VirtIO / OpenAMP)** | **Standards-Based (VirtIO / OpenAMP)** | **Custom Hardware-Direct HAL** | **Custom Hardware-Direct HAL** |
-| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings via C++ `std::atomic` | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x40000000`) |
-| **Data Path** | RPMsg DMA buffers (DDR) | RPMsg DMA buffers (DDR) | **DDR DRAM Carveout (`0x48100000`, 1 MB)** | Direct SRAM (`0x3FFC0000` / `0x40000000`, 64B frames) |
-| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | Kernel UIO / Shared SRAM (`sunxi_rproc`) |
+| **Control Path** | VirtIO vrings via `libmetal` layers | VirtIO vrings in DDR DRAM (`0xf2f80000` / `0xf2f82000`) | Lock-Free SPSC in SRAM (`0x3FFF2000` / `0x072B2000`) | Lock-Free SPSC in SRAM (`0x3FFC0000` / `0x07280000`) |
+| **Data Path** | RPMsg DMA buffers (DDR) | **RPMsg DMA buffers in DDR (`0xf2f84000`)** | **DDR DRAM Carveout (`0x48000000`, 1 MB)** | **Direct On-Chip SRAM (`0x3FFC0000`)** |
+| **Linux Driver / Stack**| `virtio_rpmsg_bus` + `rpmsg_char` | `virtio_rpmsg_bus` + `rpmsg_char` | Kernel UIO / Reserved Memory Carveout | Direct memory mmap / `uio_pdrv_genirq` |
 | **Linux Ecosystem**     | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Standard (`/dev/rpmsg0`, `/dev/ttyRPMSG0`) | Custom High-Speed API / `ping_dram` | Custom High-Speed API / `ping_shm` |
-| **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~2 – 3 KB** (zero dynamic allocation) | **~3 – 4 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
-| **Typical RTT Latency** | **~60 – 160 $\mu\text{s}$** | **~50 – 90 $\mu\text{s}$** | **~3.0 – 6.0 $\mu\text{s}$** (DDR bus latency) | **~1.5 – 2.5 $\mu\text{s}$** (Zero-wait-state SRAM) |
-| **Jitter (StdDev)**     | Moderate (Kernel context switches) | Moderate (Kernel context switches) | **Ultra-Low (<0.5 $\mu\text{s}$)** | **Ultra-Low (<0.2 $\mu\text{s}$)** |
-| **Max Payload Size**    | Medium (512 B default) | Medium (512 B default) | **Large (Up to 4 KB per frame, MBs pool)** | Small (40–64 B, SRAM capacity bounded) |
-| **Throughput Bandwidth**| Moderate (~10–20 MB/s) | Moderate (~10–20 MB/s) | **High Bandwidth (>100 MB/s)** | High Packet Rate (Low Payload) |
+| **Firmware Code Size**  | **~30 – 50 KB** (requires dynamic heap) | **~3 KB** (zero dynamic allocation) | **~3 KB** (zero dynamic allocation) | **< 1 KB** (header-only C++ template) |
+| **Buffer Length (Apples-to-Apples)** | 512 B default | **512 B buffer (496 B payload + 16 B hdr)** | **512 B payload** | **512 B packet (484 B payload + hdr)** |
+| **Typical RTT Latency** | **~60 – 160 $\mu\text{s}$** | **175.64 $\mu\text{s}$ avg** (Min: 162.88 $\mu\text{s}$) | **191.84 $\mu\text{s}$ avg** (Min: 189.75 $\mu\text{s}$) | **14.59 $\mu\text{s}$ avg** (Min: 13.88 $\mu\text{s}$) |
+| **Jitter (StdDev)**     | Moderate (Kernel context switches) | **13.19 $\mu\text{s}$** (PREEMPT_RT kernel) | **2.25 $\mu\text{s}$** | **2.75 $\mu\text{s}$** (Ultra-deterministic) |
+| **Throughput (1,000 pings)** | Moderate | **5,671.2 msgs/sec** | **4,710.4 msgs/sec** | **63,022.1 msgs/sec** |
+| **Bidirectional Bandwidth** | Moderate (~5–10 MB/s) | **5.37 MB/sec** | **4.60 MB/sec** | **61.54 MB/sec** |
+| **Success Rate (1,000 pings)** | N/A | **100% (0 timeouts)** | **100% (0 timeouts)** | **100% (0 timeouts)** |
 | **Target Use Case**     | Generic standard OS interop | Lightweight standard Linux RPMsg | Point-clouds, camera frames, flight logs | Hard real-time motor control, PID loops |
 
 ---

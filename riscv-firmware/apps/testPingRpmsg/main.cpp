@@ -17,6 +17,7 @@
 #include <atomic>
 #include "hal/trace.hpp"
 #include "hal/timer.hpp"
+#include "hal/pmp.hpp"
 #include "hal/rpmsg.hpp"
 #include "include/resource_table.h"
 
@@ -56,6 +57,7 @@ int main(void) {
     // 1. Initialize HAL
     hal::Trace::init();
     hal::Timer::init();
+    hal::Pmp::init();
 
     hal::Trace::puts("================================================================\n");
     hal::Trace::puts("  Allwinner T527 XuanTie E907 testPingRpmsg (Linux RPMsg)      \n");

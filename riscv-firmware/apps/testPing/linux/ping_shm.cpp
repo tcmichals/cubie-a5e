@@ -125,9 +125,12 @@ int main(int argc, char *argv[]) {
         // Prepare Ping Packet
         channel->ping_pkt.magic = SHM_PING_MAGIC;
         channel->ping_pkt.seq = seq;
-        channel->ping_pkt.payload_len = std::min((size_t)39, payload_str.size());
-        strncpy((char *)channel->ping_pkt.payload, payload_str.c_str(), sizeof(channel->ping_pkt.payload) - 1);
-        channel->ping_pkt.payload[sizeof(channel->ping_pkt.payload) - 1] = '\0';
+        size_t plen = std::min(sizeof(channel->ping_pkt.payload) - 1, payload_str.size());
+        channel->ping_pkt.payload_len = plen;
+        for (size_t k = 0; k < plen; ++k) {
+            channel->ping_pkt.payload[k] = payload_str[k];
+        }
+        channel->ping_pkt.payload[plen] = '\0';
 
         uint64_t tx_ns = get_time_ns();
         channel->ping_pkt.host_tx_ts_ns = tx_ns;
@@ -189,6 +192,10 @@ int main(int argc, char *argv[]) {
     std::cout << "Total Duration : " << std::fixed << std::setprecision(3) << total_time_sec << " s\n";
     std::cout << "Throughput     : " << std::fixed << std::setprecision(1)
               << ((double)latencies_us.size() / total_time_sec) << " msgs/sec\n";
+    double total_bytes = (double)(latencies_us.size() * sizeof(ShmPingPacket) * 2);
+    double mb_sec = (total_bytes / (1024.0 * 1024.0)) / total_time_sec;
+    std::cout << "Bandwidth      : " << std::fixed << std::setprecision(2)
+              << mb_sec << " MB/sec (Bidirectional)\n";
 
     if (!latencies_us.empty()) {
         std::sort(latencies_us.begin(), latencies_us.end());

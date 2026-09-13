@@ -57,15 +57,17 @@ static void print_usage(const char *prog) {
               << "Options:\n"
               << "  -d, --dev <path>      RPMsg character device (default: /dev/rpmsg0 or /dev/rpmsg_ctrl0)\n"
               << "  -n, --count <num>     Number of pings to send (default: 1000, 0 = continuous)\n"
-              << "  -s, --sleep <us>      Sleep between pings in microseconds (default: 1000)\n"
-              << "  -p, --payload <str>   Custom payload string (max 47 chars)\n"
+              << "  -s, --size <bytes>    Payload size in bytes (default: 496 for 512B buffer, 16..496)\n"
+              << "  -D, --delay <us>      Delay between pings in microseconds (default: 1000)\n"
+              << "  -p, --payload <str>   Custom payload string\n"
               << "  -t, --timeout <ms>    Pong timeout in milliseconds (default: 1000)\n"
               << "  -h, --help            Show this help message\n";
 }
 
 int main(int argc, char *argv[]) {
     uint32_t count = 1000;
-    uint32_t sleep_us = 1000;
+    uint32_t payload_size = 496; // Default: 496 bytes (512-byte buffer length on wire/DDR)
+    uint32_t delay_us = 1000;
     uint32_t timeout_ms = 1000;
     std::string payload_str = "Ping from Linux RPMsg Host";
     std::string dev_path = "";
@@ -73,7 +75,9 @@ int main(int argc, char *argv[]) {
     static struct option long_options[] = {
         {"dev",     required_argument, 0, 'd'},
         {"count",   required_argument, 0, 'n'},
-        {"sleep",   required_argument, 0, 's'},
+        {"size",    required_argument, 0, 's'},
+        {"delay",   required_argument, 0, 'D'},
+        {"sleep",   required_argument, 0, 'D'},
         {"payload", required_argument, 0, 'p'},
         {"timeout", required_argument, 0, 't'},
         {"help",    no_argument,       0, 'h'},
@@ -81,11 +85,12 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "d:n:s:p:t:h", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "d:n:s:D:p:t:h", long_options, nullptr)) != -1) {
         switch (opt) {
             case 'd': dev_path = optarg; break;
             case 'n': count = std::stoul(optarg); break;
-            case 's': sleep_us = std::stoul(optarg); break;
+            case 's': payload_size = std::stoul(optarg); break;
+            case 'D': delay_us = std::stoul(optarg); break;
             case 'p': payload_str = optarg; break;
             case 't': timeout_ms = std::stoul(optarg); break;
             case 'h': print_usage(argv[0]); return 0;
@@ -93,10 +98,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (payload_size < 16) payload_size = 16;
+    if (payload_size > 496) payload_size = 496;
+
     std::cout << "================================================================\n";
     std::cout << "  Allwinner T527 Linux VirtIO RPMsg Ping-Pong Benchmark        \n";
     std::cout << "  Protocol: Linux kernel virtio_rpmsg_bus                      \n";
     std::cout << "  Channel : rpmsg-ping-channel (Endpoint Addr: 1024)           \n";
+    std::cout << "  Payload : " << payload_size << " bytes (" << (payload_size + 16)
+              << "-byte VirtIO buffer) | Count: " << count << " iterations\n";
     std::cout << "================================================================\n";
 
     // Auto-discover RPMsg device if not provided
@@ -142,11 +152,13 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         close(ctrl_fd);
+
+        // Open newly created endpoint
         dev_path = "/dev/rpmsg0";
-        usleep(100000); // Allow udev to instantiate /dev/rpmsg0
+        usleep(50000); // 50ms settling delay for devtmpfs node creation
     }
 
-    fd = open(dev_path.c_str(), O_RDWR | O_NONBLOCK);
+    fd = open(dev_path.c_str(), O_RDWR);
     if (fd < 0) {
         std::cerr << "[ERROR] Failed to open " << dev_path << ": " << strerror(errno) << "\n";
         std::cerr << "[HINT] Ensure Linux remoteproc firmware is booted and rpmsg_char driver is loaded.\n";
@@ -159,6 +171,9 @@ int main(int argc, char *argv[]) {
     std::vector<double> latencies_us;
     latencies_us.reserve(count > 0 ? count : 10000);
 
+    std::vector<uint8_t> tx_buf(payload_size);
+    std::vector<uint8_t> rx_buf(512);
+
     uint64_t bench_start_ns = get_time_ns();
     uint32_t seq = 0;
     uint32_t timeouts = 0;
@@ -166,16 +181,21 @@ int main(int argc, char *argv[]) {
     for (uint32_t i = 0; count == 0 || i < count; ++i) {
         seq++;
 
-        RpmsgPingPayload tx_payload;
-        tx_payload.seq = seq;
-        strncpy(tx_payload.text, payload_str.c_str(), sizeof(tx_payload.text) - 1);
-        tx_payload.text[sizeof(tx_payload.text) - 1] = '\0';
-
+        // Header: seq (uint32) @ offset 0, host_tx_ts_ns (uint64) @ offset 4
+        memcpy(tx_buf.data(), &seq, sizeof(seq));
         uint64_t tx_ns = get_time_ns();
-        tx_payload.host_tx_ts_ns = tx_ns;
+        memcpy(tx_buf.data() + 4, &tx_ns, sizeof(tx_ns));
+
+        // Remaining bytes filled with payload_str and padded
+        size_t text_max = payload_size - 12;
+        size_t copy_len = std::min(payload_str.size(), text_max);
+        memcpy(tx_buf.data() + 12, payload_str.data(), copy_len);
+        if (copy_len < text_max) {
+            memset(tx_buf.data() + 12 + copy_len, 'X', text_max - copy_len);
+        }
 
         // Send RPMsg Ping
-        ssize_t bytes_written = write(fd, &tx_payload, sizeof(tx_payload));
+        ssize_t bytes_written = write(fd, tx_buf.data(), payload_size);
         if (bytes_written < 0) {
             std::cerr << "[ERROR] write() failed on seq=" << seq << ": " << strerror(errno) << "\n";
             break;
@@ -188,8 +208,7 @@ int main(int argc, char *argv[]) {
 
         int ret = poll(&pfd, 1, timeout_ms);
         if (ret > 0 && (pfd.revents & POLLIN)) {
-            RpmsgPingPayload rx_payload;
-            ssize_t bytes_read = read(fd, &rx_payload, sizeof(rx_payload));
+            ssize_t bytes_read = read(fd, rx_buf.data(), rx_buf.size());
             uint64_t rx_ns = get_time_ns();
 
             if (bytes_read > 0) {
@@ -207,8 +226,8 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        if (sleep_us > 0) {
-            usleep(sleep_us);
+        if (delay_us > 0) {
+            usleep(delay_us);
         }
 
         if (seq % 200 == 0) {
@@ -228,7 +247,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Total Duration : " << std::fixed << std::setprecision(3) << total_time_sec << " s\n";
     std::cout << "Throughput     : " << std::fixed << std::setprecision(1)
               << ((double)latencies_us.size() / total_time_sec) << " msgs/sec\n";
-    double total_bytes = (double)(latencies_us.size() * sizeof(RpmsgPingPayload) * 2);
+    double total_bytes = (double)(latencies_us.size() * payload_size * 2);
     double kb_sec = (total_bytes / 1024.0) / total_time_sec;
     double mb_sec = kb_sec / 1024.0;
     std::cout << "Bandwidth      : " << std::fixed << std::setprecision(2)
@@ -269,5 +288,5 @@ int main(int argc, char *argv[]) {
     }
 
     close(fd);
-    return 0;
+    return (latencies_us.empty() || timeouts == seq) ? 1 : 0;
 }

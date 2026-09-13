@@ -11,20 +11,24 @@
  *  - Control Block in Fast Zero-Wait-State Dedicated MCU SRAM C (0x07130000)
  *  - Payload Buffer Pool in DDR DRAM Carveout (0x48100000)
  */
-#define DRAM_SPSC_SRAM_ADDR    0x07130000UL /* Dedicated MCU SRAM C Base */
+#if defined(__riscv)
+#define DRAM_SPSC_SRAM_ADDR    0x3FFF2000UL /* Core DA in SRAM Space 0 (offset +0x32000) */
+#else
+#define DRAM_SPSC_SRAM_ADDR    0x072B2000UL /* Host PA in SRAM Space 0 (Host 0x07280000 + 0x32000) */
+#endif
 #define DRAM_SPSC_SRAM_SIZE    0x1000UL     /* 4 KB Control Window */
 
-#define DRAM_SPSC_DRAM_ADDR    0x48100000UL /* DDR Reserved Memory Carveout */
+#define DRAM_SPSC_DRAM_ADDR    0x48000000UL /* DDR Reserved Memory Carveout */
 #define DRAM_SPSC_DRAM_SIZE    0x00100000UL /* 1 MB Buffer Pool */
 
 #define DRAM_SPSC_RING_ENTRIES 16           /* 16 Slots per Ring */
 #define DRAM_SPSC_MAX_BUF_LEN  4096UL       /* 4 KB Max Payload per Slot */
 
 /*
- * SPSC Ring Descriptor (Placed in SRAM C)
+ * SPSC Ring Descriptor (Placed in SRAM C, 32 bytes, 8-byte aligned)
  */
-struct __attribute__((packed, aligned(4))) DramSpscDesc {
-    uint32_t dram_buf_offset; // Byte offset into DRAM buffer pool (0x48100000 + offset)
+struct __attribute__((aligned(8))) DramSpscDesc {
+    uint32_t dram_buf_offset; // Byte offset into DRAM buffer pool (0x48000000 + offset)
     uint32_t payload_len;     // Actual valid payload length in bytes
     uint32_t seq;             // Monotonic sequence number
     uint32_t flags;           // Status flags (0 = Empty, 1 = Ready, 2 = Ack)
@@ -35,7 +39,7 @@ struct __attribute__((packed, aligned(4))) DramSpscDesc {
 /*
  * Bidirectional SPSC Queue Control Block (Placed in SRAM C @ 0x07130000)
  */
-struct __attribute__((packed, aligned(4))) DramSpscControlBlock {
+struct __attribute__((aligned(8))) DramSpscControlBlock {
     // Control block initialization signature
     volatile uint32_t magic;
     volatile uint32_t ring_size;
@@ -55,7 +59,7 @@ struct __attribute__((packed, aligned(4))) DramSpscControlBlock {
     // Diagnostic Counters
     volatile uint32_t total_pings_recv;
     volatile uint32_t total_pongs_sent;
-    volatile uint64_t total_bytes_transferred;
+    volatile uint64_t total_bytes_transferred; // At offset 48 (aligned to 8!)
 
     // Descriptor Rings (16 slots Host->RISC-V, 16 slots RISC-V->Host)
     DramSpscDesc tx_ring[DRAM_SPSC_RING_ENTRIES]; // Host -> RISC-V

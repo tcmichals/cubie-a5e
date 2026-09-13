@@ -427,7 +427,12 @@ def test_ping_rpmsg():
             log_warn(f"ping_rpmsg.py notice: {e}")
 
     stop_rproc()
-    return True
+    if ping_success:
+        log_pass("VirtIO RPMsg ping-pong communication verified successfully")
+        return True
+    else:
+        log_fail("VirtIO RPMsg ping-pong failed: No replies received (all timed out)")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description="Automated XuanTie E907 Firmware Test Suite")
