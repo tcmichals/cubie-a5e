@@ -1,5 +1,10 @@
 # RISC-V Firmware & RemoteProc Driver: Roadmap & Testing TODOs
 
+> **Roadmap Navigation**:
+> - For full board-wide feature roadmaps (Camera encoding, NPU acceleration, and RemoteProc), see [**`TODO_A5E.md`**](../TODO_A5E.md).
+> - For Radxa Cubie A7A hardware bring-up (USB, Ethernet, E902 co-processor), see [**`TODO_A7A.md`**](../TODO_A7A.md).
+> - For the multi-board executive summary, see [**`TODO.md`**](../TODO.md).
+
 This document tracks active accomplishments, hardware proofs, and upcoming testing/enhancement tasks for the XuanTie E907 / E902 co-processor firmware and Linux `sunxi_rproc` driver.
 
 ---

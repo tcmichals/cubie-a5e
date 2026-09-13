@@ -1,116 +1,70 @@
-# Cubie A7A Bring-Up TODO
+# Cubie Project Roadmap & Multi-Board Dashboard
 
-> **Restart here.** Last updated: 2026-09-01.
->
-> Active scope: Ethernet and E907 remoteproc in parallel. USB remains disabled. Do not change serial transport for these tasks.
+This repository supports software and hardware bring-up for two distinct Allwinner-based single board computers:
+1. **Radxa Cubie A5E** (Allwinner A527 / T527)
+2. **Radxa Cubie A7A** (Allwinner A733)
 
-## Mandatory patch gate
+To ensure clarity, each board has a dedicated, comprehensive tracking document. Use the links below to navigate to board-specific milestones and tasks.
 
-- [x] Clean Buildroot Linux validation passed: `make -C bld.a7a linux-dirclean && make -C bld.a7a linux` reapplied all A7A external kernel patches to clean Linux 7.1 and built the A7A DTB.
-- [ ] Before every patch commit, rerun that clean-tree gate.
-- [ ] Permanent kernel changes must be synchronized into `project-cubie-a5e/patches/linux/`; never commit a fix that exists only in `bld.a7a/build/linux-7.1/`.
+---
 
-See `docs/buildroot/A7A_KERNEL_PATCH_VALIDATION.md`.
+## Board Navigation & Status Matrix
 
-## Ethernet: no physical carrier
+| Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Tracking Document |
+| :--- | :--- | :--- | :--- | :--- |
+| **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E907<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up**<br>• RemoteProc & Mailbox Upstream RFC Ready<br>• Sub-15 $\mu$s IPC Verified<br>• Next: Camera Encoding (VPU) & NPU | 📄 [**TODO_A5E.md**](TODO_A5E.md) |
+| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **Active Silicon Bring-Up**<br>• Active Focus: USB & Power (FE1.1S / AIC8800)<br>• Active Blocker: Ethernet GMAC210 TX DMA<br>• Architecture: Dual-Mode E902 RemoteProc | 📄 [**TODO_A7A.md**](TODO_A7A.md) |
 
-- [x] MDIO finds U10 Maxio MAE0621A-Q3C at PHY address 1.
-- [x] U-Boot pre-start MDIO reads returned `0x0000` at every address because the Ethernet controller had not entered its normal start path; do not use pre-start `mdio` results as PHY evidence.
-- [x] U-Boot target proof: two pings to live peer `192.168.1.2` succeeded, while absent peer `.3` correctly failed. PHY power/reset, MDIO, RGMII, MAC DMA, board routing, magnetics, and cable are functional. The Ethernet fault is isolated to Linux configuration.
-- [x] Running U-Boot control DT has GMAC enabled, PH0–PH15 muxed to function 5, PHY address 1, and PH16 active-low reset released high. Treat the old vendor U-Boot source as register/routing evidence only.
-- [x] Post-ping U-Boot reads return teardown state (`0x0200341c = 1`, syscfg and standalone MDIO reads zero); they are not active-state references. The successful ping is the valid datapath proof.
-- [ ] In Linux, capture `/proc/interrupts` before and after traffic. Vendor GMAC210 explicitly enables split multi-MSI and requests TX0/RX0 IRQs; current `dwmac-sun55i` does not enable multi-MSI, so SPI 173/174 are not requested.
-- [ ] If target IRQ counts confirm only inactive `macirq`, review the minimal GMAC210 variant fix: standard queue IRQ names in DTS plus `STMMAC_FLAG_MULTI_MSI_EN` in A733 glue. This cannot be solved in DTS alone.
-- [x] A later target boot reports `Link is Up - 1Gbps/Full`; PHY power/reset, copper link, autonegotiation, and basic RGMII MAC/PHY integration are confirmed.
-- [x] TX DMA failure confirmed: `NETDEV WATCHDOG: transmit queue 0 timed out` repeats every 5–6 seconds with zero RX and only 1314 TX bytes. Adapter reset/re-probe causes the repeated `Link is Up` messages.
-- [x] Demoted MAE0621 probe/version/self-check/remove banners from unconditional `printk()` to `phydev_dbg()`; normal console output now retains only real link transitions and MAC watchdog/reset diagnostics.
-- [x] GMAC core-clock parent and `rgmii-id` correction are active: PTP clock now registers and link remains 1 Gbps/full duplex, but TX DMA watchdog timeouts persist.
-- [x] Added A733 CCU/DTS resource wiring only: `CLK_GMAC_PTP`, plus distinct GMAC AXI and MAC reset IDs. The A7A DTS now supplies `ptp_ref` and standard `stmmaceth`/`ahb` reset names; MAC and PHY driver code is unchanged.
-- [x] Schematic: PHY has its own 25 MHz crystal Y5. The SoC `EPHY-CLK-25M` route is unpopulated (R116), so the CCU output cannot fix PHY link.
-- [x] Added `ethtool` and `phytool` to the A7A external defconfig and verified them in the rebuilt target at `/usr/sbin/ethtool` and `/usr/bin/phytool`.
-- [x] Built and structurally audited the diagnostic A7A SD image.
-- [ ] On target, capture `ethtool eth0`, interface counters, and ping/traffic results while watching `dmesg -w`.
-- [ ] If `Link is Up`/`Link is Down` messages recur with different timestamps, capture PHY control/status and autonegotiation registers across the transition to diagnose link flap.
-- [ ] Build and target-test the DTS/CCU-only GMAC resource update; verify TX completion before making any other Ethernet change.
+---
 
-See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
+## Radxa Cubie A5E Executive Summary
 
-## USB and Power: Verification Phase (Active)
+* **Dedicated Roadmap**: [**`TODO_A5E.md`**](TODO_A5E.md)
+* **Status**: Highly mature; upstream Linux submission ready.
+* **Top Active Priorities**:
+  1. **Camera & Hardware Video Encoding (VPU / Cedrus)**:
+     - MIPI-CSI / parallel camera capture (`/dev/video0`).
+     - Enable `CONFIG_VIDEO_SUNXI_CEDRUS=y` with stateless `v4l2_m2m` H.264/H.265 encoding.
+     - Zero-copy `dma-buf` pipeline passing camera frames directly into Cedrus hardware encoder without CPU `memcpy`.
+  2. **NPU Deep Learning Acceleration (2 TOPS TinyML)**:
+     - Enable mainline `CONFIG_DRM_ETNAVIV=y` for onboard Vivante VIP9000 (`npu@7122000`).
+     - Build Mesa with Etnaviv Gallium and Teflon delegate (`libteflon.so`).
+     - Validate TensorFlow Lite INT8 quantized models on target silicon.
+  3. **XuanTie E907 Advanced RemoteProc & IPC**:
+     - Complete 4-tier benchmark matrix with pure on-chip SRAM VirtIO (`testPingRpmsgSram`).
+     - **Automatic Core Restart After Crash**: Wire E907 trap handler alert to `rproc_report_crash()` in `sunxi_rproc.c` for automatic firmware reload and restart without host reboot.
+     - **System Suspend / Resume**: Implement `dev_pm_ops` in `sunxi_rproc.c` and validate sleep retention in SRAM (`echo mem > /sys/power/state`).
+     - Multi-channel concurrency & high-load stress testing (10+ worker threads).
+     - Cadence Tensilica HiFi4 DSP co-processor bring-up.
+  4. **Upstream Linux Submission**:
+     - 5-patch series in `patches-upstream-rfc/` passing `checkpatch.pl` 100% clean (0 errors).
+     - Ready for submission to `linux-sunxi@lists.linux.dev` and `linux-remoteproc@vger.kernel.org`.
 
-- [x] **Schematic & Power Sequencing**: Decoded V1.10 schematic. Port 0 VBUS (`PL2`), Port 1 / Hub VBUS (`PM5`), Wi-Fi Power (`PM0`), and Wi-Fi Chip Enable (`PM1`) configured as `regulator-always-on` and `regulator-boot-on`.
-- [x] **CCU Interconnect & HCI Clocks**: Un-gated `0x05C0` (`AHB_GATE_SW_CFG` bit 9) in CCU probe. Updated `bus_usb0_clk` and `bus_usb1_clk` to mask `BIT(4) | BIT(0)` (`0x1304`/`0x130c`), clocking both EHCI DMA engines and OHCI.
-- [x] **PHY SIDDQ & Shared Resets**: Added `sun60i_a733_cfg` in `phy-sun4i-usb.c` clearing `PHY_CTL_SIDDQ | PHY_CTL_H3_SIDDQ` on PMU1, with `devm_reset_control_get_shared()` to prevent `-EBUSY` collisions.
-- [ ] **Target Validation**: Boot newly assembled image on Radxa Cubie A7A hardware:
-  - Verify EHCI0/1 and OHCI0/1 probe without `-EBUSY`.
-  - Verify FE1.1S USB 2.0 hub enumeration on Host 1 (`ehci1`).
-  - Verify AIC8800 Wi-Fi 6 device enumeration on hub port 4 (`0xA69C:0x8800`).
+---
 
-## Remoteproc & Real-Time Control: A733 Dual-Mode Architecture
+## Radxa Cubie A7A Executive Summary
 
-- [x] **Silicon & Security Discovery**: Confirmed A733 coprocessor is **XuanTie E902** (RV32EMC, 200 MHz, no FPU, no TCMs, 208 KB System SRAM A2). Stock BL31 write-protects `0x07032204` for factory `scp.fex`.
-- [x] **Dual-Mode Architecture Defined**: Detailed in `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md`:
-  - **Mode 1 (Suspend/Resume)**: Stock TOC1 with `scp.fex` for consumer S3 deep sleep.
-  - **Mode 2 (Real-Time Control / Linux RemoteProc)**: 24/7 industrial/embedded control without suspend/resume.
-- [ ] **Post-USB Execution Plan for Mode 2**:
-  1. **TF-A (BL31)**: Configure `sunxi_security.c` to unlock `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`) so Non-Secure Linux EL1 can access `0x07032000` and System SRAM A2 (`0x00040000`).
-  2. **U-Boot**: Ensure U-Boot RSB driver powers PMIC `DCDC1` and `ALDO1` when `scp.fex` is omitted from TOC1.
-  3. **Device Tree**: Add `cubie-a7a-rproc.dtso` overlay defining `&rproc` and `0x4E000000` DMA pool.
-  4. **Kernel Driver**: Update `sunxi_rproc.c` with `"allwinner,sun60i-a733-rproc"` to map SRAM A2 (`0x00040000`, 208 KB) and manage E902 lifecycle.
+* **Dedicated Roadmap**: [**`TODO_A7A.md`**](TODO_A7A.md)
+* **Status**: Board bring-up in progress.
+* **Top Active Priorities**:
+  1. **USB & Power Subsystem (Active Focus)**:
+     - Validate FE1.1S USB 2.0 4-port hub enumeration on Host 1 (`ehci1`).
+     - Validate AIC8800 Wi-Fi 6 / BT 5.4 module enumeration on hub port 4 (`0xA69C:0x8800`).
+     - Verify power rails and GPIO regulators (`PL2`, `PM5`, `PM0`, `PM1`).
+  2. **Ethernet GMAC210 TX DMA Watchdog (Active Blocker)**:
+     - Resolve recurring `NETDEV WATCHDOG: transmit queue 0 timed out`.
+     - Implement multi-MSI queue IRQ handling (`STMMAC_FLAG_MULTI_MSI_EN`, SPI 173/174) in A733 stmmac glue.
+  3. **XuanTie E902 Co-Processor RemoteProc (Mode 2 Bring-Up)**:
+     - Post-USB bring-up: Unlock BL31 `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`) for Non-Secure Linux access.
+     - Map System SRAM A2 (`0x00040000`, 208 KB) in `sunxi_rproc.c`.
 
-## RemoteProc Driver: Additional Validation & Stress Testing Scope (A5E / T527 / A733)
+---
 
-- [x] **Core Lifecycle & Boot Validation**: Tested `start` -> `stop` -> `start` cycles with zero `/dev/mem` register workarounds.
-- [x] **ELF Loader & Address Translation**: Verified SRAM Space 0 (`0x3FFC0000`), SRAM Space 1 (`0x40000000`), and DDR carveout (`0x48000000`).
-- [x] **Debugfs Trace Integration**: Verified dynamic `RSC_TRACE` extraction into `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
-- [x] **VirtIO RPMsg over DDR DRAM**: Verified `dma_alloc_coherent()` DDR CMA buffers (`0xf2f80000`), mailbox doorbells, PREEMPT_RT deferred workqueue, and 1,000 round-trip 512B packets at 100% success (0 timeouts).
-- [x] **Standardized 512-Byte Apples-to-Apples Benchmarks**: Tested `ping_shm` (14.6 us RTT, 61.5 MB/s), `ping_dram` (191.8 us RTT, 4.6 MB/s), and `ping_rpmsg` (175.6 us RTT, 5.37 MB/s).
-- [x] **Exception Trapping & Isolation**: Verified `testCrash` captures register autopsy in SRAM while ARM host kernel remains stable.
-- [ ] **1. Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
-  - [ ] Update firmware `.resource_table` with fixed Device Addresses (`.da = 0x40000000` in SRAM Space 1) for Vring 0, Vring 1, and VirtIO payload message buffers instead of dynamic DDR CMA (`FW_RSC_ADDR_ANY`).
-  - [ ] Ensure `sunxi_rproc.c` handles SRAM mapping for vrings and buffers without calling `dma_alloc_coherent()`.
-  - [ ] Benchmark `ping_rpmsg` with 512-byte buffer length over pure on-chip SRAM.
-  - [ ] Complete the 4-way architectural comparison matrix:
-    - Pure SRAM Polling (`ping_shm`): **14.59 $\mu\text{s}$**
-    - VirtIO in On-Chip SRAM (Projected): **~40 – 50 $\mu\text{s}$**
-    - VirtIO in DDR DRAM (`ping_rpmsg`): **175.64 $\mu\text{s}$**
-    - Hybrid SRAM/DDR Carveout (`ping_dram`): **191.84 $\mu\text{s}$**
-- [ ] **2. Automatic Crash Recovery (`rproc_report_crash`)**:
-  - [ ] Implement mailbox/interrupt notification from E907 trap handler to ARM Linux host.
-  - [ ] Wire `rproc_report_crash()` in `sunxi_rproc.c` to trigger automatic core recovery/reboot when `recovery = enabled`.
-  - [ ] Test automatic recovery cycle on target silicon when `testCrash.elf` fires an illegal instruction.
-- [ ] **3. System Power Management (Suspend / Resume / `pm_runtime`)**:
-  - [ ] Add runtime PM / system suspend callbacks to `sunxi_rproc.c`.
-  - [ ] Test system deep sleep (`echo mem > /sys/power/state`) while XuanTie E907 is running.
-  - [ ] Verify core state retention, SRAM memory persistence, and clean resume without bus lockup or clock stall.
-- [ ] **4. Multi-Channel Concurrency & High-Load Stress Testing**:
-  - [ ] Create multiple concurrent RPMsg channels (e.g., `rpmsg-ping-channel`, `rpmsg-telemetry`, `rpmsg-control`) multiplexed over VirtIO vrings.
-  - [ ] Multi-threaded user-space stress test with 10+ concurrent worker threads hammering `/dev/rpmsg0`..`/dev/rpmsgN`.
-  - [ ] Evaluate lock contention, ring buffer saturation, and PREEMPT_RT latency degradation under 100% CPU load.
-- [ ] **5. Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up**:
-  - [ ] Add HiFi4 DSP compatible string and memory window (`0x00020000`) in `sunxi_rproc.c` / Device Tree.
-  - [ ] Validate DSP clock/reset domain sequencing and firmware loading.
+## Supporting Engineering References
 
-## Upstream Linux Kernel Submission Gate (`linux-remoteproc`, `linux-mailbox`, `linux-sunxi`)
-
-- [x] **1. Devicetree YAML Binding Schemas (`dt-schema` Validation)**:
-  - [x] Created `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml` (`#mbox-cells = <1>`, clocks, resets, interrupts) in patch `0012b`.
-  - [x] Created `Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml` (memory-region references, mailboxes, clocks, resets) in patch `0002b`.
-  - [x] Validated both schemas pass `checkpatch.pl` with **0 errors**.
-- [ ] **2. Device Tree `memory-region` Refactoring**:
-  - [ ] Replace hardcoded carveout addresses in `sunxi_rproc.c` with standard `rproc_of_resm_mem_entry_init()`.
-  - [ ] Define reserved-memory nodes (`<&rproc_vring0>`, `<&rproc_vring1>`, `<&rproc_dram>`) in `sun55i-a523.dtsi`.
-- [x] **3. Mailbox Driver Justification for Cover Letter**:
-  - [x] Documented technical rationale for standalone `sun55i-msgbox.c` vs `sun6i-msgbox.c` (4-port multi-processor architecture with $0x100$-strided registers and dynamic routing vs older 2-core fixed layout) in `patches-upstream-rfc/0000-cover-letter.patch`.
-- [x] **4. 5-Patch Upstream Submission Series Formatting**:
-  - [x] `[RFC 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema`
-  - [x] `[RFC 2/5] mailbox: sun55i: add Allwinner sun55i msgbox driver`
-  - [x] `[RFC 3/5] dt-bindings: remoteproc: add Allwinner sun55i rproc schema`
-  - [x] `[RFC 4/5] remoteproc: sunxi: add Allwinner XuanTie remoteproc driver`
-  - [x] `[RFC 5/5] arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes`
-  - [x] Automated validator script created: [`tools/check_upstream_rfc.sh`](file:///home/tcmichals/projects/cubie/cubie-a5e/tools/check_upstream_rfc.sh) (**100% checkpatch PASS** across all patches).
-
-## Engineering record
-
-Update `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` after every target test and when any TODO item changes state. Detailed task history is also maintained at `docs/platforms/CUBIE_A7A_BRINGUP_TODO.md`.
-
-
+* **A5E RemoteProc & Benchmarks**: `riscv-firmware/TODO.md`, `riscv-firmware/tests.md`
+* **Upstream RFC Patch Series**: `patches-upstream-rfc/`
+* **Upstream Validation Script**: `tools/check_upstream_rfc.sh`
+* **A7A Bring-Up Debug Log**: `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`
+* **A7A Ethernet Reference**: `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md`
+* **A7A Coprocessor Architecture**: `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md`

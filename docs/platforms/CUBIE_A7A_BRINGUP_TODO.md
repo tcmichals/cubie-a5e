@@ -1,5 +1,8 @@
 # Cubie A7A Bring-Up TODO
 
+> **Roadmap Notice**:
+> For the active bring-up roadmap including the updated USB/Power verification phase and E902 dual-mode architecture, see the primary document [**`TODO_A7A.md`**](../../TODO_A7A.md) and [**`TODO.md`**](../../TODO.md).
+>
 > **Last updated**: 2026-09-01  
 > **Active scope**: Ethernet and E907 remoteproc in parallel. USB controllers remain disabled. Do not introduce serial-path changes as part of this work.
 
