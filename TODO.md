@@ -57,6 +57,30 @@ See `docs/platforms/CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md` and `docs/platfor
   3. **Device Tree**: Add `cubie-a7a-rproc.dtso` overlay defining `&rproc` and `0x4E000000` DMA pool.
   4. **Kernel Driver**: Update `sunxi_rproc.c` with `"allwinner,sun60i-a733-rproc"` to map SRAM A2 (`0x00040000`, 208 KB) and manage E902 lifecycle.
 
+## RemoteProc Driver: Additional Validation & Stress Testing Scope (A5E / T527 / A733)
+
+- [x] **Core Lifecycle & Boot Validation**: Tested `start` -> `stop` -> `start` cycles with zero `/dev/mem` register workarounds.
+- [x] **ELF Loader & Address Translation**: Verified SRAM Space 0 (`0x3FFC0000`), SRAM Space 1 (`0x40000000`), and DDR carveout (`0x48000000`).
+- [x] **Debugfs Trace Integration**: Verified dynamic `RSC_TRACE` extraction into `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+- [x] **VirtIO RPMsg over DDR DRAM**: Verified `dma_alloc_coherent()` DDR CMA buffers (`0xf2f80000`), mailbox doorbells, PREEMPT_RT deferred workqueue, and 1,000 round-trip 512B packets at 100% success (0 timeouts).
+- [x] **Standardized 512-Byte Apples-to-Apples Benchmarks**: Tested `ping_shm` (14.6 us RTT, 61.5 MB/s), `ping_dram` (191.8 us RTT, 4.6 MB/s), and `ping_rpmsg` (175.6 us RTT, 5.37 MB/s).
+- [x] **Exception Trapping & Isolation**: Verified `testCrash` captures register autopsy in SRAM while ARM host kernel remains stable.
+- [ ] **1. Automatic Crash Recovery (`rproc_report_crash`)**:
+  - [ ] Implement mailbox/interrupt notification from E907 trap handler to ARM Linux host.
+  - [ ] Wire `rproc_report_crash()` in `sunxi_rproc.c` to trigger automatic core recovery/reboot when `recovery = enabled`.
+  - [ ] Test automatic recovery cycle on target silicon when `testCrash.elf` fires an illegal instruction.
+- [ ] **2. System Power Management (Suspend / Resume / `pm_runtime`)**:
+  - [ ] Add runtime PM / system suspend callbacks to `sunxi_rproc.c`.
+  - [ ] Test system deep sleep (`echo mem > /sys/power/state`) while XuanTie E907 is running.
+  - [ ] Verify core state retention, SRAM memory persistence, and clean resume without bus lockup or clock stall.
+- [ ] **3. Multi-Channel Concurrency & High-Load Stress Testing**:
+  - [ ] Create multiple concurrent RPMsg channels (e.g., `rpmsg-ping-channel`, `rpmsg-telemetry`, `rpmsg-control`) multiplexed over VirtIO vrings.
+  - [ ] Multi-threaded user-space stress test with 10+ concurrent worker threads hammering `/dev/rpmsg0`..`/dev/rpmsgN`.
+  - [ ] Evaluate lock contention, ring buffer saturation, and PREEMPT_RT latency degradation under 100% CPU load.
+- [ ] **4. Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up**:
+  - [ ] Add HiFi4 DSP compatible string and memory window (`0x00020000`) in `sunxi_rproc.c` / Device Tree.
+  - [ ] Validate DSP clock/reset domain sequencing and firmware loading.
+
 ## Engineering record
 
 Update `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` after every target test and when any TODO item changes state. Detailed task history is also maintained at `docs/platforms/CUBIE_A7A_BRINGUP_TODO.md`.
