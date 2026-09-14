@@ -81,13 +81,11 @@ Design Decisions for Maintainer Review
 
 Acknowledgements & References
 =============================
-We gratefully acknowledge the Linux-sunxi community and YuzukiHD for their
-open-source firmware and tooling contributions. In particular, YuzukiHD's
-SyterKit (https://github.com/YuzukiHD/SyterKit) and FreeRTOS-HIFI4-DSP
-(https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP) projects served as valuable
-independent community references for cross-checking hardware register offsets,
-SRAM memory window mappings, and clock/reset sequencing on the Allwinner T527
-and A733 SoC families.
+Thanks to the Linux-sunxi community and YuzukiHD. I used YuzukiHD's SyterKit
+(https://github.com/YuzukiHD/SyterKit) and FreeRTOS-HIFI4-DSP
+(https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP) as independent references
+to cross-check register offsets, SRAM mappings, and clock/reset sequencing
+on the T527 and A733.
 
 Patch Summary
 =============

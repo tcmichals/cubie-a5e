@@ -247,11 +247,11 @@ sync
 
 ## Acknowledgments & Credits
 
-We gratefully acknowledge the following open-source projects and developers whose reference implementations, hardware archaeology, and tools helped cross-reference and validate our reverse-engineering and drivers:
+Thanks to the following projects and developers whose work I referenced during bring-up:
 
 * **[YuzukiHD](https://github.com/YuzukiHD)**:
-  * [**SyterKit**](https://github.com/YuzukiHD/SyterKit): An outstanding bare-metal firmware framework for Allwinner SoCs. Its register implementations and DTS address mappings provided independent validation of our memory layout and clock/reset sequencing on the T527 and A733.
-  * [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): Reference FreeRTOS port and GCC toolchain for the Cadence Tensilica HiFi4 Audio DSP on Allwinner silicon, utilized as a cross-check for our DSP message box and remoteproc bring-up.
-* **The Linux Sunxi Community**: For decades of tireless work documenting, reverse-engineering, and mainline-supporting Allwinner hardware architectures.
-* **Radxa**: For manufacturing the Cubie A5E, Cubie A7A, and Cubie A7Z hardware platforms.
+  * [**SyterKit**](https://github.com/YuzukiHD/SyterKit): Bare-metal firmware framework for Allwinner SoCs. I used its register definitions and DTS mappings to cross-check memory layout and clock/reset sequencing on the T527 and A733.
+  * [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): FreeRTOS port and GCC toolchain for the HiFi4 DSP on Allwinner silicon, used as a reference for the DSP message box and remoteproc work.
+* **The Linux Sunxi Community**: For documenting and mainline-supporting Allwinner hardware.
+* **Radxa**: For the Cubie A5E, Cubie A7A, and Cubie A7Z hardware.
 

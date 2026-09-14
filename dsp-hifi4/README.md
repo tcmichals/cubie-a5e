@@ -61,6 +61,7 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 ---
 
 ## 6. Credits & Prior Art
-We gratefully acknowledge **[YuzukiHD](https://github.com/YuzukiHD)**:
-- [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): Low-level message box driver routines, linker script topology, and Xtensa HiFi4 GCC toolchain configurations adapted for this test framework.
-- [**SyterKit**](https://github.com/YuzukiHD/SyterKit): Independent bare-metal firmware framework used to cross-reference T527 and A733 coprocessor memory maps and register offsets.
+Thanks to **[YuzukiHD](https://github.com/YuzukiHD)**:
+- [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): Message box driver routines, linker script layout, and Xtensa HiFi4 GCC toolchain setup referenced for this test framework.
+- [**SyterKit**](https://github.com/YuzukiHD/SyterKit): Bare-metal firmware framework I used to cross-check T527 and A733 coprocessor memory maps and register offsets.
+
