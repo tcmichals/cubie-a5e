@@ -20,13 +20,13 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 78 +++++++++++++++++++
- 1 file changed, 78 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 96 +++++++++++++++++++
+ 1 file changed, 96 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,96 @@
 +# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 +%YAML 1.2
 +---
@@ -57,7 +57,18 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +      - allwinner,sun60i-a733-msgbox
 +
 +  reg:
-+    maxItems: 1
++    minItems: 4
++    maxItems: 4
++    description: |
++      Register banks for each of the four processor ports. Each port has
++      an independent 256-byte register bank.
++
++  reg-names:
++    items:
++      - const: arm
++      - const: dsp
++      - const: cpus
++      - const: rv
 +
 +  clocks:
 +    maxItems: 1
@@ -68,15 +79,20 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +    description: bus reset
 +
 +  interrupts:
-+    maxItems: 1
++    minItems: 1
++    maxItems: 4
++    description: |
++      One interrupt per processor port. The host port interrupt is required;
++      remote port interrupts are optional.
 +
 +  '#mbox-cells':
 +    const: 1
-+    description: channel number (0-11: 0-3 CPUS, 4-7 DSP, 8-11 RISC-V)
++    description: "channel number (0-11: 0-3 CPUS, 4-7 DSP, 8-11 RISC-V)"
 +
 +required:
 +  - compatible
 +  - reg
++  - reg-names
 +  - clocks
 +  - resets
 +  - interrupts
@@ -90,10 +106,17 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +    mailbox@3003000 {
 +        compatible = "allwinner,sun55i-a523-msgbox";
-+        reg = <0x03003000 0x1000>;
++        reg = <0x03003000 0x1000>,
++              <0x07094000 0x1000>,
++              <0x07120000 0x1000>,
++              <0x07136000 0x1000>;
++        reg-names = "arm", "dsp", "cpus", "rv";
 +        clocks = <&ccu 120>;
 +        resets = <&ccu 45>;
-+        interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
++        interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
++                     <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>,
++                     <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,
++                     <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
 +        #mbox-cells = <1>;
 +    };
 +

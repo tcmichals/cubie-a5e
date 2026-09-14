@@ -37,10 +37,10 @@ index 1234567..89abcdef 100644
 +		msgbox: mailbox@3003000 {
 +			compatible = "allwinner,sun55i-a523-msgbox";
 +			reg = <0x03003000 0x1000>,
-+			      <0x07120000 0x1000>,
 +			      <0x07094000 0x1000>,
++			      <0x07120000 0x1000>,
 +			      <0x07136000 0x1000>;
-+			reg-names = "arm", "cpus", "dsp", "rv";
++			reg-names = "arm", "dsp", "cpus", "rv";
 +			clocks = <&ccu CLK_BUS_MSGBOX>;
 +			resets = <&ccu RST_BUS_MSGBOX>;
 +			interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,

@@ -26,16 +26,20 @@ A5E_PATCHES = [
     "0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch",
     "0005-arm64-dts-allwinner-add-a523-remoteproc-and-msgbox.patch",
     "0012-mailbox-sun55i-add-allwinner-sun55i-a523-msgbox.patch",
+    "0013-remoteproc-sunxi-add-kunit-tests.patch",
+    "0014-mailbox-sun55i-add-kunit-tests.patch",
 ]
 
 FILES_TOUCHED = [
     "drivers/remoteproc/Kconfig",
     "drivers/remoteproc/Makefile",
     "drivers/remoteproc/sunxi_rproc.c",
+    "drivers/remoteproc/sunxi_rproc_test.c",
     "arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi",
     "drivers/mailbox/Kconfig",
     "drivers/mailbox/Makefile",
     "drivers/mailbox/sun55i-msgbox.c",
+    "drivers/mailbox/sun55i_msgbox_test.c",
 ]
 
 BASE_FILES_IN_TAR = [
@@ -144,12 +148,15 @@ def test_patch_dry_run(scratch_dir, tarball):
         return False
     shutil.copytree(clean_dir, patched_dir, dirs_exist_ok=True)
 
+    dry_dir = os.path.join(scratch_dir, "dry_run")
+    shutil.copytree(clean_dir, dry_dir, dirs_exist_ok=True)
+
     all_ok = True
-    # 1. Dry-run
+    # 1. Sequential Dry-run
     for p_name in A5E_PATCHES:
         p_path = os.path.join(PATCH_DIR, p_name)
         with open(p_path, "r") as pf:
-            cmd = ["patch", "-p1", "--dry-run", "-d", patched_dir]
+            cmd = ["patch", "-p1", "-d", dry_dir]
             res = subprocess.run(cmd, stdin=pf, capture_output=True, text=True)
         if res.returncode == 0:
             print(f"  [PASS DRY-RUN] {p_name}")

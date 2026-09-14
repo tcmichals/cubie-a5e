@@ -1,0 +1,49 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *         RADXA CUBIE A5E — HARDWARE MAILBOX ISOLATION TEST OVERLAY
+ * ============================================================================
+ * Configures the Linux 'mailbox-test' driver client to isolate and validate
+ * the Allwinner T527 sun55i-msgbox hardware mailbox controller without
+ * requiring active co-processor firmware execution.
+ *
+ * Reserves:
+ *   - 1 MB Shared DMA buffer pool (0x40000000 - 0x40100000)
+ *   - 4 MB Firmware execution segment (0x40100000 - 0x40500000)
+ *
+ * Mailbox Channels (sun55i-msgbox with #mbox-cells = <1>):
+ *   - Channels 4 & 5: ARM Cortex-A55 <-> Cadence HiFi4 Audio DSP
+ *   - Channels 8 & 9: ARM Cortex-A55 <-> XuanTie E907 RISC-V
+ *
+ * Load in /boot/config.txt:
+ *   dtoverlay=cubie-a5e-mailbox-test
+ * ============================================================================
+ */
+
+&{/reserved-memory} {
+    coproc_shm: sram@40000000 {
+        compatible = "shared-dma-pool";
+        reg = <0x0 0x40000000 0x0 0x00100000>;
+        no-map;
+    };
+
+    coproc_firmware: sram@40100000 {
+        reg = <0x0 0x40100000 0x0 0x00400000>;
+        no-map;
+    };
+};
+
+&{/} {
+    mailbox_test: mailbox-test {
+        compatible = "mailbox-test";
+        mboxes = <&msgbox 4>, <&msgbox 5>;
+        mbox-names = "tx", "rx";
+        status = "okay";
+    };
+};
+
+&msgbox {
+    status = "okay";
+};

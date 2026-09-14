@@ -22,6 +22,7 @@ ping_rpmsg
 ping_dram
 ping_uio
 riscv-firmware/bin/
+dsp-hifi4/bin/
 
 # Whitelist board vendor firmware tools
 !project-cubie-a5e/board/**/tools/*.bin
@@ -31,3 +32,4 @@ riscv-firmware/bin/
 __pycache__/
 *.pyc
 
+FreeRTOS-HIFI4-DSP/

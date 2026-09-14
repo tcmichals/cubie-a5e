@@ -45,6 +45,13 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [x] **Automated RemoteProc Test Suite**: Complete test suite passing 100% across all profiles via `python3 /usr/bin/run_tests.py`.
 - [x] **Kernel Patch Validation Gate**: `tools/validate_kernel_patches.py` asserting clean dry-run and byte identity against `linux-7.1`.
 - [x] **Upstream RFC Patch Series (`patches-upstream-rfc/`)**: Complete 5-patch series + cover letter passing `checkpatch.pl` with 0 errors.
+- [x] **Cadence Tensilica HiFi4 Audio DSP Testing Framework (`dsp-hifi4/`)**:
+  - `apps/testBasic`: Remoteproc ELF parsing, execution startup, and `trace0` buffer output (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
+  - `apps/testMsgbox`: Bidirectional hardware mailbox validation over Channels 4 (ARM -> DSP) and 5 (DSP -> ARM).
+  - Memory carveout DTS overlays: 1MB `shared-dma-pool` at `0x40000000` (`coproc_shm`), 4MB firmware execution segment at `0x40100000` (`coproc_firmware`).
+  - Hardware mailbox driver isolation testing via `CONFIG_MAILBOX_TEST=m` and `cubie-a5e-mailbox-test.dtso`.
+  - Target validation script `tools/validate_coproc.sh` and `/usr/bin/run_tests.py` integration.
+
 
 ---
 
@@ -143,13 +150,251 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## 5. Upstream Linux Kernel Submission (RFC Ready)
 
+### 5.0 Patch Series (Completed)
+
 - [x] Patch 1: `dt-bindings: mailbox: add Allwinner sun55i msgbox schema`
 - [x] Patch 2: `mailbox: sun55i: add Allwinner sun55i/A523 msgbox driver`
 - [x] Patch 3: `dt-bindings: remoteproc: add Allwinner sun55i rproc schema`
 - [x] Patch 4: `remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver`
 - [x] Patch 5: `arm64: dts: allwinner: sun55i: add msgbox and remoteproc nodes`
 - [x] Cover Letter: `patches-upstream-rfc/0000-cover-letter.patch` (72 char line wrap, 0 errors).
+
+---
+
+### 5.1 Test Hardening Plan (Pre-Submission — Closes Coverage Gaps)
+
+> **Context**: Coverage analysis identified **17 gaps in `sunxi_rproc.c`** and **19 gaps in `sun55i-msgbox.c`**. The happy-path silicon tests are excellent (all 3 profiles pass 100%), but upstream reviewers (Bjorn Andersson, Mathieu Poirier, Jassi Brar) will probe error paths, edge cases, and untested channels. This plan closes every identified gap.
+
+---
+
+#### Workstream A: DT Binding Schema Fix [BLOCKER — closes msgbox M19]
+
+> **Priority: CRITICAL** — `make dt_binding_check` and `make dtbs_check` will **FAIL** with the current binding. This blocks submission.
+
+- [x] **A.1: Fix `sun55i-msgbox` DT binding YAML** — `reg: maxItems: 1` must become `minItems: 4 / maxItems: 4` with `reg-names` items (`arm`, `dsp`, `cpus`, `rv`). `interrupts: maxItems: 1` must become `minItems: 1 / maxItems: 4`. **Also fixed DTS `reg` order** to match driver `regs[]` indexing (`arm=0, dsp=1, cpus=2, rv=3`). Quoted description string to ensure 100% valid YAML safe-load.
+  - File: `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml`
+  - Patch: Update `patches-upstream-rfc/0001-dt-bindings-mailbox-add-Allwinner-sun55i-msgbox-schema.patch`
+  - Also update: `project-cubie-a5e/patches/linux/0012b-dt-bindings-mailbox-add-allwinner-sun55i-msgbox.patch`
+- [x] **A.2: Host YAML Schema Validation** — Verified all RFC and Buildroot DT binding schemas parse cleanly with 0 errors via `yaml.safe_load`.
+- [ ] **A.3: Run `make dtbs_check`** against `sun55i-a523.dtsi` with the remoteproc+msgbox nodes and verify 0 errors/warnings.
+
+---
+
+#### Workstream B: KUnit Test Suite for `sunxi_rproc.c` [closes rproc #1-9, #11, #14, #17]
+
+> **Priority: HIGH** — Zero in-kernel unit tests currently exist. KUnit tests run at boot or via `kunit_tool` without needing real hardware and catch regressions in CI.
+
+- [x] **B.1: Create `drivers/remoteproc/sunxi_rproc_test.c`** — New KUnit module under `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST`. Bundled into self-contained patch `0013-remoteproc-sunxi-add-kunit-tests.patch`.
+- [x] **B.2: `da_to_va` address translation tests** (pure logic, verified host-side compilation with `aarch64-linux-gcc`):
+  - [x] `test_da_to_va_sram_space0_core_da` — DA=`0x3FFC0000`+offset → `r_sram_va` + offset
+  - [x] `test_da_to_va_sram_space0_host_phys` — DA=`0x07280000`+offset → `r_sram_va` + offset
+  - [x] `test_da_to_va_sram_space0_alt_0x3ff80000` — DA=`0x3FF80000` fallback view
+  - [x] `test_da_to_va_sram_space0_alt_0x3ffc0000` — DA=`0x3FFC0000` primary view
+  - [x] `test_da_to_va_sram_space1_host_phys` — DA=`r_sram1_phys` → `r_sram1_va`
+  - [x] `test_da_to_va_sram_space1_core_da_0x40000000` — DA=`0x40000000` → `r_sram1_va`
+  - [x] `test_da_to_va_sram_space1_core_da_0x40040000` — DA=`0x40040000` → `r_sram1_va`
+  - [x] `test_da_to_va_dram_carveout` — DA=`dram_phys`+offset → `dram_va` + offset
+  - [x] `test_da_to_va_trace_region` — DA=`trace_phys`+offset → `trace_va` + offset, `*is_iomem=false`
+  - [x] `test_da_to_va_zero_length_returns_null` — len=0 → NULL [closes rproc #gap in len==0 guard]
+  - [x] `test_da_to_va_out_of_range_returns_null` — unmapped DA → NULL (falls through to core carveout table)
+  - [x] `test_da_to_va_overflow_wraps_returns_null` — DA + len overflows u64 → NULL
+  - [x] `test_da_to_va_is_iomem_sram_true` — SRAM windows set `*is_iomem = true`
+  - [x] `test_da_to_va_is_iomem_dram_false` — DRAM/trace windows set `*is_iomem = false`
+- [ ] **B.3: `start` / `stop` logic tests**:
+  - [ ] `test_start_bootaddr_over_u32_max` — `rproc->bootaddr = 0x100000000ULL` → returns `-EINVAL` [closes rproc #9]
+  - [ ] `test_start_writes_boot_vector` — verify `writel(bootaddr, cfg_va + E906_STA_ADD_REG)` with mock `cfg_va`
+  - [ ] `test_stop_asserts_core_reset` — verify `reset_control_assert(rst_core)` called
+  - [ ] `test_stop_cancels_work_sync` — verify `cancel_work_sync(&priv->vq_work)` called before reset
+- [ ] **B.4: `prepare` / `unprepare` error cascade tests** [closes rproc #1, #2]:
+  - [ ] `test_prepare_all_clocks_resets_ok` — happy path, all succeed
+  - [ ] `test_prepare_cfg_reset_fail_returns_error` — `rst_cfg` deassert fails → immediate return
+  - [ ] `test_prepare_sram_reset_fail_unwinds_cfg` — `rst_sram` fails → `rst_cfg` re-asserted
+  - [ ] `test_prepare_msgbox_reset_fail_unwinds_sram_cfg` — `rst_msgbox` fails → `rst_sram` + `rst_cfg` asserted
+  - [ ] `test_prepare_parent_clk_fail_unwinds_all_resets` — `clk_parent` fails → all 3 resets asserted
+  - [ ] `test_prepare_bus_clk_fail_unwinds_parent` — `clk_bus` fails → `clk_parent` disabled + resets asserted
+  - [ ] `test_prepare_sram_clk_fail_unwinds_bus` — `clk_sram` fails → `clk_bus` + `clk_parent` disabled + resets
+  - [ ] `test_prepare_msgbox_clk_fail_unwinds_sram` — `clk_msgbox` fails → full unwind
+  - [ ] `test_prepare_core_clk_fail_unwinds_msgbox` — `clk_core` fails → full unwind
+  - [ ] `test_unprepare_symmetry` — verify exact reverse order of clk_disable + reset_assert
+- [ ] **B.5: `kick` and `parse_fw` tests** [closes rproc #10, #11, #14]:
+  - [ ] `test_kick_null_tx_chan_noop` — `priv->tx_chan = NULL` → early return, no crash
+  - [ ] `test_kick_sends_vqid` — `mbox_send_message` called with correct vqid pointer
+  - [ ] `test_kick_send_failure_ratelimited` — `mbox_send_message` returns error → `dev_err_ratelimited`
+  - [ ] `test_parse_fw_no_resource_table` — `rproc_elf_load_rsc_table` returns `-EINVAL` → `parse_fw` returns 0
+  - [ ] `test_parse_fw_with_resource_table` — `rproc_elf_load_rsc_table` returns 0 → `parse_fw` returns 0
+- [ ] **B.6: Probe error path tests** [closes rproc #3, #4, #5, #6, #8]:
+  - [ ] `test_probe_clk_parent_error_returns_probe_err` — `devm_clk_get_optional("parent")` returns IS_ERR
+  - [ ] `test_probe_clk_bus_error_returns_probe_err`
+  - [ ] `test_probe_clk_core_error_returns_probe_err`
+  - [ ] `test_probe_clk_sram_error_returns_probe_err`
+  - [ ] `test_probe_clk_msgbox_error_returns_probe_err`
+  - [ ] `test_probe_rst_core_error_returns_probe_err`
+  - [ ] `test_probe_rst_cfg_error_returns_probe_err`
+  - [ ] `test_probe_rst_sram_error_returns_probe_err`
+  - [ ] `test_probe_rst_msgbox_error_returns_probe_err`
+  - [ ] `test_probe_r_sram_ioremap_fail_returns_enomem` — r_sram ioremap → `-ENOMEM`
+  - [ ] `test_probe_mbox_tx_eprobe_defer` — TX channel returns `-EPROBE_DEFER` → propagated
+  - [ ] `test_probe_rproc_add_fail_cleanup` — `rproc_add` fails → mbox + reserved mem released
+- [x] **B.7: Add Kconfig entry and Makefile rule** for `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST`:
+  - [x] Added to `drivers/remoteproc/Kconfig` (0 checkpatch errors/warnings)
+  - [x] Added to `drivers/remoteproc/Makefile`
+  - [x] Added to buildroot `linux.config`: `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`
+  - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
+
+---
+
+#### Workstream C: KUnit Test Suite for `sun55i-msgbox.c` [closes msgbox M17, M18]
+
+> **Priority: HIGH** — Routing table and register offset macros are exercised only for channels 8-9. A single wrong offset silently corrupts adjacent hardware registers.
+
+- [x] **C.1: Create `drivers/mailbox/sun55i_msgbox_test.c`** — New KUnit module under `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`. Bundled into self-contained patch `0014-mailbox-sun55i-add-kunit-tests.patch`.
+- [x] **C.2: Channel routing table tests** — verify `sun55i_chan_to_route()` for all 12 channels:
+  - [x] `test_chan_to_route_cpus_ch0` — chan=0 → `local_n=0, p=0, remote_id=2, remote_n=0`
+  - [x] `test_chan_to_route_cpus_ch1` — chan=1 → `local_n=0, p=1, remote_id=2, remote_n=0`
+  - [x] `test_chan_to_route_cpus_ch2` — chan=2 → `local_n=0, p=2, remote_id=2, remote_n=0`
+  - [x] `test_chan_to_route_cpus_ch3` — chan=3 → `local_n=0, p=3, remote_id=2, remote_n=0`
+  - [x] `test_chan_to_route_dsp_ch4` — chan=4 → `local_n=1, p=0, remote_id=1, remote_n=0`
+  - [x] `test_chan_to_route_dsp_ch5_6_7` — channels 5-7 likewise
+  - [x] `test_chan_to_route_rv_ch8` — chan=8 → `local_n=2, p=0, remote_id=3, remote_n=2`
+  - [x] `test_chan_to_route_rv_ch9_10_11` — channels 9-11 likewise
+- [x] **C.3: Register offset macro tests** — verify computed offsets match hardware manual:
+  - [x] `test_msgbox_offset_0` — `SUNXI_MSGBOX_OFFSET(0)` = `0x000`
+  - [x] `test_msgbox_offset_1` — `SUNXI_MSGBOX_OFFSET(1)` = `0x100`
+  - [x] `test_msgbox_offset_2` — `SUNXI_MSGBOX_OFFSET(2)` = `0x200`
+  - [x] `test_read_irq_enable_offsets` — verify for local_n=0,1,2
+  - [x] `test_read_irq_status_offsets` — verify for local_n=0,1,2
+  - [x] `test_write_irq_enable_offsets` — verify for local_n=0,1,2
+  - [x] `test_fifo_status_offsets` — verify for all (n, p) combos
+  - [x] `test_msg_status_offsets` — verify for all (n, p) combos
+  - [x] `test_msg_fifo_offsets` — verify for all (n, p) combos → most critical, wrong offset = silent register corruption
+- [x] **C.4: IRQ enable/pending bit position tests**:
+  - [x] `test_rd_irq_en_bit_p0` — `RD_IRQ_EN_BIT(0)` = `0x01`
+  - [x] `test_rd_irq_en_bit_p1` — `RD_IRQ_EN_BIT(1)` = `0x04`
+  - [x] `test_rd_irq_en_bit_p2` — `RD_IRQ_EN_BIT(2)` = `0x10`
+  - [x] `test_rd_irq_en_bit_p3` — `RD_IRQ_EN_BIT(3)` = `0x40`
+- [ ] **C.5: Functional logic tests** (with mock `readl`/`writel`):
+  - [ ] `test_send_data_null_sends_zero` — `data=NULL` → `writel(0, fifo)`
+  - [ ] `test_send_data_valid_sends_value` — `data=&val` → `writel(val, fifo)`
+  - [ ] `test_last_tx_done_fifo_empty` — `MSG_STATUS=0` → true
+  - [ ] `test_last_tx_done_fifo_partial` — `MSG_STATUS=4` → true (4 < 8)
+  - [ ] `test_last_tx_done_fifo_full` — `MSG_STATUS=8` → false
+  - [ ] `test_peek_data_empty` — `MSG_STATUS=0` → false
+  - [ ] `test_peek_data_available` — `MSG_STATUS=3` → true
+- [x] **C.6: Add Kconfig + Makefile for `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`**:
+  - [x] Added to `drivers/mailbox/Kconfig` (0 checkpatch errors/warnings)
+  - [x] Added to `drivers/mailbox/Makefile`
+  - [x] Added to buildroot `linux.config`: `CONFIG_SUN55I_MSGBOX_KUNIT_TEST=y`
+  - [x] Compiled `drivers/mailbox/sun55i_msgbox_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
+
+---
+
+#### Workstream D: On-Target Stress & Lifecycle Tests [closes rproc #12, #13, #15]
+
+> **Priority: MEDIUM** — Catches clock refcount leaks, race conditions, and SRAM clearing issues that only manifest under rapid cycling.
+
+- [ ] **D.1: Rapid start/stop lifecycle stress test** (50+ iterations) [closes rproc #12]:
+  ```bash
+  #!/bin/sh
+  for i in $(seq 1 50); do
+    echo "testBasic.elf" > /sys/class/remoteproc/remoteproc0/firmware
+    echo start > /sys/class/remoteproc/remoteproc0/state
+    sleep 0.1
+    echo stop > /sys/class/remoteproc/remoteproc0/state
+  done
+  # Verify: dmesg clean, no oops, clock refcounts balanced
+  ```
+  - [ ] Add to `run_tests.py` as `test_lifecycle_stress`
+  - [ ] Verify `dmesg` has zero warnings/errors after 50 cycles
+  - [ ] Verify `cat /sys/kernel/debug/clk/clk_summary` shows balanced enable counts
+- [ ] **D.2: Double-start rejection test** [closes rproc #13]:
+  - [ ] `echo start` when already `running` → verify graceful rejection (no crash/oops)
+  - [ ] Add to `run_tests.py`
+- [ ] **D.3: SRAM zeroing verification** [closes rproc #15]:
+  - [ ] After `echo start` with `testBasic.elf`, stop and re-start → verify SRAM was cleanly re-zeroed (no stale data from prior run visible in `trace0`)
+  - [ ] Add to `run_tests.py`
+- [ ] **D.4: RPMsg rapid connect/disconnect cycling**:
+  - [ ] Start `testPingRpmsg.elf`, open `/dev/rpmsg0`, send 10 pings, close, repeat 20 times
+  - [ ] Verify no vring leaks, channel re-registration is clean, `dmesg` clean
+
+---
+
+#### Workstream E: Msgbox Multi-Channel & FIFO Tests [closes msgbox M1-M8, M16]
+
+> **Priority: MEDIUM** — 10 of 12 channels have zero silicon validation. Tests here prove the routing table and register offsets work for all ports.
+
+- [ ] **E.1: Multi-channel mailbox loopback test module** [closes M1-M4]:
+  - [ ] Create a minimal kernel test module that opens channels 0 (CPUS), 4 (DSP), and 8 (RV) simultaneously
+  - [ ] Send a known 32-bit token on each TX FIFO
+  - [ ] Read back the remote port's RX FIFO status register to verify the message landed in the correct hardware FIFO
+  - [ ] Proves `arm_routes[]` entries and register bank (`regs[remote_id]`) mappings are correct
+- [ ] **E.2: FIFO depth stress test** [closes M5-M6]:
+  - [ ] Burst-write 8 messages to a single TX FIFO without draining
+  - [ ] Verify `last_tx_done()` returns `true` for count < 8 and `false` at count == 8
+  - [ ] Attempt 9th write and document hardware behavior (drop? block? error?)
+- [ ] **E.3: Stale FIFO flush verification** [closes M16]:
+  - [ ] Start `testPingRpmsg.elf`, send several RPMsg pings, then `echo stop` **without** cleanly shutting down firmware
+  - [ ] Immediately re-start → verify `sun55i_msgbox_startup()` flushes stale FIFO entries and no ghost messages appear
+- [ ] **E.4: Spurious IRQ handling test** [closes M7]:
+  - [ ] With no channels active, manually trigger the shared IRQ line
+  - [ ] Verify handler returns `IRQ_NONE` and no crash or data corruption
+- [ ] **E.5: Multi-IRQ line verification** [closes M8]:
+  - [ ] Document which of the 4 DTS IRQs (`SPI 0`, `SPI 1`, `SPI 181`, `SPI 174`) fires for each processor port
+  - [ ] Verify at least 2 different IRQ lines fire during concurrent multi-channel tests
+
+---
+
+#### Workstream F: Driver Unbind/Rebind & Remove Path Testing [closes rproc remove gap, msgbox M2 remove]
+
+> **Priority: MEDIUM** — `remove()` is never tested during normal start/stop cycles; only fires on driver unbind.
+
+- [ ] **F.1: Remoteproc unbind/rebind cycle**:
+  ```bash
+  echo stop > /sys/class/remoteproc/remoteproc0/state
+  echo "7130000.remoteproc" > /sys/bus/platform/drivers/sunxi-rproc/unbind
+  sleep 1
+  echo "7130000.remoteproc" > /sys/bus/platform/drivers/sunxi-rproc/bind
+  # Verify: clean re-probe, can start firmware again
+  echo "testBasic.elf" > /sys/class/remoteproc/remoteproc0/firmware
+  echo start > /sys/class/remoteproc/remoteproc0/state
+  cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+  ```
+  - [ ] Verify `dmesg` shows clean `rproc_del` + `mbox_free_channel` + `of_reserved_mem_device_release`
+  - [ ] Verify no memory leaks (check `/proc/meminfo` before/after)
+- [ ] **F.2: Msgbox unbind/rebind cycle**:
+  ```bash
+  echo "3003000.mailbox" > /sys/bus/platform/drivers/sun55i-msgbox/unbind
+  sleep 1
+  echo "3003000.mailbox" > /sys/bus/platform/drivers/sun55i-msgbox/bind
+  ```
+  - [ ] Verify `mbox_controller_unregister` + `clk_disable_unprepare` in `dmesg`
+  - [ ] Verify subsequent remoteproc start with RPMsg still works
+- [ ] **F.3: Unbind while running** (negative test):
+  - [ ] Attempt to unbind remoteproc driver while core is `running`
+  - [ ] Verify driver handles this gracefully (stops core first, or refuses unbind)
+- [ ] **F.4: Add unbind/rebind to `run_tests.py`** as optional advanced test tier
+
+---
+
+#### Workstream G: Automated CI Integration
+
+- [x] **G.1: Add KUnit test configs to buildroot**:
+  - [x] Configured `CONFIG_KUNIT=y`, `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`, `CONFIG_SUN55I_MSGBOX_KUNIT_TEST=y` in `linux.config`.
+  - [x] Verified native compilation with `aarch64-linux-gcc` produces valid test suites.
+- [ ] **G.2: Extend `run_tests.py`** to include:
+  - [ ] Lifecycle stress test (Workstream D.1)
+  - [ ] Double-start rejection test (D.2)
+  - [ ] SRAM re-zeroing test (D.3)
+  - [ ] RPMsg rapid cycling test (D.4)
+  - [ ] Unbind/rebind test (F.1, optional tier)
+- [x] **G.3: Extend `validate_kernel_patches.py`** to validate all 5 patches:
+  - [x] Added `0013` and `0014` to defconfigs, dry-run, live tree comparison, and checkpatch verification (100% PASS).
+
+---
+
+### 5.2 Submit to Upstream
+
 - [ ] Submit RFC series to `linux-sunxi@lists.linux.dev` and `linux-remoteproc@vger.kernel.org` via `git send-email`.
+
 
 ---
 
@@ -237,3 +482,30 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [ ] Rerun clean validation gate before committing any new A7A patch.
 - [ ] Keep permanent kernel patches in `project-cubie-a5e/patches/linux/` (never leave fixes isolated in `bld.a7a/`).
 - [ ] Maintain diagnostic record in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
+
+---
+
+# Part III: Bare-Metal Firmware & Bootloader Research: YuzukiHD/SyterKit Evaluation
+
+* **Repository**: [YuzukiHD/SyterKit](https://github.com/YuzukiHD/SyterKit)
+* **Scope**: Cross-reference bare-metal drivers, clock trees, DRAM initialization, and coprocessor loaders for both **Allwinner T527 (Radxa Cubie A5E / Avaota-A1)** and **Allwinner A733 (Radxa Cubie A7A)** to ensure no hardware quirks, errata workarounds, or register bits are missed in our upstream Linux and U-Boot port.
+
+## 1. Allwinner T527 / A527 (Cubie A5E / Avaota-A1) Follow-Up Tasks
+- [ ] **HiFi4 DSP & XuanTie E907 Bare-Metal Loaders**:
+  - [ ] Inspect SyterKit's `load_hifi4` implementation to compare DSP reset release sequence, `HIFI4_CTRL_REG0` stall bits, and `HIFI4_ALT_RESET_VEC` vector setup against our `sunxi_rproc.c` and `cubie-a5e-dsp.dtso`.
+  - [ ] Compare SyterKit's SRAM remap register settings (`0x07140364` / `0x07010364`) to confirm DSP private memory isolation vs host shared window.
+- [ ] **CCU / MCU CCU Clock Gating & Reset Assertions**:
+  - [ ] Audit SyterKit clock tree tables for `CLK_DSP`, `CLK_DSP_CFG`, `CLK_BUS_MSGBOX`, and `CLK_BUS_MCU_PUBSRAM` to verify if any auxiliary parent PLLs (e.g. `PLL_PERI0_2X`) require specific pre-dividers under high load.
+- [ ] **PMIC Sequencing & Voltage Rails**:
+  - [ ] Cross-check AXP PMIC power rail voltages for the DSP/MCU core voltage under active 600 MHz DSP clocking.
+
+## 2. Allwinner A733 (Cubie A7A) Follow-Up Tasks
+- [ ] **GMAC210 TX DMA Watchdog Timeout Investigation**:
+  - [ ] Review SyterKit's Ethernet / GMAC initialization for A733 to see if DMA burst length, AXI bus arbitration, or interrupt moderation settings differ from mainline `dwmac-sun55i.c`.
+  - [ ] Check if SyterKit configures additional interconnect / system bus gating registers for the GMAC DMA controller.
+- [ ] **USB 2.0 PHY & Host Subsystem**:
+  - [ ] Compare SyterKit's USB PHY SIDDQ power-down disable and PMU register sequences against our `phy-sun4i-usb.c` (`sun60i_a733_cfg`) implementation.
+  - [ ] Verify if any additional USB hub reset timing or VBUS enable delays are specified.
+- [ ] **XuanTie E902 Co-Processor Initialization**:
+  - [ ] Check if SyterKit contains early bootstrap code or linker scripts for the A733 E902 core running out of System SRAM A2 (`0x00040000`).
+

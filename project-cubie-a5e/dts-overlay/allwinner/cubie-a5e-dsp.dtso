@@ -1,0 +1,38 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *           RADXA CUBIE A5E — CADENCE HIFI4 DSP REMOTEPROC OVERLAY
+ * ============================================================================
+ * Configures the Cadence Tensilica HiFi4 Audio DSP coprocessor core on the
+ * Allwinner T527 / A527 SoC.
+ *
+ * Memory Carveouts:
+ *   - 1 MB Shared DMA buffer pool (coproc_shm @ 0x40000000)
+ *   - 4 MB Firmware execution segment (coproc_firmware @ 0x40100000)
+ *
+ * Mailbox Channels:
+ *   - Channel 4: ARM Cortex-A55 -> HiFi4 DSP (TX)
+ *   - Channel 5: HiFi4 DSP -> ARM Cortex-A55 (RX)
+ *
+ * Load in /boot/config.txt:
+ *   dtoverlay=cubie-a5e-mailbox-test cubie-a5e-dsp
+ * ============================================================================
+ */
+
+&soc {
+    rproc_dsp: rproc@1700000 {
+        compatible = "allwinner,sun55i-hifi4-rproc", "allwinner,sunxi-rproc";
+        reg = <0x01700000 0x1000>;
+        memory-region = <&coproc_firmware>, <&coproc_shm>;
+        mboxes = <&msgbox 4>, <&msgbox 5>;
+        mbox-names = "tx", "rx";
+        firmware-name = "dsp_firmware.elf";
+        status = "okay";
+    };
+};
+
+&msgbox {
+    status = "okay";
+};
