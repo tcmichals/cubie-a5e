@@ -192,6 +192,13 @@ When Linux RemoteProc loads a firmware ELF:
 5. **DDR Streaming DMA Carveout (`0x40040000`+)**:
    Directly mapped into kernel virtual address space and accessed via non-cached DMA coherent mappings. Reserved strictly for bulk streaming payload transfers and VirtIO rings. Control blocks, descriptors, and trace buffers (`trace0`) reside in deterministic on-chip SRAM.
 
+> 💡 **Independent Silicon Verification via YuzukiHD/SyterKit**:  
+> The bare-metal Allwinner firmware framework [**SyterKit**](https://github.com/YuzukiHD/SyterKit) independently validates this exact memory and register architecture in `drivers/remoteproc/rproc-sun55iw3.c` and `boards/avaota-a1/board.dts`:
+> - **Address Remap**: `allwinner,address-map = <0x3ffc0000 0x4003ffff 0x07280000>` confirms our 512 KB contiguous SRAM mapping (Space 0 + Space 1) from core DA `0x3FFC0000` to host physical `0x07280000`.
+> - **Start Vector Register**: `SUN55IW3_E906_START_OFFSET = 0x0204U` confirms our `STA_ADD_REG` offset (`priv->cfg_va + 0x0204`).
+> - **Clock & Reset Block**: `SUNXI_DSP_PRCM_BASE = 0x07102000` confirms our `mcu_ccu: clock-controller@7102000`.
+> - **Control Block**: `SUNXI_RISCV_CFG_BASE = 0x07130000` confirms our `rproc: remoteproc@7130000` CFG register base.
+
 ### 2.8 Hardware Remap Architecture in Device Tree & Linux Driver
 
 #### 1. Hardware Register & Bit Definitions
