@@ -242,3 +242,16 @@ sync
 
 > [!WARNING]
 > Double-check `/dev/sdX` before running `dd` to avoid overwriting the wrong drive.
+
+---
+
+## Acknowledgments & Credits
+
+We gratefully acknowledge the following open-source projects and developers whose reference implementations, hardware archaeology, and tools helped cross-reference and validate our reverse-engineering and drivers:
+
+* **[YuzukiHD](https://github.com/YuzukiHD)**:
+  * [**SyterKit**](https://github.com/YuzukiHD/SyterKit): An outstanding bare-metal firmware framework for Allwinner SoCs. Its register implementations and DTS address mappings provided independent validation of our memory layout and clock/reset sequencing on the T527 and A733.
+  * [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): Reference FreeRTOS port and GCC toolchain for the Cadence Tensilica HiFi4 Audio DSP on Allwinner silicon, utilized as a cross-check for our DSP message box and remoteproc bring-up.
+* **The Linux Sunxi Community**: For decades of tireless work documenting, reverse-engineering, and mainline-supporting Allwinner hardware architectures.
+* **Radxa**: For manufacturing the Cubie A5E, Cubie A7A, and Cubie A7Z hardware platforms.
+

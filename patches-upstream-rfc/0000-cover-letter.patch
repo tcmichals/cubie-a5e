@@ -79,6 +79,16 @@ Design Decisions for Maintainer Review
    Both allwinner,sun55i-a523-msgbox.yaml and allwinner,sun55i-rproc.yaml
    have been created and pass checkpatch.pl with 0 errors.
 
+Acknowledgements & References
+=============================
+We gratefully acknowledge the Linux-sunxi community and YuzukiHD for their
+open-source firmware and tooling contributions. In particular, YuzukiHD's
+SyterKit (https://github.com/YuzukiHD/SyterKit) and FreeRTOS-HIFI4-DSP
+(https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP) projects served as valuable
+independent community references for cross-checking hardware register offsets,
+SRAM memory window mappings, and clock/reset sequencing on the Allwinner T527
+and A733 SoC families.
+
 Patch Summary
 =============
   [RFC 1/5] dt-bindings: mailbox: add Allwinner sun55i msgbox schema
