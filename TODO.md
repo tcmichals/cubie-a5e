@@ -55,22 +55,34 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 2. Active Feature Bring-Up: Camera & Video Encoding (VPU / Cedrus)
+## 2. Active Feature Bring-Up: Camera, Hardware ISP & Video Encoding (VPU / Cedrus)
 
-* **Goal**: Capture live camera streams (MIPI-CSI or parallel) and encode them to H.264/H.265 video using the SoC's hardware Video Engine (VEU / Cedrus) with zero CPU overhead.
+* **Goal**: Capture live camera streams from an OmniVision OV5647 sensor over 2-lane MIPI CSI-2, process through the onboard Allwinner Hardware ISP 5.22, and encode to H.264 video using the hardware Video Engine (VE / Cedar) with **zero CPU memcpy overhead** via standard Linux `dma-buf` memory sharing.
 
-- [ ] **Camera Sensor Interface Bring-Up**:
-  - [ ] Configure MIPI-CSI / parallel camera interface in Device Tree (`sun55i-a523.dtsi` / overlay).
-  - [ ] Integrate sensor driver (e.g. OV5640, IMX219, or USB UVC camera input).
-  - [ ] Verify V4L2 capture device node `/dev/video0` with `v4l2-ctl --list-formats-ext`.
-  - [ ] Test raw frame capture: `v4l2-ctl --stream-mmap --stream-count=100 -d /dev/video0`.
-- [ ] **Hardware Video Encoding (VEU / Cedrus Stateless Encoder)**:
-  - [ ] Enable `CONFIG_VIDEO_SUNXI_CEDRUS=y` in `linux.config`.
-  - [ ] Extend Cedrus driver with H.264 encoding support (`v4l2_m2m` stateless memory-to-memory architecture).
-  - [ ] Verify encoder device node `/dev/video-dec` or `/dev/video-enc`.
-  - [ ] Test zero-copy pipeline: Pass V4L2 camera `dma-buf` directly to hardware encoder without CPU `memcpy`:
-    `gst-launch-1.0 v4l2src device=/dev/video0 ! v4l2h264enc ! h264parse ! mp4mux ! filesink location=test.mp4`
-  - [ ] Measure CPU load and frame latency during 1080p30 / 1080p60 encoding.
+- [ ] **Camera Sensor Interface Bring-Up (OmniVision OV5647)**:
+  - [ ] Enable `CONFIG_VIDEO_OV5647=m` in `project-cubie-a5e/board/radxa/cubie_a5e/linux.config`.
+  - [ ] Implement Device Tree Overlay `cubie-a5e-ov5647.dtso` with 25 MHz `camera-clk`, I2C3 at address `0x36`, and 2-lane MIPI CSI-2 OF-graph endpoints (`mipi_csi0` @ `0x05810100` -> `csi0` @ `0x05820000`).
+  - [ ] Compile overlay to `.dtbo` and integrate into Buildroot rootfs deployment.
+  - [ ] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
+  - [ ] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `BA10`):
+    `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=BA10 --stream-mmap --stream-count=10`.
+- [ ] **Allwinner Hardware ISP 5.22 Integration**:
+  - [ ] Utilize verified vendor C source reference located on local disk:
+    `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/vin/vin-isp/` (`isp522/`, `sunxi_isp.c`, and default hardware tables in `isp_default_tbl.h`).
+  - [ ] **Dual-Delivery Strategy**:
+    - **Strategy 1 (Out-of-Tree Rapid Bring-Up)**: Buildroot kernel module package `project-cubie-a5e/package/sunxi-vin/` adapting `vin-isp` and `vin-video` against Linux 7.1 headers.
+    - **Strategy 2 (100% Mainline Upstream Refactor)**: Clean V4L2 platform subdev driver (`drivers/media/platform/sunxi/sunxi-isp.c`) exposing metadata nodes `/dev/video-isp-params` (`V4L2_BUF_TYPE_META_OUTPUT`) and `/dev/video-isp-stats` (`V4L2_BUF_TYPE_META_CAPTURE`).
+  - [ ] Verify hardware debayering and conversion from Raw Bayer 10-bit to NV12 / YUYV420.
+  - [ ] Verify 3A hardware statistics reporting (AEC histograms, AWB RGB grid sums, AF edge gradients).
+- [ ] **Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)**:
+  - [ ] Utilize verified vendor C source reference located on local disk:
+    `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/ve/cedar-ve/` (`cedar_ve.c` @ `0x01c0e000`).
+  - [ ] Enable Video Engine hardware clock gates (`CLK_BUS_VE`, `CLK_VE`, `CLK_MBUS_VE`) and reset (`RST_BUS_VE`) in device tree node `video-codec@1c0e000`.
+  - [ ] Implement V4L2 Memory-to-Memory (`v4l2_m2m`) hardware H.264 encoder driver with `videobuf2-dma-contig`.
+  - [ ] Verify `/dev/video-enc` encoder device node.
+  - [ ] Test end-to-end zero-copy pipeline passing camera/ISP `dma-buf` file descriptors directly to encoder:
+    `gst-launch-1.0 v4l2src device=/dev/video0 io-mode=dmabuf ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! v4l2h264enc ! h264parse ! mp4mux ! filesink location=/mnt/sdcard/flight.mp4`.
+  - [ ] Measure CPU load during 1080p30 / 1080p60 encoding to verify 0% `memcpy` overhead (< 2% CPU usage).
 
 ---
 
