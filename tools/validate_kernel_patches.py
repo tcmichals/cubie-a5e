@@ -156,7 +156,7 @@ def test_patch_dry_run(scratch_dir, tarball):
     for p_name in A5E_PATCHES:
         p_path = os.path.join(PATCH_DIR, p_name)
         with open(p_path, "r") as pf:
-            cmd = ["patch", "-p1", "-d", dry_dir]
+            cmd = ["patch", "-p1", "--fuzz=0", "-d", dry_dir]
             res = subprocess.run(cmd, stdin=pf, capture_output=True, text=True)
         if res.returncode == 0:
             print(f"  [PASS DRY-RUN] {p_name}")
@@ -172,7 +172,7 @@ def test_patch_dry_run(scratch_dir, tarball):
     for p_name in A5E_PATCHES:
         p_path = os.path.join(PATCH_DIR, p_name)
         with open(p_path, "r") as pf:
-            cmd = ["patch", "-p1", "-d", patched_dir]
+            cmd = ["patch", "-p1", "--fuzz=0", "-d", patched_dir]
             res = subprocess.run(cmd, stdin=pf, capture_output=True, text=True)
         if res.returncode == 0:
             print(f"  [APPLIED] {p_name}")

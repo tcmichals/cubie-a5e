@@ -1,23 +1,26 @@
+From a08356aca0e9c20731c86cf40a9baba53e024901 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Sun, 14 Sep 2026 12:00:00 +0000
-Subject: [PATCH] mailbox: sun55i: add KUnit tests for routing and register offsets
+Date: Wed, 16 Sep 2026 10:39:17 -0500
+Subject: [PATCH 2/2] mailbox: sun55i: add KUnit tests for routing and
+ registers
 
-Add KUnit test suites for the sun55i-msgbox driver, verifying:
-  - Channel routing table (sun55i_chan_to_route) for all 12 channels
-    across 3 processor routes (CPUS, DSP, RV)
-  - Register offset macros (MSG_FIFO, MSG_STATUS, FIFO_STATUS,
-    IRQ_ENABLE, IRQ_STATUS) for all (n, p) combinations
-  - IRQ enable/pending bit positions
+Add KUnit test suite for the sun55i-msgbox driver, verifying:
+  - Channel routing table entries for CPUX (ARM), CPUS, DSP, and RV
+  - Local and remote port register offset macros
+  - Direction flags (rx/tx) and FIFO configurations
+  - Read IRQ enable/pending bit positions per channel
   - Driver constants (NUM_CHANS, FIFO_MAX, MSG_NUM_MASK)
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/mailbox/Kconfig              |  10 +
  drivers/mailbox/Makefile             |   1 +
- drivers/mailbox/sun55i_msgbox_test.c | 296 +
+ drivers/mailbox/sun55i_msgbox_test.c | 296 +++++++++++++++++++++++++++
  3 files changed, 307 insertions(+)
  create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
 
+diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
+index 7fd89ee..13c412a 100644
 --- a/drivers/mailbox/Kconfig
 +++ b/drivers/mailbox/Kconfig
 @@ -342,6 +342,16 @@ config SUN55I_MSGBOX
@@ -37,15 +40,21 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  config SPRD_MBOX
  	tristate "Spreadtrum Mailbox"
  	depends on ARCH_SPRD || COMPILE_TEST
+diff --git a/drivers/mailbox/Makefile b/drivers/mailbox/Makefile
+index a741f3e..27483d0 100644
 --- a/drivers/mailbox/Makefile
 +++ b/drivers/mailbox/Makefile
-@@ -72,5 +72,6 @@
+@@ -72,6 +72,7 @@ obj-$(CONFIG_ZYNQMP_IPI_MBOX)	+= zynqmp-ipi-mailbox.o
  obj-$(CONFIG_SUN6I_MSGBOX)	+= sun6i-msgbox.o
  
  obj-$(CONFIG_SUN55I_MSGBOX)	+= sun55i-msgbox.o
 +obj-$(CONFIG_SUN55I_MSGBOX_KUNIT_TEST)	+= sun55i_msgbox_test.o
  
  obj-$(CONFIG_SPRD_MBOX)		+= sprd-mailbox.o
+ 
+diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
+new file mode 100644
+index 0000000..984870b
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
 @@ -0,0 +1,296 @@
@@ -346,4 +355,5 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +MODULE_DESCRIPTION("KUnit tests for Allwinner sun55i-msgbox routing and registers");
 +MODULE_LICENSE("GPL");
 -- 
-2.34.1
+2.43.0
+

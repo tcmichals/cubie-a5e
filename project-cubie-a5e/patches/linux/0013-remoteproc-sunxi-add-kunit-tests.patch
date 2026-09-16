@@ -1,6 +1,8 @@
+From 677134cea0b13ee3f5f09477a2dc64690618cb08 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Sun, 14 Sep 2026 12:00:00 +0000
-Subject: [PATCH] remoteproc: sunxi: add KUnit tests for da_to_va address translation
+Date: Wed, 16 Sep 2026 10:39:17 -0500
+Subject: [PATCH 1/2] remoteproc: sunxi: add KUnit tests for da_to_va address
+ translation
 
 Add KUnit test suite for the sunxi_rproc da_to_va() function, verifying
 address translation logic across all memory window types:
@@ -15,18 +17,20 @@ is_iomem flag correctness, and NULL safety.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/remoteproc/Kconfig           |  10 +
- drivers/remoteproc/Makefile          |   1 +
- drivers/remoteproc/sunxi_rproc_test.c | 442 +
- 3 files changed, 453 insertions(+)
+ drivers/remoteproc/Kconfig            |  11 +
+ drivers/remoteproc/Makefile           |   1 +
+ drivers/remoteproc/sunxi_rproc_test.c | 442 ++++++++++++++++++++++++++
+ 3 files changed, 454 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
+diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+index a9ec494..a84a726 100644
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
-@@ -389,5 +389,15 @@ config SUNXI_REMOTEPROC
- 	  Say y or m here to support the Allwinner XuanTie E906/E907 RISC-V
+@@ -388,6 +388,17 @@ config SUNXI_REMOTEPROC
  	  co-processor on Allwinner A523, A527, and T527 SoCs via the
  	  remote processor framework.
+ 
 +
 +config SUNXI_REMOTEPROC_KUNIT_TEST
 +	tristate "KUnit tests for Allwinner sunxi remoteproc" if !KUNIT_ALL_TESTS
@@ -37,15 +41,22 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	  da_to_va() address translation logic and boundary conditions
 +	  across dedicated SRAM spaces, DRAM carveouts, and trace regions.
 +	  Say Y here to run these tests during boot or via kunit.py.
- 
++
  endif # REMOTEPROC
+ 
+ endmenu
+diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
+index d55862a..5edfb86 100644
 --- a/drivers/remoteproc/Makefile
 +++ b/drivers/remoteproc/Makefile
-@@ -41,3 +41,4 @@
+@@ -41,3 +41,4 @@ obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
  obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 +obj-$(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)	+= sunxi_rproc_test.o
+diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/sunxi_rproc_test.c
+new file mode 100644
+index 0000000..4a47154
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc_test.c
 @@ -0,0 +1,442 @@
@@ -492,4 +503,5 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +MODULE_DESCRIPTION("KUnit tests for Allwinner sunxi_rproc da_to_va()");
 +MODULE_LICENSE("GPL");
 -- 
-2.34.1
+2.43.0
+
