@@ -414,24 +414,53 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## 2. USB and Power Subsystem (Active Priority)
 
-* **Goal**: Enable the onboard FE1.1S USB 2.0 4-port hub on Host 1 (`ehci1`) and verify enumeration of the integrated AIC8800 Wi-Fi 6 / BT 5.4 module on hub downstream port 4.
+* **Architecture & Goal**:
+  - The onboard **Genesys Logic FE1.1S USB 2.0 4-port Hub** (`U6`) is wired directly to the SoC's **`USB2-DP` / `USB2-DM`** pins (V1.10 schematic sheet 14 & 25).
+  - On the Allwinner A733, these pins are driven by the internal **DWC3 controller** (`0x06A00000`, `snps,dwc3`) paired with the dedicated **Sun60i USB 2.0 Analog PHY** (`0x06B00000`, `phy@6b00000`), operating in **USB 2.0 High-Speed mode** (`maximum-speed = "high-speed"`).
+  - Downstream Port 4 of the FE1.1S hub wires internally to the **AIC8800 Wi-Fi 6 / BT 5.4 module** (`U3`).
+  - **Goal**: Verify DWC3 core reachability (`GSNPSID`), analog PHY calibration, and power domain stability, achieving clean enumeration of the FE1.1S hub (`1a40:0101`) and AIC8800 Wi-Fi 6 (`0xA69C:0x8800`).
 
 - [x] **Schematic & Power Sequencing Analysis**:
   - [x] Decoded V1.10 schematic sheets 4, 13–15, and 18.
   - [x] Configured GPIO power switches as `regulator-always-on` and `regulator-boot-on`:
     - Port 0 VBUS: `PL2` (`USB0-DRVVBUS`)
-    - Port 1 / Hub VBUS: `PM5` (`USB_HOST_EN`)
+    - Port 1 / Hub VBUS: `PM5` (`USB_HOST_EN` / 5V rail for FE1.1S hub)
     - Wi-Fi Power: `PM0` (`WL_REG_ON` / 3.3V power gate)
     - Wi-Fi Chip Enable: `PM1` (`WL_WAKE_AP` / reset-enable)
-- [x] **CCU Interconnect & HCI Clocks**:
-  - [x] Un-gated `0x05C0` (`AHB_GATE_SW_CFG` bit 9) in CCU probe.
-  - [x] Updated `bus_usb0_clk` and `bus_usb1_clk` to mask `BIT(4) | BIT(0)` (`0x1304`/`0x130c`), clocking EHCI DMA engines and OHCI.
-- [x] **PHY SIDDQ & Shared Resets**:
-  - [x] Added `sun60i_a733_cfg` in `phy-sun4i-usb.c` clearing `PHY_CTL_SIDDQ | PHY_CTL_H3_SIDDQ` on PMU1.
-  - [x] Switched to `devm_reset_control_get_shared()` to prevent `-EBUSY` collisions between USB host controllers.
-- [ ] **Target Hardware Validation**:
+- [x] **Silicon Power Island & Interconnect Discovery**:
+  - [x] Identified that DWC3 (`0x06A00000`) and the USB 2.0 PHY (`0x06B00000`) reside inside **PCK-600 Power Domain 8 (`PD_USB2`)** at `0x07068000`. If Domain 8 is unpowered, MMIO access stalls the bus and `GSNPSID` returns all zeros.
+  - [x] Mapped true CCU transport clocks from vendor `ccu-sun60iw2.c`:
+    - `CLK_USB_REF` (`0x02003340`, 24 MHz)
+    - `CLK_USB2_U2_REF` (`0x02003348`, 24 MHz reference clock)
+    - `CLK_USB2_SUSPEND` (`0x02003350`, 24 MHz suspend clock)
+    - `CLK_USB2_MF` (`0x02003354`, 400 MHz Master core clock from `PLL_PERIPH0`)
+    - `RST_USB_2` (`0x0200335C` bit 16, reset deassert)
+  - [x] Identified required USB 2.0 PHY analog eye and impedance calibration parameter: `0x143338D6` written to `0x06B00000`.
+- [ ] **Interactive U-Boot Diagnostic Validation (Pre-Linux Gate)**:
+  - [ ] Power on PCK-600 Domain 8 from U-Boot prompt:
+    ```sh
+    mw.l 0x07068170 0x001f1f1f 1; mw.l 0x07068174 0x00001f1f 1
+    mw.l 0x07068c00 0x08080808 1; mw.l 0x07068c04 0x00000808 1
+    mw.l 0x07068c10 0x00000008 1; mw.l 0x07068000 0x00000008 1
+    md.l 0x07068008 1   # Must return 0x00000008 (STATUS_ON)
+    ```
+  - [ ] Enable CCU transport clocks and deassert reset:
+    ```sh
+    mw.l 0x020025a4 0x00030001 1; mw.l 0x02003340 0x80000000 1
+    mw.l 0x02003348 0x80000000 1; mw.l 0x02003350 0x81000000 1
+    mw.l 0x02003354 0x80000000 1; mw.l 0x0200335c 0x00010000 1
+    ```
+  - [ ] Calibrate USB 2.0 PHY:
+    ```sh
+    mw.l 0x06b00000 0x143338d6 1
+    ```
+  - [ ] Read Synopsys DesignWare core ID:
+    ```sh
+    md.l 0x06a0c120 1   # Must return Synopsys signature 0x5533xxxx
+    ```
+- [ ] **Target Linux Kernel Validation**:
   - [ ] Boot newly compiled Linux kernel image on Radxa Cubie A7A hardware.
-  - [ ] Verify `dmesg | grep -i -E "ehci|ohci|phy-sun4i"` shows clean probe without `-EBUSY`.
+  - [ ] Verify `dmesg | grep -i -E "dwc3|sun60i-usb2-phy|pck600"` shows `PD_USB2` energized and DWC3 successfully probed.
   - [ ] Run `lsusb` to confirm FE1.1S 4-port USB 2.0 hub enumerates (`1a40:0101`).
   - [ ] Confirm AIC8800 Wi-Fi 6 device enumerates on hub downstream port 4 (`0xA69C:0x8800`).
   - [ ] Load `aic8800_fdrv` out-of-tree kernel driver and verify `wlan0` interface appears.
