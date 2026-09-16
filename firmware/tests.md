@@ -1,35 +1,45 @@
-# XuanTie E907 Firmware Test Applications Suite & Performance Guide
+# Allwinner T527 Co-Processor Firmware Test Suite & Performance Guide
+### XuanTie E907 RISC-V & Cadence Tensilica HiFi4 Audio DSP
 
-This document details the bare-metal test suite (`apps/`) for the **XuanTie E907 RISC-V Co-Processor (up to 200 MHz)** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**, outlining memory layouts, execution flows, and host Linux benchmarking procedures.
+This document details the bare-metal test suite (`apps/`) for both the **XuanTie E907 RISC-V Co-Processor (up to 200 MHz)** and the **Cadence Tensilica HiFi4 Audio DSP (up to 600 MHz)** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**, outlining memory layouts, execution flows, and host Linux benchmarking procedures.
 
 ---
 
 ## 1. Test Applications Architecture (Walk -> Run Roadmap)
 
-The firmware test suite follows a progressive **"Walk -> Run"** methodology, validating core bootstrap and diagnostic telemetry before advancing to hard real-time inter-processor communication (IPC):
+The firmware test suite follows a progressive **"Walk -> Run"** methodology across both heterogeneous co-processors, validating core bootstrap and diagnostic telemetry before advancing to hard real-time inter-processor communication (IPC) and concurrent multi-core hardware mailbox messaging:
 
 ```text
-riscv-firmware/apps/
-├── [PHASE 1: WALK - BOOT, TRACE & DIAGNOSTICS]
-│   ├── testBasic/               # Minimal boot in on-chip SRAM (0x3FFC0000) & live counter increment
-│   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, mixed ASCII text + packed binary telemetry + hardware FPU
-│   ├── testCrash/               # Hardware exception trapping (mtvec), 0xDEADF00D signature & crash dump
-│   └── exampleRiscv/            # Minimal reference template with HAL timer delay
+firmware/
+├── e907-riscv/apps/
+│   ├── [PHASE 1: WALK - BOOT, TRACE & DIAGNOSTICS]
+│   │   ├── testBasic/               # Minimal boot in on-chip SRAM (0x3FFC0000) & live counter increment
+│   │   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, mixed ASCII text + packed binary telemetry + hardware FPU
+│   │   ├── testCrash/               # Hardware exception trapping (mtvec), 0xDEADF00D signature & crash dump
+│   │   └── exampleRiscv/            # Minimal reference template with HAL timer delay
+│   │
+│   └── [PHASE 2: RUN - LOW-LATENCY IPC & HIGH-THROUGHPUT STREAMING]
+│       ├── testPing/                # Ultra-low-latency (~2us) Direct SRAM SPSC Queue + UIO Doorbell benchmark
+│       │   └── linux/               # ping_shm and ping_uio Linux host companion benchmark tools
+│       ├── testPingRpmsg/           # Standards-based Linux VirtIO RPMsg (hal::Rpmsg) + Mailbox Doorbells
+│       │   └── linux/               # ping_rpmsg Linux host companion benchmark tool
+│       ├── testDRAMMsg/             # High-throughput Hybrid SRAM Control + DDR DRAM DMA Payload Buffers
+│       │   └── linux/               # ping_dram Linux host companion benchmark tool
+│       └── testMsgbox/              # Direct Hardware Message Box Port 2 IPC (Host Ch 8/9 <-> RV Ch 0/1)
 │
-└── [PHASE 2: RUN - LOW-LATENCY IPC & HIGH-THROUGHPUT STREAMING]
-    ├── testPing/                # Ultra-low-latency (~2us) Direct SRAM SPSC Queue + UIO Doorbell benchmark
-    │   └── linux/               # ping_shm and ping_uio Linux host companion benchmark tools
-    ├── testPingRpmsg/           # Standards-based Linux VirtIO RPMsg (hal::Rpmsg) + Mailbox Doorbells
-    │   └── linux/               # ping_rpmsg Linux host companion benchmark tool
-    └── testDRAMMsg/             # High-throughput Hybrid SRAM Control + DDR DRAM DMA Payload Buffers
-        └── linux/               # ping_dram Linux host companion benchmark tool
+└── hifi4-dsp/apps/
+    ├── [PHASE 1: WALK - DSP BOOT & TRACE]
+    │   └── testBasic/               # Minimal boot in DSP local memory & live heartbeat counter via trace0
+    │
+    └── [PHASE 2: RUN - HARDWARE MAILBOX IPC]
+        └── testMsgbox/              # Direct Hardware Message Box Port 0 IPC (Host Ch 4/5 <-> DSP Ch 0/1)
 ```
 
 ---
 
 ## 1.1 Upstream Linux Kernel Submission (`linux-sunxi`) Validation Sequence
 
-When proposing the `sunxi_rproc.c` driver to upstream maintainers (e.g., `linux-sunxi`, `linux-remoteproc`), submitters must prove driver compliance across four tiers:
+When proposing the `sunxi_rproc.c` and `sun55i-msgbox.c` drivers to upstream maintainers (e.g., `linux-sunxi`, `linux-remoteproc`, `linux-mailbox`), submitters must prove driver compliance across five tiers:
 
 | Tier | Test App | Upstream Driver Capability Verified | Expected Kernel / Diagnostic Output |
 | :--- | :--- | :--- | :--- |
@@ -37,22 +47,25 @@ When proposing the `sunxi_rproc.c` driver to upstream maintainers (e.g., `linux-
 | **Tier 2: Sustained Streaming & FPU** | `testStringBinaryTrace0` | Sustained `trace0` ring buffer streaming without memory corruption; hardware single-precision FPU math | Live sine telemetry via `monitor_trace.py` or debugfs `trace0` |
 | **Tier 3: Standard VirtIO RPMsg (Gold Standard)** | `testPingRpmsg` | `virtio_rpmsg_bus` probing, vring parsing from `.resource_table`, Name Service announcement, `/dev/rpmsg0` | `dmesg`: `registered virtio0 (type 7)` and `ping_rpmsg -n 1000` passes 100% (0 timeouts, 116.68 $\mu$s avg RTT) |
 | **Tier 4: Crash Isolation** | `testCrash` | Post-mortem register autopsy captured in SRAM; ARM host kernel remains stable without panicking | `trace0`: `mcause=0x00000002` dump; Linux OS continues running |
+| **Tier 5: Hardware Mailbox & Multi-Core IPC** | `testMsgbox` & `dsp-testMsgbox` | Dedicated hardware FIFO communication on independent channels (DSP Ch 4/5, RV Ch 8/9); zero crosstalk | `/usr/bin/test_dual_msgbox.py 1000` passes 100% (1,000/1,000 packets on both cores concurrently) |
 
 ---
 
 ## 1.2 Hardware Overlay Configuration & Manual Test Execution via `/boot/config.txt`
 
-> **CRITICAL RULE**: Swapping `.elf` firmware images via sysfs without changing the Device Tree invalidates memory-topology tests. In upstream Linux RemoteProc, DMA memory allocations (DDR CMA vs on-chip SRAM Space 1) are strictly governed by the active Devicetree `memory-region` node. Any test switching memory topologies requires applying the matching overlay in `/boot/config.txt` and performing a clean reboot.
+> **CRITICAL RULE**: Swapping `.elf` firmware images via sysfs without changing the Device Tree invalidates memory-topology tests. In upstream Linux RemoteProc, DMA memory allocations (DDR CMA vs on-chip SRAM Space 1) and hardware mailbox assignments are strictly governed by the active Devicetree overlay. Any test switching topologies requires applying the matching overlay in `/boot/config.txt` and performing a clean reboot.
 
 ### Hardware Overlay Configuration Profiles
 
 The Radxa Cubie A5E bootloader (`U-Boot 2024`) merges overlays declared in `/boot/config.txt` (or `/boot/uEnv.txt`) into the kernel Device Tree before handover:
 
-| Test Profile | Active Overlay in `/boot/config.txt` | Target `memory-region` | Intended Test Suite Scope |
+| Test Profile | Active Overlay in `/boot/config.txt` | Target Hardware Nodes | Intended Test Suite Scope |
 | :--- | :--- | :--- | :--- |
 | **Profile 1: Standard DDR VirtIO RPMsg (Default)** | `dtoverlay=cubie-a5e-flight-stack` | `vdev@48000000`<br>(1 MB DDR DRAM carveout) | `testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf` |
 | **Profile 2: Pure On-Chip SRAM VirtIO** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` | `sram1@72c0000`<br>(256 KB on-chip SRAM Space 1) | `testPingRpmsgSram.elf` (VirtIO vrings & message buffers locked to on-chip SRAM) |
 | **Profile 3: Userspace UIO Direct SPSC Queue** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` | None (Mailbox owned by `generic-uio`) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
+| **Profile 4: Dual Co-Processor Concurrent Mailbox** | `dtoverlay=cubie-a5e-dual-mailbox-test` | `mailbox_test_dsp` (Ch 4/5)<br>`mailbox_test_e907` (Ch 8/9) | Concurrent multi-core stress testing (`test_dual_msgbox.py`, `testMsgbox.elf`, `dsp-testMsgbox.elf`) |
+| **Profile 5: HiFi4 DSP Mailbox Isolation** | `dtoverlay=cubie-a5e-dsp-mailbox-test` | `mailbox_test_dsp` (Ch 4/5) | Cadence HiFi4 DSP standalone mailbox testing (`dsp-testMsgbox.elf`) |
 
 ---
 
@@ -587,12 +600,98 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 
 ---
 
-### 6.9 Automated Test Suite Execution
+### 6.9 XuanTie E907 Hardware Mailbox Loopback (`testMsgbox.elf`)
 
-As an alternative to running each manual step individually, the Python test harness automates Tests 1 through 4:
+Validates direct Allwinner hardware Message Box communication between ARM Linux Host and XuanTie E907 via Port 2 (Host Tx Ch 8, Rx Ch 9).
 
 ```bash
+# Step 1: Ensure dual-mailbox overlay is active
+sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
+reboot
+
+# Step 2: Deploy and boot testMsgbox.elf on XuanTie E907
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# Step 3: Verify core is executing and trace output shows Port 2 initialized
+cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+
+# Step 4: Transmit PING and verify PONG reply on Channel 8/9
+echo -ne "PING" > /sys/kernel/debug/mailbox-test-e907/message
+hexdump -C /sys/kernel/debug/mailbox-test-e907/message
+# Expected output:
+# 00000000  50 4f 4e 47                                       |PONG|
+```
+
+---
+
+### 6.10 Cadence HiFi4 DSP Hardware Mailbox Loopback (`dsp-testMsgbox.elf`)
+
+Validates direct Allwinner hardware Message Box communication between ARM Linux Host and Cadence HiFi4 Audio DSP via Port 0 (Host Tx Ch 4, Rx Ch 5).
+
+```bash
+# Step 1: Ensure DSP mailbox test overlay is active
+# (or cubie-a5e-dual-mailbox-test which activates both DSP and E907)
+sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dsp-mailbox-test/' /boot/config.txt
+reboot
+
+# Step 2: Start the Cadence HiFi4 DSP core with dsp-testMsgbox.elf
+# If using Linux DSP remoteproc:
+echo stop > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+echo "dsp-testMsgbox.elf" > /sys/class/remoteproc/remoteproc1/firmware 2>/dev/null || true
+echo start > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+
+# Step 3: Transmit PING and verify PONG reply on Channel 4/5
+echo -ne "PING" > /sys/kernel/debug/mailbox-test-dsp/message
+hexdump -C /sys/kernel/debug/mailbox-test-dsp/message
+# Expected output:
+# 00000000  50 4f 4e 47                                       |PONG|
+```
+
+---
+
+### 6.11 Concurrent Dual-Core Mailbox Stress Benchmark (`test_dual_msgbox.py`)
+
+Validates simultaneous multi-core hardware mailbox throughput with zero crosstalk:
+
+```bash
+# Step 1: Enable dual-mailbox test overlay
+sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
+reboot
+
+# Step 2: Start XuanTie E907 with testMsgbox.elf
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# Step 3: Start Cadence HiFi4 DSP with dsp-testMsgbox.elf
+echo stop > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+echo "dsp-testMsgbox.elf" > /sys/class/remoteproc/remoteproc1/firmware 2>/dev/null || true
+echo start > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+
+# Step 4: Run concurrent multi-threaded benchmark (1,000 pings per core)
+python3 /usr/bin/test_dual_msgbox.py 1000
+
+# Step 5: Or run automated end-to-end test suite
+python3 /usr/bin/run_tests.py --test dual-msgbox
+```
+
+---
+
+### 6.12 Automated Test Suite Execution
+
+As an alternative to running each manual step individually, the Python test harness automates tests across all profiles:
+
+```bash
+# Run all tests compatible with active Device Tree profile:
 python3 /usr/bin/run_tests.py
+
+# Or run specific tests directly:
+python3 /usr/bin/run_tests.py --test rpmsg
+python3 /usr/bin/run_tests.py --test ping-uio
+python3 /usr/bin/run_tests.py --test msgbox
+python3 /usr/bin/run_tests.py --test dual-msgbox
 ```
 
 ## 7. Silicon Core Identification (E906 vs E907 Verification)
@@ -992,7 +1091,15 @@ ls -la /sys/kernel/debug/mailbox-test-dsp/
 # --w------- 1 root root 0 signal
 ```
 
-#### Step 3: Run the Test Firmware (`dsp-testMsgbox.elf`)
+#### Step 3: Deploy and Run the Test Firmware (`dsp-testMsgbox.elf`)
+
+Start the Cadence HiFi4 DSP core with the mailbox test firmware:
+```bash
+echo stop > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+echo "dsp-testMsgbox.elf" > /sys/class/remoteproc/remoteproc1/firmware 2>/dev/null || true
+echo start > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+```
+
 The DSP test firmware (`firmware/hifi4-dsp/apps/testMsgbox`) initializes the hardware mailbox and listens on Channel 0:
 ```c
 /* firmware/hifi4-dsp/apps/testMsgbox/main.c */
@@ -1014,7 +1121,7 @@ void _start(void) {
 #### Step 4: Transmit PING and Read PONG from Host Linux
 ```bash
 # Send 4-byte 'PING' (0x50494E47) to DSP
-echo -ne "\x50\x49\x4E\x47" > /sys/kernel/debug/mailbox-test-dsp/message
+echo -ne "PING" > /sys/kernel/debug/mailbox-test-dsp/message
 
 # Read 4-byte response from DSP (returns 'PONG' 0x504F4E47)
 hexdump -C /sys/kernel/debug/mailbox-test-dsp/message
@@ -1082,15 +1189,28 @@ The dual-mailbox overlay instantiates two simultaneous `mailbox-test` clients in
 
 ### 12.3 Automated Concurrent Multi-Core Benchmark (`test_dual_msgbox.py`)
 
-A multi-threaded benchmark tool is provided in `firmware/e907-riscv/tools/test_dual_msgbox.py`. It launches concurrent threads transmitting independent message streams to both co-processors simultaneously:
+A multi-threaded benchmark tool is provided in `firmware/e907-riscv/tools/test_dual_msgbox.py` and packaged into `/usr/bin/test_dual_msgbox.py`. It launches concurrent threads transmitting independent message streams to both co-processors simultaneously:
 
 ```bash
 # 1. Enable dual mailbox overlay
 sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
 reboot
 
-# 2. Run concurrent multi-core mailbox stress test (1,000 iterations per core)
+# 2. Deploy and boot testMsgbox.elf on XuanTie E907:
+echo stop > /sys/class/remoteproc/remoteproc0/state
+echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
+echo start > /sys/class/remoteproc/remoteproc0/state
+
+# 3. Deploy and boot dsp-testMsgbox.elf on Cadence HiFi4 DSP:
+echo stop > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+echo "dsp-testMsgbox.elf" > /sys/class/remoteproc/remoteproc1/firmware 2>/dev/null || true
+echo start > /sys/class/remoteproc/remoteproc1/state 2>/dev/null || true
+
+# 4. Run concurrent multi-core mailbox stress test (1,000 iterations per core):
 python3 /usr/bin/test_dual_msgbox.py 1000
+
+# 5. Or execute via automated test harness:
+python3 /usr/bin/run_tests.py --test dual-msgbox
 ```
 
 #### Example Output on Live Silicon:
@@ -1128,14 +1248,24 @@ In the Allwinner T527 hardware Message Box peripheral, each receiver port has a 
 - **XuanTie E907**: `0x07136220` (Port 2 offset `0x200`)
 - **ARM Cortex-A55**: `0x03003020` (Port 0), `0x03003120` (Port 1), `0x03003220` (Port 2)
 
-When `sunxi_msgbox_init()` executes:
+#### Default Configuration: Polling with Interrupts Disabled (`enable_irq = false`)
+In bare-metal firmware applications, `hal::MsgBox::init(false)` and `sunxi_msgbox_init(void)` default to `enable_irq = false`:
 ```c
-SUNXI_MSGBOX_RD_IRQ_EN_REG |= 0x00000001U;
+/* firmware/common/hal/msgbox.c & msgbox.cpp */
+void sunxi_msgbox_init_ex(bool enable_irq) {
+    if (enable_irq) {
+        SUNXI_MSGBOX_RD_IRQ_EN_REG |= 0x00000001U;
+    } else {
+        SUNXI_MSGBOX_RD_IRQ_EN_REG &= ~0x00000001U; /* Disable hardware IRQ generation */
+    }
+}
 ```
-This programs the peripheral's internal interrupt logic: whenever a remote sender writes a 32-bit word into the local port's RX FIFO, the hardware peripheral asserts its external interrupt output line:
-- Routed to **GIC SPI 174** for ARM Cortex-A55 Host.
+When `enable_irq = false`, `RD_IRQ_EN_REG` is cleared to 0. This prevents the peripheral from asserting its external interrupt line:
 - Routed to **PLIC Line 48** for XuanTie E907 RISC-V.
 - Routed to **Xtensa Core Interrupt Line** for Cadence HiFi4 DSP.
+- Routed to **GIC SPI 174** for ARM Cortex-A55 Host.
+
+By keeping interrupts disabled by default, firmware polling loops (`has_data()` / `is_rx_pending()`) avoid unhandled interrupt exceptions and trap handler overhead while polling hardware FIFO registers. When migrating to an RTOS (FreeRTOS / Zephyr), pass `enable_irq = true` to enable hardware interrupt notification.
 
 ### 13.2 Software Execution Paradigm: Why Firmware Polls
 
@@ -1148,4 +1278,5 @@ This programs the peripheral's internal interrupt logic: whenever a remote sende
 #### Rationale for Polled Reception in Bare-Metal Co-Processors:
 1. **Zero Interrupt Overhead**: An interrupt on RISC-V or Xtensa requires pushing 16 to 32 general-purpose registers to stack/memory, flushing the pipeline, jumping through the vector table, executing the ISR, and executing `mret`/`rfi`. In high-speed IPC (60,000+ msgs/sec), interrupt entry/exit consumes 80–120 clock cycles per packet.
 2. **Deterministic Jitter**: Polling within a real-time event loop (`while (1) { if (has_data()) ... }`) guarantees strictly bounded latency without priority inversion or nested trap latency.
-3. **Hardware Readiness**: Enabling `RD_IRQ_EN_REG` ensures the hardware interrupt pending status flags (`RD_IRQ_STA_REG`) latch correctly upon FIFO write, and provides turnkey compatibility if the application is migrated to FreeRTOS (`vTaskNotifyGiveFromISR`) or Zephyr RTOS.
+3. **No Spurious Traps**: Disabling `RD_IRQ_EN_REG` ensures the core does not vector to an unhandled interrupt on PLIC Line 48 or Xtensa IRQ while running bare metal without an RTOS interrupt dispatcher.
+4. **RTOS Compatibility**: Turnkey support for RTOS environments (`vTaskNotifyGiveFromISR`) is achieved simply by calling `hal::MsgBox::init(true)`.

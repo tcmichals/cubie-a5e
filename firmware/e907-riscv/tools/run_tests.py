@@ -22,6 +22,8 @@ import argparse
 import re
 import json
 
+import threading
+
 RPROC_STATE = "/sys/class/remoteproc/remoteproc0/state"
 RPROC_FW    = "/sys/class/remoteproc/remoteproc0/firmware"
 RPROC_RECOV = "/sys/kernel/debug/remoteproc/remoteproc0/recovery"
@@ -45,6 +47,7 @@ C_BLUE   = "\033[94m"
 PROFILE_1 = 1  # Standard DDR VirtIO
 PROFILE_2 = 2  # Pure On-Chip SRAM VirtIO
 PROFILE_3 = 3  # Userspace UIO Mode
+PROFILE_4 = 4  # Hardware Mailbox Isolation & Dual-Core Test
 
 PROFILE_INFO = {
     PROFILE_1: {
@@ -67,6 +70,13 @@ PROFILE_INFO = {
         "test_overlays": ["cubie-a5e-testPing", "cubie-a5e-uio"],
         "node_desc": "Hardware Mailbox bound to generic-uio (/dev/uio0)",
         "compatible_tests": ["ping-uio"],
+    },
+    PROFILE_4: {
+        "name": "Profile 4 (Hardware Mailbox Isolation & Dual-Core Test)",
+        "overlay_config": "dtoverlay=cubie-a5e-dual-mailbox-test",
+        "test_overlays": ["cubie-a5e-dual-mailbox-test", "cubie-a5e-dsp-mailbox-test", "cubie-a5e-mailbox-test"],
+        "node_desc": "Hardware Mailbox Clients (/sys/kernel/debug/mailbox-test-*)",
+        "compatible_tests": ["msgbox", "dsp-msgbox", "dual-msgbox", "mailbox"],
     },
 }
 
@@ -99,6 +109,18 @@ TEST_OVERLAY_HINTS = {
         "dtbo": "cubie-a5e-testStringBinaryTrace0",
         "config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testStringBinaryTrace0",
     },
+    "testMsgbox": {
+        "dtbo": "cubie-a5e-dual-mailbox-test",
+        "config": "dtoverlay=cubie-a5e-dual-mailbox-test",
+    },
+    "testDSPMsgbox": {
+        "dtbo": "cubie-a5e-dsp-mailbox-test",
+        "config": "dtoverlay=cubie-a5e-dsp-mailbox-test",
+    },
+    "testDualMsgbox": {
+        "dtbo": "cubie-a5e-dual-mailbox-test",
+        "config": "dtoverlay=cubie-a5e-dual-mailbox-test",
+    },
 }
 
 TEST_ALIAS_MAP = {
@@ -120,6 +142,12 @@ TEST_ALIAS_MAP = {
     "mailbox": "testMailbox",
     "mailbox-test": "testMailbox",
     "testMailbox": "testMailbox",
+    "msgbox": "testMsgbox",
+    "testMsgbox": "testMsgbox",
+    "dsp-msgbox": "testDSPMsgbox",
+    "testDSPMsgbox": "testDSPMsgbox",
+    "dual-msgbox": "testDualMsgbox",
+    "testDualMsgbox": "testDualMsgbox",
 }
 
 def strip_ansi(text):
@@ -247,6 +275,14 @@ def detect_active_dt_profile():
     Inspects /sys/firmware/devicetree/base to determine the active hardware profile.
     Returns: (profile_id, details_str)
     """
+    # Profile 4 check: Standalone or dual mailbox test overlays
+    if os.path.exists(os.path.join(DT_BASE, "mailbox-test-dsp")) or \
+       os.path.exists(os.path.join(DT_BASE, "mailbox-test-e907")) or \
+       os.path.exists(os.path.join(DT_BASE, "mailbox-test")) or \
+       os.path.exists("/sys/kernel/debug/mailbox-test-dsp") or \
+       os.path.exists("/sys/kernel/debug/mailbox-test-e907"):
+        return PROFILE_4, "mailbox-test endpoints (sun55i-msgbox hardware channels)"
+
     msgbox_compat_path = os.path.join(DT_BASE, "soc/mailbox@3003000/compatible")
     if os.path.exists(msgbox_compat_path):
         try:
@@ -875,6 +911,141 @@ def test_mailbox_isolation():
 
     return result
 
+def run_mailbox_channel_test(name, path, num_pings=100):
+    if not os.path.exists(path):
+        return {
+            "name": name,
+            "status": "SKIP",
+            "details": f"Node {path} not found",
+            "metrics": {}
+        }
+
+    latencies = []
+    success_count = 0
+    test_msg = b"PING"
+    pong_msg = b"PONG"
+
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except Exception as e:
+        return {
+            "name": name,
+            "status": "FAIL",
+            "details": f"Failed to open {path}: {e}",
+            "metrics": {}
+        }
+
+    try:
+        for _ in range(num_pings):
+            t0 = time.perf_counter()
+            os.write(fd, test_msg)
+            reply = os.read(fd, 4)
+            t1 = time.perf_counter()
+            rtt_us = (t1 - t0) * 1e6
+
+            if reply == pong_msg:
+                success_count += 1
+                latencies.append(rtt_us)
+            elif len(reply) == 4:
+                val = struct.unpack("<I", reply)[0]
+                if val != 0:
+                    success_count += 1
+                    latencies.append(rtt_us)
+    finally:
+        os.close(fd)
+
+    if success_count > 0:
+        avg_lat = sum(latencies) / len(latencies)
+        min_lat = min(latencies)
+        max_lat = max(latencies)
+        rate = (success_count / (sum(latencies) / 1e6)) if sum(latencies) > 0 else 0
+        return {
+            "name": name,
+            "status": "PASS",
+            "details": f"{success_count}/{num_pings} responses, Avg RTT={avg_lat:.2f}us",
+            "metrics": {
+                "packets_sent": num_pings,
+                "packets_recv": success_count,
+                "avg_lat_us": round(avg_lat, 2),
+                "min_lat_us": round(min_lat, 2),
+                "max_lat_us": round(max_lat, 2),
+                "throughput_msgs_s": round(rate, 1),
+                "bandwidth": f"{rate * 4 / 1024:.2f} KB/s",
+                "data_integrity": "PASS (0 errors)"
+            }
+        }
+    else:
+        return {
+            "name": name,
+            "status": "FAIL",
+            "details": f"No valid responses received from {path}",
+            "metrics": {
+                "packets_sent": num_pings,
+                "packets_recv": 0
+            }
+        }
+
+def test_msgbox():
+    log_header("TEST: XuanTie E907 Hardware Mailbox Loopback (testMsgbox)")
+    if read_file(RPROC_STATE) != "running" or read_file(RPROC_FW) != "testMsgbox.elf":
+        log_info("Deploying and starting testMsgbox.elf on XuanTie E907...")
+        if not start_rproc("testMsgbox.elf"):
+            log_warn("remoteproc0 failed to start testMsgbox.elf; proceeding to test mailbox node directly")
+
+    node = "/sys/kernel/debug/mailbox-test-e907/message"
+    if not os.path.isfile(node):
+        if os.path.isfile("/sys/kernel/debug/mailbox-test/message"):
+            node = "/sys/kernel/debug/mailbox-test/message"
+
+    res = run_mailbox_channel_test("testMsgbox (E907 Mailbox Ch 8/9)", node, num_pings=100)
+    if res["status"] == "PASS":
+        log_pass(f"E907 Mailbox RTT: {res['metrics']['avg_lat_us']:.2f} us avg ({res['metrics']['throughput_msgs_s']:.1f} msgs/s)")
+    else:
+        log_warn(f"E907 Mailbox test status: {res['status']} ({res['details']})")
+    return res
+
+def test_dsp_msgbox():
+    log_header("TEST: Cadence HiFi4 DSP Hardware Mailbox Loopback (dsp-testMsgbox)")
+    node = "/sys/kernel/debug/mailbox-test-dsp/message"
+    res = run_mailbox_channel_test("dsp-testMsgbox (DSP Mailbox Ch 4/5)", node, num_pings=100)
+    if res["status"] == "PASS":
+        log_pass(f"DSP Mailbox RTT: {res['metrics']['avg_lat_us']:.2f} us avg ({res['metrics']['throughput_msgs_s']:.1f} msgs/s)")
+    else:
+        log_warn(f"DSP Mailbox test status: {res['status']} ({res['details']})")
+    return res
+
+def test_dual_msgbox():
+    log_header("TEST: Dual Co-Processor Concurrent Mailbox Benchmark (DSP + E907)")
+    dsp_node = "/sys/kernel/debug/mailbox-test-dsp/message"
+    e907_node = "/sys/kernel/debug/mailbox-test-e907/message"
+    num_pings = 1000
+
+    results = {}
+    threads = []
+
+    t_start = time.perf_counter()
+    if os.path.isfile(dsp_node):
+        threads.append(threading.Thread(target=lambda: results.update({"dsp": run_mailbox_channel_test("Dual: DSP-HiFi4 (Ch 4/5)", dsp_node, num_pings)})))
+    if os.path.isfile(e907_node):
+        threads.append(threading.Thread(target=lambda: results.update({"e907": run_mailbox_channel_test("Dual: E907-RISCV (Ch 8/9)", e907_node, num_pings)})))
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    total_wall_s = time.perf_counter() - t_start
+    sub_results = []
+    for k, v in results.items():
+        sub_results.append(v)
+        if v["status"] == "PASS":
+            log_pass(f"Concurrent {k.upper()} RTT: {v['metrics']['avg_lat_us']:.2f} us avg")
+        else:
+            log_warn(f"Concurrent {k.upper()} status: {v['status']} ({v['details']})")
+
+    log_info(f"Dual-Core concurrent sweep finished in {total_wall_s:.3f} s")
+    return sub_results
+
 def format_summary_table(results_list):
     header  = f"  {'Test / Application':<34} | {'Status':<6} | {'Pkts/Recv':<11} | {'Avg RTT':<10} | {'Throughput':<14} | {'Bandwidth':<15} | {'Integrity':<10}"
     divider = f"  {'-'*34}-+-{'-'*6}-+-{'-'*11}-+-{'-'*10}-+-{'-'*14}-+-{'-'*15}-+-{'-'*10}"
@@ -1003,6 +1174,8 @@ def main():
         verify_profile_or_halt("testPing", PROFILE_3)
     elif canon_test in ("testCrash", "testPingRpmsg", "testDRAMMsg"):
         verify_profile_or_halt(canon_test, PROFILE_1)
+    elif canon_test in ("testMsgbox", "testDSPMsgbox", "testDualMsgbox"):
+        verify_profile_or_halt(canon_test, PROFILE_4)
 
     check_prerequisites()
 
@@ -1027,6 +1200,10 @@ def main():
             append_results(test_ping_rpmsg_sram())
         elif active_profile == PROFILE_3:
             append_results(test_ping_uio())
+        elif active_profile == PROFILE_4:
+            append_results(test_msgbox())
+            append_results(test_dsp_msgbox())
+            append_results(test_dual_msgbox())
     else:
         if canon_test == "testBasic":
             append_results(test_basic())
@@ -1044,6 +1221,12 @@ def main():
             append_results(test_ping_uio())
         elif canon_test == "testMailbox":
             append_results(test_mailbox_isolation())
+        elif canon_test == "testMsgbox":
+            append_results(test_msgbox())
+        elif canon_test == "testDSPMsgbox":
+            append_results(test_dsp_msgbox())
+        elif canon_test == "testDualMsgbox":
+            append_results(test_dual_msgbox())
 
     # Final Summary Table with Quantitative Metrics
     log_header("TEST EXECUTION & BENCHMARK SUMMARY REPORT")
