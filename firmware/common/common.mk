@@ -108,8 +108,9 @@ $(ELF): $(OBJS) $(LDSCRIPT)
 	$(CC) $(OBJS) $(LDFLAGS) -Wl,-Map=$(MAP) -o $@
 	@echo "--- Memory Footprint ($@) ---"
 	$(SIZE) $@
-	@if [ -f $(COMMON_DIR)/../tools/generate_devmem_map.py ]; then \
-		python3 $(COMMON_DIR)/../tools/generate_devmem_map.py $(ELF) $(MAP) $(TARGET) $(CROSS_COMPILE) 2>/dev/null || true; \
+	@GEN_DEVMEM=$$(ls $(COMMON_DIR)/../e907-riscv/tools/generate_devmem_map.py $(COMMON_DIR)/../tools/generate_devmem_map.py 2>/dev/null | head -n 1); \
+	if [ -n "$$GEN_DEVMEM" ] && [ -f "$$GEN_DEVMEM" ]; then \
+		python3 "$$GEN_DEVMEM" $(ELF) $(MAP) $(TARGET) $(CROSS_COMPILE) 2>/dev/null || true; \
 	fi
 
 $(BIN): $(ELF)
@@ -129,7 +130,7 @@ gdb: $(ELF)
 	$(GDB) -ex "target remote localhost:1234" $(ELF)
 
 clean:
-	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map $(TARGET)_devmem.md
+	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
 
 .PHONY: all clean qemu qemu-run gdb
 

@@ -8,7 +8,12 @@
 *.bin
 *.map
 *.hex
-riscv-load
-io-bridge
 build/
 *.ctf
+bin/*.md
+bin/*.elf
+bin/*.bin
+bin/*.map
+bin/ping_*
+bin/riscv-load
+bin/io-bridge
