@@ -517,8 +517,24 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 5. Mandatory Patch Gate & Engineering Rules
+## 5. Camera & Video Input Subsystem (MIPI-CSI & CSIC DMA 1.40)
 
+* **Silicon Architecture & Status**:
+  - **Vendor Reference**: Verified in official Radxa Cubie A7A kernel tree (`A7A_kernel/linux-a733/device-a733/configs/cubie_a7a/linux-6.6/board.dts`).
+  - **Hardware DMA Engine**: Dedicated **VINC (Video Input Capture DMA)** controller located at `0x05830000` (driven by Allwinner CSIC DMA 1.40 architecture via `dma140_reg.c`).
+  - **Active DMA Channels in `board.dts`**: 8 independent hardware DMA writer channels enabled (`vinc00`, `vinc01`, `vinc02`, `vinc10`, `vinc11`, `vinc12`, `vinc20`, `vinc30`).
+  - **Active Camera Sensor**: `sensor0` (`ov13850_mipi` 13MP sensor) configured with hardware ISP enabled (`sensor0_isp_used = <1>`) and bound to primary DMA writer `vinc00` (`0x05830000`).
+  - **Zero-Copy Memory Model**: Video buffers allocated as physically contiguous memory via `videobuf2-dma-contig`, enabling direct `dma-buf` file descriptor export for zero-copy DMA handoff to Video Engine and NPU without CPU `memcpy`.
+
+---
+
+## 6. Mandatory Patch Gate & Engineering Rules
+
+- [x] **Buildroot Kernel Patch Gate Resolution (100% PASS with Zero Fuzz)**:
+  - Resolved `apply-patches.sh` failure (`Hunk #1 FAILED at 389` on `drivers/remoteproc/Kconfig` and `Hunk #1 FAILED at 72` on `drivers/mailbox/Makefile`).
+  - Corrected hunk offsets and unified diff context whitespace in `0013-remoteproc-sunxi-add-kunit-tests.patch` and `0014-mailbox-sun55i-add-kunit-tests.patch`.
+  - Updated `tools/validate_kernel_patches.py` to enforce `--fuzz=0`, matching Buildroot's strict patch application rules.
+  - Verified 100% clean application across both `cubie_a5e_defconfig` and `avaota_a1_defconfig` via Buildroot's `apply-patches.sh`.
 - [x] Clean Buildroot validation gate passing: `make -C bld.a7a linux-dirclean && make -C bld.a7a linux`.
 - [ ] Rerun clean validation gate before committing any new A7A patch.
 - [ ] Keep permanent kernel patches in `project-cubie-a5e/patches/linux/` (never leave fixes isolated in `bld.a7a/`).
