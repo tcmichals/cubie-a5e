@@ -1,6 +1,43 @@
 config BR2_PACKAGE_RISCV_FIRMWARE
-	bool "riscv-firmware"
+	bool "riscv-firmware (Allwinner XuanTie E907 RISC-V)"
 	help
 	  XuanTie RISC-V co-processor bare-metal ingestion firmware.
 	  Compiles the firmware from the local source directory and
-	  installs the binary payload into target `/lib/firmware/`.
+	  installs binary payloads into target `/lib/firmware/` and
+	  images directory.
+
+if BR2_PACKAGE_RISCV_FIRMWARE
+
+choice
+	prompt "Default Active Boot Firmware"
+	default BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTSTRINGBINARYTRACE0
+	help
+	  Select which RISC-V firmware payload is installed as the active
+	  `/lib/firmware/riscv-firmware.elf` loaded by S60riscv at startup.
+
+config BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTSTRINGBINARYTRACE0
+	bool "testStringBinaryTrace0 (Trace0 telemetry & RPMsg)"
+	help
+	  Telemetry firmware using circular trace0 buffer and fast SRAM ring.
+
+config BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG
+	bool "testPingRpmsg (VirtIO RPMsg echo)"
+	help
+	  VirtIO RPMsg communication test firmware.
+
+config BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV
+	bool "exampleRiscv (Minimal baseline)"
+	help
+	  Minimal bare-metal RISC-V startup and blink baseline.
+
+endchoice
+
+config BR2_PACKAGE_RISCV_FIRMWARE_HOST_TOOLS
+	bool "Install host companion and benchmark tools"
+	default y
+	help
+	  Install Linux host tools (ping_shm, ping_rpmsg, ping_dram, riscv-load,
+	  load-riscv.sh, test_riscv.py, monitor_trace.py, fast_sram_telemetry.py)
+	  to `/usr/bin`.
+
+endif

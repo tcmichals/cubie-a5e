@@ -1,7 +1,30 @@
 config BR2_PACKAGE_DSP_HIFI4
-	bool "dsp-hifi4"
+	bool "dsp-hifi4 (Allwinner Cadence HiFi4 DSP)"
 	help
 	  Cadence Tensilica HiFi4 Audio DSP co-processor firmware.
 	  Compiles the DSP firmware from local source directory using the
 	  Xtensa HiFi4 GCC toolchain and installs binary payloads into
 	  target `/lib/firmware/` and images directory.
+
+if BR2_PACKAGE_DSP_HIFI4
+
+choice
+	prompt "Default Active Boot Firmware"
+	default BR2_PACKAGE_DSP_HIFI4_APP_TESTMSGBOX
+	help
+	  Select which DSP firmware payload is installed as the default
+	  `/lib/firmware/dsp-firmware.elf`.
+
+config BR2_PACKAGE_DSP_HIFI4_APP_TESTMSGBOX
+	bool "testMsgbox (Hardware Message Box & Trace0)"
+	help
+	  DSP application with hardware Message Box IPC and trace0 buffer.
+
+config BR2_PACKAGE_DSP_HIFI4_APP_TESTBASIC
+	bool "testBasic (Minimal DSP startup)"
+	help
+	  Minimal bare-metal DSP startup and resource table baseline.
+
+endchoice
+
+endif

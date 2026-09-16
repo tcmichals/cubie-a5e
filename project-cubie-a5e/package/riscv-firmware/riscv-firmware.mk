@@ -32,30 +32,32 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	fi
 
 	# Default active firmware loaded at boot by /etc/init.d/S60riscv
-	if [ -f $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
-	elif [ -f $(@D)/e907-riscv/bin/exampleRiscv.elf ]; then \
+	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV)" = "y" ]; then \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/exampleRiscv.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/exampleRiscv.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+	else \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	fi
 
-	# Install Linux host benchmark and communication tools
-	for tool in ping_shm ping_rpmsg ping_dram; do \
-		if [ -f $(@D)/e907-riscv/bin/$$tool ]; then \
-			$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$tool $(TARGET_DIR)/usr/bin/$$tool; \
-		fi; \
-	done
-	$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/riscv-load $(TARGET_DIR)/usr/bin/riscv-load
-	$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh
-	$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_riscv.py $(TARGET_DIR)/usr/bin/test_riscv.py
-
-	# Install host companion Python trace monitor & telemetry tools
-	for py_tool in monitor_trace.py fast_sram_telemetry.py; do \
-		if [ -f $(@D)/e907-riscv/bin/$$py_tool ]; then \
-			$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$py_tool $(TARGET_DIR)/usr/bin/$$py_tool; \
-		fi; \
-	done
+	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_HOST_TOOLS)" = "y" ]; then \
+		for tool in ping_shm ping_rpmsg ping_dram; do \
+			if [ -f $(@D)/e907-riscv/bin/$$tool ]; then \
+				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$tool $(TARGET_DIR)/usr/bin/$$tool; \
+			fi; \
+		done; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/riscv-load $(TARGET_DIR)/usr/bin/riscv-load; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_riscv.py $(TARGET_DIR)/usr/bin/test_riscv.py; \
+		for py_tool in monitor_trace.py fast_sram_telemetry.py; do \
+			if [ -f $(@D)/e907-riscv/bin/$$py_tool ]; then \
+				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$py_tool $(TARGET_DIR)/usr/bin/$$py_tool; \
+			fi; \
+		done; \
+	fi
 endef
 
 RISCV_FIRMWARE_INSTALL_IMAGES = YES
@@ -66,10 +68,12 @@ define RISCV_FIRMWARE_INSTALL_IMAGES_CMDS
 			[ -f "$$elf" ] && $(INSTALL) -D -m 0644 "$$elf" $(BINARIES_DIR)/$$(basename "$$elf"); \
 		done; \
 	fi
-	if [ -f $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(BINARIES_DIR)/riscv-firmware.elf; \
-	elif [ -f $(@D)/e907-riscv/bin/exampleRiscv.elf ]; then \
+	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV)" = "y" ]; then \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/exampleRiscv.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+	else \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	fi
 endef
 

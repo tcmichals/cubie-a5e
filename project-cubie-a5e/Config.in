@@ -2,7 +2,9 @@ menu "Radxa Cubie A5E Flight Controller Custom Packages"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/aic8800-driver/Config.in"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/aic8800-firmware/Config.in"
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/timvx-delegate/Config.in"
-    source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/riscv-firmware/Config.in"
-    source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/dsp-hifi4/Config.in"
+    menu "Co-Processor Firmwares (RISC-V E907 & HiFi4 DSP)"
+        source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/riscv-firmware/Config.in"
+        source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/dsp-hifi4/Config.in"
+    endmenu
     source "$BR2_EXTERNAL_CUBIE_A5E_PATH/package/boot0-a733/Config.in"
 endmenu
