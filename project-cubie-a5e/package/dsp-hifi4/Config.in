@@ -1,0 +1,7 @@
+config BR2_PACKAGE_DSP_HIFI4
+	bool "dsp-hifi4"
+	help
+	  Cadence Tensilica HiFi4 Audio DSP co-processor firmware.
+	  Compiles the DSP firmware from local source directory using the
+	  Xtensa HiFi4 GCC toolchain and installs binary payloads into
+	  target `/lib/firmware/` and images directory.

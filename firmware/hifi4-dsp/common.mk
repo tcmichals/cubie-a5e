@@ -2,7 +2,7 @@
 # Common Makefile Fragment for Cadence Tensilica HiFi4 Audio DSP (Allwinner T527)
 # ==============================================================================
 
-COMMON_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+COMMON_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../common)
 
 # 1. Toolchain Configuration
 # Supports Cadence Xtensa HiFi4 GCC toolchain or cross-compiler fallback
@@ -24,17 +24,18 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 
 # 2. Compilation Flags
-INCLUDES += -I. -I$(COMMON_DIR)
+INCLUDES += -I. -I$(COMMON_DIR) -I$(COMMON_DIR)/include -I$(COMMON_DIR)/hal
 CFLAGS   += -O2 -g $(INCLUDES) -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections
-LDSCRIPT ?= $(COMMON_DIR)/dsp.ld
+LDSCRIPT ?= $(COMMON_DIR)/arch_dsp/dsp.ld
 LDFLAGS  += -T $(LDSCRIPT) -Wl,-Map=$(TARGET).map -Wl,--gc-sections -nostdlib -lgcc
 
-# 3. Source Files
-COMMON_SRCS ?= $(COMMON_DIR)/resource_table.c $(COMMON_DIR)/msgbox.c
+# 3. Source Files (Unified with RISC-V co-processor)
+COMMON_SRCS ?= $(COMMON_DIR)/resource_table.c $(COMMON_DIR)/hal/sunxi_msgbox.c
 SRCS        += $(COMMON_SRCS)
 OBJS        += $(patsubst %.c, build/%.o, $(notdir $(SRCS)))
 
 vpath %.c $(dir $(SRCS))
+
 
 # 4. Build Targets
 all: build/$(TARGET).elf build/$(TARGET).bin

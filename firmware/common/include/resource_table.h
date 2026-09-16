@@ -161,9 +161,20 @@ struct rpmsg_ns_msg {
     uint32_t flags;
 } __attribute__((packed));
 
+/*
+ * Universal Trace0 Logging API (accessible in C and C++)
+ */
+void rproc_trace_init(void);
+void rproc_trace_puts(const char *str);
+
+/* Backward compatibility aliases for DSP */
+#define dsp_trace_init  rproc_trace_init
+#define dsp_trace_puts  rproc_trace_puts
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* RESOURCE_TABLE_H */
+
 

@@ -80,3 +80,28 @@ const struct standard_resource_table global_resource_table = {
 
 #endif
 
+/*
+ * Universal Trace0 Logging Implementation
+ */
+static uint32_t s_trace_head = 0;
+
+void rproc_trace_init(void)
+{
+    s_trace_head = 0;
+    for (uint32_t i = 0; i < sizeof(g_rproc_trace_buffer); ++i) {
+        g_rproc_trace_buffer[i] = 0;
+    }
+}
+
+void rproc_trace_puts(const char *str)
+{
+    if (!str)
+        return;
+
+    while (*str && s_trace_head < (sizeof(g_rproc_trace_buffer) - 1)) {
+        g_rproc_trace_buffer[s_trace_head++] = *str++;
+    }
+    g_rproc_trace_buffer[s_trace_head] = '\0';
+}
+
+
