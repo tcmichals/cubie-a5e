@@ -38,6 +38,9 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTMSGBOX)" = "y" ]; then \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testMsgbox.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testMsgbox.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	else \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
@@ -52,6 +55,7 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/riscv-load $(TARGET_DIR)/usr/bin/riscv-load; \
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh; \
 		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_riscv.py $(TARGET_DIR)/usr/bin/test_riscv.py; \
+		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_dual_msgbox.py $(TARGET_DIR)/usr/bin/test_dual_msgbox.py; \
 		for py_tool in monitor_trace.py fast_sram_telemetry.py; do \
 			if [ -f $(@D)/e907-riscv/bin/$$py_tool ]; then \
 				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$py_tool $(TARGET_DIR)/usr/bin/$$py_tool; \
@@ -72,6 +76,8 @@ define RISCV_FIRMWARE_INSTALL_IMAGES_CMDS
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/exampleRiscv.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTMSGBOX)" = "y" ]; then \
+		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testMsgbox.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	else \
 		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	fi

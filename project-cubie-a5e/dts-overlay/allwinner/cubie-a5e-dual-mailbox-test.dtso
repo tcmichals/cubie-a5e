@@ -1,0 +1,44 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *   RADXA CUBIE A5E — DUAL CO-PROCESSOR CONCURRENT MAILBOX TEST OVERLAY
+ * ============================================================================
+ * Simultaneously instantiates two independent 'mailbox-test' driver clients
+ * to validate concurrent, bidirectional hardware mailbox communications:
+ *
+ * Client 1: Cadence Tensilica HiFi4 Audio DSP
+ *   - Channel 4: ARM Cortex-A55 -> HiFi4 DSP (Linux TX -> DSP RX)
+ *   - Channel 5: HiFi4 DSP -> ARM Cortex-A55 (DSP TX -> Linux RX)
+ *   - Debugfs node: /sys/kernel/debug/mailbox-test-dsp/message
+ *
+ * Client 2: XuanTie E907 RISC-V Co-Processor
+ *   - Channel 8: ARM Cortex-A55 -> XuanTie E907 (Linux TX -> RV RX)
+ *   - Channel 9: XuanTie E907 -> ARM Cortex-A55 (RV TX -> Linux RX)
+ *   - Debugfs node: /sys/kernel/debug/mailbox-test-e907/message
+ *
+ * Load in /boot/config.txt:
+ *   dtoverlay=cubie-a5e-dual-mailbox-test
+ * ============================================================================
+ */
+
+&{/} {
+    mailbox_test_dsp: mailbox-test-dsp {
+        compatible = "mailbox-test";
+        mboxes = <&msgbox 4>, <&msgbox 5>;
+        mbox-names = "tx", "rx";
+        status = "okay";
+    };
+
+    mailbox_test_e907: mailbox-test-e907 {
+        compatible = "mailbox-test";
+        mboxes = <&msgbox 8>, <&msgbox 9>;
+        mbox-names = "tx", "rx";
+        status = "okay";
+    };
+};
+
+&msgbox {
+    status = "okay";
+};

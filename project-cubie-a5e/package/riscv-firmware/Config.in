@@ -25,6 +25,11 @@ config BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG
 	help
 	  VirtIO RPMsg communication test firmware.
 
+config BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTMSGBOX
+	bool "testMsgbox (Hardware Message Box & Trace0)"
+	help
+	  Hardware Message Box ping-pong test firmware with trace0 buffer.
+
 config BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV
 	bool "exampleRiscv (Minimal baseline)"
 	help

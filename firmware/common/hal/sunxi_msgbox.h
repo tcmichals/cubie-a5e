@@ -21,14 +21,17 @@ extern "C" {
 
 /* Automatic core port selection based on compiler target */
 #if defined(__XTENSA__) || defined(CONFIG_CORE_HIFI4)
-  #define SUNXI_MSGBOX_LOCAL_BASE   SUNXI_MSGBOX_DSP_BASE
-  #define SUNXI_MSGBOX_PORT_OFFSET  0x00000000U
+  #define SUNXI_MSGBOX_LOCAL_BASE       SUNXI_MSGBOX_DSP_BASE
+  #define SUNXI_MSGBOX_PORT_OFFSET      0x00000000U /* DSP Local Port 0 */
+  #define SUNXI_MSGBOX_ARM_PORT_OFFSET  0x00000100U /* ARM Host Port 1 (Channels 4..7) */
 #elif defined(__riscv) || defined(CONFIG_CORE_E907)
-  #define SUNXI_MSGBOX_LOCAL_BASE   SUNXI_MSGBOX_RV_BASE
-  #define SUNXI_MSGBOX_PORT_OFFSET  0x00000200U
+  #define SUNXI_MSGBOX_LOCAL_BASE       SUNXI_MSGBOX_RV_BASE
+  #define SUNXI_MSGBOX_PORT_OFFSET      0x00000200U /* RV Local Port 2 */
+  #define SUNXI_MSGBOX_ARM_PORT_OFFSET  0x00000200U /* ARM Host Port 2 (Channels 8..11) */
 #else
-  #define SUNXI_MSGBOX_LOCAL_BASE   SUNXI_MSGBOX_RV_BASE
-  #define SUNXI_MSGBOX_PORT_OFFSET  0x00000200U
+  #define SUNXI_MSGBOX_LOCAL_BASE       SUNXI_MSGBOX_RV_BASE
+  #define SUNXI_MSGBOX_PORT_OFFSET      0x00000200U
+  #define SUNXI_MSGBOX_ARM_PORT_OFFSET  0x00000200U
 #endif
 
 #define SUNXI_MSGBOX_MAX_CHANNEL    4
@@ -50,9 +53,9 @@ extern "C" {
     (*(volatile uint32_t *)(SUNXI_MSGBOX_LOCAL_BASE + 0x070 + SUNXI_MSGBOX_PORT_OFFSET + ((ch) * 4)))
 
 #define SUNXI_MSGBOX_TX_STA_REG(ch) \
-    (*(volatile uint32_t *)(SUNXI_MSGBOX_ARM_BASE + 0x060 + SUNXI_MSGBOX_PORT_OFFSET + ((ch) * 4)))
+    (*(volatile uint32_t *)(SUNXI_MSGBOX_ARM_BASE + 0x060 + SUNXI_MSGBOX_ARM_PORT_OFFSET + ((ch) * 4)))
 #define SUNXI_MSGBOX_TX_FIFO_REG(ch) \
-    (*(volatile uint32_t *)(SUNXI_MSGBOX_ARM_BASE + 0x070 + SUNXI_MSGBOX_PORT_OFFSET + ((ch) * 4)))
+    (*(volatile uint32_t *)(SUNXI_MSGBOX_ARM_BASE + 0x070 + SUNXI_MSGBOX_ARM_PORT_OFFSET + ((ch) * 4)))
 
 /* Unified C API */
 void     sunxi_msgbox_init(void);
