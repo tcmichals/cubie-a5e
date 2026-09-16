@@ -6,10 +6,10 @@
 
 #include "msgbox.h"
 
-void sunxi_msgbox_init(void)
+void sunxi_msgbox_init_ex(bool enable_irq)
 {
-    /* Enable Receive IRQ on local port for channel 0 (ARM -> Co-processor) */
-    SUNXI_MSGBOX_RD_IRQ_EN_REG |= 0x00000001U;
+    /* Enable Receive IRQ on local port for channel 0 if requested, otherwise disable */
+    SUNXI_MSGBOX_RD_IRQ_EN_REG = enable_irq ? 0x00000001U : 0x00000000U;
 
     /* Clear any pending status */
     SUNXI_MSGBOX_RD_IRQ_STA_REG = 0xFFFFFFFFU;
@@ -20,6 +20,12 @@ void sunxi_msgbox_init(void)
             (void)SUNXI_MSGBOX_RX_FIFO_REG(c);
         }
     }
+}
+
+void sunxi_msgbox_init(void)
+{
+    /* Default to false: polling mode with interrupts disabled */
+    sunxi_msgbox_init_ex(false);
 }
 
 bool sunxi_msgbox_has_data(uint32_t ch)

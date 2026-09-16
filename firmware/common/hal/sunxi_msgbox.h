@@ -59,6 +59,7 @@ extern "C" {
 
 /* Unified C API */
 void     sunxi_msgbox_init(void);
+void     sunxi_msgbox_init_ex(bool enable_irq);
 bool     sunxi_msgbox_has_data(uint32_t ch);
 uint32_t sunxi_msgbox_recv(uint32_t ch);
 void     sunxi_msgbox_send(uint32_t ch, uint32_t data);

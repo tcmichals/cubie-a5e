@@ -24,10 +24,11 @@ namespace hal {
 inline constexpr uint32_t MSG_NUM_MASK   = 0x0FU;
 inline constexpr uint32_t FIFO_DEPTH_MAX = 8U;
 
-void MsgBox::init() noexcept
+void MsgBox::init(bool enable_irq) noexcept
 {
-    // Enable Read IRQs on local port for channels 0..3 (n=2, RV <-> ARM)
-    RV_READ_IRQ_EN_REG = 0x00000055U; // Bits 0, 2, 4, 6 enable RD IRQ for ch 0..3
+    // Set Read IRQs on local port for channels 0..3:
+    // Bits 0, 2, 4, 6 enable RD IRQ for ch 0..3 (0x55) if enable_irq is true, else 0 (disabled)
+    RV_READ_IRQ_EN_REG = enable_irq ? 0x00000055U : 0x00000000U;
     RV_READ_IRQ_STA_REG = 0xFFFFFFFFU; // W1C clear pending
 
     // Flush any stale words in receive FIFOs

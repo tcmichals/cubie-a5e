@@ -24,8 +24,9 @@ public:
 
     /**
      * @brief Initialize local RISC-V hardware message box
+     * @param enable_irq Enable hardware receive interrupts on channels (default: false)
      */
-    static void init() noexcept;
+    static void init(bool enable_irq = false) noexcept;
 
     /**
      * @brief Non-blocking message send to Cortex-A55 (CPUX)
