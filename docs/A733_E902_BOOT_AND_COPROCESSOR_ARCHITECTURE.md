@@ -66,7 +66,7 @@ The start address register `0x07032204` defines the instruction fetch entry poin
   ┌─────────────────────────────────────┐                     ┌─────────────────────────────────────┐
   │ • TOC1 contains scp.fex             │                     │ • TOC1 omits scp.fex                │
   │ • Loads to 0x40014000 at power-on   │                     │ • E902 held in reset at boot        │
-  │ • E902 manages AXP8191 PMIC over RSB│                     │ • U-Boot initializes AXP8191 PMIC   │
+  │ • E902 manages AXP8191 PMIC (s_twi0)│                     │ • U-Boot/Linux controls AXP8191 PMIC│
   │ • BL31 installs SCPI PSCI handlers  │                     │ • BL31 unlocks R_SPC & TZMA to NS   │
   │ • Linux reserves 0x40014000 (no-map)│                     │ • Linux sunxi_rproc loads firmware  │
   │ • remoteproc node disabled in DTS   │                     │ • remoteproc node enabled in DTS    │
@@ -97,8 +97,8 @@ cldo1_vol       = 3300000   ; 3.3V - MicroSD Card VCC-SD (`PF0`-`PF5`)
 
 [pmu1_para]
 pmu_used        = 1
-pmu_twi_addr    = 0x34      ; PMIC Device Address on RSB / TWI
-pmu_twi_id      = 0         ; Bound to r_rsb / r_i2c0 (0x07083000)
+pmu_twi_addr    = 0x36      ; Primary PMIC (AXP8191) Address on s_twi0 (0x34 for AXP515)
+pmu_twi_id      = 0         ; Bound to s_twi0 / R_TWI0 (0x07083000, pins PL0/PL1)
 pmu_irq_id      = 203       ; GIC SPI 203 / R_PIO Interrupt
 pmu_battery_rdc = 100
 pmu_battery_cap = 0
@@ -139,7 +139,7 @@ During the U-Boot build, the text FEX files are compiled into binary parameter b
 ┌────────────────────────────────────────────────────────────────────────┐
 │ 2. scp.fex Execution (XuanTie E902 @ 0x40014000)                       │
 │    • Reads [power_sply] tables from DRAM                               │
-│    • Initializes Reduced Serial Bus (RSB) at 0x07083000                │
+│    • Initializes I2C Bus (s_twi0 / R_TWI0) at 0x07083000                │
 │    • Programs AXP8191 DCDC1 = 3.3V (Enables FE1.1S Hub & AIC8800 Wi-Fi)│
 │    • Programs ALDO1/3 & CLDO1 for system I/O buses                     │
 │    • Enters SCPI command listener loop for TF-A BL31 DVFS calls        │
@@ -224,9 +224,10 @@ To allow Linux `remoteproc` to write `0x07032204` and load code into System SRAM
 ### B. U-Boot & TOC1 Packaging Changes
 1. **Packaging**: Generate a TOC1 container without `scp.fex` (e.g. `radxa_a733_bootloader_rt.bin`).
 2. **PMIC Standalone Initialization**:
-   Ensure U-Boot initializes the **AXP8191 PMIC** over RSB (`0x07083000`):
+   Ensure U-Boot initializes the **AXP8191 PMIC** over I2C (`s_twi0` / `sunxi_r_i2c0` @ `0x07083000`):
    - Enable `DCDC1` (3.3V system power for USB hub, Wi-Fi, Ethernet).
    - Enable `ALDO1` (3.3V for `VCC-PL` and `VCC-PM` I/O banks).
+   - Enable `ELDO1`, `ELDO2`, `ELDO4` (USB PHY & core rails).
 3. **Core Reset**: Leave the E902 held in reset in `r_ccu` at boot.
 
 ---
@@ -289,8 +290,50 @@ Because the E902 is RV32E, firmware applications must be built targeting:
 | **Primary Use Case** | Consumer Battery Devices (S3 Sleep) | **24/7 Embedded Control, Robotics, Real-Time I/O** |
 | **TOC1 Container** | Contains `scp.fex` | **Omits `scp.fex`** |
 | **E902 Boot Time** | Starts at power-on (`boot0`) | **Starts dynamically from Linux (`remoteproc`)** |
-| **PMIC Control** | Handled by `scp.fex` over RSB | **Handled directly by U-Boot / Linux PMIC driver** |
+| **PMIC Control** | Handled by `scp.fex` over `s_twi0` (I2C) | **Handled directly by U-Boot / Linux I2C driver** |
 | **BL31 Security** | `0x07032204` locked in Secure World | **`R_SPC` & `R_TZMA` unlocked for Non-Secure EL1** |
 | **DRAM Map** | `0x40014000` reserved (`no-map`) | **`0x4E000000` DMA pool / SRAM A2 (`0x00040000`)** |
 | **Linux RemoteProc** | Disabled (`status = "disabled"`) | **Enabled (`sunxi_rproc.c`)** |
 | **Firmware Toolchain**| Vendor binary | **Bare-metal C++ (`-march=rv32emc_zicsr -mabi=ilp32e`)** |
+
+---
+
+## 8. Mode 2 Action Plan: Decoupling Power from E902 Safely
+
+To safely repurpose the XuanTie E902 without power collapse or rail instability, follow this 4-step decoupling strategy:
+
+```
++───────────────────────────────────────────────────────────────────────────────────────+
+|                  POWER DECOUPLING STRATEGY FOR E902 MODE 2                            |
++───────────────────────────────────────────────────────────────────────────────────────+
+
+ 1. BOOTLOADER STAGE (boot0 + U-Boot):
+    • Vendor boot0 sets core DRAM voltages (DCDC2/3 = 0.9V, DCDC4 = 1.1V).
+    • U-Boot initializes s_twi0 (0x07083000) directly:
+      - Writes AXP8191 registers to latch DCDC1 = 3.3V, ALDO1 = 1.8V, ELDO1/2/4 ON.
+      - Never issues arm_svc_arisc_startup(); leaves E902 in reset.
+
+ 2. SECURE MONITOR (TF-A / BL31):
+    • Replaces SCPI communication with native CPU power controls (sunxi_native_pm.c).
+    • Configures R_SPC and R_TZMA to allow Non-Secure Linux EL1 access to:
+      - E902_CFG (0x07032000)
+      - System SRAM A2 (0x00040000)
+
+ 3. LINUX HOST KERNEL:
+    • Binds s_twi0 to allwinner,sun6i-a31-i2c (NOT sun8i-a23-rsb).
+    • axp20x / axp8191 regulator driver directly manages all rails.
+    • Key rails declared regulator-always-on and regulator-boot-on.
+    • sunxi_rproc loads real-time firmware into SRAM A2 and releases E902 reset.
+
+ 4. XUANTIE E902 (User Real-Time Firmware):
+    • Runs real-time application (sensor sampling, IMU, GPS, motor PWM).
+    • Has ZERO power management responsibilities.
+    • Never touches s_twi0 or AXP registers; communicated with ARM via msgbox0.
+```
+
+### Action Items & Deliverables:
+- [ ] **Task P.1 (U-Boot Bus Probe)**: Verify `s_twi0` bus ID in U-Boot (`i2c bus`), probe PMIC addresses `0x36` and `0x34`, and confirm register read/write works without ARISC.
+- [ ] **Task P.2 (DTS Bus Correction)**: In `0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`, replace `r_rsb: rsb@7083000` with `s_twi0: i2c@7083000` (`allwinner,sun6i-a31-i2c`). This eliminates the `-110` timeout and brings up the AXP8191 regulator tree in Linux.
+- [ ] **Task P.3 (Fixed Voltage Stability)**: Lock CPU and system rails to standard high-performance operating points in Device Tree (`regulator-always-on`) so DVFS is not required during real-time flight operation.
+- [ ] **Task P.4 (TF-A Firewall Patch)**: In `bl31`, un-gate `R_SPC` and `R_TZMA` for non-secure access so `sunxi_rproc` can write `0x07032204` (`E902_STA_ADD_REG`) without bus fault.
+- [ ] **Task P.5 (E902 Firmware Build)**: Target `-march=rv32emc_zicsr -mabi=ilp32e` linked to SRAM A2 (`0x00044000`) for ping and telemetry testing over `msgbox0`.

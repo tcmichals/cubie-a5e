@@ -227,3 +227,65 @@ Unlike TI Sitara (AM62x/AM64x), STM32MP1, and NXP i.MX SoCs which implement a me
 ### Future Silicon Outlook:
 If future Allwinner SoC revisions incorporate a standard memory-mapped `dmem` interface to the RISC-V Debug Module Interface (DMI), native self-hosted OpenOCD and GDB remote debugging can be used directly from Linux without external hardware probes, matching the workflow on TI and ST devices.
 
+---
+
+## 7. Power Management Co-Processor Architecture (ARISC, PMIC & Secure Monitor)
+
+In addition to serving as a real-time auxiliary compute engine (as in the T527 `remoteproc` configuration), the on-chip XuanTie RISC-V core functions as the **System Control Processor (SCP / ARISC)** in the Allwinner power architecture.
+
+```
++---------------------------------------------------------------------------------------+
+|                 HETEROGENEOUS POWER MANAGEMENT SUBSYSTEM TOPOLOGY                     |
+|                                                                                       |
+|   [ARM64 Cortex-A76/A55 Cores]                                                        |
+|        │                                                                              |
+|        ▼ (SMC Calls: 0x8000ff10 - 0x8000ff13)                                         |
+|   [ARM Trusted Firmware (BL31 / EL3)]                                                 |
+|        │                                                                              |
+|        ▼ (Hardware Mailbox Doorbell IPC: 0x03004000 / 0x07094000)                     |
+|   [XuanTie RISC-V Co-Processor (ARISC / CPUS @ 0x07032000)]                           |
+|        │                                                                              |
+|        ▼ (Low-Power Bus: s_twi0 / R_TWI0 @ 0x07083000, Pins PL0 / PL1)                |
+|   ┌──────────────────────────────────────────────┐                                    |
+|   │         AXP Power Management ICs             │                                    |
+|   │  - AXP8191 Primary PMIC (I2C Addr: 0x36)     │                                    |
+|   │    * ELDO1 (3.3V/1.8V VCC-USB)               │                                    |
+|   │    * ELDO2 (3.3V VCC33-USB-2)                │                                    |
+|   │    * ELDO4 (0.8V VDD-USB)                    │                                    |
+|   │    * DCDC1-9, ALDO1-6, BLDO1-5, CLDO1-5      │                                    |
+|   │  - AXP515 Secondary PMIC (I2C Addr: 0x34)    │                                    |
+|   └──────────────────────────────────────────────┘                                    |
++---------------------------------------------------------------------------------------+
+```
+
+### 7.1 Physical Interconnect: `s_twi0` / `R_TWI0`
+* **Address**: `0x07083000` (Size: `0x400`).
+* **Physical Pins**: `PL0` (SCL) and `PL1` (SDA) on Port L.
+* **Power Domain**: Resides inside the Always-On `R_PRCM` / `CPUS` domain (`0x07010000`).
+* **Connected Slaves**:
+  - `0x36`: **X-Powers AXP8191** (Main system power: CPU cores, DRAM, USB, SerDes, PCIe, I/O banks).
+  - `0x34`: **X-Powers AXP515** (Auxiliary power & Type-C / VBUS power path management).
+
+### 7.2 ARM Host to RISC-V SMC Protocol
+When running under ARM Trusted Firmware (BL31), the ARM cores can request power operations via Secure Monitor Calls (SMC):
+
+| Function Name | SMC Function ID | Arguments | Description |
+| :--- | :--- | :--- | :--- |
+| `ARM_SVC_ARISC_STARTUP` | `0x8000ff10` | `a1`: DTB/Config pointer | Un-resets and boots the RISC-V core |
+| `ARM_SVC_ARISC_WAIT_READY` | `0x8000ff11` | None | Polls until ARISC signals ready |
+| `ARM_SVC_ARISC_READ_PMU` | `0x8000ff12` | `a1`: PMIC register offset | Reads byte from PMIC over `s_twi0` |
+| `ARM_SVC_ARISC_WRITE_PMU` | `0x8000ff13` | `a1`: Reg offset, `a2`: Val | Writes byte to PMIC over `s_twi0` |
+| `ARM_SVC_ARISC_FAKE_POWER_OFF` | `0x83000019` | None | Signals ARISC to initiate power-off |
+
+### 7.3 Boot Lifecycle Arbitration (U-Boot vs. Linux)
+1. **At U-Boot Prompt (`=> `)**:
+   - ARISC is not started by default; it is held in standby.
+   - The ARM host has direct hardware access to `s_twi0` (`0x07083000`) through U-Boot's native `sunxi_r_i2c0` controller driver (`CONFIG_R_I2C0_ENABLE=y`).
+   - U-Boot `i2c dev <bus>` routes commands directly to `s_twi0` without invoking the RISC-V core.
+2. **At OS Boot Handover (`bootm`)**:
+   - Right before jumping to the kernel, U-Boot triggers `arm_svc_arisc_startup()`.
+   - ARISC loads its runtime firmware (`ar100s/driver/pmu/pmu_axp8191.c`) into SRAM A2 (`0x00040000`).
+3. **Implications for Remoteproc vs. Power Management**:
+   - On the **T527 (Cubie A5E)**: The XuanTie E906 is repurposed as a dedicated real-time avionics co-processor via `remoteproc`. Power management remains entirely host-driven in Linux via Device Tree regulator bindings (`regulator-always-on`).
+   - On the **A733 (Cubie A7A)**: If the RISC-V core is used for `remoteproc`, the host Linux kernel **must** take direct ownership of `s_twi0` using `allwinner,sun6i-a31-i2c` to control the AXP8191 PMIC directly. If the kernel misdeclares `s_twi0` as an RSB bus, PMIC communication collapses with `-110` timeout, leaving peripheral rails (such as `ELDO1`, `ELDO2`, and `ELDO4` for USB) unpowered in hardware.
+

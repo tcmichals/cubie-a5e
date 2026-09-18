@@ -5,20 +5,18 @@ Subject: [PATCH] phy: allwinner: add sun60i-a733-usb2-phy driver for DWC3
 
 The Allwinner A733 SoC integrates a dedicated USB 2.0 PHY for its DWC3
 controller at 0x06B00000. It requires analog calibration tuning
-(aw,phy_tune_param = 0x143338d6) to adjust squelch detection,
-disconnect threshold, and signal eye pre-emphasis for downstream
-High-Speed USB communication.
-
-Add a lightweight platform PHY driver that binds to "allwinner,sun60i-a733-usb2-phy"
-or "allwinner,sunxi-plat-phy" and writes the tuning value upon phy_init()
-under active PM runtime (PD_USB2 power domain).
+(aw,phy_tune_param = 0x143338d6) written to PHY_USB2_PHYTUNE (0x18),
+waking up the transceiver by setting COMMONONN (bit 2) and clearing SIDDQ
+(bit 3) in PHY_USB2_PHYCTL (0x10), forcing host mode in PHY_USB2_ISCR (0x00),
+and configuring the SerDes top bridge at 0x06c00008 (SUBSYS_USB3P1_BGR = 0x00230010)
+to deassert USB2P0_PHY_RSTN, enable ACLK/HCLK, and select UTMI clock.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/phy/allwinner/Kconfig           | 10 ++++
- drivers/phy/allwinner/Makefile          |  1 +
- drivers/phy/allwinner/phy-sun60i-usb2.c | 75 +++++++++++++++++++++++++
- 3 files changed, 86 insertions(+)
+ drivers/phy/allwinner/Kconfig           |  10 ++
+ drivers/phy/allwinner/Makefile          |   1 +
+ drivers/phy/allwinner/phy-sun60i-usb2.c | 142 ++++++++++++++++++++++++
+ 3 files changed, 153 insertions(+)
  create mode 100644 drivers/phy/allwinner/phy-sun60i-usb2.c
 
 diff --git a/drivers/phy/allwinner/Kconfig b/drivers/phy/allwinner/Kconfig
@@ -56,7 +54,7 @@ new file mode 100644
 index 0000000..c1d2e3f
 --- /dev/null
 +++ b/drivers/phy/allwinner/phy-sun60i-usb2.c
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,142 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/*
 + * Allwinner A733 (sun60iw2) USB 2.0 PHY driver for DWC3
@@ -76,12 +74,58 @@ index 0000000..c1d2e3f
 +	u32 tune_param;
 +};
 +
++#define PHY_USB2_ISCR		0x00
++#define PHY_USB2_PHYCTL		0x10
++#define PHY_USB2_PHYTUNE	0x18
++#define SERDES_TOP_SUBSYS_BGR	0x06c00008
++
++static void sun60i_usb2_phy_hw_init(struct sun60i_usb2_phy *priv)
++{
++	void __iomem *subsys_bgr;
++
++	/* Deassert PHY reset, enable ACLK/HCLK and select UTMI clock in SerDes top bridge (0x00230010) */
++	subsys_bgr = ioremap(SERDES_TOP_SUBSYS_BGR, 4);
++	if (subsys_bgr) {
++		writel(0x00230010, subsys_bgr);
++		iounmap(subsys_bgr);
++	}
++
++	/* Configure 200-ohm resistor calibration in SYSCFG (0x03000000) */
++	{
++		void __iomem *syscfg = ioremap(0x03000160, 0x10);
++		if (syscfg) {
++			u32 val;
++
++			/* RESCAL_CTRL (0x160): select PCIE_USB 200 ohm trim (bit 10), clear CAL_EN (bit 0) */
++			val = readl(syscfg + 0x00);
++			val &= ~BIT(0);
++			val |= BIT(10);
++			writel(val, syscfg + 0x00);
++
++			/* RES1_CTRL (0x168): clear manual trim bits [15:8] for auto-calibration */
++			val = readl(syscfg + 0x08);
++			val &= ~GENMASK(15, 8);
++			writel(val, syscfg + 0x08);
++
++			iounmap(syscfg);
++		}
++	}
++
++	/* Force ID low and VBUS valid in ISCR to guarantee host mode */
++	writel(0x0000b000, priv->base + PHY_USB2_ISCR);
++
++	/* Clear SIDDQ (bit 3) and set COMMONONN (bit 2) in PHYCTL to wake up the USB 2.0 PHY transceiver */
++	writel(0x000e2434, priv->base + PHY_USB2_PHYCTL);
++
++	/* Apply analog tuning (squelch threshold, pre-emphasis, DCAP) */
++	writel(priv->tune_param, priv->base + PHY_USB2_PHYTUNE);
++}
++
 +static int sun60i_usb2_phy_init(struct phy *phy)
 +{
 +	struct sun60i_usb2_phy *priv = phy_get_drvdata(phy);
 +
-+	/* Tune squelch threshold, disconnect threshold, pre-emphasis & DCAP */
-+	writel(priv->tune_param, priv->base + 0x00);
++	sun60i_usb2_phy_hw_init(priv);
 +	return 0;
 +}
 +
@@ -124,8 +168,8 @@ index 0000000..c1d2e3f
 +		return PTR_ERR(provider);
 +	}
 +
-+	/* Apply analog tuning immediately */
-+	writel(priv->tune_param, priv->base + 0x00);
++	/* Initialize hardware registers */
++	sun60i_usb2_phy_hw_init(priv);
 +
 +	dev_info(dev, "Allwinner A733 USB 2.0 PHY initialized at %pr (tune=0x%08x)\n",
 +		 platform_get_resource(pdev, IORESOURCE_MEM, 0), priv->tune_param);
@@ -152,5 +196,6 @@ index 0000000..c1d2e3f
 +MODULE_DESCRIPTION("Allwinner A733 USB 2.0 PHY driver");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_LICENSE("GPL");
++
 -- 
 2.34.1

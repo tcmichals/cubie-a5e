@@ -613,8 +613,14 @@ V0.93 and critical clock definitions.
 +	writel(readl(reg + 0x1340) | BIT(31), reg + 0x1340);
 +	writel(readl(reg + 0x1348) | BIT(31), reg + 0x1348);
 +	writel(readl(reg + 0x1350) | BIT(31), reg + 0x1350);
-+	writel(readl(reg + 0x1354) | BIT(31), reg + 0x1354);
++	writel(0x81000000, reg + 0x1354);
 +	writel(readl(reg + 0x135c) | BIT(16) | BIT(0), reg + 0x135c);
++	writel(0x81000004, reg + 0x1360);
++	writel(readl(reg + 0x1364) | BIT(31), reg + 0x1364);
++	writel(readl(reg + 0x1a00) | BIT(3), reg + 0x1a00);
++	writel(readl(reg + 0x13c0) | BIT(31), reg + 0x13c0);
++	writel(readl(reg + 0x13c4) | BIT(16), reg + 0x13c4);
++	writel(readl(reg + 0x05a4) | BIT(0), reg + 0x05a4);
 +
 +	return devm_sunxi_ccu_probe(&pdev->dev, reg, &sun60i_a733_ccu_desc);
 +}

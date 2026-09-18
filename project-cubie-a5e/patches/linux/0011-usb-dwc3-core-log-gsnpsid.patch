@@ -1,21 +1,103 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 10 Sep 2026 02:30:00 -0500
-Subject: [PATCH] usb: dwc3: core: log GSNPSID during core probe
+Subject: [PATCH] usb: dwc3: core: fix DWC31 2.0 clock force, OCFG reset mask, and log GSNPSID
 
-Add diagnostic dev_info print showing raw GSNPSID register read value
-and decoded IP ID prior to calling dwc3_core_is_valid().
+1. Add diagnostic dev_info print showing raw GSNPSID register read value
+   and decoded IP ID prior to calling dwc3_core_is_valid().
+2. In dwc3_probe(), if raw GSNPSID reads 0x00000000 (PD_USB2 power domain
+   not yet initialized by PCK-600), return -EPROBE_DEFER so driver model
+   defers probe and retries once power domain is active.
+3. In dwc3_core_soft_reset(), check if dwc->dr_mode == USB_DR_MODE_HOST
+   to pulse DWC3_GUSB2PHYCFG_PHYSOFTRST and return early, properly synchronizing
+   the UTMI 60MHz clock before host operation.
+4. In dwc3_core_setup_global_control(), expand DEV_FORCE_20_CLK_FOR_30_CLK
+   check to include DWC31_IP and DWC32_IP. When operating in High-Speed mode
+   without a SuperSpeed PIPE clock running, xhci_reset() hangs unless this
+   bit is set.
+5. Set DWC3_OCFG_SFTRSTMASK in DWC3_OCFG to prevent host controller reset
+   (USBCMD.HCRST) from wiping PHY interface signals and OTG core filters.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/usb/dwc3/core.c | 3 +++
- 1 file changed, 3 insertions(+)
+ drivers/usb/dwc3/core.c | 41 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 39 insertions(+), 2 deletions(-)
 
-diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
-index a1b2c3d..e4f5a6b 100644
 --- a/drivers/usb/dwc3/core.c
 +++ b/drivers/usb/dwc3/core.c
-@@ -2280,6 +2280,9 @@ static int dwc3_probe(struct platform_device *pdev)
+@@ -329,8 +329,22 @@ int dwc3_core_soft_reset(struct dwc3 *dw
+ 	 * XHCI driver will reset the host block. If dwc3 was configured for
+ 	 * host-only mode, then we can return early.
+ 	 */
+-	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
++	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST ||
++	    dwc->dr_mode == USB_DR_MODE_HOST) {
++		u32 usb2_port;
++
++		usb2_port = dwc3_readl(dwc, DWC3_GUSB2PHYCFG(0));
++		usb2_port |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
++		dwc3_writel(dwc, DWC3_GUSB2PHYCFG(0), usb2_port);
++
++		usleep_range(1000, 2000);
++
++		usb2_port &= ~DWC3_GUSB2PHYCFG_PHYSOFTRST;
++		dwc3_writel(dwc, DWC3_GUSB2PHYCFG(0), usb2_port);
++
++		msleep(50);
+ 		return 0;
++	}
+ 
+ 	reg = dwc3_readl(dwc, DWC3_DCTL);
+ 	reg |= DWC3_DCTL_CSFTRST;
+@@ -744,7 +758,7 @@ static int dwc3_hs_phy_setup(struct dwc3
+ 		reg &= ~(DWC3_GUSB2PHYCFG_PHYIF_MASK |
+ 		       DWC3_GUSB2PHYCFG_USBTRDTIM_MASK);
+ 		reg |= DWC3_GUSB2PHYCFG_PHYIF(UTMI_PHYIF_8_BIT) |
+-		       DWC3_GUSB2PHYCFG_USBTRDTIM(USBTRDTIM_UTMI_8_BIT);
++		       DWC3_GUSB2PHYCFG_USBTRDTIM(15);
+ 		break;
+ 	case USBPHY_INTERFACE_MODE_UTMIW:
+ 		reg &= ~(DWC3_GUSB2PHYCFG_PHYIF_MASK |
+@@ -793,9 +807,9 @@ static void dwc3_ulpi_setup(struct dwc3
+ 
+ 	if (dwc->enable_usb2_transceiver_delay) {
+ 		for (index = 0; index < dwc->num_usb2_ports; index++) {
+-			reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(index));
++			reg = dwc3_readl(dwc, DWC3_GUSB2PHYCFG(index));
+ 			reg |= DWC3_GUSB2PHYCFG_XCVRDLY;
+-			dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(index), reg);
++			dwc3_writel(dwc, DWC3_GUSB2PHYCFG(index), reg);
+ 		}
+ 	}
+ }
+@@ -1493,7 +1507,8 @@ int dwc3_core_init(struct dwc3 *dwc)
+ 		if (dwc->parkmode_disable_hs_quirk)
+ 			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_HS;
+ 
+-		if (DWC3_VER_IS_WITHIN(DWC3, 290A, ANY)) {
++		if (DWC3_VER_IS_WITHIN(DWC3, 290A, ANY) ||
++		    DWC3_IP_IS(DWC31) || DWC3_IP_IS(DWC32)) {
+ 			if (dwc->maximum_speed == USB_SPEED_FULL ||
+ 			    dwc->maximum_speed == USB_SPEED_HIGH)
+ 				reg |= DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK;
+@@ -1502,6 +1517,16 @@ int dwc3_core_init(struct dwc3 *dwc)
+ 		}
+ 
+ 		dwc3_writel(dwc, DWC3_GUCTL1, reg);
++
++		/*
++		 * Prevent host/device reset from resetting OTG core.
++		 * If we don't do this then xhci_reset (USBCMD.HCRST) will reset
++		 * the signal outputs sent to the PHY, the OTG FSM logic of the
++		 * core and also the resets to the VBUS filters inside the core.
++		 */
++		reg = dwc3_readl(dwc, DWC3_OCFG);
++		reg |= DWC3_OCFG_SFTRSTMASK;
++		dwc3_writel(dwc, DWC3_OCFG, reg);
+ 	}
+ 
+ 	dwc3_config_threshold(dwc);
+@@ -2279,9 +2304,19 @@ int dwc3_core_probe(const struct dwc3_pr
  	if (ret)
  		goto err_assert_reset;
  
@@ -23,7 +105,19 @@ index a1b2c3d..e4f5a6b 100644
 +		 dwc3_readl(dwc, DWC3_GSNPSID), DWC3_GSNPS_ID(dwc3_readl(dwc, DWC3_GSNPSID)));
 +
  	if (!dwc3_core_is_valid(dwc)) {
- 		dev_err(dwc->dev, "this is not a DesignWare USB3 DRD Core\n");
- 		ret = -ENODEV;
+-		dev_err(dwc->dev, "this is not a DesignWare USB3 DRD Core\n");
+-		ret = -ENODEV;
++		u32 raw_id = dwc3_readl(dwc, DWC3_GSNPSID);
++
++		if (raw_id == 0) {
++			dev_info(dwc->dev, "DWC3 core power domain pending, deferring probe\n");
++			ret = -EPROBE_DEFER;
++		} else {
++			dev_err(dwc->dev, "this is not a DesignWare USB3 DRD Core\n");
++			ret = -ENODEV;
++		}
+ 		goto err_disable_clks;
+ 	}
+ 
 -- 
 2.34.1
