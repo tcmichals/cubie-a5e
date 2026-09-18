@@ -20,8 +20,8 @@ Subject: [PATCH] usb: dwc3: core: fix DWC31 2.0 clock force, OCFG reset mask, an
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/usb/dwc3/core.c | 41 +++++++++++++++++++++++++++++++++++--
- 1 file changed, 39 insertions(+), 2 deletions(-)
+ drivers/usb/dwc3/core.c | 39 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 38 insertions(+), 1 deletion(-)
 
 --- a/drivers/usb/dwc3/core.c
 +++ b/drivers/usb/dwc3/core.c
@@ -49,15 +49,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  
  	reg = dwc3_readl(dwc, DWC3_DCTL);
  	reg |= DWC3_DCTL_CSFTRST;
-@@ -744,7 +758,7 @@ static int dwc3_hs_phy_setup(struct dwc3
- 		reg &= ~(DWC3_GUSB2PHYCFG_PHYIF_MASK |
- 		       DWC3_GUSB2PHYCFG_USBTRDTIM_MASK);
- 		reg |= DWC3_GUSB2PHYCFG_PHYIF(UTMI_PHYIF_8_BIT) |
--		       DWC3_GUSB2PHYCFG_USBTRDTIM(USBTRDTIM_UTMI_8_BIT);
-+		       DWC3_GUSB2PHYCFG_USBTRDTIM(15);
- 		break;
- 	case USBPHY_INTERFACE_MODE_UTMIW:
- 		reg &= ~(DWC3_GUSB2PHYCFG_PHYIF_MASK |
 @@ -793,9 +807,9 @@ static void dwc3_ulpi_setup(struct dwc3
  
  	if (dwc->enable_usb2_transceiver_delay) {
