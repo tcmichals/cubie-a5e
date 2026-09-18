@@ -807,3 +807,19 @@ md.l 0x06a0c120 1
      - **Analog Squelch & Eye Calibration**:
        - Squelch threshold bits `[3:0]` of `0x06B00018` must be tuned to detect the 800 mV Chirp K without false triggers (testing `0x143338D6` vendor default vs `0x143338D0`/`0x143338D2`).
 
+  3. **Breakthrough & Root Cause Discovery: DWC3 Turnaround Time (`USBTRDTIM`) (Sep 18, 2026)**:
+     - **Observation**:
+       - Cold boot locked onto High-Speed mode (`usb 1-1: new high-speed USB device number 2 using xhci-hcd`) at 1.349s.
+       - However, subsequent descriptor reads failed with `error -71` (`-EPROTO` / `COMP_USB_TRANSACTION_ERROR`).
+     - **Root Cause**:
+       - In `0011-usb-dwc3-core-log-gsnpsid.patch` and `drivers/usb/dwc3/core.c`, `DWC3_GUSB2PHYCFG_USBTRDTIM` was set to `15` (`0x3C00`), resulting in `0x06A0C200 = 0x02103C00`.
+       - For an 8-bit UTMI PHY running at 60 MHz, `USBTRDTIM` must be `9` (`USBTRDTIM_UTMI_8_BIT` / `0x2400`).
+       - Setting `USBTRDTIM = 15` made the MAC receiver wait 16 clock cycles before opening its reception window. When the FE1.1S hub replied within the standard 8–9 cycles, the DWC3 MAC dropped the SYNC pattern and PID byte, producing continuous protocol framing errors (`error -71`).
+     - **Dual Power Architecture of FE1.1S Hub (`U6`)**:
+       - The FE1.1S 3.3V core power (`VCC_3V3_USB20HUB`) is powered by `DCDC1` via `R58` (0Ω), and reset `XRSTJ` is tied to 3.3V via RC delay (`R60`/`C155`).
+       - The 5V VBUS rail (`VCC5V0_USB20`) is switched by GPIO `PM5`.
+       - Toggling `PM5` at runtime cuts VBUS but keeps the 3.3V core alive without triggering POR, causing the hub to fall back to Full-Speed (12 Mbps). A clean cold boot initializes both rails from 0V, allowing proper High-Speed Chirp K handshake.
+     - **Resolution**:
+       - Reverted `DWC3_GUSB2PHYCFG_USBTRDTIM(15)` back to `DWC3_GUSB2PHYCFG_USBTRDTIM(USBTRDTIM_UTMI_8_BIT)` in `core.c` and patch `0011`.
+       - Verified all silicon registers on hardware: SerDes Top `0x06C00008 = 0x00030010`, SYSCFG `0x03000160 = 0x00C80502`, Resistor calibration `0x03000168 = 0xC8C80000`, UTMI clock `0x02003360 = 0x81000004` (60 MHz), AXI clock `0x02003354 = 0x81000000` (300 MHz).
+       - Kernel rebuilt and packaged into `bld.a7a/images/sdcard.img` and `bld.a7a/images/Image`.
