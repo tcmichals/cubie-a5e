@@ -54,7 +54,7 @@ new file mode 100644
 index 0000000..c1d2e3f
 --- /dev/null
 +++ b/drivers/phy/allwinner/phy-sun60i-usb2.c
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,141 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/*
 + * Allwinner A733 (sun60iw2) USB 2.0 PHY driver for DWC3
@@ -196,6 +196,5 @@ index 0000000..c1d2e3f
 +MODULE_DESCRIPTION("Allwinner A733 USB 2.0 PHY driver");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_LICENSE("GPL");
-+
 -- 
 2.34.1

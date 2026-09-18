@@ -31,7 +31,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts
-@@ -0,0 +1,595 @@
+@@ -0,0 +1,590 @@
 +// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 +/*
 + * Copyright (C) 2026 Radxa Computer Co., Ltd.
@@ -608,8 +608,8 @@ index 0000000..1234567
 +			};
 +		};
 +
-+		r_rsb: rsb@7083000 {
-+			compatible = "allwinner,sun8i-a23-rsb";
++		s_twi0: i2c@7083000 {
++			compatible = "allwinner,sun6i-a31-i2c";
 +			reg = <0x07083000 0x400>;
 +			interrupts = <GIC_SPI 203 IRQ_TYPE_LEVEL_HIGH>;
 +			clocks = <&r_ccu CLK_R_TWI0>;
@@ -619,11 +619,6 @@ index 0000000..1234567
 +			#address-cells = <1>;
 +			#size-cells = <0>;
 +			status = "okay";
-+
-+			axp8191: pmic@3a3 {
-+				compatible = "x-powers,axp8191";
-+				reg = <0x3a3>;
-+			};
 +		};
 +	};
 +};
