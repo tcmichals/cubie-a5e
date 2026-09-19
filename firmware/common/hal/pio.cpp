@@ -1,7 +1,7 @@
 #include "pio.hpp"
 #include "memory_map.h"
 
-namespace fc::hal {
+namespace hal {
 
 /* Main PIO Registers */
 #define PB_CFG0         (*(volatile uint32_t *)(PIO_BASE + 0x0030))
@@ -46,4 +46,6 @@ void Pio::init() {
     PC_DATA |= (1 << 3) | (1 << 7);
 }
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }

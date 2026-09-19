@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "memory_map.h"
 
-namespace fc::hal {
+namespace hal {
 
 #define PC_DATA_REG (*(volatile uint32_t *)(PIO_BASE + 0x0070))
 
@@ -38,6 +38,8 @@ public:
     }
 };
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }
 
 #endif // IOPROCESSOR_HAL_PIO_HPP

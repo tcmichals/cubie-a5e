@@ -32,4 +32,6 @@ dsp-hifi4/bin/
 __pycache__/
 *.pyc
 
-FreeRTOS-HIFI4-DSP/
+# Logs
+*.log
+serial_console.log

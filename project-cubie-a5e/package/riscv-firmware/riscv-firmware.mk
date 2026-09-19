@@ -47,7 +47,7 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	fi
 
 	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_HOST_TOOLS)" = "y" ]; then \
-		for tool in ping_shm ping_rpmsg ping_dram; do \
+		for tool in ping_shm ping_uio ping_rpmsg ping_dram; do \
 			if [ -f $(@D)/e907-riscv/bin/$$tool ]; then \
 				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$tool $(TARGET_DIR)/usr/bin/$$tool; \
 			fi; \

@@ -252,6 +252,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Added to `drivers/remoteproc/Makefile`
   - [x] Added to buildroot `linux.config`: `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`
   - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
+  - [x] **Live Hardware Verified**: 19/19 `sunxi_rproc_da_to_va` KUnit tests passed 100% at kernel boot.
 
 ---
 
@@ -297,6 +298,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Added to `drivers/mailbox/Makefile`
   - [x] Added to buildroot `linux.config`: `CONFIG_SUN55I_MSGBOX_KUNIT_TEST=y`
   - [x] Compiled `drivers/mailbox/sun55i_msgbox_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
+  - [x] **Live Hardware Verified**: 18/18 `sun55i_msgbox` KUnit tests (`sun55i_msgbox_routing` 8/8, `sun55i_msgbox_registers` 10/10) passed 100% at kernel boot.
 
 ---
 

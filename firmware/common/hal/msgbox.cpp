@@ -65,7 +65,6 @@ void MsgBox::send_blocking(Channel ch, uint32_t data) noexcept
     if (c > 3) return;
 
     while ((ARM_MSG_STA_REG(c) & MSG_NUM_MASK) >= FIFO_DEPTH_MAX) {
-        __asm__ volatile ("pause");
     }
 
     std::atomic_thread_fence(std::memory_order_release);
@@ -133,7 +132,6 @@ void MsgBox::notify_doorbell(uint32_t token) noexcept
 uint32_t MsgBox::wait_for_doorbell(uint32_t old_token) noexcept
 {
     while (s_doorbell_token.load(std::memory_order_acquire) == old_token) {
-        __asm__ volatile ("pause");
     }
     return s_doorbell_token.load(std::memory_order_acquire);
 }

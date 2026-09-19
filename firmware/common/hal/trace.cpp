@@ -2,34 +2,37 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstddef>
+#include <atomic>
 
 namespace hal {
 
 // RemoteProc trace buffer size, tied directly to g_rproc_trace_buffer defined in resource_table.c
 static constexpr size_t TRACE_BUFFER_SIZE = sizeof(::g_rproc_trace_buffer);
 
-static volatile uint32_t g_trace_head = 0;
+static std::atomic<uint32_t> g_trace_head{0};
 
 void Trace::init() noexcept {
-    g_trace_head = 0;
+    g_trace_head.store(0, std::memory_order_relaxed);
     
     // Clear initial byte so buffer can be read safely immediately
     ::g_rproc_trace_buffer[0] = '\0';
 }
 
 void Trace::putc(char c) noexcept {
-    // Write to memory trace buffer for Linux remoteproc trace0
-    uint32_t idx = g_trace_head;
+    // Write to memory trace buffer for Linux remoteproc trace0 with atomic position update
+    uint32_t idx = g_trace_head.load(std::memory_order_relaxed);
+    uint32_t next_idx;
     if (idx < (TRACE_BUFFER_SIZE - 1)) {
         ::g_rproc_trace_buffer[idx]     = c;
-        ::g_rproc_trace_buffer[idx + 1] = '\0';
-        g_trace_head                  = idx + 1;
+        next_idx                        = idx + 1;
+        ::g_rproc_trace_buffer[next_idx] = '\0';
     } else {
         // Wrap-around ring buffer behavior
-        g_trace_head = 0;
         ::g_rproc_trace_buffer[0] = c;
         ::g_rproc_trace_buffer[1] = '\0';
+        next_idx = 1;
     }
+    g_trace_head.store(next_idx, std::memory_order_release);
 }
 
 void Trace::puts(const char* s) noexcept {
@@ -48,7 +51,7 @@ void Trace::write(const void* data, size_t len) noexcept {
 }
 
 uint32_t Trace::get_pos() noexcept {
-    return g_trace_head;
+    return g_trace_head.load(std::memory_order_relaxed);
 }
 
 // -----------------------------------------------------------------------------
@@ -106,26 +109,21 @@ void Trace::print_float(float val, int decimals) noexcept {
         putc('-');
         val = -val;
     }
+    if (decimals > 6) decimals = 6;
 
-    // Rounding offset based on decimals
-    double round = 0.5;
-    for (int i = 0; i < decimals; ++i) {
-        round /= 10.0;
-    }
-    double dval = static_cast<double>(val) + round;
-
-    uint32_t int_part = static_cast<uint32_t>(dval);
+    // Integer part
+    uint32_t int_part = static_cast<uint32_t>(val);
     print_unsigned(int_part, 10, false, 0, false);
 
     if (decimals > 0) {
         putc('.');
-        double frac = dval - static_cast<double>(int_part);
+        float frac = val - static_cast<float>(int_part);
         for (int i = 0; i < decimals; ++i) {
-            frac *= 10.0;
+            frac *= 10.0f;
             uint32_t digit = static_cast<uint32_t>(frac);
             if (digit > 9) digit = 9;
             putc('0' + digit);
-            frac -= digit;
+            frac -= static_cast<float>(digit);
         }
     }
 }

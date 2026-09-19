@@ -26,6 +26,11 @@ SIZE    = $(CROSS_COMPILE)size
 # 2. Compilation Flags
 INCLUDES += -I. -I$(COMMON_DIR) -I$(COMMON_DIR)/include -I$(COMMON_DIR)/hal
 CFLAGS   += -O2 -g $(INCLUDES) -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections
+ifeq ($(findstring riscv,$(CROSS_COMPILE)),riscv)
+  ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany
+  CFLAGS     += $(ARCH_FLAGS)
+  LDFLAGS    += $(ARCH_FLAGS)
+endif
 LDSCRIPT ?= $(COMMON_DIR)/arch_dsp/dsp.ld
 LDFLAGS  += -T $(LDSCRIPT) -Wl,-Map=$(TARGET).map -Wl,--gc-sections -nostdlib -lgcc
 

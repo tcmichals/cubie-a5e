@@ -16,7 +16,7 @@
  *   /sys/kernel/debug/mailbox-test-dsp/message
  *
  * Load in /boot/config.txt:
- *   dtoverlay=cubie-a5e-dsp-mailbox-test
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-dsp-mailbox-test
  * ============================================================================
  */
 

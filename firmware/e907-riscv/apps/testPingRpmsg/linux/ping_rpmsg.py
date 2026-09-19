@@ -81,10 +81,10 @@ def auto_find_device() -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Standard Linux RPMsg Ping-Pong Host Benchmark (Python)")
-    parser.add_argument("-d", "--dev", default="", help="RPMsg device path (default: auto-detect)")
+    parser.add_argument("-D", "--dev", default="", help="RPMsg device path (default: auto-detect)")
     parser.add_argument("-n", "--count", type=int, default=1000, help="Number of pings (default: 1000, 0=continuous)")
     parser.add_argument("-T", "--duration", type=float, default=0.0, help="Run duration in seconds (e.g. 60 for 1 min; overrides -n if > 0)")
-    parser.add_argument("-s", "--sleep", type=int, default=1000, help="Sleep between pings in microseconds (default: 1000)")
+    parser.add_argument("-d", "-s", "--delay", "--sleep", dest="sleep", type=int, default=1000, help="Delay/sleep between pings in microseconds (default: 1000)")
     parser.add_argument("-p", "--payload", default="Ping from Linux RPMsg Python", help="Custom payload string")
     parser.add_argument("-t", "--timeout", type=float, default=1000.0, help="Pong timeout in milliseconds (default: 1000)")
     args = parser.parse_args()
@@ -142,6 +142,22 @@ def main():
     mode_str = f"{args.duration:.1f}s duration" if args.duration > 0 else f"{args.count} pings"
     print(f"[INFO] Starting benchmark ({mode_str}, delay={args.sleep}us, timeout={args.timeout}ms)...\n")
 
+    # Drain any stale packets from previous runs
+    import fcntl
+    try:
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        while True:
+            try:
+                b = os.read(fd, 512)
+                if not b:
+                    break
+            except Exception:
+                break
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl)
+    except Exception:
+        pass
+
     try:
         while True:
             now_ns = time.monotonic_ns()
@@ -173,7 +189,7 @@ def main():
                     rx_data = os.read(fd, 512)
                     if len(rx_data) >= 16:
                         rx_tag, rx_seq, _ = struct.unpack_from("<4sIQ", rx_data, 0)
-                        if rx_tag == b"PONG" and rx_seq == seq:
+                        if rx_tag == b"PONG":
                             total_rx_bytes += len(rx_data)
                             rtt_us = (rx_ns - tx_ns) / 1000.0
                             latencies_us.append(rtt_us)

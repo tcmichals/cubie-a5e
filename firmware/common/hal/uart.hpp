@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <coroutine>
 
-namespace fc::hal {
+namespace hal {
 
 class Uart2 {
 public:
@@ -42,6 +42,8 @@ public:
     static uint8_t read_byte();
 };
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }
 
 #endif // IOPROCESSOR_HAL_UART_HPP

@@ -53,11 +53,6 @@ void sunxi_msgbox_send(uint32_t ch, uint32_t data)
 
     /* Wait until remote ARM Tx FIFO has capacity */
     while ((SUNXI_MSGBOX_TX_STA_REG(ch) & SUNXI_MSGBOX_MSG_NUM_MASK) >= SUNXI_MSGBOX_MAX_QUEUE) {
-        #if defined(__riscv)
-        __asm__ volatile ("pause");
-        #elif defined(__XTENSA__)
-        __asm__ volatile ("nop");
-        #endif
     }
 
     SUNXI_MSGBOX_TX_FIFO_REG(ch) = data;

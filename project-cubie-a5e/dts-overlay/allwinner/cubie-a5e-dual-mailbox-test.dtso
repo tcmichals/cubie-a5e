@@ -19,7 +19,7 @@
  *   - Debugfs node: /sys/kernel/debug/mailbox-test-e907/message
  *
  * Load in /boot/config.txt:
- *   dtoverlay=cubie-a5e-dual-mailbox-test
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-dual-mailbox-test
  * ============================================================================
  */
 
@@ -40,5 +40,10 @@
 };
 
 &msgbox {
+    status = "okay";
+};
+
+&rproc {
+    mbox-names = "disabled", "disabled";
     status = "okay";
 };

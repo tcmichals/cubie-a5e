@@ -3,7 +3,7 @@
 #include "memory_map.h"
 #include <atomic>
 
-namespace fc::hal {
+namespace hal {
 
 /* DesignWare 8250 UART2 Register Mapping */
 #define UART2_RBR       (*(volatile uint32_t *)(UART2_BASE + 0x00))
@@ -176,4 +176,6 @@ size_t Uart2::AsyncRxPacketAwaiter::await_resume() noexcept {
     return bytes_received;
 }
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }

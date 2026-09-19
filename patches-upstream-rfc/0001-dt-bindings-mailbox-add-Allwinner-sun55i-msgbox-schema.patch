@@ -20,13 +20,13 @@ Cc: linux-arm-kernel@lists.infradead.org
 Cc: linux-sunxi@lists.linux.dev
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 96 +++++++++++++++++++
- 1 file changed, 96 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 93 +++++++++++++++++++
+ 1 file changed, 93 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,93 @@
 +# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 +%YAML 1.2
 +---

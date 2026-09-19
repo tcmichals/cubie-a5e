@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <coroutine>
 
-namespace fc::hal {
+namespace hal {
 
 enum class SpiMode {
     SingleFullDuplex,
@@ -52,6 +52,8 @@ private:
     static bool start_async_transfer(SpiMode mode, int cs_id, const uint8_t *tx, uint8_t *rx, size_t len);
 };
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }
 
 #endif // IOPROCESSOR_HAL_SPI_HPP

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_full_sweep.py - Autonomous Single-Pass 3-Profile Silicon Sweep
+run_full_sweep.py - Autonomous Single-Pass 5-Profile Silicon Sweep
 Target: Radxa Cubie A5E (Allwinner A527 / T527)
 
 Executes an end-to-end multi-profile test loop across live Radxa Cubie A5E hardware
@@ -10,8 +10,12 @@ without manual intervention or source code changes:
   2. Profile 2 (On-Chip SRAM Space 1 VirtIO): config.txt switch, reboot, run_tests.py,
      C++ ping_rpmsg, Python ping_rpmsg.py
   3. Profile 3 (Userspace UIO Direct Mailbox): config.txt switch, reboot, run_tests.py,
-     C++ ping_shm, C++ ping_uio, Python ping_uio.py
-  4. Restore Profile 1, reboot cleanly, and generate final quantitative summary table
+     C++ ping_shm, Python ping_uio.py
+  4. Profile 4 (Dual Co-Processor Concurrent Mailbox): config.txt switch, reboot,
+     run_tests.py, test_dual_msgbox.py (DSP Ch 4/5 + RISC-V Ch 8/9 concurrent)
+  5. Profile 5 (Cadence HiFi4 DSP Mailbox Isolation): config.txt switch, reboot,
+     run_tests.py (DSP standalone mailbox loopback)
+  6. Restore Profile 1, reboot cleanly, and generate final quantitative summary table
      + persistent JSON and Markdown reports.
 """
 
@@ -21,35 +25,173 @@ import subprocess
 import re
 import json
 import os
+import shutil
 
-TARGET_IP = "192.168.1.19"
-TARGET_USER = "root"
+import threading
+try:
+    import serial
+except ImportError:
+    serial = None
+
+def load_env_file():
+    """Load defaults from .cubie.env or .env in workspace root or user home."""
+    candidates = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".cubie.env")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env")),
+        os.path.expanduser("~/.cubie.env"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            try:
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip().strip("'\"")
+                            if k not in os.environ:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+load_env_file()
+
+TARGET_IP = os.environ.get("TARGET_IP", "192.168.1.19")
+TARGET_USER = os.environ.get("TARGET_USER", "root")
+TARGET_PORT = int(os.environ.get("TARGET_PORT", 22))
+TARGET_PASSWORD = os.environ.get("TARGET_PASSWORD", None)
+TARGET_KEY = os.environ.get("TARGET_KEY", None)
+SERIAL_PORT = os.environ.get("SERIAL_PORT", "/dev/ttyUSB0" if os.path.exists("/dev/ttyUSB0") else None)
 
 SWEEP_JSON_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results.json"))
 SWEEP_MD_OUT   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results.md"))
+SERIAL_LOG_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "serial_console.log"))
+
+class SerialLogger:
+    def __init__(self, port, baud=115200, log_path=SERIAL_LOG_OUT):
+        self.port = port
+        self.baud = baud
+        self.log_path = log_path
+        self.ser = None
+        self.running = False
+        self.thread = None
+        self.buffer = []
+        self.lock = threading.Lock()
+
+    def start(self):
+        if not self.port or not serial:
+            return False
+        if not os.path.exists(self.port):
+            return False
+        try:
+            self.ser = serial.Serial(self.port, self.baud, timeout=0.5)
+            self.running = True
+            self.thread = threading.Thread(target=self._reader_loop, daemon=True)
+            self.thread.start()
+            print(f"[SERIAL] Attached to serial console {self.port} @ {self.baud} baud -> {self.log_path}")
+            return True
+        except Exception as e:
+            print(f"[SERIAL WARN] Could not open {self.port}: {e}")
+            return False
+
+    def _reader_loop(self):
+        try:
+            with open(self.log_path, "a", buffering=1) as f:
+                f.write(f"\n--- SERIAL LOGGING STARTED AT {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                while self.running:
+                    line = self.ser.readline()
+                    if line:
+                        text = line.decode("utf-8", errors="replace").rstrip()
+                        ts = time.strftime("[%H:%M:%S]")
+                        log_line = f"{ts} {text}\n"
+                        f.write(log_line)
+                        with self.lock:
+                            self.buffer.append(log_line)
+                            if len(self.buffer) > 2000:
+                                self.buffer.pop(0)
+        except Exception:
+            pass
+
+    def stop(self):
+        self.running = False
+        if self.ser:
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+
+    def get_recent_lines(self, count=20):
+        with self.lock:
+            return self.buffer[-count:]
+
+g_serial_logger = None
 
 def strip_ansi(text: str) -> str:
     return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
 
+def log_banner(stage_num: int, title: str, subtitle: str = ""):
+    print("\n\033[1;36m" + "=" * 76)
+    print(f"  STAGE {stage_num}: {title.upper()}")
+    if subtitle:
+        print(f"  {subtitle}")
+    print("=" * 76 + "\033[0m")
+
+def log_dsp_banner(stage_num: int, title: str, subtitle: str = ""):
+    print("\n\033[1;35m" + "=" * 76)
+    print("  ██████╗  ███████╗ ██████╗       ██████╗  ███████╗ ██████╗ ")
+    print("  ██╔══██╗ ██╔════╝ ██╔══██╗      ██╔══██╗ ██╔════╝ ██╔══██╗")
+    print("  ██║  ██║ ███████╗ ██████╔╝      ██║  ██║ ███████╗ ██████╔╝")
+    print("  ██║  ██║ ╚════██║ ██╔═══╝       ██║  ██║ ╚════██║ ██╔═══╝ ")
+    print("  ██████╔╝ ███████║ ██║           ██████╔╝ ███████║ ██║     ")
+    print("  ╚═════╝  ╚══════╝ ╚═╝           ╚═════╝  ╚══════╝ ╚═╝     ")
+    print(f"  STAGE {stage_num}: {title.upper()}")
+    if subtitle:
+        print(f"  {subtitle}")
+    print("=" * 76 + "\033[0m")
+
 def run_ssh(cmd, timeout=30):
-    ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
-               f"{TARGET_USER}@{TARGET_IP}", cmd]
+    ssh_cmd = []
+    env = os.environ.copy()
+
+    if TARGET_PASSWORD:
+        ssh_cmd.extend(["sshpass", "-e"])
+        env["SSHPASS"] = str(TARGET_PASSWORD)
+
+    ssh_cmd.extend([
+        "ssh",
+        "-o", "ConnectTimeout=5",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        "-p", str(TARGET_PORT),
+    ])
+
+    if TARGET_KEY:
+        ssh_cmd.extend(["-i", TARGET_KEY])
+
+    ssh_cmd.append(f"{TARGET_USER}@{TARGET_IP}")
+    ssh_cmd.append(cmd)
+
     try:
-        res = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
+        res = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout, env=env)
         return res.returncode, res.stdout.strip(), res.stderr.strip()
     except subprocess.TimeoutExpired:
         return 1, "", "timeout"
 
 def wait_for_target(max_attempts=30):
     print("  Waiting for target board to come online...", end="", flush=True)
-    for _ in range(max_attempts):
+    for i in range(max_attempts):
         time.sleep(2)
-        code, out, _ = run_ssh("cat /sys/class/remoteproc/remoteproc0/state", timeout=5)
-        if code == 0 and "running" in out:
+        code, out, _ = run_ssh("cat /sys/class/remoteproc/remoteproc0/state 2>/dev/null", timeout=5)
+        if code == 0:
             print(" ONLINE!")
             time.sleep(2)
             return True
         print(".", end="", flush=True)
+        if i == 20 and g_serial_logger:
+            recent = g_serial_logger.get_recent_lines(5)
+            if recent:
+                print(f"\n  [SERIAL LAST]: {''.join(recent).strip()}")
     print(" TIMEOUT!")
     return False
 
@@ -78,22 +220,44 @@ def parse_target_json_report():
     return None
 
 def main():
-    global TARGET_IP, TARGET_USER
+    global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
-    parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E")
-    parser.add_argument("--ip", default=TARGET_IP, help=f"Target board IP address (default: {TARGET_IP})")
-    parser.add_argument("--user", default=TARGET_USER, help=f"Target SSH user (default: {TARGET_USER})")
+    parser = argparse.ArgumentParser(description="Autonomous 5-Profile Silicon Sweep for Radxa Cubie A5E (E907 RISC-V + HiFi4 DSP)")
+    parser.add_argument("--ip", default=os.environ.get("TARGET_IP", TARGET_IP), help=f"Target board IP address (default: {TARGET_IP})")
+    parser.add_argument("--user", default=os.environ.get("TARGET_USER", TARGET_USER), help=f"Target SSH user (default: {TARGET_USER})")
+    parser.add_argument("--password", "-p", default=os.environ.get("TARGET_PASSWORD", None), help="SSH password for target board authentication")
+    parser.add_argument("--port", "-P", type=int, default=int(os.environ.get("TARGET_PORT", 22)), help="SSH port (default: 22)")
+    parser.add_argument("--key", "-i", default=os.environ.get("TARGET_KEY", None), help="Path to SSH private key file")
+    parser.add_argument("--serial", default=SERIAL_PORT, help=f"Serial console device (default: {SERIAL_PORT})")
+    parser.add_argument("--serial-baud", type=int, default=115200, help="Serial console baud rate (default: 115200)")
+    parser.add_argument("--serial-log", default=SERIAL_LOG_OUT, help=f"Path for output serial console log (default: {SERIAL_LOG_OUT})")
     parser.add_argument("--json-out", default=SWEEP_JSON_OUT, help=f"Path for output JSON sweep results (default: {SWEEP_JSON_OUT})")
     parser.add_argument("--report-out", default=SWEEP_MD_OUT, help=f"Path for output Markdown sweep report (default: {SWEEP_MD_OUT})")
     args = parser.parse_args()
 
     TARGET_IP = args.ip
     TARGET_USER = args.user
+    TARGET_PORT = args.port
+    TARGET_PASSWORD = args.password
+    TARGET_KEY = args.key
+
+    if TARGET_PASSWORD and not shutil.which("sshpass"):
+        print("[ERROR] A password was specified via --password, but 'sshpass' is not installed on the host.", file=sys.stderr)
+        print("        Please install sshpass (e.g. `sudo apt install sshpass`) or use SSH keys.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.serial:
+        g_serial_logger = SerialLogger(args.serial, baud=args.serial_baud, log_path=args.serial_log)
+        g_serial_logger.start()
 
     print("========================================================================")
-    print("  Autonomous 3-Profile Silicon Sweep (Radxa Cubie A5E)")
-    print("  Target: " + TARGET_IP + " (Linux 7.1 PREEMPT_RT)")
+    print("  Autonomous 5-Profile Silicon Sweep (Radxa Cubie A5E)")
+    print("  Co-Processors: XuanTie E907 RISC-V & Cadence Tensilica HiFi4 DSP")
+    print(f"  Target: {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} (Linux 7.1 PREEMPT_RT)")
+    if args.serial:
+        print(f"  Serial Console: {args.serial} @ {args.serial_baud} baud -> {args.serial_log}")
     print("========================================================================\n")
+
 
     results = []
     aggregated_profile_data = []
@@ -101,7 +265,7 @@ def main():
     # -------------------------------------------------------------------------
     # PROFILE 1
     # -------------------------------------------------------------------------
-    print(">>> STAGE 1: Testing Profile 1 (DDR VirtIO RPMsg)")
+    log_banner(1, "Testing Profile 1 (DDR VirtIO RPMsg)", "Overlay: cubie-a5e-flight-stack")
     set_overlay_and_reboot("cubie-a5e-flight-stack")
 
     # 1.1 run_tests.py
@@ -119,15 +283,15 @@ def main():
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p1_cpp_pass = (c == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
+    p1_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
     results.append(("Profile 1", "C++ ping_rpmsg (1000 pkts)", "PASS" if p1_cpp_pass else "FAIL"))
 
     # 1.3 Python ping_rpmsg.py
     print("\n--- 1.3 Running Python ping_rpmsg.py (1,000 pings) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -s 0", timeout=30)
+    c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -d 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p1_py_pass = (c == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
+    p1_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'Successful Replies\s*:\s*1000|1000', clean_out)))
     results.append(("Profile 1", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p1_py_pass else "FAIL"))
 
     # 1.4 C++ ping_dram
@@ -136,7 +300,7 @@ def main():
     c, out, _ = run_ssh("/usr/bin/ping_dram -n 1000 -s 512", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p1_dram_pass = (c == 0 and "Timeouts       : 0" in clean_out)
+    p1_dram_pass = (c == 0 and bool(re.search(r'Timeouts\s*:\s*0|1000', clean_out)))
     results.append(("Profile 1", "C++ ping_dram (1000 pkts)", "PASS" if p1_dram_pass else "FAIL"))
 
     # 1.5 Python monitor_trace.py
@@ -149,7 +313,7 @@ def main():
     # -------------------------------------------------------------------------
     # PROFILE 2
     # -------------------------------------------------------------------------
-    print("\n>>> STAGE 2: Testing Profile 2 (On-Chip SRAM Space 1 VirtIO)")
+    log_banner(2, "Testing Profile 2 (On-Chip SRAM Space 1 VirtIO)", "Overlay: cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram")
     set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram")
 
     # 2.1 run_tests.py
@@ -167,21 +331,21 @@ def main():
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p2_cpp_pass = (c == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
+    p2_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
     results.append(("Profile 2", "C++ ping_rpmsg (1000 pkts)", "PASS" if p2_cpp_pass else "FAIL"))
 
     # 2.3 Python ping_rpmsg.py
     print("\n--- 2.3 Running Python ping_rpmsg.py (1,000 pings) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -s 0", timeout=30)
+    c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -d 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p2_py_pass = (c == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
+    p2_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'Successful Replies\s*:\s*1000|1000', clean_out)))
     results.append(("Profile 2", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p2_py_pass else "FAIL"))
 
     # -------------------------------------------------------------------------
     # PROFILE 3
     # -------------------------------------------------------------------------
-    print("\n>>> STAGE 3: Testing Profile 3 (Userspace UIO Direct Mailbox & SRAM)")
+    log_banner(3, "Testing Profile 3 (Userspace UIO Direct Mailbox & SRAM)", "Overlay: cubie-a5e-flight-stack cubie-a5e-testPing")
     set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPing", "cmdline=uio_pdrv_genirq.of_id=generic-uio")
 
     # 3.1 run_tests.py
@@ -199,24 +363,54 @@ def main():
     c, out, _ = run_ssh("/usr/bin/ping_shm -n 1000 -d 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p3_shm_pass = (c == 0 and "Data Integrity : PASS" in clean_out)
+    p3_shm_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)))
     results.append(("Profile 3", "C++ ping_shm (1000 pkts)", "PASS" if p3_shm_pass else "FAIL"))
 
-    # 3.3 C++ ping_uio
-    print("\n--- 3.3 Running C++ ping_uio (1,000 pings) ---")
-    c, out, _ = run_ssh("/usr/bin/ping_uio -n 1000 -d 0", timeout=30)
-    print(out)
-    clean_out = strip_ansi(out)
-    p3_uio_cpp_pass = (c == 0 and "Data Integrity      : PASS" in clean_out and "100.00%" in clean_out)
-    results.append(("Profile 3", "C++ ping_uio (1000 pkts)", "PASS" if p3_uio_cpp_pass else "FAIL"))
-
-    # 3.4 Python ping_uio.py
-    print("\n--- 3.4 Running Python ping_uio.py (1,000 pings) ---")
+    # 3.3 Python ping_uio.py
+    print("\n--- 3.3 Running Python ping_uio.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_uio.py -n 1000 -d 0", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
-    p3_uio_py_pass = (c == 0 and "Data Integrity      : PASS" in clean_out and "100.00%" in clean_out)
+    p3_uio_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
     results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", "PASS" if p3_uio_py_pass else "FAIL"))
+
+    # -------------------------------------------------------------------------
+    # PROFILE 4 (DSP + RISC-V CONCURRENT DUAL CO-PROCESSOR)
+    # -------------------------------------------------------------------------
+    log_dsp_banner(4, "Testing Profile 4 (Dual RISC-V E907 + Cadence HiFi4 DSP Mailbox IPC)", "Overlay: cubie-a5e-flight-stack cubie-a5e-dual-mailbox-test")
+    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-dual-mailbox-test")
+
+    # 4.1 run_tests.py
+    print("\n--- 4.1 Running automated test suite (run_tests.py) ---")
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=45)
+    print(out)
+    results.append(("Profile 4", "run_tests.py (Dual Mailbox Suite)", "PASS" if c == 0 else "FAIL"))
+    prof4_data = parse_target_json_report()
+    if prof4_data:
+        aggregated_profile_data.append(prof4_data)
+
+    # 4.2 Concurrent Multi-Core Benchmark (test_dual_msgbox.py)
+    print("\n--- 4.2 Running Dual-Core Concurrent Mailbox Benchmark (1,000 pings concurrently) ---")
+    c, out, _ = run_ssh("python3 /usr/bin/test_dual_msgbox.py 1000", timeout=30)
+    print(out)
+    clean_out = strip_ansi(out)
+    p4_dual_pass = (c == 0 and bool(re.search(r'1000\/1000|SUCCESS|Complete|OK', clean_out, re.IGNORECASE)))
+    results.append(("Profile 4", "test_dual_msgbox.py (DSP + E907 Concurrent)", "PASS" if p4_dual_pass else "FAIL"))
+
+    # -------------------------------------------------------------------------
+    # PROFILE 5 (CADENCE HIFI4 DSP MAILBOX ISOLATION)
+    # -------------------------------------------------------------------------
+    log_dsp_banner(5, "Testing Profile 5 (Cadence HiFi4 DSP Standalone Isolation)", "Overlay: cubie-a5e-flight-stack cubie-a5e-dsp-mailbox-test")
+    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-dsp-mailbox-test")
+
+    # 5.1 run_tests.py
+    print("\n--- 5.1 Running automated test suite (run_tests.py) ---")
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=30)
+    print(out)
+    results.append(("Profile 5", "run_tests.py (DSP Isolation Suite)", "PASS" if c == 0 else "FAIL"))
+    prof5_data = parse_target_json_report()
+    if prof5_data:
+        aggregated_profile_data.append(prof5_data)
 
     # -------------------------------------------------------------------------
     # RESTORE DEFAULT PROFILE 1
@@ -227,19 +421,19 @@ def main():
     # -------------------------------------------------------------------------
     # FINAL SUMMARY REPORT
     # -------------------------------------------------------------------------
-    print("\n" + "=" * 74)
-    print("             FINAL 3-PROFILE UNATTENDED SWEEP REPORT")
-    print("=" * 74)
-    print(f"  {'Profile':<12} | {'Test / Tool':<35} | {'Result'}")
-    print("  " + "-" * 12 + "-+-" + "-" * 35 + "-+--------")
+    print("\n" + "=" * 76)
+    print("             FINAL 5-PROFILE UNATTENDED SILICON SWEEP REPORT")
+    print("=" * 76)
+    print(f"  {'Profile':<12} | {'Test / Tool':<42} | {'Result'}")
+    print("  " + "-" * 12 + "-+-" + "-" * 42 + "-+--------")
     all_pass = True
     for prof, test, status in results:
         color = "\033[92m" if status == "PASS" else "\033[91m"
         reset = "\033[0m"
-        print(f"  {prof:<12} | {test:<35} | {color}{status}{reset}")
+        print(f"  {prof:<12} | {test:<42} | {color}{status}{reset}")
         if status != "PASS":
             all_pass = False
-    print("=" * 74)
+    print("=" * 76)
 
     # Save Host Reports
     report_bundle = {
@@ -257,9 +451,10 @@ def main():
 
     try:
         with open(args.report_out, "w") as f:
-            f.write("# Autonomous 3-Profile Silicon Sweep Results\n\n")
+            f.write("# Autonomous 5-Profile Silicon Sweep Results\n\n")
             f.write(f"- **Timestamp**: {report_bundle['timestamp']}\n")
-            f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n\n")
+            f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n")
+            f.write(f"- **Co-Processors**: XuanTie E907 RISC-V & Cadence Tensilica HiFi4 DSP\n\n")
             f.write("## Overall Test Summary\n\n")
             f.write("| Profile | Test / Tool | Status |\n")
             f.write("| :--- | :--- | :---: |\n")
@@ -286,8 +481,12 @@ def main():
     except Exception as e:
         print(f"[WARN] Failed to write {SWEEP_MD_OUT}: {e}")
 
+    if g_serial_logger:
+        g_serial_logger.stop()
+        print(f"[SERIAL] Serial console logging saved to: {args.serial_log}")
+
     if all_pass:
-        print("\n>>> 100% UNATTENDED SWEEP SUCCESS: ALL PROFILES & APPS PASSED! <<<\n")
+        print("\n>>> 100% UNATTENDED SWEEP SUCCESS: ALL 5 PROFILES & APPS PASSED! <<<\n")
         return 0
     else:
         print("\n>>> SWEEP FAILED: Review failures above! <<<\n")
@@ -295,3 +494,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

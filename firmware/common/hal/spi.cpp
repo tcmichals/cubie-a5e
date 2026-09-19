@@ -3,7 +3,7 @@
 #include "memory_map.h"
 #include <abstractx/coro.hpp>
 
-namespace fc::hal {
+namespace hal {
 
 /* SPI0 Hardware Register Mapping */
 #define SPI0_GCR        (*(volatile uint32_t *)(SPI0_BASE + 0x04))
@@ -157,4 +157,6 @@ bool Spi0::transceive_imu_single_sync(const uint8_t *tx_buf, uint8_t *rx_buf, si
     return true;
 }
 
-} // namespace fc::hal
+} // namespace hal
+
+namespace fc { namespace hal = ::hal; }
