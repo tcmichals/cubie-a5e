@@ -14,7 +14,6 @@
  *   - 4 MB Firmware execution segment (0x40100000 - 0x40500000)
  *
  * Mailbox Channels (sun55i-msgbox with #mbox-cells = <1>):
- *   - Channels 4 & 5: ARM Cortex-A55 <-> Cadence HiFi4 Audio DSP
  *   - Channels 8 & 9: ARM Cortex-A55 <-> XuanTie E907 RISC-V
  *
  * Load in /boot/config.txt:
@@ -38,7 +37,7 @@
 &{/} {
     mailbox_test: mailbox-test {
         compatible = "mailbox-test";
-        mboxes = <&msgbox 4>, <&msgbox 5>;
+        mboxes = <&msgbox 8>, <&msgbox 9>;
         mbox-names = "tx", "rx";
         status = "okay";
     };
