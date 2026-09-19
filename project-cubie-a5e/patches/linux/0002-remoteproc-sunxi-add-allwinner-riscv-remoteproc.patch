@@ -1,13 +1,13 @@
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH] remoteproc: sunxi: add allwinner riscv and dsp remoteproc driver
+Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
-Add remoteproc driver for the XuanTie E906/E907 RISC-V and Cadence HiFi4 DSP
-remote processors found on Allwinner A523, A527, and T527 SoCs.
+Add remoteproc driver for the XuanTie E906/E907 RISC-V remote processor
+found on Allwinner A523, A527, and T527 SoCs.
 
 The driver integrates with the Common Clock Framework (CCF) and Reset
 Framework to manage co-processor clocks (bus, core, sram) and resets
-(cfg, core, sram), programs the core boot vector (STA_ADD_REG / DSP_ALT_RESET_VEC),
+(cfg, core, sram), programs the core boot vector (STA_ADD_REG),
 maps internal TCM and dedicated SRAM windows, and connects with hardware
 mailboxes (CPUX_MSGBOX) for standard VirtIO RPMsg IPC.
 
@@ -22,8 +22,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 967 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 976 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 906 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 915 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
 --- a/drivers/remoteproc/Kconfig
@@ -32,12 +32,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
-+	tristate "Allwinner XuanTie RISC-V and HiFi4 DSP remoteproc support"
++	tristate "Allwinner XuanTie RISC-V remoteproc support"
 +	depends on (ARCH_SUNXI || COMPILE_TEST) && MAILBOX
 +	help
 +	  Say y or m here to support the Allwinner XuanTie E906/E907 RISC-V
-+	  and Cadence HiFi4 DSP co-processors on Allwinner A523, A527, and T527
-+	  SoCs via the remote processor framework.
++	  co-processor on Allwinner A523, A527, and T527 SoCs via the
++	  remote processor framework.
 +
  endif # REMOTEPROC
  
@@ -51,8 +51,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,967 @@
-+// SPDX-License-Identifier: GPL-2.0-only
+@@ -0,0 +1,906 @@
+++// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
 + *
@@ -80,9 +80,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
-+/* Remap Control Register (offset 0x364 in DSP_CCU / PRCM_R_CCU) */
++/* Remap Control Register (offset 0x364 in PRCM_R_CCU / MCU_CCU) */
 +#define SUNXI_REMAP_CTRL_OFFSET		0x0364
-+/* Bit 0: 0 = DSP local RAM for MCU; 1 = share for system */
++/* Bit 0: 0 = local RAM for MCU; 1 = share for system */
 +#define SUNXI_REMAP_MCU_RAM_BIT		BIT(0)
 +/* Bit 1: 0 = SRAMA3_2 not shared; 1 = share for MCU_SYS */
 +#define SUNXI_REMAP_SRAMA3_2_BIT	BIT(1)
@@ -97,26 +97,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +#define E906_CTRL_REG			0x0000
 +#define E906_STA_ADD_REG		0x0204
 +
-+/* HiFi4 DSP Control Register definitions */
-+#define DSP_ALT_RESET_VEC_REG		0x0000
-+#define DSP_CTRL_REG0			0x0004
-+#define DSP_BIT_RUN_STALL		BIT(0)
-+#define DSP_BIT_START_VEC_SEL		BIT(1)
-+#define DSP_BIT_DSP_CLKEN		BIT(2)
-+
 +struct sunxi_rproc_cfg {
 +	const char *name;
-+	bool is_dsp;
 +};
 +
 +static const struct sunxi_rproc_cfg sun55i_riscv_cfg = {
 +	.name = "XuanTie E907 RISC-V",
-+	.is_dsp = false,
-+};
-+
-+static const struct sunxi_rproc_cfg sun55i_dsp_cfg = {
-+	.name = "Cadence HiFi4 DSP",
-+	.is_dsp = true,
 +};
 +
 +struct sunxi_rproc {
@@ -224,7 +210,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
-+	/* 2. Enable parent clock (PLL / DSP source) */
++	/* 2. Enable parent clock (PLL source) */
 +	if (priv->clk_parent) {
 +		ret = clk_prepare_enable(priv->clk_parent);
 +		if (ret) {
@@ -268,9 +254,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +	/*
-+	 * 4b. Enable SRAMA3_2 for MCU_SYS (RISC-V/DSP) via REMAP_CTRL_REG bit 1.
-+	 * NOTE: Bit 0 (MCU_RAM_REMAP) is left untouched (0) to ensure DSP local RAM
-+	 * remains exclusive to the HiFi4 DSP domain.
++	 * 4b. Enable SRAMA3_2 for MCU_SYS (RISC-V) via REMAP_CTRL_REG bit 1.
 +	 */
 +	if (priv->remap_va) {
 +		u32 remap_val = readl(priv->remap_va);
@@ -371,38 +355,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	if (priv->cfg && priv->cfg->is_dsp) {
-+		/* HiFi4 DSP boot sequence */
-+		if (priv->cfg_va) {
-+			u32 ctrl;
-+
-+			/* 1. Program Alternate Reset Vector */
-+			writel((u32)rproc->bootaddr, priv->cfg_va + DSP_ALT_RESET_VEC_REG);
-+			dev_dbg(priv->dev, "DSP ALT_RESET_VEC set to 0x%08x\n", (u32)rproc->bootaddr);
-+
-+			/* 2. Select Alternate Reset Vector and enable DSP clock */
-+			ctrl = readl(priv->cfg_va + DSP_CTRL_REG0);
-+			ctrl |= DSP_BIT_START_VEC_SEL | DSP_BIT_DSP_CLKEN;
-+			writel(ctrl, priv->cfg_va + DSP_CTRL_REG0);
-+
-+			/* 3. Release Core Reset from CCU if present */
-+			if (priv->rst_core) {
-+				ret = reset_control_deassert(priv->rst_core);
-+				if (ret) {
-+					dev_err(priv->dev, "failed to release DSP core reset: %d\n", ret);
-+					return ret;
-+				}
-+			}
-+
-+			/* 4. Release RUN_STALL to begin DSP execution */
-+			ctrl = readl(priv->cfg_va + DSP_CTRL_REG0);
-+			ctrl &= ~DSP_BIT_RUN_STALL;
-+			writel(ctrl, priv->cfg_va + DSP_CTRL_REG0);
-+			dev_dbg(priv->dev, "DSP CTRL_REG0 set to 0x%08x (unstalled)\n", ctrl);
-+		}
-+		return 0;
-+	}
-+
 +	/* XuanTie RISC-V boot sequence */
 +	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
@@ -436,18 +388,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	dev_info(priv->dev, "Halting %s core...\n",
 +		 priv->cfg ? priv->cfg->name : "remote");
 +
-+	if (priv->cfg && priv->cfg->is_dsp) {
-+		if (priv->cfg_va) {
-+			u32 ctrl = readl(priv->cfg_va + DSP_CTRL_REG0);
-+
-+			ctrl |= DSP_BIT_RUN_STALL;
-+			writel(ctrl, priv->cfg_va + DSP_CTRL_REG0);
-+		}
-+		if (priv->rst_core)
-+			reset_control_assert(priv->rst_core);
-+		return 0;
-+	}
-+
 +	if (priv->rst_core)
 +		reset_control_assert(priv->rst_core);
 +	else if (priv->rst_cfg)
@@ -478,7 +418,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (len == 0)
 +		return NULL;
 +
-+	/* 1. Dedicated MCU Local SRAM Space 0 / DSP Local RAM (Resource "r_sram" / "sram") */
++	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram") */
 +	if (priv->r_sram_va) {
 +		/* Host physical address view (e.g., 0x07280000, 0x07200000, 0x00020000) */
 +		if (da >= priv->r_sram_phys &&
@@ -505,7 +445,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - 0x3ffc0000);
 +		}
-+		/* DSP Local RAM / PubSRAM C DA view (0x00020000) */
++		/* PubSRAM C DA view (0x00020000) */
 +		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
@@ -605,7 +545,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			dev_warn(dev, "failed to map 'cfg' registers\n");
 +	}
 +
-+	/* 2. Map Dedicated RISC-V Local SRAM Space 0 / DSP Local RAM ("r_sram" or "sram") */
++	/* 2. Map Dedicated RISC-V Local SRAM Space 0 ("r_sram" or "sram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram");
 +	if (!res)
 +		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
@@ -999,7 +939,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	{ .compatible = "allwinner,sun55i-a523-rproc", .data = &sun55i_riscv_cfg },
 +	{ .compatible = "allwinner,sun55i-a527-rproc", .data = &sun55i_riscv_cfg },
 +	{ .compatible = "allwinner,sun55i-t527-rproc", .data = &sun55i_riscv_cfg },
-+	{ .compatible = "allwinner,sun55i-hifi4-rproc", .data = &sun55i_dsp_cfg },
 +	{ .compatible = "allwinner,sunxi-rproc", .data = &sun55i_riscv_cfg },
 +	{ /* sentinel */ }
 +};

@@ -22,16 +22,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 886 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 895 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 906 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 915 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
-
 
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
 @@ -381,5 +381,13 @@ config XLNX_R5_REMOTEPROC
  	  It's safe to say N if not interested in using RPU r5f cores.
-
+ 
 +config SUNXI_REMOTEPROC
 +	tristate "Allwinner XuanTie RISC-V remoteproc support"
 +	depends on (ARCH_SUNXI || COMPILE_TEST) && MAILBOX
@@ -41,7 +40,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	  remote processor framework.
 +
  endif # REMOTEPROC
-
+ 
  endmenu
 --- a/drivers/remoteproc/Makefile
 +++ b/drivers/remoteproc/Makefile
@@ -52,8 +51,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,886 @@
-+// SPDX-License-Identifier: GPL-2.0-only
+@@ -0,0 +1,906 @@
+++// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
 + *
@@ -81,9 +80,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +#define DRIVER_NAME "sunxi-rproc"
 +
-+/* Remap Control Register (offset 0x364 in DSP_CCU / PRCM_R_CCU) */
++/* Remap Control Register (offset 0x364 in PRCM_R_CCU / MCU_CCU) */
 +#define SUNXI_REMAP_CTRL_OFFSET		0x0364
-+/* Bit 0: 0 = DSP local RAM for MCU; 1 = share for system */
++/* Bit 0: 0 = local RAM for MCU; 1 = share for system */
 +#define SUNXI_REMAP_MCU_RAM_BIT		BIT(0)
 +/* Bit 1: 0 = SRAMA3_2 not shared; 1 = share for MCU_SYS */
 +#define SUNXI_REMAP_SRAMA3_2_BIT	BIT(1)
@@ -104,10 +103,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +static const struct sunxi_rproc_cfg sun55i_riscv_cfg = {
 +	.name = "XuanTie E907 RISC-V",
-+};
-+
-+static const struct sunxi_rproc_cfg sun55i_dsp_cfg = {
-+	.name = "Cadence HiFi4 DSP",
 +};
 +
 +struct sunxi_rproc {
@@ -215,7 +210,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
-+	/* 2. Enable parent clock (PLL / DSP source) */
++	/* 2. Enable parent clock (PLL source) */
 +	if (priv->clk_parent) {
 +		ret = clk_prepare_enable(priv->clk_parent);
 +		if (ret) {
@@ -259,9 +254,7 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +	/*
-+	 * 4b. Enable SRAMA3_2 for MCU_SYS (RISC-V/DSP) via REMAP_CTRL_REG bit 1.
-+	 * NOTE: Bit 0 (MCU_RAM_REMAP) is left untouched (0) to ensure DSP local RAM
-+	 * remains exclusive to the HiFi4 DSP domain.
++	 * 4b. Enable SRAMA3_2 for MCU_SYS (RISC-V) via REMAP_CTRL_REG bit 1.
 +	 */
 +	if (priv->remap_va) {
 +		u32 remap_val = readl(priv->remap_va);
@@ -362,18 +355,13 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	/*
-+	 * 1. Program initial boot entry vector into hardware register
-+	 * (XuanTie E906 on Allwinner T527 / A523 / A527 at cfg_va + 0x0204).
-+	 */
++	/* XuanTie RISC-V boot sequence */
 +	if (priv->cfg_va) {
 +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
 +		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
 +	}
 +
-+	/*
-+	 * 2. Release core reset to begin execution.
-+	 */
++	/* Release core reset to begin execution */
 +	if (priv->rst_core) {
 +		ret = reset_control_deassert(priv->rst_core);
 +		if (ret) {
@@ -430,9 +418,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (len == 0)
 +		return NULL;
 +
-+	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram", Core DA 0x40000000) */
++	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram") */
 +	if (priv->r_sram_va) {
-+		/* Host physical address view (e.g., 0x07280000 or 0x07200000) */
++		/* Host physical address view (e.g., 0x07280000, 0x07200000, 0x00020000) */
 +		if (da >= priv->r_sram_phys &&
 +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
@@ -456,6 +444,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - 0x3ffc0000);
++		}
++		/* PubSRAM C DA view (0x00020000) */
++		if (da >= 0x00020000 && (da + len) <= (0x00020000 + priv->r_sram_size)) {
++			if (is_iomem)
++				*is_iomem = true;
++			return priv->r_sram_va + (da - 0x00020000);
 +		}
 +	}
 +
@@ -551,8 +545,10 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +			dev_warn(dev, "failed to map 'cfg' registers\n");
 +	}
 +
-+	/* 2. Map Dedicated RISC-V Local SRAM Space 0 ("r_sram") */
++	/* 2. Map Dedicated RISC-V Local SRAM Space 0 ("r_sram" or "sram") */
 +	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "r_sram");
++	if (!res)
++		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
 +	if (res) {
 +		priv->r_sram_phys = res->start;
 +		priv->r_sram_size = resource_size(res);
@@ -943,7 +939,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	{ .compatible = "allwinner,sun55i-a523-rproc", .data = &sun55i_riscv_cfg },
 +	{ .compatible = "allwinner,sun55i-a527-rproc", .data = &sun55i_riscv_cfg },
 +	{ .compatible = "allwinner,sun55i-t527-rproc", .data = &sun55i_riscv_cfg },
-+	{ .compatible = "allwinner,sun55i-hifi4-rproc", .data = &sun55i_dsp_cfg },
 +	{ .compatible = "allwinner,sunxi-rproc", .data = &sun55i_riscv_cfg },
 +	{ /* sentinel */ }
 +};
