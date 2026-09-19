@@ -72,6 +72,26 @@ index 1234567..89abcdef 100644
 +			mbox-names = "rx", "tx";
 +			status = "disabled";
 +		};
++
++		rproc_dsp: remoteproc@7100000 {
++			compatible = "allwinner,sun55i-hifi4-rproc";
++			reg = <0x07100000 0x1000>,
++			      <0x00020000 0x20000>,
++			      <0x07280000 0x40000>,
++			      <0x07010364 0x4>;
++			reg-names = "cfg", "sram", "r_sram", "remap";
++			clocks = <&mcu_ccu CLK_BUS_MCU_DSP_CFG>,
++				 <&mcu_ccu CLK_MCU_DSP>,
++				 <&mcu_ccu CLK_BUS_MCU_DSP_MSGBOX>;
++			clock-names = "bus", "core", "msgbox";
++			resets = <&mcu_ccu RST_BUS_MCU_DSP_CFG>,
++				 <&mcu_ccu RST_BUS_MCU_DSP>,
++				 <&mcu_ccu RST_BUS_MCU_DSP_MSGBOX>;
++			reset-names = "cfg", "core", "msgbox";
++			mboxes = <&msgbox 4>, <&msgbox 5>;
++			mbox-names = "rx", "tx";
++			status = "disabled";
++		};
  	};
  };
 --

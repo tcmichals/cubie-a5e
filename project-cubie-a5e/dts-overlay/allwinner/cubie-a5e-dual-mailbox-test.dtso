@@ -47,3 +47,8 @@
     mbox-names = "disabled", "disabled";
     status = "okay";
 };
+
+&rproc_dsp {
+    mbox-names = "disabled", "disabled";
+    status = "okay";
+};

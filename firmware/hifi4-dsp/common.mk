@@ -25,7 +25,7 @@ SIZE    = $(CROSS_COMPILE)size
 
 # 2. Compilation Flags
 INCLUDES += -I. -I$(COMMON_DIR) -I$(COMMON_DIR)/include -I$(COMMON_DIR)/hal
-CFLAGS   += -O2 -g $(INCLUDES) -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections
+CFLAGS   += -O2 -g -DCONFIG_CORE_HIFI4=1 $(INCLUDES) -Wall -Wextra -ffreestanding -ffunction-sections -fdata-sections
 ifeq ($(findstring riscv,$(CROSS_COMPILE)),riscv)
   ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei -mabi=ilp32 -mcmodel=medany
   CFLAGS     += $(ARCH_FLAGS)

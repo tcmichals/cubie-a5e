@@ -61,6 +61,26 @@ public:
     [[nodiscard]] static bool is_tx_ready(Channel ch) noexcept;
 
     /**
+     * @brief Check if DSP receive FIFO has pending messages from ARM (Ch 4)
+     */
+    [[nodiscard]] static bool is_dsp_rx_pending(Channel ch = Channel::Channel0) noexcept;
+
+    /**
+     * @brief Non-blocking message receive from ARM via DSP port (Ch 4)
+     */
+    static std::optional<uint32_t> receive_dsp(Channel ch = Channel::Channel0) noexcept;
+
+    /**
+     * @brief Non-blocking message send to ARM via DSP port (Ch 5)
+     */
+    static bool send_dsp(Channel ch, uint32_t data) noexcept;
+
+    /**
+     * @brief Blocking message send to ARM via DSP port (Ch 5)
+     */
+    static void send_dsp_blocking(Channel ch, uint32_t data) noexcept;
+
+    /**
      * @brief Enable/Disable Receive Interrupt for channel
      */
     static void enable_rx_irq(Channel ch, bool enable) noexcept;

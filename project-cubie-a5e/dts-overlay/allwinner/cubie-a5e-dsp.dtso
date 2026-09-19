@@ -21,16 +21,9 @@
  * ============================================================================
  */
 
-&soc {
-    rproc_dsp: rproc@1700000 {
-        compatible = "allwinner,sun55i-hifi4-rproc", "allwinner,sunxi-rproc";
-        reg = <0x01700000 0x1000>;
-        memory-region = <&coproc_firmware>, <&coproc_shm>;
-        mboxes = <&msgbox 4>, <&msgbox 5>;
-        mbox-names = "tx", "rx";
-        firmware-name = "dsp_firmware.elf";
-        status = "okay";
-    };
+&rproc_dsp {
+    firmware-name = "dsp-testMsgbox.elf";
+    status = "okay";
 };
 
 &msgbox {

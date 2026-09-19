@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-19 11:27:57",
+  "timestamp": "2026-09-19 13:49:47",
   "target": "root@192.168.1.11",
   "sweep_summary": [
     [
@@ -60,12 +60,12 @@
     [
       "Profile 4",
       "run_tests.py (Dual Mailbox Suite)",
-      "PASS"
+      "FAIL"
     ],
     [
       "Profile 4",
       "test_dual_msgbox.py (DSP + E907 Concurrent)",
-      "PASS"
+      "FAIL"
     ],
     [
       "Profile 5",
@@ -75,7 +75,7 @@
   ],
   "profiles": [
     {
-      "timestamp": "1970-01-02 01:51:15",
+      "timestamp": "1970-01-02 00:02:52",
       "profile": "Profile 1 (Standard DDR VirtIO & Carveout)",
       "node_desc": "DDR DRAM Carveout / vdev@48000000",
       "results": [
@@ -105,7 +105,7 @@
           "metrics": {
             "mcause": "0x30000002",
             "registers_captured": 31,
-            "host_stability": "loadavg 0.12 0.03 0.01 2/199 416"
+            "host_stability": "loadavg 0.05 0.01 0.00 1/199 416"
           },
           "details": "mcause=0x30000002, 31 GPRs dumped, host stable"
         },
@@ -117,14 +117,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 175.888,
-            "min_lat_us": 167.375,
-            "max_lat_us": 241.042,
-            "jitter_us": 8.012,
-            "throughput_msgs_s": 5660.1,
-            "bandwidth": "5.35 MB/s (bi-directional)"
+            "avg_lat_us": 172.155,
+            "min_lat_us": 165.5,
+            "max_lat_us": 253.0,
+            "jitter_us": 7.356,
+            "throughput_msgs_s": 5784.6,
+            "bandwidth": "5.47 MB/s (bi-directional)"
           },
-          "details": "Avg=175.888us, Rate=5660.1msgs/s, BW=5.35 MB/s (bi-directional)"
+          "details": "Avg=172.155us, Rate=5784.6msgs/s, BW=5.47 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python VirtIO)",
@@ -135,13 +135,13 @@
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
             "avg_lat_us": null,
-            "min_lat_us": 116.08,
-            "max_lat_us": 605.58,
+            "min_lat_us": 114.83,
+            "max_lat_us": 187.08,
             "jitter_us": null,
-            "throughput_msgs_s": 5975.8,
-            "bandwidth": "747.0 KB/s (bidirectional)"
+            "throughput_msgs_s": 6166.4,
+            "bandwidth": "770.8 KB/s (bidirectional)"
           },
-          "details": "Avg=Noneus, Rate=5975.8msgs/s, BW=747.0 KB/s (bidirectional)"
+          "details": "Avg=Noneus, Rate=6166.4msgs/s, BW=770.8 KB/s (bidirectional)"
         },
         {
           "name": "ping_dram (C++ Hybrid DDR)",
@@ -151,19 +151,19 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": null,
-            "avg_lat_us": 202.047,
-            "min_lat_us": 199.708,
-            "max_lat_us": 218.0,
-            "jitter_us": 3.121,
-            "throughput_msgs_s": 4500.8,
-            "bandwidth": "4.40 MB/sec (Bidirectional)"
+            "avg_lat_us": 191.875,
+            "min_lat_us": 189.833,
+            "max_lat_us": 220.75,
+            "jitter_us": 1.816,
+            "throughput_msgs_s": 4710.2,
+            "bandwidth": "4.60 MB/sec (Bidirectional)"
           },
-          "details": "Avg=202.047us, Rate=4500.8msgs/s, BW=4.40 MB/sec (Bidirectional)"
+          "details": "Avg=191.875us, Rate=4710.2msgs/s, BW=4.60 MB/sec (Bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 01:52:03",
+      "timestamp": "1970-01-02 00:03:36",
       "profile": "Profile 2 (Pure On-Chip SRAM VirtIO)",
       "node_desc": "On-Chip SRAM Space 1 / sram1@72c0000",
       "results": [
@@ -195,14 +195,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 125.345,
-            "min_lat_us": 120.666,
-            "max_lat_us": 168.583,
-            "jitter_us": 5.891,
-            "throughput_msgs_s": 7929.8,
-            "bandwidth": "7.50 MB/s (bi-directional)"
+            "avg_lat_us": 125.539,
+            "min_lat_us": 120.125,
+            "max_lat_us": 215.5,
+            "jitter_us": 6.635,
+            "throughput_msgs_s": 7920.0,
+            "bandwidth": "7.49 MB/s (bi-directional)"
           },
-          "details": "Avg=125.345us, Rate=7929.8msgs/s, BW=7.50 MB/s (bi-directional)"
+          "details": "Avg=125.539us, Rate=7920.0msgs/s, BW=7.49 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python SRAM VirtIO)",
@@ -213,18 +213,18 @@
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
             "avg_lat_us": null,
-            "min_lat_us": 86.21,
-            "max_lat_us": 176.08,
+            "min_lat_us": 90.96,
+            "max_lat_us": 178.04,
             "jitter_us": null,
-            "throughput_msgs_s": 6806.8,
-            "bandwidth": "850.9 KB/s (bidirectional)"
+            "throughput_msgs_s": 7272.6,
+            "bandwidth": "909.1 KB/s (bidirectional)"
           },
-          "details": "Avg=Noneus, Rate=6806.8msgs/s, BW=850.9 KB/s (bidirectional)"
+          "details": "Avg=Noneus, Rate=7272.6msgs/s, BW=909.1 KB/s (bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 01:52:42",
+      "timestamp": "1970-01-02 00:04:07",
       "profile": "Profile 3 (Userspace UIO Direct Mailbox)",
       "node_desc": "Hardware Mailbox bound to generic-uio (/dev/uio0)",
       "results": [
@@ -236,14 +236,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 13.896,
-            "min_lat_us": 13.333,
-            "max_lat_us": 43.209,
-            "jitter_us": 1.549,
-            "throughput_msgs_s": 65378.9,
-            "bandwidth": "63.85 MB/sec (Bidirectional)"
+            "avg_lat_us": 13.835,
+            "min_lat_us": 13.375,
+            "max_lat_us": 39.0,
+            "jitter_us": 1.714,
+            "throughput_msgs_s": 65770.7,
+            "bandwidth": "64.23 MB/sec (Bidirectional)"
           },
-          "details": "Avg=13.896us, Rate=65378.9msgs/s, BW=63.85 MB/sec (Bidirectional)"
+          "details": "Avg=13.835us, Rate=65770.7msgs/s, BW=64.23 MB/sec (Bidirectional)"
         },
         {
           "name": "ping_uio.py (Python UIO Doorbell)",
@@ -253,41 +253,41 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 178.157,
-            "min_lat_us": 171.625,
-            "max_lat_us": 256.667,
-            "jitter_us": 9.33,
-            "throughput_msgs_s": 4578.4,
+            "avg_lat_us": 180.337,
+            "min_lat_us": 172.084,
+            "max_lat_us": 220.709,
+            "jitter_us": 10.513,
+            "throughput_msgs_s": 4459.6,
             "bandwidth": null
           },
-          "details": "Avg=178.157us, Rate=4578.4msgs/s"
+          "details": "Avg=180.337us, Rate=4459.6msgs/s"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 01:53:10",
+      "timestamp": "1970-01-02 00:04:34",
       "profile": "Profile 4 (Hardware Mailbox Isolation & Dual-Core Test)",
       "node_desc": "Hardware Mailbox Clients (/sys/kernel/debug/mailbox-test-*)",
       "results": [
         {
           "name": "testMsgbox (E907 Mailbox Ch 8/9)",
           "status": "PASS",
-          "details": "100/100 responses, Avg RTT=163.18us",
+          "details": "100/100 responses, Avg RTT=142.61us",
           "metrics": {
             "packets_sent": 100,
             "packets_recv": 100,
-            "avg_lat_us": 163.18,
-            "min_lat_us": 152.58,
-            "max_lat_us": 257.42,
-            "throughput_msgs_s": 6128.3,
-            "bandwidth": "23.94 KB/s",
+            "avg_lat_us": 142.61,
+            "min_lat_us": 131.33,
+            "max_lat_us": 231.42,
+            "throughput_msgs_s": 7012.2,
+            "bandwidth": "27.39 KB/s",
             "data_integrity": "PASS (0 errors)"
           }
         },
         {
           "name": "dsp-testMsgbox (DSP Mailbox Ch 4/5)",
-          "status": "SKIP",
-          "details": "DSP mailbox endpoint active; DSP core offline",
+          "status": "FAIL",
+          "details": "No valid responses received from /sys/kernel/debug/mailbox-test-dsp/message",
           "metrics": {
             "packets_sent": 100,
             "packets_recv": 0
@@ -295,8 +295,8 @@
         },
         {
           "name": "Dual: DSP-HiFi4 (Ch 4/5)",
-          "status": "SKIP",
-          "details": "DSP mailbox channel verified; DSP core offline",
+          "status": "FAIL",
+          "details": "No valid responses received from /sys/kernel/debug/mailbox-test-dsp/message",
           "metrics": {
             "packets_sent": 1000,
             "packets_recv": 0
@@ -305,22 +305,22 @@
         {
           "name": "Dual: E907-RISCV (Ch 8/9)",
           "status": "PASS",
-          "details": "1000/1000 responses, Avg RTT=145.20us",
+          "details": "1000/1000 responses, Avg RTT=135.64us",
           "metrics": {
             "packets_sent": 1000,
             "packets_recv": 1000,
-            "avg_lat_us": 145.2,
-            "min_lat_us": 134.12,
-            "max_lat_us": 345.54,
-            "throughput_msgs_s": 6886.9,
-            "bandwidth": "26.90 KB/s",
+            "avg_lat_us": 135.64,
+            "min_lat_us": 123.83,
+            "max_lat_us": 396.92,
+            "throughput_msgs_s": 7372.2,
+            "bandwidth": "28.80 KB/s",
             "data_integrity": "PASS (0 errors)"
           }
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 01:53:38",
+      "timestamp": "1970-01-02 00:05:01",
       "profile": "Profile 5 (Cadence HiFi4 DSP Mailbox Isolation)",
       "node_desc": "HiFi4 DSP Hardware Mailbox (/sys/kernel/debug/mailbox-test-dsp)",
       "results": [

@@ -11,7 +11,8 @@
  */
 
 #include "resource_table.h"
-#include "msgbox.h"
+#include "sunxi_msgbox.h"
+
 
 void _start(void)
 {

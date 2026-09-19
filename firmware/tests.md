@@ -1280,3 +1280,35 @@ By keeping interrupts disabled by default, firmware polling loops (`has_data()` 
 2. **Deterministic Jitter**: Polling within a real-time event loop (`while (1) { if (has_data()) ... }`) guarantees strictly bounded latency without priority inversion or nested trap latency.
 3. **No Spurious Traps**: Disabling `RD_IRQ_EN_REG` ensures the core does not vector to an unhandled interrupt on PLIC Line 48 or Xtensa IRQ while running bare metal without an RTOS interrupt dispatcher.
 4. **RTOS Compatibility**: Turnkey support for RTOS environments (`vTaskNotifyGiveFromISR`) is achieved simply by calling `hal::MsgBox::init(true)`.
+
+---
+
+## 14. Cadence Tensilica HiFi4 Audio DSP Test Applications Suite
+
+The dedicated bare-metal test suite for the Cadence Tensilica HiFi4 Audio DSP core mirrors the XuanTie E907 validation suite while leveraging DSP-specific audio vector math instructions and register layouts:
+
+### 14.1 Application Matrix
+
+| Binary Name | Target Core | Memory Segment | Key Capabilities Tested |
+| :--- | :--- | :--- | :--- |
+| `dsp-testBasic.elf` | HiFi4 DSP | `0x3FFC0000` (PubSRAM C / DSP RAM) | Lifecycle (`start`/`stop`), `trace0` heartbeat ring buffer, CCU DSP clock gates (`CLK_MCU_DSP` @ 600 MHz). |
+| `dsp-testMsgbox.elf` | HiFi4 DSP | `0x3FFC0000` (PubSRAM C / DSP RAM) | Hardware Message Box Port 0 IPC (Host Ch 4/5 <-> DSP Ch 0/1) loopback, sub-20 $\mu$s RTT latency. |
+| `dsp-testCrash.elf` | HiFi4 DSP | `0x3FFC0000` (PubSRAM C / DSP RAM) | 5-heartbeat countdown, intentional illegal instruction fault trap, register autopsy capture to SRAM (`0xDEADF00D`), host stability. |
+| `dsp-testStringBinaryTrace0.elf` | HiFi4 DSP | `0x3FFC0000` (PubSRAM C / DSP RAM) | Mixed ASCII string telemetry, DSP trigonometric floating point calculation (`sin(phase)`), binary telemetry structs, memory hexdump. |
+| `dsp-testVectorMath.elf` | HiFi4 DSP | `0x3FFC0000` (PubSRAM C / DSP RAM) | 16-tap digital audio FIR filter vector convolution math, sample buffer integrity validation, concurrent mailbox ping/pong response. |
+
+### 14.2 Execution Commands
+```bash
+# 1. Start DSP basic test:
+echo stop > /sys/class/remoteproc/remoteproc1/state
+echo "dsp-testBasic.elf" > /sys/class/remoteproc/remoteproc1/firmware
+echo start > /sys/class/remoteproc/remoteproc1/state
+cat /sys/kernel/debug/remoteproc/remoteproc1/trace0
+
+# 2. Run DSP Vector Math application:
+echo stop > /sys/class/remoteproc/remoteproc1/state
+echo "dsp-testVectorMath.elf" > /sys/class/remoteproc/remoteproc1/firmware
+echo start > /sys/class/remoteproc/remoteproc1/state
+cat /sys/kernel/debug/remoteproc/remoteproc1/trace0
+```
+

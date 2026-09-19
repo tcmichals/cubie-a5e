@@ -181,18 +181,23 @@ def main():
 
     print(f"{C_BOLD}Test Results Breakdown:{C_RESET}")
     print(f"----------------------------------------------------------------")
-    has_dsp_rproc = os.path.exists("/sys/class/remoteproc/remoteproc1/state")
+    all_passed = True
     for name, (count, avg_us, status) in results.items():
-        pass_rate = (count / num_iterations) * 100.0
-        if "DSP" in name and not has_dsp_rproc and count == 0:
-            status = "SKIP (DSP core offline)"
-            color = C_YELLOW
-            print(f"  {C_BOLD}{name:<12}{C_RESET}: {color}{count}/{num_iterations} responses ({pass_rate:.1f}%){C_RESET} | Avg RTT: {avg_us:.2f} us | {status}")
+        pass_rate = (count / num_iterations) * 100.0 if num_iterations > 0 else 0.0
+        if pass_rate == 100.0 and count == num_iterations:
+            color = C_GREEN
+            status = "OK"
         else:
-            color = C_GREEN if pass_rate == 100.0 else (C_YELLOW if pass_rate > 0 else C_RED)
-            print(f"  {C_BOLD}{name:<12}{C_RESET}: {color}{count}/{num_iterations} responses ({pass_rate:.1f}%){C_RESET} | Avg RTT: {avg_us:.2f} us | {status}")
+            color = C_RED
+            status = "FAIL"
+            all_passed = False
+        print(f"  {C_BOLD}{name:<12}{C_RESET}: {color}{count}/{num_iterations} responses ({pass_rate:.1f}%){C_RESET} | Avg RTT: {avg_us:.2f} us | {status}")
     print(f"----------------------------------------------------------------\n")
+
+    if not all_passed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
+

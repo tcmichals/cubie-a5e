@@ -15,18 +15,18 @@ This document maps XuanTie E907 RISC-V Core Device Addresses (`DA`) to **Linux H
 | **`STA_ADD_REG   (CFG)`** | `0x07130204` | `0x07130204` | CFG Block (+0x204) | `devmem2 0x07130204 w` |
 | **`WORK_MODE_REG (CFG)`** | `0x07130248` | `0x07130248` | CFG Block (+0x248) | `devmem2 0x07130248 w` |
 | **`default_trap_entry`** | `0x3FFC0040` | `0x07280040` | SRAM_A3 Space 0 (+0x40) | `devmem2 0x07280040 w` |
-| **`main`** | `0x3FFC0A28` | `0x07280A28` | SRAM_A3 Space 0 (+0xA28) | `devmem2 0x07280A28 w` |
-| **`global_resource_table`** | `0x3FFC38A0` | `0x072838A0` | SRAM_A3 Space 0 (+0x38A0) | `devmem2 0x072838A0 w` |
-| **`g_trace_head`** | `0x3FFC38E4` | `0x072838E4` | SRAM_A3 Space 0 (+0x38E4) | `devmem2 0x072838E4 w` |
-| **`_stack_bottom`** | `0x3FFC38F0` | `0x072838F0` | SRAM_A3 Space 0 (+0x38F0) | `devmem2 0x072838F0 w` |
-| **`dtcm_scratch`** | `0x3FFC78F0` | `0x072878F0` | SRAM_A3 Space 0 (+0x78F0) | `devmem2 0x072878F0 w` |
-| **`_start`** | `0x3FFC78F0` | `0x072878F0` | SRAM_A3 Space 0 (+0x78F0) | `devmem2 0x072878F0 w` |
-| **`g_rproc_trace_buffer`** | `0x3FFC78F0` | `0x072878F0` | SRAM_A3 Space 0 (+0x78F0) | `devmem2 0x072878F0 w` |
-| **`_stack_top`** | `0x3FFC78F0` | `0x072878F0` | SRAM_A3 Space 0 (+0x78F0) | `devmem2 0x072878F0 w` |
-| **`__trace_start`** | `0x3FFC78F0` | `0x072878F0` | SRAM_A3 Space 0 (+0x78F0) | `devmem2 0x072878F0 w` |
-| **`__sram_c_end`** | `0x3FFC88F0` | `0x072888F0` | SRAM_A3 Space 0 (+0x88F0) | `devmem2 0x072888F0 w` |
-| **`__sram_c_start`** | `0x3FFC88F0` | `0x072888F0` | SRAM_A3 Space 0 (+0x88F0) | `devmem2 0x072888F0 w` |
-| **`__trace_end`** | `0x3FFC88F0` | `0x072888F0` | SRAM_A3 Space 0 (+0x88F0) | `devmem2 0x072888F0 w` |
+| **`main`** | `0x3FFC0A02` | `0x07280A02` | SRAM_A3 Space 0 (+0xA02) | `devmem2 0x07280A02 w` |
+| **`global_resource_table`** | `0x3FFC21C0` | `0x072821C0` | SRAM_A3 Space 0 (+0x21C0) | `devmem2 0x072821C0 w` |
+| **`g_trace_head`** | `0x3FFC2204` | `0x07282204` | SRAM_A3 Space 0 (+0x2204) | `devmem2 0x07282204 w` |
+| **`_stack_bottom`** | `0x3FFC2210` | `0x07282210` | SRAM_A3 Space 0 (+0x2210) | `devmem2 0x07282210 w` |
+| **`dtcm_scratch`** | `0x3FFC6210` | `0x07286210` | SRAM_A3 Space 0 (+0x6210) | `devmem2 0x07286210 w` |
+| **`_start`** | `0x3FFC6210` | `0x07286210` | SRAM_A3 Space 0 (+0x6210) | `devmem2 0x07286210 w` |
+| **`g_rproc_trace_buffer`** | `0x3FFC6210` | `0x07286210` | SRAM_A3 Space 0 (+0x6210) | `devmem2 0x07286210 w` |
+| **`_stack_top`** | `0x3FFC6210` | `0x07286210` | SRAM_A3 Space 0 (+0x6210) | `devmem2 0x07286210 w` |
+| **`__trace_start`** | `0x3FFC6210` | `0x07286210` | SRAM_A3 Space 0 (+0x6210) | `devmem2 0x07286210 w` |
+| **`__sram_c_end`** | `0x3FFC7210` | `0x07287210` | SRAM_A3 Space 0 (+0x7210) | `devmem2 0x07287210 w` |
+| **`__sram_c_start`** | `0x3FFC7210` | `0x07287210` | SRAM_A3 Space 0 (+0x7210) | `devmem2 0x07287210 w` |
+| **`__trace_end`** | `0x3FFC7210` | `0x07287210` | SRAM_A3 Space 0 (+0x7210) | `devmem2 0x07287210 w` |
 
 ---
 

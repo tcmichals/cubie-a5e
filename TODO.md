@@ -153,10 +153,42 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [ ] Run multi-threaded stress test with 10+ concurrent worker threads hammering `/dev/rpmsg0`..`/dev/rpmsgN` under 100% CPU load (`stress-ng`).
   - [ ] Measure lock contention, PREEMPT_RT latency jitter, and vring buffer exhaustion.
 
-- [ ] **Task 5: Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up**:
-  - [ ] Map HiFi4 DSP memory window (`0x00020000`, 320 KB) and clock/reset controls in `sunxi_rproc.c`.
-  - [ ] Add DT binding for DSP remoteproc instance in `sun55i-a523.dtsi`.
-  - [ ] Compile and validate minimal DSP bring-up firmware ELF.
+- [x] **Task 5: Cadence Tensilica HiFi4 DSP RemoteProc Bring-Up & Test Suite**:
+  - [x] Map HiFi4 DSP memory window (`0x00020000`, 320 KB), `DSP_ALT_RESET_VEC_REG`, and `DSP_CTRL_REG0` clock/reset controls in `sunxi_rproc.c`.
+  - [x] Add DT binding for DSP remoteproc instance in `sun55i-a523.dtsi` (`rproc_dsp: remoteproc@7100000`).
+  - [x] Create and compile dedicated DSP applications: `dsp-testBasic.elf`, `dsp-testMsgbox.elf`, `dsp-testCrash.elf`, `dsp-testStringBinaryTrace0.elf`, `dsp-testVectorMath.elf`.
+  - [ ] Validate dual remoteproc (`remoteproc0` E907 and `remoteproc1` HiFi4 DSP) live on physical hardware.
+
+- [ ] **Task 6: AIC8800D80 SDIO Wi-Fi & Bluetooth Firmware Upload / SDIO Timeout Fix**:
+  - **Symptom**: On mainline Linux 7.1 kernel boot, `aicbsp` fails during SDIO firmware upload with `sunxi-mmc` data error and timeout (-110):
+    ```text
+    [   18.454098] aicbsp rwnx_plat_bin_fw_upload
+    [   18.454107] aicbsp rwnx_load_firmware: request firmware = fw_adid_8800d80_u02.bin
+    [   18.455355] aicbsp rwnx_plat_bin_fw_upload
+    [   18.455365] aicbsp rwnx_load_firmware: request firmware = fw_patch_8800d80_u02.bin
+    [   18.464965] sunxi-mmc 4021000.mmc: data error, sending stop command
+    [   18.465003] aicbsp: sdio_err:<aicwf_sdio_tx_msg,873>: aicwf_sdio_send_pkt fail-110
+    [   18.465019] aicbsp: sdio_err:<aicwf_sdio_tx_process,923>: failed to send command
+    [   18.465047] aicbsp: sdio_err:<aicwf_sdio_bus_txmsg,1012>: send failed:0, 0,1388
+    [   24.553588] aicbsp cmd timed-out
+    [   24.553597] aicbsp tkn[18]  flags:0012  result: -4  cmd:1035 - reqcfm(1036)
+    [   24.553611] aicbsp bin upload fail: 1e3c00, err:-110
+    [   24.553635] aicbsp aicbt_patch_trap_data_load fail
+    [   24.553932] aicbsp aicbsp_sdio_remove
+    Successfully initialized wpa_supplicant
+    Could not read interface wlan0 flags: No such device
+    nl80211: Driver does not support authentication/association or connect commands
+    nl80211: deinit ifname=wlan0 disabled_11b_rates=0
+    Could not read interface wlan0 flags: No such device
+    wlan0: Failed to initialize driver interface
+    wlan0: CTRL-EVENT-DSCP-POLICY clear_all
+    ```
+  - **Hardware Note**: This does **NOT** happen on RadxaOS on the same physical board.
+  - **Investigation & Resolution Steps**:
+    - [ ] Compare `mmc1` (`4021000.mmc` SDIO) DT node properties between vendor RadxaOS kernel tree (5.10 / BSP) and mainline `sun55i-a523.dtsi` / `sun55i-a527-cubie-a5e.dts` (clock frequencies, `max-frequency`, `bus-width`, `cap-sdio-irq`, `keep-power-in-suspend`, `non-removable`, `sd-uhs-sdr50`, `sd-uhs-ddr50`, drive strength / pin bias).
+    - [ ] Inspect SDIO host controller `sunxi-mmc` driver differences on Linux 7.1 regarding SDIO CMD53 / multi-block transfers and clock sample delay tuning.
+    - [ ] Verify `aicbsp` / `aic8800_fdrv` driver version, firmware paths in `/lib/firmware/`, and firmware version parity (`fw_adid_8800d80_u02.bin`, `fw_patch_8800d80_u02.bin`, `fmac8800d80_u02.bin`).
+    - [ ] Test with reduced SDIO clock (e.g. `max-frequency = <50000000>;` or `<25000000>;`) and verify clean firmware download, `wlan0` interface creation, and Wi-Fi association.
 
 ---
 
