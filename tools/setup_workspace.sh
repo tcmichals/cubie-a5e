@@ -79,6 +79,12 @@ else
     echo "  -> bld.a7a/.config exists. Updated local.mk."
 fi
 
+# 5. Ensure Top-Level Workspace README exists
+if [ -f "${SCRIPT_DIR}/WORKSPACE_README.md" ]; then
+    cp "${SCRIPT_DIR}/WORKSPACE_README.md" "${WORKSPACE_ROOT}/README.md"
+fi
+
+
 echo ""
 echo "======================================================================"
 echo " Workspace Setup Complete!"
