@@ -123,7 +123,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 
 * **Same Silicon Core**: The **T527** (industrial grade) and **A527** (commercial grade) share the exact same internal silicon die, bus topology, and MCU memory map as the **A523**.
 * **Kernel Codename (`sun55i`)**: In upstream Linux and U-Boot, this generation is codenamed **`sun55i`**. The board device tree (`sun55i-a527-cubie-a5e.dts`) includes the base `sun55i-a523.dtsi`, and the clock driver is `ccu-sun55i-a523-mcu.c`.
-* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)). Unlike the HiFi4 DSP, which relies on proprietary Cadence compiler overlays, the E907 is fully supported by standard upstream GCC/LLVM toolchains, making it the ideal target for open-source development.
+* **Dedicated RISC-V RemoteProc Architecture (Co-Processor Coexistence)**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)). Unlike the HiFi4 DSP, which requires proprietary Cadence compiler overlays, NDAs, and closed vendor binaries to function, the XuanTie E907 RISC-V core is fully supported by standard, upstream open-source GCC/LLVM toolchains (`riscv-none-elf-*`), making it the only truly open, reproducible real-time coprocessor on the silicon.
 * **Sibling Generation (`sun60i` / A733)**: The **Allwinner A733** (powering the **Radxa Cubie A7A**) belongs to the newer `sun60i` big.LITTLE generation (2x Cortex-A76 + 6x Cortex-A55). While its main peripheral space is relocated, its auxiliary MCU subsystem reuses a **XuanTie RISC-V core** (E902) executing out of SRAM A2 and adheres to the identical `remoteproc` driver model.
 
 ### 4.1 Board Hardware Comparison
@@ -148,7 +148,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 
 ---
 
-### 4.2 Note on the Cadence HiFi4 DSP (Why It Is Decoupled from `sunxi_rproc.c`)
+### 4.2 Co-Processor Coexistence: Why We Target RISC-V (and Ignore the HiFi4 DSP)
 
 While the Allwinner T527 physical die integrates a Cadence Tensilica HiFi4 Audio DSP (operating up to 600 MHz), our active Linux RemoteProc driver (`sunxi_rproc.c`) and firmware suite are **dedicated exclusively to the XuanTie E907 RISC-V co-processor**. 
 
@@ -158,7 +158,7 @@ The DSP is deliberately decoupled due to three architectural reasons:
    In upstream Linux, `drivers/remoteproc/` maintainers mandate that general-purpose microcontroller cores (Cortex-M / RISC-V) and specialized digital signal processors (Tensilica / Hexagon / C66x) remain strictly separate drivers (e.g., `imx_rproc.c` vs `imx_dsp_rproc.c`, `ti_k3_r5_remoteproc.c` vs `ti_k3_dsp_remoteproc.c`). Merging both into a single `sunxi_rproc.c` violates upstream single-responsibility principles.
 
 2. **Toolchain Reproducibility & Open Source Ecosystem**:
-   The XuanTie E907 compiles out-of-the-box using the standard upstream GNU `riscv-none-elf-gcc` cross-compiler. Conversely, the Cadence HiFi4 DSP requires proprietary Tensilica Instruction Extension (TIE) processor overlays and proprietary Xtensa toolchains. Unlike the HiFi4 DSP, which relies on proprietary Cadence compiler overlays, the E907 is fully supported by standard upstream GCC/LLVM toolchains, making it the ideal target for open-source development.
+   The HiFi4 DSP requires proprietary Cadence compiler overlays, NDAs, and closed vendor binaries to function. In contrast, the XuanTie E907 RISC-V core is fully supported by standard, upstream open-source GCC/LLVM toolchains (`riscv-none-elf-*`), making it the only truly open, reproducible real-time coprocessor on the silicon.
 
 3. **Software Stack & Hardware Domain**:
    The XuanTie E907 is designed for hard real-time flight control, sensor loops (SPI/I2C), and low-latency coroutine IPC (RPMsg / SPSC queues). The HiFi4 DSP is tailored for audio vector processing (echo cancellation, beamforming) and belongs in **Sound Open Firmware (SOF)** or Linux ALSA ASoC (`sound/soc/sof/`).
