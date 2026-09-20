@@ -23,6 +23,24 @@ co-processor under Linux:
 * **Part 3**: Inter-processor communication (IPC) deep dive—lock-free shared SRAM + hardware mailbox doorbells, standard VirtIO RPMsg, and hybrid SRAM/DDR bulk streaming.
 * **Part 4**: Deep dive into modern zero-allocation C++ coroutines and event loops on bare-metal RISC-V.
 
+```plaintext
++-------------------------------------------------------------------+
+|                           Allwinner T527                          |
+|                                                                   |
+|   +--------------------------+     +--------------------------+   |
+|   |   Octa-Core Cortex-A55   |     |  XuanTie E907 RISC-V     |   |
+|   |      (Linux 6.x / 7.x)   |     |    (FreeRTOS / Bare)     |   |
+|   +------------+-------------+     +------------+-------------+   |
+|                |                                |                 |
+|                |   AXI Interconnect / Bus Matrix|                 |
+|   +------------v--------------------------------v-------------+   |
+|   |         Hardware Mailbox / MSG-BOX (Doorbell IRQ)         |   |
+|   +-----------------------------------------------------------+   |
+|   |    Reserved SRAM / DDR Carveout (VirtIO Rings / Buffers)  |   |
+|   +-----------------------------------------------------------+   |
++-------------------------------------------------------------------+
+```
+
 ---
 
 ## 1. Bill of Materials & Hardware Prerequisites
@@ -54,10 +72,10 @@ co-processor hardware memory nodes:
 ```bash
 # 1. Check for registered RemoteProc subsystem instances:
 ls -la /sys/class/remoteproc/
-# Expected output: remoteproc0 (XuanTie E907 RISC-V)
+# Expected output: remoteproc0 (and remoteproc1 if DSP is enabled)
 
 # 2. Inspect kernel dmesg for remoteproc driver probing:
-dmesg | grep -i -E "remoteproc|rproc|sunxi"
+dmesg | grep -iE "remoteproc|rproc|sunxi"
 
 # 3. Check live Device Tree nodes for the XuanTie E907 block:
 ls -d /sys/firmware/devicetree/base/soc/remoteproc@7130000
@@ -105,7 +123,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 
 * **Same Silicon Core**: The **T527** (industrial grade) and **A527** (commercial grade) share the exact same internal silicon die, bus topology, and MCU memory map as the **A523**.
 * **Kernel Codename (`sun55i`)**: In upstream Linux and U-Boot, this generation is codenamed **`sun55i`**. The board device tree (`sun55i-a527-cubie-a5e.dts`) includes the base `sun55i-a523.dtsi`, and the clock driver is `ccu-sun55i-a523-mcu.c`.
-* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)).
+* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)). Unlike the HiFi4 DSP, which relies on proprietary Cadence compiler overlays, the E907 is fully supported by standard upstream GCC/LLVM toolchains, making it the ideal target for open-source development.
 * **Sibling Generation (`sun60i` / A733)**: The **Allwinner A733** (powering the **Radxa Cubie A7A**) belongs to the newer `sun60i` big.LITTLE generation (2x Cortex-A76 + 6x Cortex-A55). While its main peripheral space is relocated, its auxiliary MCU subsystem reuses a **XuanTie RISC-V core** (E902) executing out of SRAM A2 and adheres to the identical `remoteproc` driver model.
 
 ### 4.1 Board Hardware Comparison
@@ -140,7 +158,7 @@ The DSP is deliberately decoupled due to three architectural reasons:
    In upstream Linux, `drivers/remoteproc/` maintainers mandate that general-purpose microcontroller cores (Cortex-M / RISC-V) and specialized digital signal processors (Tensilica / Hexagon / C66x) remain strictly separate drivers (e.g., `imx_rproc.c` vs `imx_dsp_rproc.c`, `ti_k3_r5_remoteproc.c` vs `ti_k3_dsp_remoteproc.c`). Merging both into a single `sunxi_rproc.c` violates upstream single-responsibility principles.
 
 2. **Toolchain Reproducibility & Open Source Ecosystem**:
-   The XuanTie E907 compiles out-of-the-box using the standard upstream GNU `riscv-none-elf-gcc` cross-compiler. Conversely, the Cadence HiFi4 DSP requires proprietary Tensilica Instruction Extension (TIE) processor overlays and proprietary Xtensa toolchains. Decoupling the DSP ensures our entire firmware and OS build process remains 100% reproducible with pure open-source toolchains.
+   The XuanTie E907 compiles out-of-the-box using the standard upstream GNU `riscv-none-elf-gcc` cross-compiler. Conversely, the Cadence HiFi4 DSP requires proprietary Tensilica Instruction Extension (TIE) processor overlays and proprietary Xtensa toolchains. Unlike the HiFi4 DSP, which relies on proprietary Cadence compiler overlays, the E907 is fully supported by standard upstream GCC/LLVM toolchains, making it the ideal target for open-source development.
 
 3. **Software Stack & Hardware Domain**:
    The XuanTie E907 is designed for hard real-time flight control, sensor loops (SPI/I2C), and low-latency coroutine IPC (RPMsg / SPSC queues). The HiFi4 DSP is tailored for audio vector processing (echo cancellation, beamforming) and belongs in **Sound Open Firmware (SOF)** or Linux ALSA ASoC (`sound/soc/sof/`).
