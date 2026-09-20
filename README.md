@@ -3,6 +3,11 @@
 This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E**, **Yuzuki / Pine64 Avaota A1** (Allwinner A527/T527), and **Radxa Cubie A7A / A7Z** (Allwinner A733) single-board computers and run the flight controller application stack.
 
 > **Active A7A restart checklist**: [`TODO.md`](TODO.md). The chronological hardware evidence is in [`docs/platforms/CUBIE_A7A_DEBUG_LOG.md`](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
+>
+> 🚀 **Multi-PC Development & Quick Setup**:
+> * **New Machine Setup**: `git clone git@github.com:tcmichals/cubie-a5e.git && ./cubie-a5e/tools/setup_workspace.sh`
+> * **Sync Kernel Across PCs**: `./cubie-a5e/tools/sync_kernel.sh [push|pull|rebuild|status]`
+> * See **[Quick Start Guide](#quick-start-multi-pc-setup--build)** for full details.
 
 ---
 
