@@ -6,10 +6,9 @@ application cores with low-power, deterministic auxiliary microcontrollers—hav
 become the standard architecture for modern embedded systems, robotics, and 
 industrial automation. Silicon like the **Allwinner T527 / A527** (featured on 
 the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster 
-alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFCX @ 200 MHz) and 
-a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz).
+alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFCX @ 200 MHz).
 
-Getting these co-processors online requires establishing reliable hardware 
+Getting this co-processor online requires establishing reliable hardware 
 lifecycle control, clock tree synchronization, and deterministic memory 
 placement before loading production firmware.
 
@@ -55,7 +54,7 @@ co-processor hardware memory nodes:
 ```bash
 # 1. Check for registered RemoteProc subsystem instances:
 ls -la /sys/class/remoteproc/
-# Expected output: remoteproc0 (and remoteproc1 if DSP is enabled)
+# Expected output: remoteproc0 (XuanTie E907 RISC-V)
 
 # 2. Inspect kernel dmesg for remoteproc driver probing:
 dmesg | grep -i -E "remoteproc|rproc|sunxi"
@@ -106,7 +105,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 
 * **Same Silicon Core**: The **T527** (industrial grade) and **A527** (commercial grade) share the exact same internal silicon die, bus topology, and MCU memory map as the **A523**.
 * **Kernel Codename (`sun55i`)**: In upstream Linux and U-Boot, this generation is codenamed **`sun55i`**. The board device tree (`sun55i-a527-cubie-a5e.dts`) includes the base `sun55i-a523.dtsi`, and the clock driver is `ccu-sun55i-a523-mcu.c`.
-* **Co-Processor Coexistence**: The T527 also houses a **Cadence Tensilica HiFi4 Audio DSP** (@ 600 MHz, `0x07100000`). Both co-processors cleanly share the hardware Message Box subsystem (`0x03003000`) without register collisions (DSP uses Port 1 Channels 4/5; RISC-V uses Port 2 Channels 8/9).
+* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)).
 * **Sibling Generation (`sun60i` / A733)**: The **Allwinner A733** (powering the **Radxa Cubie A7A**) belongs to the newer `sun60i` big.LITTLE generation (2x Cortex-A76 + 6x Cortex-A55). While its main peripheral space is relocated, its auxiliary MCU subsystem reuses a **XuanTie RISC-V core** (E902) executing out of SRAM A2 and adheres to the identical `remoteproc` driver model.
 
 ### 4.1 Board Hardware Comparison
@@ -114,7 +113,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 #### Radxa Cubie A5E (Allwinner T527 / A527, `sun55i`)
 * **Application Processor**: 8× ARM Cortex-A55 @ 1.8 GHz
 * **Auxiliary Real-Time Core**: XuanTie E907 (RV32IMAFCX @ 200 MHz, 32 GPRs, Hardware Single FPU)
-* **Audio DSP**: Cadence Tensilica HiFi4 Audio DSP (@ 600 MHz)
+* **Audio DSP**: Decoupled (Not managed by `sunxi_rproc.c`)
 * **Fast On-Chip Memory**: 512 KB Continuous SRAM (`0x3FFC0000`–`0x40040000`)
 * **Hardware Reset Vector**: `STA_ADD_REG` defaults to `0x3FFC0000`
 * **Hardware Mailbox**: 8-channel bi-directional MSGBOX (`0x03003000`)
@@ -169,7 +168,7 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
 * **MCU CCU Clocks & Resets**: Host `0x07102000` -> Core `0x07102000` (4 KB)
   * *Role*: Clock gates (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE).
 * **Hardware MSGBOX**: Host `0x03003000` -> Core `0x03003000` (4 KB)
-  * *Role*: 8-channel bi-directional doorbell FIFO. Port 2 (Ch 8/9) connects Host ARM & E907 RISC-V; Port 1 (Ch 4/5) connects Host ARM & HiFi4 DSP.
+  * *Role*: 8-channel bi-directional doorbell FIFO. Port 2 (Ch 8/9) connects Host ARM & E907 RISC-V.
 * **RemoteProc Trace Buffer (`trace0`)**: Host `0x07285A30`+ -> Core `0x3FFC5A30`+ (4 KB)
   * *Role*: RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`). Mapped inside SRAM Space 0 (`.trace_buffer`).
 * **Main AP Peripheral Space**: Host `0x02000000`+ -> Core `0x02000000`+
@@ -193,7 +192,6 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
 
   0x03003000 - 0x03003FFF [   4 KB ] -------------> 0x03003000 - 0x03003FFF (MSGBOX)
     (Port 2 Ch 8/9: Host <-> E907)                    (Port 2: RISC-V Local Mailbox)
-    (Port 1 Ch 4/5: Host <-> HiFi4 DSP)               (Port 1: DSP Local Mailbox)
 
   0x48000000 - 0x480FFFFF [   1 MB ] -------------> 0x48000000 - 0x480FFFFF (DDR DMA Pool)
     (Reserved VirtIO RPMsg Pool)                      (vrings & Streaming Payloads)
@@ -370,7 +368,7 @@ For XuanTie E907 firmware development on current T527 hardware, these four strat
 In this introductory article, we established:
 1. **Bill of Materials & Prerequisites**: Target hardware, dual UART serial diagnostics, and toolchain setup.
 2. **Why use the RISC-V co-processor**: Deterministic SRAM execution (bypassing DRAM refresh jitter), offloading Linux CPU cycles, executing 10–50 kHz hard real-time control loops, and maintaining fault isolation.
-3. **Silicon architecture & TRM mapping**: Navigating `sun55i-a523` naming, board differences between Cubie A5E and A7A, co-processor coexistence with the Cadence HiFi4 Audio DSP, and exact register locations in the *Allwinner T527 User Manual V0.92*.
+3. **Silicon architecture & TRM mapping**: Navigating `sun55i-a523` naming, board differences between Cubie A5E and A7A, architectural isolation of the RISC-V co-processor, and exact register locations in the *Allwinner T527 User Manual V0.92*.
 4. **Memory architecture & boot mechanics**: How Linux RemoteProc (`sunxi_rproc.c`) loads firmware into SRAM Space 0 (`0x3FFC0000`), programs `STA_ADD_REG` to boot directly from SRAM, initializes the single-precision FPU (`mstatus.FS = 0b11`), and manages the 16 KB aligned stack.
 5. **Debugging realities**: Dispelling the `0x07090000` DMI myth, comparing with TI AM62x / STM32MP1, and detailing the four practical debugging techniques available today.
 
