@@ -295,7 +295,7 @@ and boot through dedicated on-chip SRAM:
 
 When the core deasserts reset at `0x3FFC0000`, execution starts in `startup.S`:
 
-```assembly
+```asm
 .section .vectors, "ax"
 .global _vectors
 _vectors:
