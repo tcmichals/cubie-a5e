@@ -45,30 +45,31 @@ Here is why this stack is superior for robotics, aerospace, and high-performance
 |                    ALLWINNER T527 / A527 (CUBIE A5E) ARCHITECTURE                       |
 |                                                                                         |
 |  +-------------------------------------+   +-----------------------------------------+  |
-|  |             CPUX Cluster            |   |               Co-Processors             |  |
+|  |             CPUX Cluster            |   |               Co-Processor              |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | Cadence Tensilica HiFi4 Audio DSP |  |  |
-|  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
+|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
+|  |  | (Main Linux Kernel / OS)      |  |   |  | (RV32IMAFDCP + Double FPU + SIMD) |  |  |
+|  |  +-------------------------------+  |   |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
+|  |  | DynamIQ Shared Unit (DSU)     |  |   |  | Driver: Linux RemoteProc (remoteproc0)| |
+|  |  | L3 Cache: 512 KB              |  |   |  +-----------------------------------+  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
-|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
-|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
-|                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
-|  +-------------------------------------+   |  +-----------------------------------+  |  |
-|  |             NPU Engine              |   |  +-----------------------------------+  |  |
-|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
+|  +-------------------------------------+   |  | Hardware Message Box (Doorbell)   |  |  |
+|  |             NPU Engine              |   |  | Port 2: Linux Tx Ch 8 / Rx Ch 9   |  |  |
+|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  +-----------------------------------+  |  |
 |  +-------------------------------------+   +-----------------------------------------+  |
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 128 KB Shared PubSRAM C (0x00020000) [Default RemoteProc Boot & Runtime]        |  |
-|  |  - 256 KB Dedicated High SRAM (0x3ffc0000 Core / 0x07280000 Host) [Zero-Wait-State] |  |
-|  |  - 64 KB ITCM & 64 KB DTCM [Private Zero-Wait Core Memories, Stage-Loaded at Boot]  |  |
+|  |  - 256 KB Dedicated High SRAM Space 0 (0x3ffc0000 Core / 0x07280000 Host)         |  |
+|  |  - 256 KB On-Chip SRAM Space 1 (0x40000000 Core / 0x072c0000 Host) [REMAP_CTRL]   |  |
+|  |  - 64 KB ITCM & 64 KB DTCM [Private Zero-Wait Core Memories]                      |  |
 |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
 |  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
 |  +-----------------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 ```
+
+> **Note on DSP Archive**: Cadence Tensilica HiFi4 DSP experiments have been decoupled and archived at Git tag **`v2.1.0-dsp-archive`** (commit `5d97010`). This repository is dedicated to the upstream-ready XuanTie E907 / E906 RISC-V co-processor.
 
 
 ---

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Hardware Mailbox Driver Implementation for Allwinner T527 Co-Processors
- * Shared across XuanTie E907 (RISC-V) and Cadence Tensilica HiFi4 (DSP).
+ * Hardware Mailbox Driver Implementation for Allwinner T527 / A527 XuanTie E907 RISC-V Co-Processor.
  */
 
 #include "msgbox.h"

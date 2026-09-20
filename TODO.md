@@ -44,13 +44,11 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - Pure scalar memory access implemented for ARM64 `PROT_DEVICE_nGnRnE` mappings in `ping_uio.cpp` and `ping_uio.py` (`ctypes.Structure`), resolving hardware bus error (SIGBUS 135).
 - [x] **Automated RemoteProc Test Suite**: Complete test suite passing 100% across all profiles via `python3 /usr/bin/run_tests.py`.
 - [x] **Kernel Patch Validation Gate**: `tools/validate_kernel_patches.py` asserting clean dry-run and byte identity against `linux-7.1`.
-- [x] **Upstream RFC Patch Series (`patches-upstream-rfc/`)**: Complete 5-patch series + cover letter passing `checkpatch.pl` with 0 errors.
-- [x] **Cadence Tensilica HiFi4 Audio DSP Testing Framework (`dsp-hifi4/`)**:
-  - `apps/testBasic`: Remoteproc ELF parsing, execution startup, and `trace0` buffer output (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`).
-  - `apps/testMsgbox`: Bidirectional hardware mailbox validation over Channels 4 (ARM -> DSP) and 5 (DSP -> ARM).
-  - Memory carveout DTS overlays: 1MB `shared-dma-pool` at `0x40000000` (`coproc_shm`), 4MB firmware execution segment at `0x40100000` (`coproc_firmware`).
-  - Hardware mailbox driver isolation testing via `CONFIG_MAILBOX_TEST=m` and `cubie-a5e-mailbox-test.dtso`.
-  - Target validation script `tools/validate_coproc.sh` and `/usr/bin/run_tests.py` integration.
+- [x] **Cadence Tensilica HiFi4 Audio DSP Decoupling & Historical Archive**:
+  - Decoupled DSP from active remoteproc driver, device tree bindings, and runtime test suite to focus 100% on upstream-ready XuanTie E907 RISC-V co-processor (`remoteproc0`).
+  - Complete historical DSP firmware, overlays, and benchmarks permanently preserved at Git tag `v2.1.0-dsp-archive` (commit `5d97010`).
+  - Architectural decoupling rationale documented in `docs/architecture/dsp_decoupling_rationale.md`.
+  - Python test runner (`run_full_sweep.py`, `run_tests.py`) and documentation (`firmware/tests.md`, `README.md`) cleaned for 4 pure RISC-V profiles.
 
 
 ---

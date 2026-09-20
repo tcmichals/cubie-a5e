@@ -17,19 +17,18 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 |                                    ALLWINNER T527 (sun55i)                              |
 |                                                                                         |
 |  +-------------------------------------+   +-----------------------------------------+  |
-|  |             CPUX Cluster            |   |               Co-Processors             |  |
+|  |             CPUX Cluster            |   |               Co-Processor              |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | Cadence Tensilica HiFi4 Audio DSP |  |  |
-|  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
+|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | XuanTie E907 RISC-V Co-Processor  |  |  |
+|  |  | (Main Linux Kernel / OS)      |  |   |  | (RV32IMAFDCP + Double FPU + SIMD) |  |  |
+|  |  +-------------------------------+  |   |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
+|  |  | DynamIQ Shared Unit (DSU)     |  |   |  | Driver: Linux RemoteProc (remoteproc0)| |
+|  |  | L3 Cache: 512 KB              |  |   |  +-----------------------------------+  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
-|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E907 RISC-V Co-Processor  |  |  |
-|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
-|  |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
-|  |  +-------------------------------------+   |  +-----------------------------------+  |  |
-|  |  |             NPU Engine              |   |  +-----------------------------------+  |  |
-|  |  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
-|  |  +-------------------------------------+   |  +-----------------------------------------+  |
+|  +-------------------------------------+   |  | Hardware Message Box (Doorbell)   |  |  |
+|  |             NPU Engine              |   |  | Port 2: Linux Tx Ch 8 / Rx Ch 9   |  |  |
+|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  +-----------------------------------+  |  |
+|  +-------------------------------------+   +-----------------------------------------+  |
 |  |                                                                                         |
 |  |  +-----------------------------------------------------------------------------------+  |
 |  |  |                           Memory Hierarchy & Interconnect                         |  |
