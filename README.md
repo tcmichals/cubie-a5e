@@ -195,39 +195,46 @@ These configurations keep AI agents aligned on the OS/Application boundaries, cu
 
 ---
 
-## Quick Start (Build the OS)
+## Quick Start (Multi-PC Setup & Build)
 
-For complete build instructions and prerequisites, see [Buildroot System How-To](docs/buildroot/BuildRootHowTo.md).
+### 1. Automated Workspace Setup (New Machine)
+To set up this entire environment on any development PC (clones `cubie-a5e`, `linux-cubie`, and `buildroot`, and configures `local.mk` for both A5E and A7A):
 
-### 1. Clone Buildroot (if not already cloned)
 ```bash
-git clone https://github.com/buildroot/buildroot.git
+git clone git@github.com:tcmichals/cubie-a5e.git
+./cubie-a5e/tools/setup_workspace.sh
 ```
 
-### 2. Configure and Build for Your Target Board
+### 2. Multi-PC Development & Synchronization Helper
+Use [`tools/sync_kernel.sh`](tools/sync_kernel.sh) so you don't need to remember git commands across multiple machines:
 
-#### Option A: Radxa Cubie A5E (Allwinner A527 / T527 — SDIO Wi-Fi 6)
 ```bash
-mkdir -p bld
-PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a5e_defconfig
-PATH=$PWD/bld/bin:$PATH make -C bld
+# Check status across both cubie-a5e and linux-cubie:
+./cubie-a5e/tools/sync_kernel.sh status
+
+# Push your kernel commits to GitHub before switching PCs:
+./cubie-a5e/tools/sync_kernel.sh push
+
+# Pull latest kernel commits from GitHub & rebuild on another PC:
+./cubie-a5e/tools/sync_kernel.sh pull
+
+# Rebuild kernel incrementally in Buildroot (bld.a5e and bld.a7a):
+./cubie-a5e/tools/sync_kernel.sh rebuild
 ```
 
-#### Option B: Radxa Cubie A7A (Allwinner A733 — USB Wi-Fi 6)
-```bash
-mkdir -p bld
-PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e cubie_a7a_defconfig
-PATH=$PWD/bld/bin:$PATH make -C bld
-```
+### 3. Build Full System OS Images
 
-#### Option C: Yuzuki / Pine64 Avaota A1 (Allwinner T527 — Dual GbE)
-```bash
-mkdir -p bld
-PATH=$PWD/bld/bin:$PATH make -C buildroot O=$PWD/bld BR2_EXTERNAL=$PWD/project-cubie-a5e avaota_a1_defconfig
-PATH=$PWD/bld/bin:$PATH make -C bld
-```
+* **Radxa Cubie A5E (Allwinner A527 / T527 — SDIO Wi-Fi 6):**
+  ```bash
+  make -C bld.a5e
+  ```
+* **Radxa Cubie A7A (Allwinner A733 — USB Wi-Fi 6):**
+  ```bash
+  make -C bld.a7a
+  ```
 
-The resulting bootable image is generated at `bld/images/sdcard.img`.
+The resulting bootable images are generated at `bld.a5e/images/sdcard.img` and `bld.a7a/images/sdcard.img`.
+
 
 ---
 
