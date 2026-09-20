@@ -113,7 +113,7 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 #### Radxa Cubie A5E (Allwinner T527 / A527, `sun55i`)
 * **Application Processor**: 8× ARM Cortex-A55 @ 1.8 GHz
 * **Auxiliary Real-Time Core**: XuanTie E907 (RV32IMAFCX @ 200 MHz, 32 GPRs, Hardware Single FPU)
-* **Audio DSP**: Decoupled (Not managed by `sunxi_rproc.c`)
+* **Audio DSP**: Decoupled (Archived at tag `v2.1.0-dsp-archive`; see note below)
 * **Fast On-Chip Memory**: 512 KB Continuous SRAM (`0x3FFC0000`–`0x40040000`)
 * **Hardware Reset Vector**: `STA_ADD_REG` defaults to `0x3FFC0000`
 * **Hardware Mailbox**: 8-channel bi-directional MSGBOX (`0x03003000`)
@@ -127,6 +127,25 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 * **Hardware Reset Vector**: Hardwired Reset Vector @ `0x00040000`
 * **Hardware Mailbox**: 8-channel bi-directional MSGBOX (`0x03003000`)
 * **Linux Driver Framework**: `sunxi_rproc.c` (Linux RemoteProc)
+
+---
+
+### 4.2 Note on the Cadence HiFi4 DSP (Why It Is Decoupled from `sunxi_rproc.c`)
+
+While the Allwinner T527 physical die integrates a Cadence Tensilica HiFi4 Audio DSP (operating up to 600 MHz), our active Linux RemoteProc driver (`sunxi_rproc.c`) and firmware suite are **dedicated exclusively to the XuanTie E907 RISC-V co-processor**. 
+
+The DSP is deliberately decoupled due to three architectural reasons:
+
+1. **Subsystem Separation (Upstream Linux Kernel Standards)**:
+   In upstream Linux, `drivers/remoteproc/` maintainers mandate that general-purpose microcontroller cores (Cortex-M / RISC-V) and specialized digital signal processors (Tensilica / Hexagon / C66x) remain strictly separate drivers (e.g., `imx_rproc.c` vs `imx_dsp_rproc.c`, `ti_k3_r5_remoteproc.c` vs `ti_k3_dsp_remoteproc.c`). Merging both into a single `sunxi_rproc.c` violates upstream single-responsibility principles.
+
+2. **Toolchain Reproducibility & Open Source Ecosystem**:
+   The XuanTie E907 compiles out-of-the-box using the standard upstream GNU `riscv-none-elf-gcc` cross-compiler. Conversely, the Cadence HiFi4 DSP requires proprietary Tensilica Instruction Extension (TIE) processor overlays and proprietary Xtensa toolchains. Decoupling the DSP ensures our entire firmware and OS build process remains 100% reproducible with pure open-source toolchains.
+
+3. **Software Stack & Hardware Domain**:
+   The XuanTie E907 is designed for hard real-time flight control, sensor loops (SPI/I2C), and low-latency coroutine IPC (RPMsg / SPSC queues). The HiFi4 DSP is tailored for audio vector processing (echo cancellation, beamforming) and belongs in **Sound Open Firmware (SOF)** or Linux ALSA ASoC (`sound/soc/sof/`).
+
+> **Historical Archive**: All historical Cadence HiFi4 DSP bare-metal firmware, overlays, and mailbox tests are permanently preserved in Git at tag **[`v2.1.0-dsp-archive`](https://github.com/tcmichals/cubie-a5e/tree/v2.1.0-dsp-archive)** (commit `5d97010`) and documented in [`docs/architecture/dsp_decoupling_rationale.md`](../architecture/dsp_decoupling_rationale.md).
 
 ---
 
