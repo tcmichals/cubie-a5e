@@ -1,6 +1,7 @@
+From c7961450bec58b614376077b8e74aa61d8131909 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH RFC 3/5] dt-bindings: remoteproc: add allwinner sun55i rproc binding
+Subject: [PATCH] dt-bindings: remoteproc: add allwinner sun55i rproc binding
 
 Add Device Tree binding schema for the Allwinner XuanTie E906/E907
 RISC-V remote processor found on A523, A527, and T527 SoCs.
@@ -25,6 +26,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  1 file changed, 152 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
 
+diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+new file mode 100644
+index 000000000000..5d8b929f60b6
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
 @@ -0,0 +1,152 @@
@@ -180,5 +184,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +        mboxes = <&msgbox 0>, <&msgbox 1>;
 +        mbox-names = "rx", "tx";
 +        firmware-name = "testBasic.elf";
-+        status = "disabled";
-+    };
+-- 
+2.43.0
+

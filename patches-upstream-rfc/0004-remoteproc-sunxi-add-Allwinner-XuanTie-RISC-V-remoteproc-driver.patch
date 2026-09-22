@@ -1,14 +1,15 @@
+From 12de1979f6fefb58c0b574a504be6104f7cf61a3 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH RFC 4/5] remoteproc: sunxi: add allwinner riscv remoteproc driver
+Subject: [PATCH] remoteproc: sunxi: add allwinner riscv remoteproc driver
 
-Add remoteproc driver for the XuanTie E906/E907 RISC-V remote processors
+Add remoteproc driver for the XuanTie E906/E907 RISC-V remote processor
 found on Allwinner A523, A527, and T527 SoCs.
 
 The driver integrates with the Common Clock Framework (CCF) and Reset
 Framework to manage co-processor clocks (bus, core, sram) and resets
-(cfg, core, sram), programs the core boot vector (STA_ADD_REG), maps
-internal TCM and dedicated SRAM windows, and connects with hardware
+(cfg, core, sram), programs the core boot vector (STA_ADD_REG),
+maps internal TCM and dedicated SRAM windows, and connects with hardware
 mailboxes (CPUX_MSGBOX) for standard VirtIO RPMsg IPC.
 
 Cc: Bjorn Andersson <andersson@kernel.org>
@@ -22,13 +23,16 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 906 +++++++++++++++++++++++++++++++++++++++
- 3 files changed, 915 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 973 +++++++++++++++++++++++++++++++
+ 3 files changed, 982 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
 
+diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+index ee54436fea5a..a9ec49426f31 100644
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
-@@ -381,5 +381,13 @@ config XLNX_R5_REMOTEPROC
+@@ -380,6 +380,14 @@ config XLNX_R5_REMOTEPROC
+ 
  	  It's safe to say N if not interested in using RPU r5f cores.
  
 +config SUNXI_REMOTEPROC
@@ -42,17 +46,22 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
  endif # REMOTEPROC
  
  endmenu
+diff --git a/drivers/remoteproc/Makefile b/drivers/remoteproc/Makefile
+index 1c7598b8475d..d55862a92cd1 100644
 --- a/drivers/remoteproc/Makefile
 +++ b/drivers/remoteproc/Makefile
-@@ -40,3 +40,4 @@
+@@ -40,3 +40,4 @@ obj-$(CONFIG_TI_K3_DSP_REMOTEPROC)	+= ti_k3_dsp_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o ti_k3_common.o
  obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
+diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
+new file mode 100644
+index 000000000000..aac2c9b0b5a6
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,906 @@
-++// SPDX-License-Identifier: GPL-2.0-only
+@@ -0,0 +1,973 @@
++// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
 + *
@@ -151,6 +160,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct mbox_chan *tx_chan;
 +	struct mbox_chan *rx_chan;
 +	struct work_struct vq_work;
++	/*
++	 * Stable storage for the VirtIO queue ID sent to the mailbox.
++	 * mbox_send_message() is non-blocking (tx_block=false), so the
++	 * message pointer must outlive the kick() call frame.
++	 */
++	u32 kick_msg;
 +};
 +
 +static void sunxi_rproc_vq_work(struct work_struct *work)
@@ -355,13 +370,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (rproc->bootaddr > U32_MAX)
 +		return -EINVAL;
 +
-+	/* XuanTie RISC-V boot sequence */
-+	if (priv->cfg_va) {
-+		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
-+		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
-+	}
-+
-+	/* Release core reset to begin execution */
++	/*
++	 * Release reset before programming the boot vector.
++	 *
++	 * On a recovery path, stop() re-asserts rst_core/rst_cfg and
++	 * start() is called without prepare() running again. Writing
++	 * STA_ADD_REG while the CFG block's AXI interconnect is held in
++	 * reset causes a synchronous external abort (bus fault) on ARM64.
++	 * Deassert the reset first, then write the boot address register.
++	 */
 +	if (priv->rst_core) {
 +		ret = reset_control_deassert(priv->rst_core);
 +		if (ret) {
@@ -376,6 +393,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +		}
 +	}
 +
++	/* Program boot vector now that the CFG block bus is live */
++	if (priv->cfg_va) {
++		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
++		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
++	}
++
 +	return 0;
 +}
 +
@@ -383,15 +406,17 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +{
 +	struct sunxi_rproc *priv = rproc->priv;
 +
-+	cancel_work_sync(&priv->vq_work);
-+
 +	dev_info(priv->dev, "Halting %s core...\n",
 +		 priv->cfg ? priv->cfg->name : "remote");
 +
++	/* Assert reset first so the core stops generating mailbox interrupts */
 +	if (priv->rst_core)
 +		reset_control_assert(priv->rst_core);
 +	else if (priv->rst_cfg)
 +		reset_control_assert(priv->rst_cfg);
++
++	/* Now safe to drain any in-flight work — no more IRQs can requeue it */
++	cancel_work_sync(&priv->vq_work);
 +
 +	return 0;
 +}
@@ -404,7 +429,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (!priv->tx_chan)
 +		return;
 +
-+	ret = mbox_send_message(priv->tx_chan, (void *)&vqid);
++	/*
++	 * Store vqid in the struct before calling mbox_send_message().
++	 * The mailbox controller operates with tx_block=false, so
++	 * mbox_send_message() may queue the pointer and return before the
++	 * hardware has consumed the message. Passing &vqid (a local stack
++	 * variable) would be a stack use-after-free once kick() returns.
++	 */
++	priv->kick_msg = (u32)vqid;
++	ret = mbox_send_message(priv->tx_chan, &priv->kick_msg);
 +	if (ret < 0)
 +		dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
 +
@@ -418,21 +451,36 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	if (len == 0)
 +		return NULL;
 +
-+	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram") */
++	/*
++	 * Guard against integer overflow in all da+len comparisons below.
++	 * A crafted ELF with da near U64_MAX could wrap da+len to a small
++	 * value, bypassing upper-bound checks and mapping arbitrary kernel
++	 * memory. Reject any combination that would overflow.
++	 */
++	if (da > U64_MAX - len)
++		return NULL;
++
++	/*
++	 * 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram")
++	 *
++	 * Space 0 core-local DA aliases recognised by the XuanTie E907:
++	 *   0x3ff80000  (SRAM_SPACE0_DA, primary TRM alias)
++	 *   0x3ffc0000  (SRAM_SPACE0_DA_ALT, secondary alias)
++	 *   0x00020000  (PubSRAM-C alias, used by older E906 firmware)
++	 *   Host PA     (direct physical address as seen by the ARM host)
++	 *
++	 * NOTE: 0x40000000 (E907_SRAM_SPACE1_DA) is NOT a Space 0 alias.
++	 * It belongs exclusively to Space 1 (r_sram1) below. Mapping it
++	 * here would silently redirect Space 1 firmware accesses into the
++	 * wrong SRAM window.
++	 */
 +	if (priv->r_sram_va) {
-+		/* Host physical address view (e.g., 0x07280000, 0x07200000, 0x00020000) */
++		/* Host physical address view (e.g., 0x07280000, 0x07200000) */
 +		if (da >= priv->r_sram_phys &&
 +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
 +			if (is_iomem)
 +				*is_iomem = true;
 +			return priv->r_sram_va + (da - priv->r_sram_phys);
-+		}
-+		/* Core DA view: 0x40000000 */
-+		if (da >= 0x40000000 &&
-+		    (da + len) <= (0x40000000 + priv->r_sram_size)) {
-+			if (is_iomem)
-+				*is_iomem = true;
-+			return priv->r_sram_va + (da - 0x40000000);
 +		}
 +		/* High SRAM Space 0 fallback views (0x3ff80000 / 0x3ffc0000) */
 +		if (da >= 0x3ff80000 && (da + len) <= (0x3ff80000 + priv->r_sram_size)) {
@@ -893,6 +941,12 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	}
 +
 +skip_mbox:
++	/*
++	 * INIT_WORK must be called before any error path that jumps to
++	 * err_mbox_release, because cancel_work_sync() on an uninitialized
++	 * work_struct triggers a kernel BUG. Place it here — before the
++	 * mbox requests — so all error paths below are safe.
++	 */
 +	INIT_WORK(&priv->vq_work, sunxi_rproc_vq_work);
 +	platform_set_drvdata(pdev, rproc);
 +
@@ -908,9 +962,15 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +
 +err_mbox_release:
 +	cancel_work_sync(&priv->vq_work);
-+	if (priv->rx_chan)
++	/*
++	 * rx_chan may hold an ERR_PTR if mbox_request_channel_byname("rx")
++	 * failed with an error other than -EPROBE_DEFER (e.g. -ENODEV).
++	 * IS_ERR() guards against calling mbox_free_channel() with a
++	 * bad pointer, which would panic on the first dereference.
++	 */
++	if (priv->rx_chan && !IS_ERR(priv->rx_chan))
 +		mbox_free_channel(priv->rx_chan);
-+	if (priv->tx_chan)
++	if (priv->tx_chan && !IS_ERR(priv->tx_chan))
 +		mbox_free_channel(priv->tx_chan);
 +err_mem_release:
 +	if (priv->has_reserved_mem)
@@ -923,8 +983,21 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +	struct rproc *rproc = platform_get_drvdata(pdev);
 +	struct sunxi_rproc *priv = rproc->priv;
 +
-+	cancel_work_sync(&priv->vq_work);
++	/*
++	 * Teardown order matters for correctness:
++	 *
++	 * 1. rproc_del() stops the remote core, tears down VirtIO devices,
++	 *    and drains the vring — this stops new mailbox RX callbacks from
++	 *    being generated by the hardware.
++	 * 2. cancel_work_sync() waits for any already-queued vq_work to
++	 *    finish. Calling this before rproc_del() would leave a window
++	 *    where rproc_del()'s internal stop() re-asserts reset (generating
++	 *    no further IRQs) but a late RX interrupt re-queued the work
++	 *    after cancel_work_sync() returned, causing a use-after-free.
++	 * 3. Free mailbox channels only after the work is fully drained.
++	 */
 +	rproc_del(rproc);
++	cancel_work_sync(&priv->vq_work);
 +
 +	if (priv->rx_chan)
 +		mbox_free_channel(priv->rx_chan);
@@ -936,10 +1009,13 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +}
 +
 +static const struct of_device_id sunxi_rproc_of_match[] = {
++	/*
++	 * A523, A527, and T527 are the same silicon die (sun55i family);
++	 * use the A523 string as the canonical family representative.
++	 * The catch-all "allwinner,sunxi-rproc" string has been dropped
++	 * per upstream DT binding policy (SoC-specific strings only).
++	 */
 +	{ .compatible = "allwinner,sun55i-a523-rproc", .data = &sun55i_riscv_cfg },
-+	{ .compatible = "allwinner,sun55i-a527-rproc", .data = &sun55i_riscv_cfg },
-+	{ .compatible = "allwinner,sun55i-t527-rproc", .data = &sun55i_riscv_cfg },
-+	{ .compatible = "allwinner,sunxi-rproc", .data = &sun55i_riscv_cfg },
 +	{ /* sentinel */ }
 +};
 +MODULE_DEVICE_TABLE(of, sunxi_rproc_of_match);
@@ -958,3 +1034,6 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Allwinner XuanTie E906/E907 RISC-V Remoteproc Driver");
 +MODULE_LICENSE("GPL");
+-- 
+2.43.0
+

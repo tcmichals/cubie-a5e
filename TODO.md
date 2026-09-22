@@ -439,8 +439,167 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ### 5.2 Submit to Upstream
 
-- [ ] Submit RFC series to `linux-sunxi@lists.linux.dev` and `linux-remoteproc@vger.kernel.org` via `git send-email`.
+- [x] Submitted RFC v1 (7 patches) to `linux-sunxi@lists.linux.dev` @ 2026-09-22 03:47 UTC
+  - Thread: https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/T/#t
 
+---
+
+### 5.3 v2 Review Response — Sashiko AI + Reviewer Feedback
+
+> **Context**: RFC v1 received automated AI review from **Sashiko-bot** (replies within ~12 min of submission) and human review from **Chen-Yu Tsai (wens)** and **Krzysztof Kozlowski (krzk)**. All items below must be addressed in v2.
+>
+> - Sashiko full review links: https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com
+> - ChenYu reply: https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/
+
+---
+
+#### S1: `sunxi_rproc.c` — Critical Bug Fixes (PATCH 5/7)
+
+**[CRITICAL]** Integer overflow in `da_to_va()` — arbitrary kernel memory read/write
+
+> Sashiko: *"If a maliciously crafted ELF provides a very large `da` (close to U64_MAX), does `da + len` overflow and wrap around, bypassing the upper-limit check?"*
+
+- [ ] **S1.1**: Add integer overflow guard to **every** `da + len` comparison in [`sunxi_rproc_da_to_va()`](patches-upstream-rfc/0004-remoteproc-sunxi-add-Allwinner-XuanTie-RISC-V-remoteproc-driver.patch):
+  ```c
+  /* Add at top of da_to_va, after len == 0 check */
+  if (da > U64_MAX - len)
+      return NULL;
+  ```
+  Apply this single guard once before all the region checks — it covers all 10+ bounds checks in the function.
+
+---
+
+**[HIGH]** Incorrect bounds check intercepts Space 1 memory accesses
+
+> Sashiko: *"`0x40000000` is `E907_SRAM_SPACE1_DA` (Space 1), but the Space 0 `r_sram` block checks `da >= 0x40000000`, intercepting valid Space 1 accesses."*
+
+- [ ] **S1.2**: Remove the `0x40000000` DA alias from the `r_sram` (Space 0) block. Space 0 core-DA views are `0x3ff80000` and `0x3ffc0000` only. The `0x40000000` check belongs exclusively in the `r_sram1` (Space 1) block.
+  - Delete lines checking `da >= 0x40000000` inside the `if (priv->r_sram_va)` block
+  - Confirm the `r_sram1` block already handles `0x40000000` and `0x40040000` correctly
+
+---
+
+**[HIGH]** Redundant memory regions parsing creates conflicting WC and WB aliases
+
+> Sashiko: *"Both `sunxi_rproc_register_mem()` and `sunxi_rproc_parse_memory_regions()` independently parse `memory-region` phandles. Regions get mapped first with `ioremap_wc` (WC) then again with `devm_memremap(..., MEMREMAP_WB)` (WB). Simultaneous WC+WB aliases to the same physical address violate ARM64 constraints."*
+
+- [ ] **S1.3**: Audit the flow: `register_mem()` maps SRAM/DRAM/trace via named `reg` resources; `parse_memory_regions()` does the same via `memory-region` phandles.
+  - Add a `return`/`continue` immediately after the `trace` and `dram` branches in `parse_memory_regions()` to prevent fall-through to the `devm_ioremap_wc()` else branch
+  - Eliminate the double-mapping: if `register_mem()` already mapped a region, `parse_memory_regions()` must detect and skip it (use the `r_sram_va`/`r_sram1_va` overlap check that's already there as a template)
+  - Verify no WC+WB aliases exist at the same physical address post-fix
+
+---
+
+**[HIGH]** Panic on deferred rx mailbox probe — uninitialized `work_struct` + ERR_PTR deref
+
+> Sashiko: *"When `mbox_request_channel_byname('rx')` returns `-EPROBE_DEFER`, code jumps to `err_mbox_release` before `INIT_WORK()` is called. `cancel_work_sync()` on an uninitialized work triggers a BUG. Also, `priv->rx_chan` holds an `ERR_PTR` (non-NULL), so `mbox_free_channel(ERR_PTR)` panics."*
+
+- [ ] **S1.4**: Move `INIT_WORK(&priv->vq_work, sunxi_rproc_vq_work)` to **before** the mailbox request block (before the `skip_mbox:` label and the `tx_chan`/`rx_chan` calls)
+- [ ] **S1.5**: In `err_mbox_release`, change `if (priv->rx_chan)` to `if (priv->rx_chan && !IS_ERR(priv->rx_chan))` to guard against the ERR_PTR dereference
+
+---
+
+**[HIGH]** Bus fault during recovery — writing `STA_ADD_REG` while CFG block is under reset
+
+> Sashiko: *"On recovery, `start()` is called without `prepare()`. At that point `rst_cfg` is asserted. Writing to `STA_ADD_REG` while the CFG block's interconnect bus is in reset causes a synchronous external abort."*
+
+- [ ] **S1.6**: In `sunxi_rproc_start()`, move the `writel(bootaddr, cfg_va + E906_STA_ADD_REG)` to **after** `reset_control_deassert(rst_core)` (or `rst_cfg`). The register must only be written when the CFG block's bus is live.
+
+---
+
+**[HIGH]** UAF in workqueue — inverted `cancel_work_sync` / `rproc_del` teardown order
+
+> Sashiko: *"`cancel_work_sync()` is called before `rproc_del()`. `rproc_del()` can trigger `stop()` which may re-schedule `vq_work` via the rx mailbox callback. After `cancel_work_sync()` already ran, the work executes on freed `priv->rx_chan`."*
+
+- [ ] **S1.7**: Swap the order in `sunxi_rproc_remove()`:
+  ```c
+  /* Correct order: stop interrupt sources first, then drain work */
+  rproc_del(rproc);          /* stops core, tears down virtio, drains vring */
+  cancel_work_sync(&priv->vq_work);  /* now safe — no more IRQs can requeue */
+
+  if (priv->rx_chan)
+      mbox_free_channel(priv->rx_chan);
+  if (priv->tx_chan)
+      mbox_free_channel(priv->tx_chan);
+  ```
+
+---
+
+**[HIGH]** Stack use-after-free — passing local stack variable to async `mbox_send_message()`
+
+> Sashiko: *"Since `tx_block = false`, `mbox_send_message()` queues the pointer and returns immediately. The local `int vqid` is on the stack. When the mailbox's async ticker later reads this pointer, the stack frame is gone."*
+
+- [ ] **S1.8**: Change `kick()` to pass the message value, not a stack pointer. Options:
+  - Use a `static u32 vqid_msg` per-channel scratch buffer in `struct sunxi_rproc`, or
+  - Use `(void *)(uintptr_t)vqid` — the sun55i mailbox `send_data()` treats the pointer as a value (`*(u32 *)data`), so passing the integer directly as a pointer value works if the driver documents this convention
+  - Simplest correct fix: add `u32 kick_msg` to `struct sunxi_rproc` and use `priv->kick_msg = vqid; mbox_send_message(priv->tx_chan, &priv->kick_msg);`
+
+---
+
+#### S2: `sun55i-msgbox.c` — High Bug Fixes (PATCH 2/7)
+
+**[HIGH]** Leak of shared reset control on remove and probe error paths
+
+- [ ] **S2.1**: In `sun55i_msgbox_remove()`, call `reset_control_assert(mbox->reset)` before `clk_disable_unprepare()`. On probe error paths that reach `err_disable_clk`, also call `reset_control_assert(mbox->reset)` if it was already deasserted.
+
+**[HIGH]** Unhandled interrupt storm due to ignored `devm_request_irq` failure
+
+- [ ] **S2.2**: Change `dev_warn(dev, "failed to request irq %d: %d\n", irq, ret)` to propagate as a hard error (`goto err_disable_clk; return ret;`). A missing IRQ handler allows an unmasked interrupt to storm the CPU.
+
+**[HIGH]** Unclocked MMIO access panic — early clock disable on error path
+
+- [ ] **S2.3**: In the probe error path, the `Disable all read IRQs` MMIO writes at lines 707-710 happen **before** `err_disable_clk` but use the clock that was just disabled. Re-audit the probe unwind order to ensure MMIO writes to `regs[0]` only happen while the clock is enabled.
+
+**[HIGH]** Dropped interrupts — TOCTOU race in `READ_IRQ_STATUS` clear
+
+- [ ] **S2.4**: In `sun55i_msgbox_irq()`, the read-process-clear sequence has a TOCTOU window: a new message can arrive between `stat = readl(READ_IRQ_STATUS)` and `writel(RD_IRQ_PEND_BIT, READ_IRQ_STATUS)`. Use a write-1-to-clear approach: write only the specific pending bits, not a full re-read, and re-check `MSG_STATUS` after clearing to drain any late arrivals.
+
+---
+
+#### S3: `allwinner,sun55i-rproc.yaml` — Low Schema Fixes (PATCH 4/7)
+
+- [ ] **S3.1**: Fix missing closing brace in the device tree example (DT binding YAML truncated at `firmware-name = "testBasic.elf";` — missing `};`)
+- [ ] **S3.2**: Add `memory-region-names` schema constraints — enumerate allowed values (`vram`, `dram`, `trace`) with proper YAML `items: enum:` typing
+- [ ] **S3.3**: Add schema enforcement requiring at least one of `r_sram` or `r_sram1` in `reg-names`
+- [ ] **S3.4**: Remove `status: true` — unnecessary redeclaration (inherited from base schema)
+- [ ] **S3.5**: Remove unused `#include <dt-bindings/interrupt-controller/arm-gic.h>` from example (example doesn't use `GIC_SPI`)
+
+---
+
+#### S4: `sun55i-a523.dtsi` — Low DTS Fixes (PATCH 7/7)
+
+- [ ] **S4.1**: Fix DT-binding schema violation in `remoteproc` compatible property — use `allwinner,sun55i-a523-rproc` only (not `allwinner,sunxi-rproc` fallback; reviewers want SoC-specific strings)
+- [ ] **S4.2**: Fix `simple-bus` node sorting — `mailbox@3003000` should appear before `remoteproc@7130000` in address-sorted order in the `.dtsi`
+
+---
+
+#### S5: Human Reviewer Requests
+
+**Chen-Yu Tsai (wens)** — response to cover letter:
+
+- [ ] **S5.1**: Use a **single compatible string** for the SoC family. A523/A527/T527 are the same die — consolidate to `allwinner,sun55i-a523-rproc` and `allwinner,sun55i-a523-msgbox` only, unless confirmed hardware differences exist. Remove `a527-rproc`, `t527-rproc`, `sunxi-rproc` catch-all fallbacks.
+- [ ] **S5.2**: CC **all parties on all patches** in the respin. Do not split to different lists per-patch — everyone gets the full 7-patch series. Correct CC list: `linux-sunxi`, `linux-remoteproc`, `linux-arm-kernel`, `devicetree`, `linux-mailbox`, plus Bjorn Andersson, Mathieu Poirier, Jassi Brar, Rob Herring, Krzysztof Kozlowski, Jernej Skrabec, Samuel Holland, Chen-Yu Tsai.
+
+**Krzysztof Kozlowski (krzk)** — on PATCH 1/7 (`allwinner,sun55i-a523-msgbox.yaml`):
+
+- [ ] **S5.3**: Address Krzysztof's DT binding schema review comments (view full reply at: https://lore.kernel.org/linux-sunxi/c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org/)
+
+---
+
+#### S6: v2 Release Checklist
+
+- [ ] **S6.1**: Apply all S1.1–S1.8 fixes to `patches-upstream-rfc/0004-remoteproc-sunxi-...patch` and corresponding `project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-...patch`
+- [ ] **S6.2**: Apply all S2.1–S2.4 fixes to `patches-upstream-rfc/0002-mailbox-sun55i-...patch` and corresponding buildroot patch
+- [ ] **S6.3**: Apply S3.1–S3.5 to `patches-upstream-rfc/0003-dt-bindings-remoteproc-...patch`
+- [ ] **S6.4**: Apply S4.1–S4.2 to `patches-upstream-rfc/0005-arm64-dts-allwinner-...patch`
+- [ ] **S6.5**: Apply S5.1 (single compatible string) across all affected patches (DT bindings, driver `of_match`, DTS)
+- [ ] **S6.6**: Run `checkpatch.pl --strict` — 0 errors, 0 warnings
+- [ ] **S6.7**: Run `make dt_binding_check` — 0 errors for both YAML schemas
+- [ ] **S6.8**: Run `make dtbs_check` on `sun55i-a523.dtsi` — 0 errors
+- [ ] **S6.9**: Boot v2 on target hardware — verify all 3 profiles still pass 100%
+- [ ] **S6.10**: Rerun 19-test KUnit suite (sunxi_rproc) + 18-test KUnit suite (sun55i_msgbox) at boot — all PASS
+- [ ] **S6.11**: Update cover letter: reference v1 thread, summarize all changes made
+- [ ] **S6.12**: Send v2 with correct full CC list via `git send-email`
 
 ---
 

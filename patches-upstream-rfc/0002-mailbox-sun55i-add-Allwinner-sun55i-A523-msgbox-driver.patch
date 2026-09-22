@@ -1,6 +1,8 @@
+From 847b7320797267336a41059a71364674f9021c74 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 21 Aug 2026 12:00:00 +0000
-Subject: [PATCH RFC 2/5] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
+Subject: [PATCH] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message
+ Box driver
 
 Add support for the 4-port hardware Message Box present on Allwinner
 A523/A527/T527 (sun55i) and A733 (sun60i) SoCs. This hardware block
@@ -15,20 +17,20 @@ Cc: linux-sunxi@lists.linux.dev
 Cc: linux-arm-kernel@lists.infradead.org
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- drivers/mailbox/Kconfig         |  10 ++
+ drivers/mailbox/Kconfig         |  10 +
  drivers/mailbox/Makefile        |   2 +
- drivers/mailbox/sun55i-msgbox.c | 336 ++++++++++++++++++++++++++++++++++++++++
+ drivers/mailbox/sun55i-msgbox.c | 336 ++++++++++++++++++++++++++++++++
  3 files changed, 348 insertions(+)
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
 
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
-index 1234567..89abcdef 100644
+index 5bf4155b090a..7fd89eee596c 100644
 --- a/drivers/mailbox/Kconfig
 +++ b/drivers/mailbox/Kconfig
 @@ -332,6 +332,16 @@ config SUN6I_MSGBOX
  	  various Allwinner SoCs. This mailbox is used for communication
  	  between the application CPUs and the power management coprocessor.
-
+ 
 +config SUN55I_MSGBOX
 +	tristate "Allwinner sun55i/sun60i 4-port Message Box"
 +	depends on ARCH_SUNXI || COMPILE_TEST
@@ -43,21 +45,21 @@ index 1234567..89abcdef 100644
  	tristate "Spreadtrum Mailbox"
  	depends on ARCH_SPRD || COMPILE_TEST
 diff --git a/drivers/mailbox/Makefile b/drivers/mailbox/Makefile
-index 1234567..89abcdef 100644
+index 944d8ea39f34..a741f3ea7898 100644
 --- a/drivers/mailbox/Makefile
 +++ b/drivers/mailbox/Makefile
 @@ -71,6 +71,8 @@ obj-$(CONFIG_ZYNQMP_IPI_MBOX)	+= zynqmp-ipi-mailbox.o
-
+ 
  obj-$(CONFIG_SUN6I_MSGBOX)	+= sun6i-msgbox.o
-
+ 
 +obj-$(CONFIG_SUN55I_MSGBOX)	+= sun55i-msgbox.o
 +
  obj-$(CONFIG_SPRD_MBOX)		+= sprd-mailbox.o
-
+ 
  obj-$(CONFIG_QCOM_CPUCP_MBOX)	+= qcom-cpucp-mbox.o
 diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
 new file mode 100644
-index 0000000..1234567
+index 000000000000..5df5c3f425f6
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.c
 @@ -0,0 +1,336 @@
@@ -397,6 +399,6 @@ index 0000000..1234567
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Allwinner sun55i/sun60i 4-Port Message Box Driver");
 +MODULE_LICENSE("GPL");
-
---
+-- 
 2.43.0
+
