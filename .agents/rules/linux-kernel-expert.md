@@ -127,3 +127,25 @@ These are upstream DT binding maintainer style requirements — no automated too
 - **Never redeclare `status: true`** — it is inherited from the base schema.
 - **Commit subjects for DT bindings**: `dt-bindings: subsystem: add foo bar` — do NOT add the word "binding" at the end; the `dt-bindings:` prefix already states that.
 - **CC entries from `get_maintainer.pl`** go BELOW the `---` separator in the commit message, never in the body above `Signed-off-by:`.
+
+---
+
+## 11. Git Workflow — Always Pull Before Editing linux-cubie
+
+**Rule: `git pull --rebase` before touching any file in `linux-cubie`.**
+
+`linux-cubie` is a shared working kernel tree. Editing files without pulling first
+causes the exact problem we hit on 2026-09-22: a local rebase produced a history
+that diverged from commits already pushed to the remote, making `--force-with-lease`
+fail and requiring a manual recovery.
+
+```bash
+# ALWAYS do this first — before any edit, git add, or git commit in linux-cubie:
+cd /home/tcmichals/ssdData/projects/home/CubieA5E/linux-cubie
+git pull --rebase origin cubie-linux-7.1
+```
+
+- Use `--rebase` (not merge) to keep the commit history linear.
+- If `git pull --rebase` reveals conflicts, resolve them before proceeding.
+- Never run `git rebase -i` on commits that have already been pushed to the
+  remote without first confirming no one else has pushed on top of them.
