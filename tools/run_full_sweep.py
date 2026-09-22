@@ -202,6 +202,28 @@ def parse_target_json_report():
             pass
     return None
 
+def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
+    """Inspect dmesg for kernel errors, oopses, panics, or call traces."""
+    if allowed_patterns is None:
+        allowed_patterns = []
+
+    c, out, _ = run_ssh("dmesg -l err,crit,alert,emerg 2>/dev/null || dmesg | grep -iE 'call trace|kernel panic|oops|bug:|cut here' | tail -n 30", timeout=10)
+    if c == 0 and out.strip():
+        lines = [line.strip() for line in out.strip().splitlines() if line.strip()]
+        filtered = []
+        for line in lines:
+            if any(pattern in line for pattern in allowed_patterns):
+                continue
+            if re.search(r'(?:call trace|kernel panic|oops|bug:|cut here|null pointer dereference|remoteproc.*failed)', line, re.IGNORECASE):
+                filtered.append(line)
+
+        if filtered:
+            print(f"  \033[91m[DMESG ERROR DETECTED in {stage_name}]\033[0m")
+            for err in filtered[:5]:
+                print(f"    \033[91m>> {err}\033[0m")
+            return False, "\n".join(filtered[:3])
+    return True, "Clean"
+
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
@@ -309,6 +331,10 @@ def main():
     print(out)
     results.append(("Profile 1", "Python monitor_trace.py", "PASS" if c == 0 else "FAIL"))
 
+    # 1.6 Kernel dmesg health check
+    dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 1", allowed_patterns=["testCrash"])
+    results.append(("Profile 1", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
+
     # -------------------------------------------------------------------------
     # PROFILE 2
     # -------------------------------------------------------------------------
@@ -341,6 +367,10 @@ def main():
     p2_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'Successful Replies\s*:\s*1000|1000', clean_out)))
     results.append(("Profile 2", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p2_py_pass else "FAIL"))
 
+    # 2.4 Kernel dmesg health check
+    dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 2")
+    results.append(("Profile 2", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
+
     # -------------------------------------------------------------------------
     # PROFILE 3
     # -------------------------------------------------------------------------
@@ -372,6 +402,10 @@ def main():
     clean_out = strip_ansi(out)
     p3_uio_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
     results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", "PASS" if p3_uio_py_pass else "FAIL"))
+
+    # 3.4 Kernel dmesg health check
+    dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 3")
+    results.append(("Profile 3", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
 
     # -------------------------------------------------------------------------
     # RESTORE DEFAULT PROFILE 1
