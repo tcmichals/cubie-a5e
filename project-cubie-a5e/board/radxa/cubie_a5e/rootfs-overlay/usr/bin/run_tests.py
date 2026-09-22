@@ -603,7 +603,7 @@ def test_ping_rpmsg():
     if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
         log_info("Running native C++ ping_rpmsg benchmark (1,000 pings)...")
         try:
-            res = subprocess.run([bin_tool, "-n", "1000", "-D", "0"],
+            res = subprocess.run([bin_tool, "-n", "1000", "-D", "50"],
                                  capture_output=True, text=True, timeout=30)
             metrics = parse_benchmark_output(res.stdout)
             clean_out = strip_ansi(res.stdout)

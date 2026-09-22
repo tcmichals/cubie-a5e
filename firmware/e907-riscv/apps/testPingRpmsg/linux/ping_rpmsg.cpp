@@ -203,8 +203,21 @@ int main(int argc, char *argv[]) {
             memset(tx_buf.data() + 16 + copy_len, 'X', text_max - copy_len);
         }
 
-        // Send RPMsg Ping
-        ssize_t bytes_written = write(fd, tx_buf.data(), payload_size);
+        // Send RPMsg Ping (with retry on temporary buffer exhaustion)
+        ssize_t bytes_written = -1;
+        int write_retries = 0;
+        while (write_retries < 200) {
+            bytes_written = write(fd, tx_buf.data(), payload_size);
+            if (bytes_written >= 0) {
+                break;
+            }
+            if (errno == EAGAIN || errno == ENOMEM || errno == ENOBUFS || errno == EINTR) {
+                usleep(50);
+                write_retries++;
+                continue;
+            }
+            break;
+        }
         if (bytes_written < 0) {
             std::cerr << "[ERROR] write() failed on seq=" << seq << ": " << strerror(errno) << "\n";
             break;

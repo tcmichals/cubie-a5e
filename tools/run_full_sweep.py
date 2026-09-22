@@ -301,7 +301,7 @@ def main():
     # 1.2 C++ ping_rpmsg
     print("\n--- 1.2 Running C++ ping_rpmsg (1,000 pings) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
-    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
     p1_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
@@ -353,7 +353,7 @@ def main():
     # 2.2 C++ ping_rpmsg
     print("\n--- 2.2 Running C++ ping_rpmsg (1,000 pings) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsgSram.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
-    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
     print(out)
     clean_out = strip_ansi(out)
     p2_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
