@@ -47,6 +47,7 @@
 };
 
 &{/aliases} {
+    ethernet0 = "/soc/ethernet@4500000";
     serial0 = "/soc/serial@2500000";
     serial2 = "/soc/serial@2500800";
 };

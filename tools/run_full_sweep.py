@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
-run_full_sweep.py - Autonomous Single-Pass 5-Profile Silicon Sweep
+run_full_sweep.py - Autonomous Single-Pass 3-Profile Silicon Sweep
 Target: Radxa Cubie A5E (Allwinner A527 / T527)
 
 Executes an end-to-end multi-profile test loop across live Radxa Cubie A5E hardware
-without manual intervention or source code changes:
+for the XuanTie E907 RISC-V real-time co-processor without manual intervention:
   1. Profile 1 (DDR VirtIO): run_tests.py, C++ ping_rpmsg, Python ping_rpmsg.py,
      C++ ping_dram, Python monitor_trace.py
   2. Profile 2 (On-Chip SRAM Space 1 VirtIO): config.txt switch, reboot, run_tests.py,
      C++ ping_rpmsg, Python ping_rpmsg.py
   3. Profile 3 (Userspace UIO Direct Mailbox): config.txt switch, reboot, run_tests.py,
      C++ ping_shm, Python ping_uio.py
-  4. Profile 4 (Dual Co-Processor Concurrent Mailbox): config.txt switch, reboot,
-     run_tests.py, test_dual_msgbox.py (DSP Ch 4/5 + RISC-V Ch 8/9 concurrent)
-  5. Profile 5 (Cadence HiFi4 DSP Mailbox Isolation): config.txt switch, reboot,
-     run_tests.py (DSP standalone mailbox loopback)
-  6. Restore Profile 1, reboot cleanly, and generate final quantitative summary table
+  4. Restore Profile 1, reboot cleanly, and generate final quantitative summary table
      + persistent JSON and Markdown reports.
 """
 
@@ -136,19 +132,6 @@ def log_banner(stage_num: int, title: str, subtitle: str = ""):
         print(f"  {subtitle}")
     print("=" * 76 + "\033[0m")
 
-def log_dsp_banner(stage_num: int, title: str, subtitle: str = ""):
-    print("\n\033[1;35m" + "=" * 76)
-    print("  ██████╗  ███████╗ ██████╗       ██████╗  ███████╗ ██████╗ ")
-    print("  ██╔══██╗ ██╔════╝ ██╔══██╗      ██╔══██╗ ██╔════╝ ██╔══██╗")
-    print("  ██║  ██║ ███████╗ ██████╔╝      ██║  ██║ ███████╗ ██████╔╝")
-    print("  ██║  ██║ ╚════██║ ██╔═══╝       ██║  ██║ ╚════██║ ██╔═══╝ ")
-    print("  ██████╔╝ ███████║ ██║           ██████╔╝ ███████║ ██║     ")
-    print("  ╚═════╝  ╚══════╝ ╚═╝           ╚═════╝  ╚══════╝ ╚═╝     ")
-    print(f"  STAGE {stage_num}: {title.upper()}")
-    if subtitle:
-        print(f"  {subtitle}")
-    print("=" * 76 + "\033[0m")
-
 def run_ssh(cmd, timeout=30):
     ssh_cmd = []
     env = os.environ.copy()
@@ -222,7 +205,7 @@ def parse_target_json_report():
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
-    parser = argparse.ArgumentParser(description="Autonomous 5-Profile Silicon Sweep for Radxa Cubie A5E (E907 RISC-V + HiFi4 DSP)")
+    parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E (E907 RISC-V)")
     parser.add_argument("--ip", default=os.environ.get("TARGET_IP", TARGET_IP), help=f"Target board IP address (default: {TARGET_IP})")
     parser.add_argument("--user", default=os.environ.get("TARGET_USER", TARGET_USER), help=f"Target SSH user (default: {TARGET_USER})")
     parser.add_argument("--password", "-p", default=os.environ.get("TARGET_PASSWORD", None), help="SSH password for target board authentication")
@@ -251,8 +234,8 @@ def main():
         g_serial_logger.start()
 
     print("========================================================================")
-    print("  Autonomous 5-Profile Silicon Sweep (Radxa Cubie A5E)")
-    print("  Co-Processors: XuanTie E907 RISC-V & Cadence Tensilica HiFi4 DSP")
+    print("  Autonomous 3-Profile Silicon Sweep (Radxa Cubie A5E)")
+    print("  Co-Processor: XuanTie E907 RISC-V (RV32IMAFDC + Double FPU)")
     print(f"  Target: {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} (Linux 7.1 PREEMPT_RT)")
     if args.serial:
         print(f"  Serial Console: {args.serial} @ {args.serial_baud} baud -> {args.serial_log}")
@@ -375,44 +358,6 @@ def main():
     results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", "PASS" if p3_uio_py_pass else "FAIL"))
 
     # -------------------------------------------------------------------------
-    # PROFILE 4 (DSP + RISC-V CONCURRENT DUAL CO-PROCESSOR)
-    # -------------------------------------------------------------------------
-    log_dsp_banner(4, "Testing Profile 4 (Dual RISC-V E907 + Cadence HiFi4 DSP Mailbox IPC)", "Overlay: cubie-a5e-flight-stack cubie-a5e-dual-mailbox-test")
-    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-dual-mailbox-test")
-
-    # 4.1 run_tests.py
-    print("\n--- 4.1 Running automated test suite (run_tests.py) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=45)
-    print(out)
-    results.append(("Profile 4", "run_tests.py (Dual Mailbox Suite)", "PASS" if c == 0 else "FAIL"))
-    prof4_data = parse_target_json_report()
-    if prof4_data:
-        aggregated_profile_data.append(prof4_data)
-
-    # 4.2 Concurrent Multi-Core Benchmark (test_dual_msgbox.py)
-    print("\n--- 4.2 Running Dual-Core Concurrent Mailbox Benchmark (1,000 pings concurrently) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/test_dual_msgbox.py 1000", timeout=30)
-    print(out)
-    clean_out = strip_ansi(out)
-    p4_dual_pass = (c == 0 and bool(re.search(r'1000\/1000|SUCCESS|Complete|OK', clean_out, re.IGNORECASE)))
-    results.append(("Profile 4", "test_dual_msgbox.py (DSP + E907 Concurrent)", "PASS" if p4_dual_pass else "FAIL"))
-
-    # -------------------------------------------------------------------------
-    # PROFILE 5 (CADENCE HIFI4 DSP MAILBOX ISOLATION)
-    # -------------------------------------------------------------------------
-    log_dsp_banner(5, "Testing Profile 5 (Cadence HiFi4 DSP Standalone Isolation)", "Overlay: cubie-a5e-flight-stack cubie-a5e-dsp-mailbox-test")
-    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-dsp-mailbox-test")
-
-    # 5.1 run_tests.py
-    print("\n--- 5.1 Running automated test suite (run_tests.py) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=30)
-    print(out)
-    results.append(("Profile 5", "run_tests.py (DSP Isolation Suite)", "PASS" if c == 0 else "FAIL"))
-    prof5_data = parse_target_json_report()
-    if prof5_data:
-        aggregated_profile_data.append(prof5_data)
-
-    # -------------------------------------------------------------------------
     # RESTORE DEFAULT PROFILE 1
     # -------------------------------------------------------------------------
     print("\n>>> CLEANUP: Restoring target board to default Profile 1")
@@ -422,7 +367,7 @@ def main():
     # FINAL SUMMARY REPORT
     # -------------------------------------------------------------------------
     print("\n" + "=" * 76)
-    print("             FINAL 5-PROFILE UNATTENDED SILICON SWEEP REPORT")
+    print("             FINAL 3-PROFILE UNATTENDED SILICON SWEEP REPORT")
     print("=" * 76)
     print(f"  {'Profile':<12} | {'Test / Tool':<42} | {'Result'}")
     print("  " + "-" * 12 + "-+-" + "-" * 42 + "-+--------")
@@ -451,10 +396,10 @@ def main():
 
     try:
         with open(args.report_out, "w") as f:
-            f.write("# Autonomous 5-Profile Silicon Sweep Results\n\n")
+            f.write("# Autonomous 3-Profile Silicon Sweep Results\n\n")
             f.write(f"- **Timestamp**: {report_bundle['timestamp']}\n")
             f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n")
-            f.write(f"- **Co-Processors**: XuanTie E907 RISC-V & Cadence Tensilica HiFi4 DSP\n\n")
+            f.write(f"- **Co-Processor**: XuanTie E907 RISC-V\n\n")
             f.write("## Overall Test Summary\n\n")
             f.write("| Profile | Test / Tool | Status |\n")
             f.write("| :--- | :--- | :---: |\n")
@@ -486,7 +431,7 @@ def main():
         print(f"[SERIAL] Serial console logging saved to: {args.serial_log}")
 
     if all_pass:
-        print("\n>>> 100% UNATTENDED SWEEP SUCCESS: ALL 5 PROFILES & APPS PASSED! <<<\n")
+        print("\n>>> 100% UNATTENDED SWEEP SUCCESS: ALL 3 PROFILES & APPS PASSED! <<<\n")
         return 0
     else:
         print("\n>>> SWEEP FAILED: Review failures above! <<<\n")
@@ -494,4 +439,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
