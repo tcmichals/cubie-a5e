@@ -1,0 +1,42 @@
+#!/bin/sh
+#
+# Start network interfaces with deterministic GMAC mapping
+#
+
+mkdir -p /run/network
+
+case "$1" in
+  start)
+	printf "Starting network: "
+	# Deterministically enforce GMAC0 (4500000) -> eth0 and GMAC1 (4510000) -> eth1
+	if [ -d /sys/devices/platform/soc/4510000.ethernet/net/eth0 ] && \
+	   [ -d /sys/devices/platform/soc/4500000.ethernet/net/eth1 ]; then
+		ip link set dev eth0 down 2>/dev/null
+		ip link set dev eth1 down 2>/dev/null
+		ip link set dev eth0 name tmp_eth0
+		ip link set dev eth1 name eth0
+		ip link set dev tmp_eth0 name eth1
+	fi
+
+	/sbin/ifup -a 2>/dev/null
+	ifconfig eth0 192.168.3.3 up
+	ifconfig eth1 up 2>/dev/null
+	echo "OK"
+	;;
+  stop)
+	printf "Stopping network: "
+	ifconfig eth0 down 2>/dev/null
+	ifconfig eth1 down 2>/dev/null
+	/sbin/ifdown -a 2>/dev/null
+	echo "OK"
+	;;
+  restart|reload)
+	"$0" stop
+	"$0" start
+	;;
+  *)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+esac
+
+exit 0
