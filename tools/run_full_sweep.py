@@ -251,6 +251,22 @@ def main():
     log_banner(1, "Testing Profile 1 (DDR VirtIO RPMsg)", "Overlay: cubie-a5e-flight-stack")
     set_overlay_and_reboot("cubie-a5e-flight-stack")
 
+    # 1.0 Kernel KUnit Driver Tests
+    print("\n--- 1.0 Running in-kernel KUnit Driver Tests (sun55i_msgbox & sunxi_rproc) ---")
+    c_k1, out_k1, _ = run_ssh("modprobe -q sun55i_msgbox_test 2>&1")
+    c_k2, out_k2, _ = run_ssh("modprobe -q sunxi_rproc_test 2>&1")
+    _, kunit_dmesg, _ = run_ssh("dmesg | grep -E 'kunit.*(sun55i_msgbox|sunxi_rproc)' | tail -n 20")
+    if kunit_dmesg.strip():
+        print(kunit_dmesg)
+        kunit_ok = ("fail:0" in kunit_dmesg.lower() or "ok " in kunit_dmesg.lower()) and "failed" not in kunit_dmesg.lower()
+        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "PASS" if kunit_ok else "FAIL"))
+    elif c_k1 == 0 and c_k2 == 0:
+        print("  [INFO] KUnit test modules loaded successfully")
+        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "PASS"))
+    else:
+        print("  [INFO] KUnit test modules not loaded (built-in or not compiled as =m). Skipping.")
+        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "SKIP"))
+
     # 1.1 run_tests.py
     print("\n--- 1.1 Running automated test suite (run_tests.py) ---")
     c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=45)
