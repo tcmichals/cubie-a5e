@@ -1504,7 +1504,7 @@ index 984870b49db1..10b4966a9bfb 100644
 +MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sun55i Message Box driver");
  MODULE_LICENSE("GPL");
 diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
-index 5fa8085470a5..e11d71e8d134 100644
+index 5fa8085470a5..f098641ed909 100644
 --- a/drivers/remoteproc/sunxi_rproc.c
 +++ b/drivers/remoteproc/sunxi_rproc.c
 @@ -23,87 +23,35 @@
@@ -1756,7 +1756,7 @@ index 5fa8085470a5..e11d71e8d134 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  	int ret;
-@@ -383,9 +367,36 @@ static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
+@@ -383,102 +367,101 @@ static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
  	mbox_client_txdone(priv->tx_chan, 0);
  }
  
@@ -1770,6 +1770,9 @@ index 5fa8085470a5..e11d71e8d134 100644
 +{
 +	const struct sunxi_rproc_cfg *cfg = priv->cfg ? priv->cfg : &sun55i_riscv_cfg;
 +	size_t i;
++
++	if (len == 0 || da > U64_MAX - len)
++		return -EINVAL;
 +
 +	if (cfg->att) {
 +		for (i = 0; i < cfg->att_size; i++) {
@@ -1790,11 +1793,22 @@ index 5fa8085470a5..e11d71e8d134 100644
 +void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
  {
  	struct sunxi_rproc *priv = rproc->priv;
+-
+-	if (len == 0)
+-		return NULL;
 +	u64 sys;
  
- 	if (len == 0)
- 		return NULL;
-@@ -400,85 +411,57 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool
+ 	/*
+-	 * Reject any da+len combination that overflows u64. A crafted ELF
+-	 * with da near U64_MAX could wrap da+len to a small value, bypassing
+-	 * every upper-bound check below and allowing arbitrary kernel memory
++	 * Reject zero length and any da+len combination that overflows u64.
++	 * A crafted ELF with da near U64_MAX could wrap da+len to a small value,
++	 * bypassing upper-bound checks and allowing arbitrary kernel memory
+ 	 * to be mapped during firmware loading.
+ 	 */
+-	if (da > U64_MAX - len)
++	if (len == 0 || da > U64_MAX - len)
  		return NULL;
  
  	/*
