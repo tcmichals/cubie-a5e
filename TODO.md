@@ -574,6 +574,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - `sun55i_msgbox_test.c`: Expanded to **32 test cases (811 lines)**, covering CPUS/DSP/RV 12-channel routing, FIFO drain bounds (`FIFO_MAX = 8`), backpressure thresholds, multi-port interleaving, and spurious IRQ rejection.
   - **Total Coverage**: **67 test cases across 1,494 lines of test code** (>2.3:1 test-to-driver code ratio).
 - [x] **Verification**: Ran `checkpatch.pl --strict` across all 6 drivers, tests, and headers: **0 errors, 0 warnings, 0 checks**.
+- [x] **Static Analysis (Category 3 - Sparse)**: Compiled and executed Sparse static analyzer (`C=2`) with Buildroot ARM64 toolchain across `sunxi_rproc.c` and `sun55i-msgbox.c`. Added standard upstream `(__force void *)` casts for I/O memory conversions matching mainline `imx_rproc.c` and `ti_k3_common.c`. Result: **0 errors, 0 warnings across both drivers**.
 - [x] **Build & Packaging**: Built with Buildroot (`make -C bld.a5e linux-rebuild` and `make -C bld.a5e`). Both test suites compiled directly into target ARM64 kernel (`Image`) with `CONFIG_KUNIT_AUTORUN_ENABLED=y`. Fresh `sdcard.img` (580 MB) packaged and ready for deployment.
 - [x] **Code & Audit Status**: **ALL DRIVER ISSUES AND CODE AUDITS ARE COMPLETE (100% DONE).**
 
