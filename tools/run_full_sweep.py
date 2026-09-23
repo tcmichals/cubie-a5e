@@ -224,6 +224,137 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
             return False, "\n".join(filtered[:3])
     return True, "Clean"
 
+def validate_kunit_tests():
+    """
+    Query, validate, and report in-kernel KUnit driver test suites on target hardware.
+    Tests verified:
+      - sunxi_rproc (35 tests): SRAM boundaries, DRAM carveouts, arithmetic overflow guards,
+                                corrupted ELF segments, and malformed resource tables.
+      - sun55i_msgbox (32 tests): CPUS/DSP/RV 12-channel routing, FIFO drain limits (FIFO_MAX),
+                                  backpressure thresholds, multi-port interleaving, spurious IRQs.
+    Total: 67 in-kernel tests.
+    """
+    print("\n" + "=" * 76)
+    print("        1.0 IN-KERNEL KUNIT DRIVER TEST VALIDATION (67 TESTS)")
+    print("=" * 76)
+
+    # Ensure debugfs is mounted on target
+    run_ssh("mount -t debugfs none /sys/kernel/debug 2>/dev/null")
+
+    suites_info = {
+        "sunxi_rproc": {
+            "title": "sunxi_rproc (Remoteproc Driver)",
+            "expected_count": 35,
+        },
+        "sun55i_msgbox": {
+            "title": "sun55i_msgbox (Mailbox Driver)",
+            "expected_count": 32,
+        },
+    }
+
+    suite_results = {}
+    total_expected = sum(s["expected_count"] for s in suites_info.values())
+    total_passed = 0
+    total_failed = 0
+    total_skipped = 0
+    total_executed = 0
+
+    for suite_name, meta in suites_info.items():
+        # Attempt 1: Read results from debugfs
+        code, out, _ = run_ssh(f"cat /sys/kernel/debug/kunit/{suite_name}/results 2>/dev/null", timeout=10)
+        source = "debugfs"
+        if code != 0 or not out.strip():
+            # Attempt 2: Fallback to dmesg boot log
+            code, out, _ = run_ssh(f"dmesg | grep -iE '{suite_name}'", timeout=10)
+            source = "dmesg"
+
+        subtests = []
+        failed_tests = []
+        pass_count = 0
+        fail_count = 0
+        skip_count = 0
+        total_count = 0
+
+        if out.strip():
+            # Parse KTAP summary line if present: # <suite>: pass:<P> fail:<F> skip:<S> total:<T>
+            sum_match = re.search(r'#\s*' + suite_name + r':\s*pass:(\d+)\s*fail:(\d+)\s*skip:(\d+)\s*total:(\d+)', out)
+            if sum_match:
+                pass_count = int(sum_match.group(1))
+                fail_count = int(sum_match.group(2))
+                skip_count = int(sum_match.group(3))
+                total_count = int(sum_match.group(4))
+
+            # Parse individual test lines: (ok|not ok) <idx> - <test_name>
+            raw_tests = re.findall(r'(?:\[[\s\d\.]+\]\s*)?(ok|not ok)\s+(\d+)\s*-\s*([a-zA-Z0-9_]+)', out)
+            for status_str, idx_str, name_str in raw_tests:
+                if name_str == suite_name:
+                    continue  # Skip suite summary line
+                subtests.append({"name": name_str, "status": "PASS" if status_str == "ok" else "FAIL"})
+                if status_str == "not ok":
+                    failed_tests.append(name_str)
+
+            # If summary line was absent, deduce from parsed subtests
+            if total_count == 0 and subtests:
+                total_count = len(subtests)
+                pass_count = sum(1 for t in subtests if t["status"] == "PASS")
+                fail_count = sum(1 for t in subtests if t["status"] == "FAIL")
+
+        suite_status = "PASS" if (pass_count > 0 and fail_count == 0) else ("FAIL" if fail_count > 0 else "MISSING")
+        suite_results[suite_name] = {
+            "title": meta["title"],
+            "expected_count": meta["expected_count"],
+            "total": total_count,
+            "passed": pass_count,
+            "failed": fail_count,
+            "skipped": skip_count,
+            "status": suite_status,
+            "source": source,
+            "subtests": subtests,
+            "failed_tests": failed_tests,
+        }
+        total_passed += pass_count
+        total_failed += fail_count
+        total_skipped += skip_count
+        total_executed += total_count
+
+    # Render Terminal Breakdown Table
+    print(f"  {'Suite / Component':<32} | {'Tests':<6} | {'Passed':<6} | {'Failed':<6} | {'Skipped':<7} | {'Status'}")
+    print("  " + "-" * 32 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 7 + "-+-------")
+    for suite_name, s in suite_results.items():
+        color = "\033[92m" if s["status"] == "PASS" else "\033[91m"
+        reset = "\033[0m"
+        print(f"  {s['title']:<32} | {s['total']:<6} | {s['passed']:<6} | {s['failed']:<6} | {s['skipped']:<7} | {color}{s['status']}{reset}")
+
+    print("  " + "-" * 32 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 7 + "-+-------")
+    overall_status = "PASS" if (total_failed == 0 and total_passed >= total_expected) else "FAIL"
+    color = "\033[92m" if overall_status == "PASS" else "\033[91m"
+    reset = "\033[0m"
+    print(f"  {'COMBINED TOTAL':<32} | {total_executed:<6} | {total_passed:<6} | {total_failed:<6} | {total_skipped:<7} | {color}{overall_status}{reset}")
+    print("=" * 76)
+
+    # If any failures, print alert with test names
+    any_failed = any(s["failed_tests"] for s in suite_results.values())
+    if any_failed:
+        print("\033[91m[ERROR] The following KUnit test cases failed on target hardware:\033[0m")
+        for suite_name, s in suite_results.items():
+            for ftest in s["failed_tests"]:
+                print(f"  \033[91m  - {suite_name}: {ftest}\033[0m")
+        print()
+    elif total_passed >= total_expected:
+        print(f"\033[92m[PASS] All {total_passed} in-kernel KUnit tests executed cleanly with 0 failures!\033[0m\n")
+    else:
+        print(f"\033[93m[WARN] KUnit tests partially executed: {total_passed}/{total_expected} passed.\033[0m\n")
+
+    return {
+        "status": overall_status,
+        "total_expected": total_expected,
+        "total_executed": total_executed,
+        "total_passed": total_passed,
+        "total_failed": total_failed,
+        "total_skipped": total_skipped,
+        "suites": suite_results
+    }
+
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
@@ -274,20 +405,9 @@ def main():
     set_overlay_and_reboot("cubie-a5e-flight-stack")
 
     # 1.0 Kernel KUnit Driver Tests
-    print("\n--- 1.0 Running in-kernel KUnit Driver Tests (sun55i_msgbox & sunxi_rproc) ---")
-    c_k1, out_k1, _ = run_ssh("modprobe -q sun55i_msgbox_test 2>&1")
-    c_k2, out_k2, _ = run_ssh("modprobe -q sunxi_rproc_test 2>&1")
-    _, kunit_dmesg, _ = run_ssh("dmesg | grep -E 'kunit.*(sun55i_msgbox|sunxi_rproc)' | tail -n 20")
-    if kunit_dmesg.strip():
-        print(kunit_dmesg)
-        kunit_ok = ("fail:0" in kunit_dmesg.lower() or "ok " in kunit_dmesg.lower()) and "failed" not in kunit_dmesg.lower()
-        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "PASS" if kunit_ok else "FAIL"))
-    elif c_k1 == 0 and c_k2 == 0:
-        print("  [INFO] KUnit test modules loaded successfully")
-        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "PASS"))
-    else:
-        print("  [INFO] KUnit test modules not loaded (built-in or not compiled as =m). Skipping.")
-        results.append(("Profile 1", "Kernel KUnit Tests (msgbox & rproc)", "SKIP"))
+    kunit_summary = validate_kunit_tests()
+    for suite_name, s in kunit_summary["suites"].items():
+        results.append(("Profile 1", f"KUnit: {s['title']} ({s['passed']}/{s['total']} tests)", s["status"]))
 
     # 1.1 run_tests.py
     print("\n--- 1.1 Running automated test suite (run_tests.py) ---")
@@ -434,6 +554,7 @@ def main():
     report_bundle = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "target": f"{TARGET_USER}@{TARGET_IP}",
+        "kunit_tests": kunit_summary,
         "sweep_summary": results,
         "profiles": aggregated_profile_data
     }
@@ -450,6 +571,28 @@ def main():
             f.write(f"- **Timestamp**: {report_bundle['timestamp']}\n")
             f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n")
             f.write(f"- **Co-Processor**: XuanTie E907 RISC-V\n\n")
+
+            if kunit_summary and "suites" in kunit_summary:
+                f.write("## In-Kernel KUnit Driver Test Verification (67 Tests)\n\n")
+                f.write(f"- **Overall Status**: **{kunit_summary['status']}** ({kunit_summary['total_passed']}/{kunit_summary['total_expected']} tests passed, {kunit_summary['total_failed']} failed)\n\n")
+                f.write("| Subsystem / Driver | Test Suite | Executed | Passed | Failed | Skipped | Status |\n")
+                f.write("| :--- | :--- | :---: | :---: | :---: | :---: | :---: |\n")
+                for sname, s in kunit_summary["suites"].items():
+                    f.write(f"| {s['title']} | `{sname}` | {s['total']} | {s['passed']} | {s['failed']} | {s['skipped']} | **{s['status']}** |\n")
+                f.write(f"| **Combined Total** | **All In-Kernel Drivers** | **{kunit_summary['total_executed']}** | **{kunit_summary['total_passed']}** | **{kunit_summary['total_failed']}** | **{kunit_summary['total_skipped']}** | **{kunit_summary['status']}** |\n\n")
+
+                f.write("<details>\n<summary>Click to view individual test case breakdown</summary>\n\n")
+                for sname, s in kunit_summary["suites"].items():
+                    f.write(f"### {s['title']} ({len(s['subtests'])} tests)\n\n")
+                    if s['subtests']:
+                        for t in s['subtests']:
+                            mark = "x" if t["status"] == "PASS" else " "
+                            f.write(f"- [{mark}] `{t['name']}` ({t['status']})\n")
+                    else:
+                        f.write(f"- *Summary validated: {s['passed']}/{s['total']} passed via {s['source']}*\n")
+                    f.write("\n")
+                f.write("</details>\n\n")
+
             f.write("## Overall Test Summary\n\n")
             f.write("| Profile | Test / Tool | Status |\n")
             f.write("| :--- | :--- | :---: |\n")
