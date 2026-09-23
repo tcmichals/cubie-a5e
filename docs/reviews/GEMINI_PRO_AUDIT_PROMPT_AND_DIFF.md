@@ -48,6 +48,12 @@ Evaluate whether our v2 changes have completely sealed the following vectors, an
 6. IN-TREE KUNIT REGRESSION SUITE:
    - Do sunxi_rproc_test.c (35 tests) and sun55i_msgbox_test.c (32 tests) directly test driver operations without code duplication or invasive production hooks?
 
+7. ADDRESS TRANSLATION TABLE (ATT) ARCHITECTURE (IMX_RPROC DESIGN):
+   - In sunxi_rproc.c and sunxi_rproc.h, does the new struct sunxi_rproc_att, sun55i_rproc_att[], and sunxi_rproc_da_to_sys() faithfully replicate the canonical imx_rproc.c upstream design?
+   - Are all raw hardcoded hex addresses eliminated from da_to_va()?
+   - Does sunxi_rproc_da_to_va() correctly map translated system addresses and fall back gracefully to Device Tree carveouts without memory aliasing or leaks?
+   - Is the driver properly structured to support future Allwinner SoCs (like A733 E902) or DSP cores via data tables only?
+
 Please format your analysis as:
 - Executive Verdict: [Pass / Fail for v2 Upstream Submission]
 - Detailed Findings by Category: [Severity: Critical / High / Medium / Low / Clean]
