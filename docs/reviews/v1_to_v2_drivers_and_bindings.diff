@@ -152,7 +152,7 @@ index c5295b425114..dc26b56c895e 100644
  			compatible = "allwinner,sun55i-a523-rproc";
  			reg = <0x07130000 0x1000>,
 diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
-index d12b87af6597..0628daea06e4 100644
+index d12b87af6597..b1678a34b627 100644
 --- a/drivers/mailbox/sun55i-msgbox.c
 +++ b/drivers/mailbox/sun55i-msgbox.c
 @@ -20,28 +20,7 @@
@@ -190,7 +190,7 @@ index d12b87af6597..0628daea06e4 100644
   *   local_n = 2 -> RV   (remote_id = 3, remote_n = 2) -> Channels 8..11
   */
 -static const struct sun55i_route arm_routes[3] = {
-+const struct sun55i_route arm_routes[3] = {
++const struct sun55i_route sun55i_msgbox_arm_routes[3] = {
  	[0] = { .remote_id = 2, .remote_n = 0 },
  	[1] = { .remote_id = 1, .remote_n = 0 },
  	[2] = { .remote_id = 3, .remote_n = 2 },
@@ -205,7 +205,7 @@ index d12b87af6597..0628daea06e4 100644
 -	spinlock_t lock;
 -};
 +#if IS_ENABLED(CONFIG_SUN55I_MSGBOX_KUNIT_TEST)
-+EXPORT_SYMBOL_GPL(arm_routes);
++EXPORT_SYMBOL_GPL(sun55i_msgbox_arm_routes);
 +#endif
  
  static inline struct sun55i_msgbox *to_sun55i_msgbox(struct mbox_chan *chan)
@@ -227,8 +227,10 @@ index d12b87af6597..0628daea06e4 100644
 +	}
  	*local_n = chan_idx / SUN55I_CHANS_PER_PROC;
  	*p = chan_idx % SUN55I_CHANS_PER_PROC;
- 	*remote_id = arm_routes[*local_n].remote_id;
- 	*remote_n = arm_routes[*local_n].remote_n;
+-	*remote_id = arm_routes[*local_n].remote_id;
+-	*remote_n = arm_routes[*local_n].remote_n;
++	*remote_id = sun55i_msgbox_arm_routes[*local_n].remote_id;
++	*remote_n = sun55i_msgbox_arm_routes[*local_n].remote_n;
  }
  
 -static irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id)
@@ -450,7 +452,7 @@ index d12b87af6597..0628daea06e4 100644
  }
 diff --git a/drivers/mailbox/sun55i-msgbox.h b/drivers/mailbox/sun55i-msgbox.h
 new file mode 100644
-index 000000000000..e2306dab1d86
+index 000000000000..8e45252b269a
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.h
 @@ -0,0 +1,52 @@
@@ -498,7 +500,7 @@ index 000000000000..e2306dab1d86
 +	spinlock_t lock;
 +};
 +
-+extern const struct sun55i_route arm_routes[3];
++extern const struct sun55i_route sun55i_msgbox_arm_routes[3];
 +extern const struct mbox_chan_ops sun55i_msgbox_chan_ops;
 +
 +void sun55i_chan_to_route(int chan_idx, int *local_n, int *p,
@@ -507,7 +509,7 @@ index 000000000000..e2306dab1d86
 +
 +#endif /* _SUN55I_MSGBOX_H_ */
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
-index 984870b49db1..6d85770fa760 100644
+index 984870b49db1..10b4966a9bfb 100644
 --- a/drivers/mailbox/sun55i_msgbox_test.c
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
 @@ -2,295 +2,810 @@
@@ -791,7 +793,7 @@ index 984870b49db1..6d85770fa760 100644
 +	KUNIT_EXPECT_EQ(test, SUNXI_MSGBOX_MSG_FIFO(0, 0),    0x070);
 +	KUNIT_EXPECT_EQ(test, SUNXI_MSGBOX_MSG_FIFO(0, 3),    0x07c);
 +
-+	/* Port 2 (RV remote in arm_routes[2]) */
++	/* Port 2 (RV remote in sun55i_msgbox_arm_routes[2]) */
 +	KUNIT_EXPECT_EQ(test, SUNXI_MSGBOX_MSG_FIFO(2, 0),    0x270);
 +	KUNIT_EXPECT_EQ(test, SUNXI_MSGBOX_MSG_FIFO(2, 3),    0x27c);
 +}
@@ -1502,7 +1504,7 @@ index 984870b49db1..6d85770fa760 100644
 +MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sun55i Message Box driver");
  MODULE_LICENSE("GPL");
 diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
-index 5fa8085470a5..a35b3af0a24f 100644
+index 5fa8085470a5..16241cec514f 100644
 --- a/drivers/remoteproc/sunxi_rproc.c
 +++ b/drivers/remoteproc/sunxi_rproc.c
 @@ -23,6 +23,7 @@
@@ -1592,11 +1594,21 @@ index 5fa8085470a5..a35b3af0a24f 100644
  static void sunxi_rproc_vq_work(struct work_struct *work)
  {
  	struct sunxi_rproc *priv = container_of(work, struct sunxi_rproc, vq_work);
-@@ -127,12 +64,13 @@ static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
+@@ -122,17 +59,21 @@ static void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)
+ 
+ static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
+ {
+-	struct rproc *rproc = data;
+-	struct sunxi_rproc *priv = rproc->priv;
++	struct sunxi_rproc *priv = data;
++	struct rproc *rproc = priv->rproc;
  
  	dev_err(priv->dev, "Hardware crash event received from %s core!\n",
  		priv->cfg ? priv->cfg->name : "remote");
-+	disable_irq_nosync(irq);
++	if (priv->crash_irq_enabled) {
++		disable_irq_nosync(irq);
++		priv->crash_irq_enabled = false;
++	}
  	rproc_report_crash(rproc, RPROC_FATAL_ERROR);
  
  	return IRQ_HANDLED;
@@ -1607,7 +1619,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  	int ret;
-@@ -257,7 +195,11 @@ static int sunxi_rproc_prepare(struct rproc *rproc)
+@@ -257,7 +198,11 @@ static int sunxi_rproc_prepare(struct rproc *rproc)
  	return ret;
  }
  
@@ -1620,7 +1632,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  
-@@ -296,7 +238,11 @@ static int sunxi_rproc_unprepare(struct rproc *rproc)
+@@ -296,7 +241,11 @@ static int sunxi_rproc_unprepare(struct rproc *rproc)
  	return 0;
  }
  
@@ -1633,18 +1645,20 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  	int ret;
-@@ -307,6 +253,10 @@ static int sunxi_rproc_start(struct rproc *rproc)
+@@ -307,6 +256,12 @@ static int sunxi_rproc_start(struct rproc *rproc)
  	if (rproc->bootaddr > U32_MAX)
  		return -EINVAL;
  
-+	/* Re-enable crash IRQ on start if it was disabled during crash handling */
-+	if (priv->crash_irq > 0)
++	/* Enable crash IRQ now that core is executing */
++	if (priv->crash_irq > 0 && !priv->crash_irq_enabled) {
 +		enable_irq(priv->crash_irq);
++		priv->crash_irq_enabled = true;
++	}
 +
  	/*
  	 * Deassert reset before writing the boot vector register.
  	 *
-@@ -338,7 +288,11 @@ static int sunxi_rproc_start(struct rproc *rproc)
+@@ -338,7 +293,11 @@ static int sunxi_rproc_start(struct rproc *rproc)
  	return 0;
  }
  
@@ -1657,7 +1671,18 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  
-@@ -361,7 +315,11 @@ static int sunxi_rproc_stop(struct rproc *rproc)
+@@ -356,12 +315,22 @@ static int sunxi_rproc_stop(struct rproc *rproc)
+ 	else if (priv->rst_cfg)
+ 		reset_control_assert(priv->rst_cfg);
+ 
++	/* Disable crash IRQ while core is stopped */
++	if (priv->crash_irq > 0 && priv->crash_irq_enabled) {
++		disable_irq(priv->crash_irq);
++		priv->crash_irq_enabled = false;
++	}
++
+ 	cancel_work_sync(&priv->vq_work);
+ 
  	return 0;
  }
  
@@ -1670,7 +1695,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  	int ret;
-@@ -383,7 +341,11 @@ static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
+@@ -383,7 +352,11 @@ static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
  	mbox_client_txdone(priv->tx_chan, 0);
  }
  
@@ -1683,7 +1708,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  {
  	struct sunxi_rproc *priv = rproc->priv;
  
-@@ -489,6 +451,10 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool
+@@ -489,6 +462,10 @@ static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool
  	return NULL;
  }
  
@@ -1694,7 +1719,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  static int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
  {
  	int ret;
-@@ -501,7 +467,7 @@ static int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
+@@ -501,7 +478,7 @@ static int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
  	return ret;
  }
  
@@ -1703,7 +1728,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	.prepare        = sunxi_rproc_prepare,
  	.unprepare      = sunxi_rproc_unprepare,
  	.start          = sunxi_rproc_start,
-@@ -516,6 +482,10 @@ static const struct rproc_ops sunxi_rproc_ops = {
+@@ -516,6 +493,10 @@ static const struct rproc_ops sunxi_rproc_ops = {
  	.coredump       = rproc_coredump,
  };
  
@@ -1714,7 +1739,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *rproc)
  {
  	struct device *dev = &pdev->dev;
-@@ -571,7 +541,7 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
+@@ -571,7 +552,7 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
  			dev_warn(dev, "failed to map 'remap' register\n");
  	}
  
@@ -1723,7 +1748,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram");
  	if (res) {
  		priv->dram_phys = res->start;
-@@ -581,33 +551,6 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
+@@ -581,33 +562,6 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
  			priv->dram_va = devm_ioremap_wc(dev, res->start, resource_size(res));
  		if (!priv->dram_va)
  			dev_warn(dev, "failed to map 'dram' resource\n");
@@ -1757,7 +1782,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	}
  
  	dev_info(dev, "Memory resources: r_sram=%s, r_sram1=%s, remap=%s, cfg=%s, dram=%s\n",
-@@ -617,7 +560,7 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
+@@ -617,7 +571,7 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
  		 priv->cfg_va ? "yes" : "no",
  		 priv->dram_va ? "yes" : "no");
  
@@ -1766,7 +1791,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "trace");
  	if (res) {
  		priv->trace_phys = res->start;
-@@ -627,32 +570,6 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
+@@ -627,32 +581,6 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
  			priv->trace_va = devm_ioremap_wc(dev, res->start, resource_size(res));
  		dev_info(dev, "mapped 'trace' mmio resource %pa+%zu\n",
  			 &priv->trace_phys, priv->trace_size);
@@ -1799,12 +1824,22 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	}
  
  	return 0;
-@@ -830,9 +747,13 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
- 						rproc);
- 		if (ret)
+@@ -826,13 +754,20 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
+ 	if (crash_irq > 0) {
+ 		ret = devm_request_threaded_irq(dev, crash_irq, NULL,
+ 						sunxi_rproc_crash_handler,
+-						IRQF_ONESHOT, "sunxi-rproc-crash",
+-						rproc);
+-		if (ret)
++						IRQF_ONESHOT | IRQF_NO_AUTOEN,
++						"sunxi-rproc-crash",
++						priv);
++		if (ret) {
  			dev_warn(dev, "failed to request crash IRQ %d: %d\n", crash_irq, ret);
-+		else
++		} else {
 +			priv->crash_irq = crash_irq;
++			priv->crash_irq_enabled = false;
++		}
  	}
  
  	/* 6. Mailbox IPC Client */
@@ -1813,7 +1848,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	priv->cl.dev = dev;
  	priv->cl.rx_callback = sunxi_rproc_mb_rx_callback;
  	priv->cl.tx_block = false;
-@@ -879,13 +800,6 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
+@@ -879,13 +814,6 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
  	}
  
  skip_mbox:
@@ -1827,7 +1862,7 @@ index 5fa8085470a5..a35b3af0a24f 100644
  	platform_set_drvdata(pdev, rproc);
  
  	ret = rproc_add(rproc);
-@@ -922,13 +836,18 @@ static void sunxi_rproc_remove(struct platform_device *pdev)
+@@ -922,13 +850,20 @@ static void sunxi_rproc_remove(struct platform_device *pdev)
  
  	/*
  	 * Teardown order is critical:
@@ -1843,18 +1878,20 @@ index 5fa8085470a5..a35b3af0a24f 100644
 -	 * 3. Free mailbox channels only after the workqueue is fully drained.
 +	 * 4. Free mailbox channels only after the workqueue is fully drained.
  	 */
-+	if (priv->crash_irq > 0)
++	if (priv->crash_irq > 0 && priv->crash_irq_enabled) {
 +		disable_irq(priv->crash_irq);
++		priv->crash_irq_enabled = false;
++	}
 +
  	rproc_del(rproc);
  	cancel_work_sync(&priv->vq_work);
  
 diff --git a/drivers/remoteproc/sunxi_rproc.h b/drivers/remoteproc/sunxi_rproc.h
 new file mode 100644
-index 000000000000..8277c44d8266
+index 000000000000..ed4c430aaf43
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.h
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,82 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +#ifndef _SUNXI_RPROC_H_
 +#define _SUNXI_RPROC_H_
@@ -1919,6 +1956,7 @@ index 000000000000..8277c44d8266
 +	/* Reserved Memory & Mailbox State */
 +	bool has_reserved_mem;
 +	int crash_irq;
++	bool crash_irq_enabled;
 +	struct mbox_client cl;
 +	struct mbox_chan *tx_chan;
 +	struct mbox_chan *rx_chan;
