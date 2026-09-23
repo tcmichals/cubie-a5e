@@ -257,6 +257,8 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] `test_da_to_va_exact_upper_boundary_dram` — exact boundary tests on DRAM carveout
   - [x] `test_da_to_va_a733_sram_a2_layout` — A733 208 KB System SRAM A2 mapping and boundary isolation
   - [x] `test_da_to_va_unaligned_lengths` — odd 3-byte and 7-byte buffer requests across windows
+  - [x] `test_da_to_va_malformed_rsc_table_entry` — rejects invalid vring/carveout DA (e.g. 0xDEADBEEF)
+  - [x] `test_da_to_va_corrupted_elf_overflow_segment` — rejects wrapping lengths and segments exceeding SRAM
 - [x] **B.5: `kick` and `ops` table completeness tests** [closes rproc #10, #11, #14]:
   - [x] `test_kick_null_tx_chan_safe` — `priv->tx_chan = NULL` → early return, no crash
   - [x] `test_kick_stores_vqid` — `priv->kick_msg` updated with correct vqid
@@ -265,7 +267,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Added to `drivers/remoteproc/Kconfig` (0 checkpatch errors/warnings)
   - [x] Added to `drivers/remoteproc/Makefile`
   - [x] Added to buildroot `linux.config`: `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`
-  - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors (33 tests, 647 lines)
+  - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors (35 tests, 683 lines)
 
 ---
 
