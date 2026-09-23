@@ -235,11 +235,19 @@ rproc: remoteproc@7130000 {
 };
 ```
 
-#### 3. RemoteProc Driver Lifecycle (`sunxi_rproc.c`)
-- **Probe (`sunxi_rproc_register_mem`)**: Maps `"r_sram"` (`0x07280000`), `"r_sram1"` (`0x072c0000`), and `"remap"` (`0x07010364`).
-- **Prepare (`sunxi_rproc_prepare`)**: Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Bit 0 is left untouched.
-- **DA Translation (`sunxi_rproc_da_to_va`)**: Translates `0x3FFC0000`–`0x3FFFFFFF` to `priv->r_sram_va` (`0x07280000`) and `0x40000000`–`0x4003FFFF` to `priv->r_sram1_va` (`0x072C0000`). Rejects forbidden regions (`< 0x00020000`, `0x00020000`–`0x0003FFFF`, `0x00040000`–`0x00067FFF`, and `0x00400000`–`0x0044FFFF`).
-- **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG` on core shutdown.
+#### 3. RemoteProc Driver Lifecycle & Hardening Invariants (`sunxi_rproc.c`)
+- **Probe (`sunxi_rproc_probe` / `register_mem`)**: Maps `"r_sram"` (`0x07280000`), `"r_sram1"` (`0x072c0000`), and `"remap"` (`0x07010364`). Initializes workqueues (`INIT_WORK(&priv->vq_work)`) *before* requesting mailbox channels to eliminate race conditions on early interrupts or deferred probes.
+- **Two-Stage Reset Architecture**:
+  - **Prepare (`sunxi_rproc_prepare`)**: Deasserts bus/interconnect resets (`rst_cfg`, `rst_sram`, `rst_msgbox`) and enables clocks. Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Clears SRAM via `memset_io` to eliminate stale data / ECC noise. Keeps CPU pipeline reset (`rst_core`) asserted so firmware can be loaded into SRAM without premature execution.
+  - **Start (`sunxi_rproc_start`)**: Deasserts `rst_core` and writes entry point to `STA_ADD_REG` (`0x07130204`). Re-enables the hardware crash IRQ if previously disabled during recovery.
+  - **Stop (`sunxi_rproc_stop`)**: Asserts `rst_core` to freeze execution, then drains `vq_work` via `cancel_work_sync()`.
+  - **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG`, disables CCU clocks, and asserts bus resets.
+- **DA Translation (`sunxi_rproc_da_to_va`)**:
+  - Guarded against 64-bit integer wrap-around: `if (da > U64_MAX - len) return NULL;`.
+  - Translates Space 0 (`0x3FF80000`, `0x3FFC0000`, `0x00020000`), Space 1 (`0x40000000`, `0x40040000`), Host PAs (`0x07280000`, `0x072C0000`), Trace, and DRAM.
+  - Returns `NULL` for dynamic DDR carveouts to delegate translation directly to the Linux remoteproc core's `rproc->carveouts` linked list.
+- **Teardown Order**: `disable_irq(priv->crash_irq)` -> `rproc_del()` -> `cancel_work_sync()` -> `mbox_free_channel()`.
+- **Reference Guide**: For full architectural rules and comparisons across mainline drivers, refer to [**`LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`**](../architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md).
 
 ---
 
@@ -903,3 +911,13 @@ devmem2 0x07130248 w
    * Read `/sys/kernel/debug/remoteproc/remoteproc0/trace0` to inspect the full GPR and CSR exception frame dump (`mepc`, `mcause`, `mtval`, `mstatus`, `ra`, `sp`, `gp`, etc.).
    * Verify persistent crash magic `0xDEADF00D` in SRAM_A3 at `0x4003FF00` (`devmem2 0x072BFF00 w 4`).
    * Resolve faulting PC using `riscv-none-elf-addr2line -e testCrash.elf -a -f -C <mepc>`.
+
+5. **Verify In-Kernel KUnit Driver Test Suites**:
+   The Linux kernel includes comprehensive KUnit test suites for both `sunxi_rproc` and `sun55i-msgbox` (`CONFIG_KUNIT=y`, `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`, `CONFIG_SUN55I_MSGBOX_KUNIT_TEST=y`):
+   ```bash
+   # Check KUnit results in dmesg at boot:
+   dmesg | grep -i kunit
+   ```
+   * **`sunxi_rproc` suite**: 27 test cases validating `da_to_va` across Space 0/1/Host PA/Trace/DRAM, 64-bit integer overflow protection, mock MMIO lifecycle (`start`, `stop`, `prepare`, `unprepare`, `kick`), and `rproc_ops` table integrity.
+   * **`sun55i_msgbox` suite**: 28 test cases validating the 12-channel routing table, invalid channel index clamping, register formulas, mock MMIO ops, FIFO status sweeps (0..15), startup/shutdown stale FIFO purging, hardirq burst drains capped at `SUN55I_FIFO_MAX` (8), channel crosstalk isolation, and simultaneous 3-route concurrency.
+   * Target: 55/55 PASS (100% success).

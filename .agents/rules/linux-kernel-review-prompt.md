@@ -222,16 +222,43 @@ These are not caught by automated tools — they are upstream maintainer style r
 
 ---
 
+## CHECK GROUP 16: KUnit Test Design — Direct Execution, Zero Duplication
+
+**This is what Sashiko caught in our v1 KUnit test suites.**
+
+1. **Does the test duplicate or mirror driver code?** If the test file defines its own `test_da_to_va()`, `test_chan_to_route()`, or copies `routes[]`, **REJECT IT**. Testing a duplicate copy proves nothing about the driver and creates silent coverage gaps when the driver changes.
+2. **Does the test invoke the actual driver functions?** Internal driver functions under test must be exposed via an internal header (`driver.h`) and exported with `#if IS_ENABLED(CONFIG_*_KUNIT_TEST) EXPORT_SYMBOL_GPL(func); #endif`.
+3. **Does the test exercise subsystem ops?** Tests should call through the formal subsystem callbacks (`rproc->ops->da_to_va()`, `chan->ops->send_data()`, `startup()`, `shutdown()`).
+4. **Does the test use mock hardware registers?** Pure logic is not enough. Provide a mock MMIO array to simulate register responses (`MSG_STATUS`, `FIFO`, `IRQ_ENABLE`) and verify the driver's register manipulation.
+5. **Are boundary and hostile inputs covered?** Zero-length requests, `U64_MAX` overflows, full FIFOs, invalid channel IDs.
+
+**Expected answer:** Tests call the compiled driver code directly. Zero duplicate functions in test files. Mock MMIO buffers verify register side-effects.
+
+---
+
+## CHECK GROUP 17: Probe Error Ladder and IRQ / Clock Race Safety
+
+1. **Allocation order:** Resources that do not depend on hardware (data structures, channel arrays) MUST be allocated first. Failure exits immediately before any MMIO, clock, or reset is touched.
+2. **Reverse LIFO unwind:** Every `goto err_*` must strictly unwind resources acquired up to that line in exact reverse order.
+3. **No unclocked ISR execution:** If an interrupt is registered (`devm_request_irq` or `request_irq`), hardware interrupt enable registers must be masked to zero (`writel(0, ...)`) before any error path disables the peripheral clock or asserts reset.
+4. **Shared reset balancing:** If `reset_control_deassert()` is called in `probe()`, every subsequent error path must call `reset_control_assert()` to balance the refcount.
+5. **Crash IRQ storm prevention:** When a remote core crash interrupt fires, the ISR MUST call `disable_irq_nosync()` before reporting the crash. Re-enable the IRQ only in `start()` once the core has been reset and restarted.
+
+**Expected answer:** Probe allocates memory before clocks/resets; unwinds strictly in reverse LIFO order; masks hardware interrupts before disabling clocks; disables crash IRQs during recovery.
+
+---
+
 ## UPDATED FINAL GATE: Before Every `git send-email`
 
 - [ ] `checkpatch.pl --strict` → 0 errors, 0 warnings
 - [ ] `pip3 install dtschema --upgrade` run this submission cycle
 - [ ] `make dt_binding_check` → 0 errors (full run, DT_SCHEMA_FILES unset)
 - [ ] `make dtbs_check` on affected `.dtsi` → 0 errors
+- [ ] Compiled with target toolchain (`ARCH=arm64 CROSS_COMPILE=...`) → 0 warnings
 - [ ] DT binding examples use raw hex constants OR cross-patch dependency is documented
 - [ ] Patch series based on `linux-next` or latest `-rc1` (noted in cover letter if different)
-- [ ] All 15 check groups above answered with "Expected answer"
-- [ ] KUnit tests added for any new pure-logic code
+- [ ] All 17 check groups above answered with "Expected answer"
+- [ ] KUnit tests call real driver functions directly (zero duplicate/mirrored code)
 - [ ] Cover letter references the previous version's thread
 - [ ] Full CC list on every patch (no split CC across patches)
 - [ ] Commit messages explain WHY, not just what

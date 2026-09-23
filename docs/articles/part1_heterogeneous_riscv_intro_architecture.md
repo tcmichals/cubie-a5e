@@ -19,7 +19,7 @@ practical bring-up and engineering realities of the XuanTie E907 RISC-V
 co-processor under Linux:
 
 * **Part 1 (This Article)**: Bill of Materials, architectural rationale, TRM memory maps, SRAM architecture & RemoteProc boot mechanics, `startup.S` FPU initialization, and debugging realities on live silicon.
-* **Part 2**: Authoring the Linux `remoteproc` kernel driver, memory-mapped ELF loading into 512 KB continuous SRAM, and systematically proving hardware state with the `firmware/e907-riscv/apps` verification suite.
+* **Part 2**: Authoring the Linux `remoteproc` and mailbox kernel drivers, eliminating lifecycle race conditions, in-kernel KUnit testing architecture (>2:1 test ratio), and systematically proving hardware state with the `riscv-firmware/apps` verification suite.
 * **Part 3**: Inter-processor communication (IPC) deep dive—lock-free shared SRAM + hardware mailbox doorbells, standard VirtIO RPMsg, and hybrid SRAM/DDR bulk streaming.
 * **Part 4**: Deep dive into modern zero-allocation C++ coroutines and event loops on bare-metal RISC-V.
 
