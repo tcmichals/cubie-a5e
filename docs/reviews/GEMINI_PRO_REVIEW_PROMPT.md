@@ -107,4 +107,3 @@ Please format your analysis as:
 ## 4. Associated Files & References
 
 - Full series diff: [`cubie-a5e/docs/reviews/v1_to_v2_drivers_and_bindings.diff`](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/docs/reviews/v1_to_v2_drivers_and_bindings.diff)
-- Additional review notes: [`cubie-a5e/docs/reviews/GEMINI_PRO_AUDIT_PROMPT_AND_DIFF.md`](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/docs/reviews/GEMINI_PRO_AUDIT_PROMPT_AND_DIFF.md)
