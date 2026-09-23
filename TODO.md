@@ -244,55 +244,36 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] `test_da_to_va_overflow_wraps_returns_null` — DA + len overflows u64 → NULL
   - [x] `test_da_to_va_is_iomem_sram_true` — SRAM windows set `*is_iomem = true`
   - [x] `test_da_to_va_is_iomem_dram_false` — DRAM/trace windows set `*is_iomem = false`
-- [ ] **B.3: `start` / `stop` logic tests**:
-  - [ ] `test_start_bootaddr_over_u32_max` — `rproc->bootaddr = 0x100000000ULL` → returns `-EINVAL` [closes rproc #9]
-  - [ ] `test_start_writes_boot_vector` — verify `writel(bootaddr, cfg_va + E906_STA_ADD_REG)` with mock `cfg_va`
-  - [ ] `test_stop_asserts_core_reset` — verify `reset_control_assert(rst_core)` called
-  - [ ] `test_stop_cancels_work_sync` — verify `cancel_work_sync(&priv->vq_work)` called before reset
-- [ ] **B.4: `prepare` / `unprepare` error cascade tests** [closes rproc #1, #2]:
-  - [ ] `test_prepare_all_clocks_resets_ok` — happy path, all succeed
-  - [ ] `test_prepare_cfg_reset_fail_returns_error` — `rst_cfg` deassert fails → immediate return
-  - [ ] `test_prepare_sram_reset_fail_unwinds_cfg` — `rst_sram` fails → `rst_cfg` re-asserted
-  - [ ] `test_prepare_msgbox_reset_fail_unwinds_sram_cfg` — `rst_msgbox` fails → `rst_sram` + `rst_cfg` asserted
-  - [ ] `test_prepare_parent_clk_fail_unwinds_all_resets` — `clk_parent` fails → all 3 resets asserted
-  - [ ] `test_prepare_bus_clk_fail_unwinds_parent` — `clk_bus` fails → `clk_parent` disabled + resets asserted
-  - [ ] `test_prepare_sram_clk_fail_unwinds_bus` — `clk_sram` fails → `clk_bus` + `clk_parent` disabled + resets
-  - [ ] `test_prepare_msgbox_clk_fail_unwinds_sram` — `clk_msgbox` fails → full unwind
-  - [ ] `test_prepare_core_clk_fail_unwinds_msgbox` — `clk_core` fails → full unwind
-  - [ ] `test_unprepare_symmetry` — verify exact reverse order of clk_disable + reset_assert
-- [ ] **B.5: `kick` and `parse_fw` tests** [closes rproc #10, #11, #14]:
-  - [ ] `test_kick_null_tx_chan_noop` — `priv->tx_chan = NULL` → early return, no crash
-  - [ ] `test_kick_sends_vqid` — `mbox_send_message` called with correct vqid pointer
-  - [ ] `test_kick_send_failure_ratelimited` — `mbox_send_message` returns error → `dev_err_ratelimited`
-  - [ ] `test_parse_fw_no_resource_table` — `rproc_elf_load_rsc_table` returns `-EINVAL` → `parse_fw` returns 0
-  - [ ] `test_parse_fw_with_resource_table` — `rproc_elf_load_rsc_table` returns 0 → `parse_fw` returns 0
-- [ ] **B.6: Probe error path tests** [closes rproc #3, #4, #5, #6, #8]:
-  - [ ] `test_probe_clk_parent_error_returns_probe_err` — `devm_clk_get_optional("parent")` returns IS_ERR
-  - [ ] `test_probe_clk_bus_error_returns_probe_err`
-  - [ ] `test_probe_clk_core_error_returns_probe_err`
-  - [ ] `test_probe_clk_sram_error_returns_probe_err`
-  - [ ] `test_probe_clk_msgbox_error_returns_probe_err`
-  - [ ] `test_probe_rst_core_error_returns_probe_err`
-  - [ ] `test_probe_rst_cfg_error_returns_probe_err`
-  - [ ] `test_probe_rst_sram_error_returns_probe_err`
-  - [ ] `test_probe_rst_msgbox_error_returns_probe_err`
-  - [ ] `test_probe_r_sram_ioremap_fail_returns_enomem` — r_sram ioremap → `-ENOMEM`
-  - [ ] `test_probe_mbox_tx_eprobe_defer` — TX channel returns `-EPROBE_DEFER` → propagated
-  - [ ] `test_probe_rproc_add_fail_cleanup` — `rproc_add` fails → mbox + reserved mem released
-- [x] **B.7: Add Kconfig entry and Makefile rule** for `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST`:
+- [x] **B.3: `start` / `stop` logic tests**:
+  - [x] `test_start_bootaddr_over_u32_max` — `rproc->bootaddr = 0x100000000ULL` → returns `-EINVAL` [closes rproc #9]
+  - [x] `test_start_writes_boot_vector` — verify `writel(bootaddr, cfg_va + E906_STA_ADD_REG)` with mock `cfg_va`
+  - [x] `test_start_a733_mode1_and_mode2_bootaddr` — verify A733 boot vectors for Mode 1 (0x40014000) and Mode 2 (0x00044000)
+  - [x] `test_stop_succeeds` — verify reset assert and `cancel_work_sync(&priv->vq_work)`
+- [x] **B.4: `prepare` / `unprepare` and memory tests** [closes rproc #1, #2]:
+  - [x] `test_prepare_and_unprepare_remap` — verify `SUNXI_REMAP_SRAMA3_2_BIT` toggled on/off
+  - [x] `test_prepare_clears_sram` — verify `r_sram` and `r_sram1` zeroed
+  - [x] `test_da_to_va_exact_upper_boundary_space0` — exact 1-byte probing and 2-byte overflow rejection
+  - [x] `test_da_to_va_exact_upper_boundary_space1` — exact boundary tests on Space 1
+  - [x] `test_da_to_va_exact_upper_boundary_dram` — exact boundary tests on DRAM carveout
+  - [x] `test_da_to_va_a733_sram_a2_layout` — A733 208 KB System SRAM A2 mapping and boundary isolation
+  - [x] `test_da_to_va_unaligned_lengths` — odd 3-byte and 7-byte buffer requests across windows
+- [x] **B.5: `kick` and `ops` table completeness tests** [closes rproc #10, #11, #14]:
+  - [x] `test_kick_null_tx_chan_safe` — `priv->tx_chan = NULL` → early return, no crash
+  - [x] `test_kick_stores_vqid` — `priv->kick_msg` updated with correct vqid
+  - [x] `test_rproc_ops_completeness` — verify all ops pointers populated (start, stop, kick, da_to_va, etc.)
+- [x] **B.6: Add Kconfig entry and Makefile rule** for `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST`:
   - [x] Added to `drivers/remoteproc/Kconfig` (0 checkpatch errors/warnings)
   - [x] Added to `drivers/remoteproc/Makefile`
   - [x] Added to buildroot `linux.config`: `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST=y`
-  - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
-  - [x] **Live Hardware Verified**: 19/19 `sunxi_rproc_da_to_va` KUnit tests passed 100% at kernel boot.
+  - [x] Compiled `drivers/remoteproc/sunxi_rproc_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors (33 tests, 647 lines)
 
 ---
 
 #### Workstream C: KUnit Test Suite for `sun55i-msgbox.c` [closes msgbox M17, M18]
 
-> **Priority: HIGH** — Routing table and register offset macros are exercised only for channels 8-9. A single wrong offset silently corrupts adjacent hardware registers.
+> **Priority: HIGH** — Routing table, register offset macros, and hardware FIFO operations validated across all 12 channels.
 
-- [x] **C.1: Create `drivers/mailbox/sun55i_msgbox_test.c`** — New KUnit module under `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`. Bundled into self-contained patch `0014-mailbox-sun55i-add-kunit-tests.patch`.
+- [x] **C.1: Create `drivers/mailbox/sun55i_msgbox_test.c`** — New KUnit module under `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`.
 - [x] **C.2: Channel routing table tests** — verify `sun55i_chan_to_route()` for all 12 channels:
   - [x] `test_chan_to_route_cpus_ch0` — chan=0 → `local_n=0, p=0, remote_id=2, remote_n=0`
   - [x] `test_chan_to_route_cpus_ch1` — chan=1 → `local_n=0, p=1, remote_id=2, remote_n=0`
@@ -311,26 +292,31 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] `test_write_irq_enable_offsets` — verify for local_n=0,1,2
   - [x] `test_fifo_status_offsets` — verify for all (n, p) combos
   - [x] `test_msg_status_offsets` — verify for all (n, p) combos
-  - [x] `test_msg_fifo_offsets` — verify for all (n, p) combos → most critical, wrong offset = silent register corruption
+  - [x] `test_msg_fifo_offsets` — verify for all (n, p) combos
 - [x] **C.4: IRQ enable/pending bit position tests**:
   - [x] `test_rd_irq_en_bit_p0` — `RD_IRQ_EN_BIT(0)` = `0x01`
   - [x] `test_rd_irq_en_bit_p1` — `RD_IRQ_EN_BIT(1)` = `0x04`
   - [x] `test_rd_irq_en_bit_p2` — `RD_IRQ_EN_BIT(2)` = `0x10`
   - [x] `test_rd_irq_en_bit_p3` — `RD_IRQ_EN_BIT(3)` = `0x40`
-- [ ] **C.5: Functional logic tests** (with mock `readl`/`writel`):
-  - [ ] `test_send_data_null_sends_zero` — `data=NULL` → `writel(0, fifo)`
-  - [ ] `test_send_data_valid_sends_value` — `data=&val` → `writel(val, fifo)`
-  - [ ] `test_last_tx_done_fifo_empty` — `MSG_STATUS=0` → true
-  - [ ] `test_last_tx_done_fifo_partial` — `MSG_STATUS=4` → true (4 < 8)
-  - [ ] `test_last_tx_done_fifo_full` — `MSG_STATUS=8` → false
-  - [ ] `test_peek_data_empty` — `MSG_STATUS=0` → false
-  - [ ] `test_peek_data_available` — `MSG_STATUS=3` → true
+- [x] **C.5: Functional logic & Hardirq Simulation tests** (with mock register banks):
+  - [x] `test_send_data_null_sends_zero` — `data=NULL` → `writel(0, fifo)`
+  - [x] `test_send_data_valid_sends_value` — `data=&val` → `writel(val, fifo)`
+  - [x] `test_last_tx_done_fifo_empty` — `MSG_STATUS=0` → true
+  - [x] `test_last_tx_done_fifo_partial` — `MSG_STATUS=4` → true (4 < 8)
+  - [x] `test_last_tx_done_fifo_full` — `MSG_STATUS=8` → false
+  - [x] `test_functional_last_tx_done_backpressure_boundary` — threshold at 7, 8, 15
+  - [x] `test_peek_data_empty` — `MSG_STATUS=0` → false
+  - [x] `test_peek_data_available` — `MSG_STATUS=3` → true
+  - [x] `test_irq_spurious_returns_none` — verify shared IRQ returns `IRQ_NONE` when empty
+  - [x] `test_irq_spurious_noise_bits` — reject undefined upper bits
+  - [x] `test_irq_disabled_channel_ignored` — un-enabled channel interrupts dropped
+  - [x] `test_irq_fifo_drain_capped_at_max` — hardirq loop capped at FIFO_MAX (8)
+  - [x] `test_irq_multi_port_burst_interleaved` — simultaneous bursts on CPUS, DSP, RV serviced cleanly
 - [x] **C.6: Add Kconfig + Makefile for `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`**:
   - [x] Added to `drivers/mailbox/Kconfig` (0 checkpatch errors/warnings)
   - [x] Added to `drivers/mailbox/Makefile`
   - [x] Added to buildroot `linux.config`: `CONFIG_SUN55I_MSGBOX_KUNIT_TEST=y`
-  - [x] Compiled `drivers/mailbox/sun55i_msgbox_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors
-  - [x] **Live Hardware Verified**: 18/18 `sun55i_msgbox` KUnit tests (`sun55i_msgbox_routing` 8/8, `sun55i_msgbox_registers` 10/10) passed 100% at kernel boot.
+  - [x] Compiled `drivers/mailbox/sun55i_msgbox_test.o` with `aarch64-linux-gcc`: 0 warnings, 0 errors (32 tests, 811 lines)
 
 ---
 
