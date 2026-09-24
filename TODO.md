@@ -735,9 +735,47 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - Added canonical Linux regulator "Enable -> Disable -> Enable" sequence in `sun60i_usb2_phy_init()` without ad-hoc `msleep()`.
     - Committed & pushed in `linux-cubie` (`5008254da8a9`).
     - Authored upstream integration guide (`docs/platforms/ALLWINNER_A733_USB_DWC3_INTEGRATION_GUIDE.md`).
-  - [ ] Confirm FE1.1S 4-port USB 2.0 hub enumerates (`1a40:0101`) and external mouse works on live target.
-  - [ ] Confirm AIC8800 Wi-Fi 6 device enumerates on hub downstream port 4 (`0xA69C:0x8800`).
-  - [ ] Load `aic8800_fdrv` out-of-tree kernel driver and verify `wlan0` interface appears.
+  - [ ] **Target Hardware Verification Protocol (A7A Bench Gate)**:
+    - [ ] **Step 1: Build & Deploy Updated Kernel + DTB**:
+      ```sh
+      # Rebuild Linux kernel and device tree blobs in Buildroot
+      make -C /home/tcmichals/ssdData/projects/home/CubieA5E/bld.a7a linux-rebuild
+      # Copy output/images/Image and output/images/sun60i-a733-cubie-a7a.dtb to boot partition
+      ```
+    - [ ] **Step 2: Cold Boot Power Cycle Test (from 0V DC)**:
+      - [ ] Disconnect Type-C / 12V DC power for 5 seconds to drain board rails.
+      - [ ] Reconnect power and boot into Linux console.
+      - [ ] Inspect kernel boot dmesg for VBUS timing and DWC3 init:
+        ```sh
+        dmesg | grep -E 'dwc3|usb|hub|regulator|phy'
+        ```
+      - [ ] Run `lsusb` to confirm the FE1.1S 4-port USB 2.0 hub enumerates cleanly:
+        ```sh
+        lsusb -t
+        # Expected: Bus 01.Port 1: Dev 2, Class=Hub, Driver=hub/4p, 480M (1a40:0101)
+        ```
+      - [ ] Verify **zero** occurrences of `device descriptor read/64, error -71`.
+    - [ ] **Step 3: Warm Reboot Resilience Test**:
+      - [ ] Execute `reboot` command in Linux (tests `VBUSM` reset while `DCDC1` remains 3.3V).
+      - [ ] Once back at console, run `lsusb` and inspect `dmesg`.
+      - [ ] Confirm hub re-enumerates reliably without needing a manual power pull.
+    - [ ] **Step 4: Top External USB Port (`CON1`) Functional Test**:
+      - [ ] Plug USB flash drive or mouse into the top USB-A port (`CON1`).
+      - [ ] Verify `dmesg` reports device connection on downstream port 1 at High-Speed (480 Mbps) or Full-Speed (12 Mbps).
+    - [ ] **Step 5: AIC8800 Wi-Fi 6 Module Enumeration & Driver Load**:
+      - [ ] Verify AIC8800 USB device appears on hub downstream port 4:
+        ```sh
+        lsusb | grep -i "a69c" # Expected: 0xa69c:0x8800
+        ```
+      - [ ] Load the `aic8800_fdrv` driver and verify `wlan0` interface appears:
+        ```sh
+        modprobe aic8800_fdrv
+        ip link show wlan0
+        ```
+    - [ ] **Step 6: Diagnostic Contingency (If `error -71` persists)**:
+      - [ ] Check if cold boot passes while warm reboot fails (points to `XRSTJ` hardware limitation).
+      - [ ] Test alternate `aw,phy_tune_param` in DT (e.g. reduce pre-emphasis/drive strength from `0x143338d6` for the short 15mm trace).
+      - [ ] Dump `/sys/kernel/debug/usb/devices` and xHCI port status register `PORTSC`.
 
 ---
 
