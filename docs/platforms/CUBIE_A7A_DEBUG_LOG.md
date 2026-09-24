@@ -887,4 +887,24 @@ Following the comprehensive audit, Gemini Pro evaluated the codebase and identif
 4. **Git Commit**:
    - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `b54152aa69d7`.
 
+### Active VBUS Power-Cycling & `u2phy` Regulator Binding (Commit `0aca6351dc2a`)
+
+- **Analysis & Core Breakthrough**:
+  - `regulator-always-on` and `regulator-boot-on` in `reg_usb1_vbus` (`PM5` / `USB_HOST_EN`) prevented the Linux kernel regulator core from ever toggling `PM5` low.
+  - If U-Boot left `PM5` high, the 5V VBUS rail never dropped to 0V. The onboard Genesys Logic FE1.1S USB hub (`U6`) RC reset circuit ($10\text{ k}\Omega \times 100\text{ nF} = 1\text{ ms}$) never discharged, leaving the hub state machine in an un-reset or partially brownout state, directly causing `device descriptor read/64, error -71`.
+  - Furthermore, `u2phy` (`phy-sun60i-usb2.c`) was not bound to `reg_usb1_vbus`, relying solely on `ehci1` (`phy-sun4i-usb.c`) to control power.
+- **Implementation**:
+  1. In `sun60i-a733-cubie-a7a.dts`:
+     - Removed `regulator-always-on` and `regulator-boot-on` from `reg_usb1_vbus`.
+     - Retained `startup-delay-us = <100000>` (100 ms) to allow the SGM2576 power switch and FE1.1S RC delay on `XRSTJ` to completely stabilize.
+     - Added `vbus-supply = <&reg_usb1_vbus>;` to `u2phy: phy@6b00000`.
+  2. In `drivers/phy/allwinner/phy-sun60i-usb2.c`:
+     - Acquired optional `priv->vbus` regulator via `devm_regulator_get_optional(dev, "vbus")`.
+     - Invoked `regulator_enable(priv->vbus)` in `sun60i_usb2_phy_init()`, asserting `PM5` and enforcing the 100 ms hardware settling time.
+     - Invoked `regulator_disable(priv->vbus)` in `sun60i_usb2_phy_exit()`.
+- **Verification & Git Commit**:
+  - Both `drivers/phy/allwinner/phy-sun60i-usb2.o` and `allwinner/sun60i-a733-cubie-a7a.dtb` compiled cleanly with 0 warnings.
+  - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `0aca6351dc2a`.
+
+
 
