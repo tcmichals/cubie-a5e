@@ -873,3 +873,18 @@ md.l 0x06a0c120 1
   - Validated compilation: Built `drivers/phy/allwinner/phy-sun60i-usb2.o` cleanly with zero warnings using GCC 15.1.0 (`aarch64-linux-gcc`).
   - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `9dc2249af351`.
 
+### Integration of Gemini Pro Adversarial Review Findings (Commit `b54152aa69d7`)
+
+Following the comprehensive audit, Gemini Pro evaluated the codebase and identified 3 key architectural refinements:
+1. **Reverted `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` Override**:
+   - The `DEV_` prefix designates this as a Device-mode quirk. Injecting it into a pure High-Speed host topology creates undefined controller state machine transitions. Reverted back to standard upstream mainline.
+2. **Read-Modify-Write Without Forcing Bit 21 in `SERDES_TOP_SUBSYS_BGR`**:
+   - In `phy-sun60i-usb2.c`, rather than explicitly forcing Bit 21 (`USB3P1_ONLY_UTMI_CLK_SEL`) to 0, strictly enable `ACLK_EN` (bit 17), `HCLK_EN` (bit 16), and `USB2P0_PHY_RSTN` (bit 4) via read-modify-write without modifying any other multiplexer bits, matching vendor `combo_usb2_clk_set` / `combo_usb_clk_set`.
+3. **Hardware Power-Sequencing Delay for FE1.1S Hub (`U6`) in DTS**:
+   - The FE1.1S reset pin `XRSTJ` is tied to an external RC delay ($10\text{ k}\Omega \times 100\text{ nF} = 1\text{ ms}$) on the 3.3V rail, and 5V VBUS is switched by `U5` (SGM2576) driving a 20 $\mu\text{F}$ capacitor bank.
+   - When the SoC boots rapidly, DWC3 initiates High-Speed Chirp K before the hub's internal 12 MHz crystal oscillator and reset state have stabilized.
+   - Added `startup-delay-us = <100000>` (100 ms) and `off-on-delay-us = <100000>` (100 ms) to `reg_usb1_vbus` in `sun60i-a733-cubie-a7a.dts`. This guarantees full electrical and clock stability prior to xHCI enumeration.
+4. **Git Commit**:
+   - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `b54152aa69d7`.
+
+
