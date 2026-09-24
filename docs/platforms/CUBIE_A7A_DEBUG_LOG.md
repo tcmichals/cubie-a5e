@@ -906,5 +906,23 @@ Following the comprehensive audit, Gemini Pro evaluated the codebase and identif
   - Both `drivers/phy/allwinner/phy-sun60i-usb2.o` and `allwinner/sun60i-a733-cubie-a7a.dtb` compiled cleanly with 0 warnings.
   - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `0aca6351dc2a`.
 
+### Deliberate 200ms VBUS Discharge Cycle to Bleed 20uF Bank (Commit `2fcbe40eb409`)
+
+- **Root Cause & Physics**:
+  - In Linux's regulator core, calling `regulator_enable()` alone on a regulator whose GPIO was already held high by U-Boot increments the logical use count without toggling the GPIO line low.
+  - Furthermore, `U5` (SGM2576) outputs to a 20 $\mu\text{F}$ capacitor bank (`C151` 10uF + `C153` 10uF). The only passive discharge path when `PM5` drops is the `R64/R65` divider ($200\text{ k}\Omega$).
+  - If the regulator is not explicitly disabled with adequate dwell time, residual charge keeps the FE1.1S hub powered through brownout, preventing a true cold Power-On Reset (POR).
+- **Implementation in `phy-sun60i-usb2.c`**:
+  - In `sun60i_usb2_phy_init()`:
+    1. Call `regulator_enable(priv->vbus)`.
+    2. Call `regulator_disable(priv->vbus)` (physically drops `PM5` low).
+    3. Sleep `msleep(200)` to allow the 20 $\mu\text{F}$ capacitor bank to bleed off completely to 0V.
+    4. Call `regulator_enable(priv->vbus)` to assert `PM5` and execute the 100 ms `startup-delay-us`.
+- **Verification & Git Commit**:
+  - Validated style: `checkpatch.pl --strict` passed with 0 errors.
+  - Built `drivers/phy/allwinner/phy-sun60i-usb2.o` cleanly with GCC 15.1.0 (0 warnings).
+  - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `2fcbe40eb409`.
+
+
 
 
