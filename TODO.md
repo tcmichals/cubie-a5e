@@ -729,7 +729,12 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - Backed out SerDes top bridge bit 21 (`0x00230010` -> `0x00030010`) to preserve internal 60 MHz UTMI PLL.
     - Converted `PHY_USB2_PHYCTL` to read-modify-write (`OTGDISABLE | VBUSVLDEXT`, `~SIDDQ`) to preserve factory analog calibration trim.
     - Added `sun60i_usb2_phy_exit()` to assert `SIDDQ` on exit.
-    - Committed & pushed in `linux-cubie` (`9dc2249af351`).
+    - Reverted invalid device-mode quirk `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` in `dwc3/core.c`.
+    - Added host-mode `PHYSOFTRST` with 50 ms delay in `dwc3_core_soft_reset()` for UTMI 60 MHz phase lock.
+    - Decoupled capacitor bleed-off and crystal startup timing from C code: added `off-on-delay-us = <200000>` and `startup-delay-us = <100000>` to `reg_usb1_vbus` in DTS.
+    - Added canonical Linux regulator "Enable -> Disable -> Enable" sequence in `sun60i_usb2_phy_init()` without ad-hoc `msleep()`.
+    - Committed & pushed in `linux-cubie` (`5008254da8a9`).
+    - Authored upstream integration guide (`docs/platforms/ALLWINNER_A733_USB_DWC3_INTEGRATION_GUIDE.md`).
   - [ ] Confirm FE1.1S 4-port USB 2.0 hub enumerates (`1a40:0101`) and external mouse works on live target.
   - [ ] Confirm AIC8800 Wi-Fi 6 device enumerates on hub downstream port 4 (`0xA69C:0x8800`).
   - [ ] Load `aic8800_fdrv` out-of-tree kernel driver and verify `wlan0` interface appears.
