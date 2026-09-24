@@ -923,6 +923,24 @@ Following the comprehensive audit, Gemini Pro evaluated the codebase and identif
   - Built `drivers/phy/allwinner/phy-sun60i-usb2.o` cleanly with GCC 15.1.0 (0 warnings).
   - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `2fcbe40eb409`.
 
+### Migration of Bleed-Off Delay to DTS `off-on-delay-us` (Commit `5008254da8a9`)
+
+- **Architectural Cleanup**:
+  - In accordance with mainline standards, hardware-specific capacitor discharge timings belong in the Device Tree rather than being hardcoded via `msleep()` inside C driver logic.
+  - Standard Linux fixed regulator binding provides `off-on-delay-us` (read by `drivers/regulator/fixed.c` and enforced automatically in `drivers/regulator/core.c` via `fsleep()` before re-asserting the enable GPIO).
+- **Implementation**:
+  1. In `sun60i-a733-cubie-a7a.dts` (`reg_usb1_vbus`):
+     - Added `off-on-delay-us = <200000>;` (200 ms to bleed the 20 $\mu\text{F}$ capacitor bank).
+     - Retained `startup-delay-us = <100000>;` (100 ms for the FE1.1S 12 MHz crystal and PLL to lock).
+  2. In `drivers/phy/allwinner/phy-sun60i-usb2.c`:
+     - Removed `msleep(200)` and `#include <linux/delay.h>`.
+     - In `sun60i_usb2_phy_init()`: Calls `regulator_enable -> regulator_disable -> regulator_enable`. The regulator core intercepts the second enable, automatically sleeps for the remaining `off-on-delay-us` (200 ms) while `PM5` is low, drives `PM5` high, and then sleeps for `startup-delay-us` (100 ms).
+- **Verification & Git Commit**:
+  - Validated style: `checkpatch.pl --strict` passed with 0 errors.
+  - Both driver and DTB built cleanly with zero warnings.
+  - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `5008254da8a9`.
+
+
 
 
 
