@@ -13,8 +13,7 @@
 * Enable local GDB debugging connectivity into the XuanTie E906/E907 real-time core directly from the ARM terminal under Linux.
 
 ## 4. Implementation Phases
-### Phase 1: Boot Unlocking Parameter Patch
-* Legacy boot configuration parameter notes.
+* Legacy bootargs configuration notes.
 
 ### Phase 2: OpenOCD Target Script Construction
 - Construct an advanced OpenOCD hardware script (`openocd_t527_local.cfg`). Map the configuration to interface using the Allwinner physical memory base address (`0x07090000`).
