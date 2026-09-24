@@ -43,19 +43,21 @@ PART 1: HARDWARE & SCHEMATIC GROUND TRUTH (Radxa Cubie A7A V1.10)
 ================================================================================
 PART 2: RECENT MAINLINE DRIVER & DEVICE TREE REVISIONS
 ================================================================================
-We implemented the following system-wide updates:
+We implemented the following system-wide updates to pass rigorous upstream review:
 
 1. Device Tree (sun60i-a733-cubie-a7a.dts):
    - In reg_usb1_vbus: DELETED regulator-always-on and regulator-boot-on.
-     Rationale: These properties blocked Linux regulator core from cycling PM5 low. If U-Boot left PM5 high, the hub never saw 0V, preventing a cold reset flush.
+     Rationale: Allows the Linux regulator core to physically toggle PM5 low, overriding U-Boot state to execute a cold Power-On Reset (POR).
+   - In reg_usb1_vbus: Set off-on-delay-us = <200000> (200 ms).
+     Rationale: Forces the regulator framework to wait 200ms when disabled, guaranteeing the massive 20uF capacitor bank (C151+C153) completely bleeds off below the FE1.1S Brown-Out Reset threshold.
    - In reg_usb1_vbus: Set startup-delay-us = <100000> (100 ms).
-     Rationale: Forces Linux regulator core to wait 100 ms after asserting PM5 so U5 (SGM2576), the 20 uF capacitor bank, the R64/R65 divider, the XRSTJ RC delay, and the hub's 12 MHz crystal oscillator completely stabilize.
+     Rationale: Delays subsequent operations so the SGM2576 power switch, R64/R65 divider, XRSTJ RC delay, and the hub's 12 MHz crystal completely stabilize.
    - In u2phy (phy@6b00000): Added vbus-supply = <&reg_usb1_vbus>;.
 
 2. PHY Driver (drivers/phy/allwinner/phy-sun60i-usb2.c):
-   - Added vbus regulator management (devm_regulator_get_optional, regulator_enable in init, regulator_disable in exit).
+   - Added vbus regulator management using an "Enable -> Disable -> Enable" sequence in init(). This satisfies the Linux regulator core reference counting (`use_count`) while guaranteeing a hardware reset cycle without throwing `WARN_ON` stack traces.
    - SerDes Top Bridge (0x06C00008 / SERDES_TOP_SUBSYS_BGR):
-     Read-modify-write setting ONLY ACLK_EN (bit 17), HCLK_EN (bit 16), and USB2P0_PHY_RSTN (bit 4) without altering Bit 21 or other multiplexer bits, matching vendor combo_usb2_clk_set / combo_usb_clk_set.
+     Read-modify-write setting ONLY ACLK_EN (bit 17), HCLK_EN (bit 16), and USB2P0_PHY_RSTN (bit 4) without altering Bit 21 or other multiplexer bits.
    - PHYCTL (0x10): Read-modify-write setting OTGDISABLE (bit 10) and VBUSVLDEXT (bit 5) while clearing SIDDQ (bit 3), preserving wafer analog calibration.
    - SYSCFG (0x03000160/0x168): Configured 200-ohm calibration trim.
 
