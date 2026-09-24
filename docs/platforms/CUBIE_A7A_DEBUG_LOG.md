@@ -823,3 +823,53 @@ md.l 0x06a0c120 1
        - Reverted `DWC3_GUSB2PHYCFG_USBTRDTIM(15)` back to `DWC3_GUSB2PHYCFG_USBTRDTIM(USBTRDTIM_UTMI_8_BIT)` in `core.c` and patch `0011`.
        - Verified all silicon registers on hardware: SerDes Top `0x06C00008 = 0x00030010`, SYSCFG `0x03000160 = 0x00C80502`, Resistor calibration `0x03000168 = 0xC8C80000`, UTMI clock `0x02003360 = 0x81000004` (60 MHz), AXI clock `0x02003354 = 0x81000000` (300 MHz).
        - Kernel rebuilt and packaged into `bld.a7a/images/sdcard.img` and `bld.a7a/images/Image`.
+
+### Comprehensive Audit of USB/DWC3 Changes & SerDes Clock Mux Resolution (Sep 24, 2026)
+
+- **Problem Statement**:
+  - The Radxa Cubie A7A bottom USB port (next to Ethernet) functions reliably, but the top USB port, internal USB header, and onboard AIC8800 Wi-Fi 6 failed enumeration with `device descriptor read/64, error -71` (`-EPROTO` / `COMP_USB_TRANSACTION_ERROR`).
+  - An audit of all prior kernel modifications was conducted against the Radxa Cubie A7A V1.10 schematic, the Allwinner A733 vendor BSP (`linux-a733`), and Nick Alilovic's Armbian tree (`Radxa-A7A`) to determine which changes are essential and which experimental modifications must be backed out.
+
+- **Schematic Routing & Port Discrepancy Root Cause**:
+  1. **Bottom USB 2.0 / 3.0 Type-A Port (`CON_U3_U2`)**:
+     - Direct point-to-point wiring to SoC balls `E36`/`F36` (`USB1-DP`/`USB1-DM`).
+     - Driven by SoC host controllers **EHCI1/OHCI1** (`0x04200000`) and the standard `phy-sun4i-usb` PHY (`0x04100400`, port 1).
+     - 5V VBUS is supplied by SGM2576 `U2`, controlled by `PL2` (`USB0-DRVVBUS`).
+     - **Result**: Always operates reliably because it completely bypasses DWC3 and the USB hub.
+  2. **Top Port (`CON1`), Internal Header (`J4`), and AIC8800 Wi-Fi 6 (`U3`)**:
+     - All connect downstream of the onboard **Genesys Logic FE1.1S 4-Port USB Hub (`U6`)**.
+     - The upstream pins of `U6` (`DPU`/`DMU`) connect through `R53`/`R69` (0Ω) directly to SoC balls `C36`/`B37` (`USB2-DP`/`USB2-DM`).
+     - Driven exclusively by **DWC3 (`0x06A00000`)** paired with the dedicated **Sun60i USB 2.0 PHY (`0x06B00000`)**.
+     - VBUS for the hub and downstream ports is supplied by SGM2576 `U5`, switched by `PM5` (`USB_HOST_EN`).
+
+- **Audit Findings: Fixes Retained vs. Fixes Backed Out / Modified**:
+  1. **Retained Fixes (Do NOT Back Out)**:
+     - `drivers/usb/dwc3/core.c` (`dwc3_core_soft_reset()`):
+       - Pulses `DWC3_GUSB2PHYCFG_PHYSOFTRST` and sleeps 50 ms when `dwc->dr_mode == USB_DR_MODE_HOST`. Directly matches vendor BSP `core.c` lines 294–318; mandatory for UTMI 60 MHz clock synchronization.
+     - `drivers/usb/dwc3/core.c` (`dwc3_core_init()`):
+       - Sets `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` for `DWC31_IP` and `DWC32_IP` when running in High-Speed mode. Prevents `xhci_reset()` from stalling for 13 seconds waiting for an unclocked SuperSpeed PIPE domain.
+       - Sets `DWC3_OCFG_SFTRSTMASK` in `DWC3_OCFG`. Matches vendor BSP `drd.c` lines 104 and 279; prevents host controller reset (`USBCMD.HCRST`) from clearing OTG filters and PHY interface lines.
+     - `drivers/pmdomain/sunxi/sun55i-pck600.c`:
+       - Fixed `pd->pck = pck` NULL pointer dereference in error path.
+       - Fixed `is_off` detection from `PPU_PWSR` register instead of hardcoding `false`.
+       - Powered on Domain 8 (`PD_USB2`) and marked it `GENPD_FLAG_ALWAYS_ON` so DWC3 MMIO does not stall and return 0x0.
+     - `drivers/clk/sunxi-ng/ccu-sun60i-a733.c`:
+       - CCU register `0x1360 = 0x81000004` (60 MHz UTMI clock generation from PLL).
+     - `drivers/phy/allwinner/phy-sun4i-usb.c`:
+       - Shared reset control and SIDDQ clearing for EHCI1/OHCI1.
+  2. **Modified / Backed Out (Root Cause of `error -71`)**:
+     - **SerDes Top Bridge `0x06C00008` (`SERDES_TOP_SUBSYS_BGR`)**:
+       - *Previous code*: `writel(0x00230010, subsys_bgr);` set bit 21 (`USB3P1_ONLY_UTMI_CLK_SEL`).
+       - *Vendor BSP*: In `sunxi-cadence-combophy.c` lines 743–761, register `0x06C00008` is written with **`0x00030010`** (`USB3P1_USB2P0_PHY_RSTN | USB3P1_ACLK_EN | USB3P1_HCLK_EN`), leaving bit 21 strictly `0`.
+       - *Impact*: Setting bit 21 forces an alternate clock mux that detaches or destabilizes the 60 MHz UTMI clock generator during High-Speed packet serialization, causing CRC and framing errors during EP0 descriptor reads.
+       - *Action*: Backed out bit 21. Driver now performs read-modify-write setting bits 17, 16, 4 and strictly clearing bit 21.
+     - **PHY Control Register `PHY_USB2_PHYCTL` (`0x10`)**:
+       - *Previous code*: `writel(0x000e2434, priv->base + PHY_USB2_PHYCTL);` hardcoded a raw register value, clobbering factory analog calibration trim.
+       - *Vendor BSP*: In `phy-sunxi-plat.c` lines 215–226, reads `PHY_USB2_PHYCTL`, sets `OTGDISABLE` (`BIT(10)`) and `VBUSVLDEXT` (`BIT(5)`), and clears `SIDDQ` (`BIT(3)`).
+       - *Action*: Converted to read-modify-write matching vendor BSP. Added `sun60i_usb2_phy_exit()` to assert `SIDDQ` on driver removal/suspend.
+
+- **Verification & Git Commit**:
+  - Validated style: `scripts/checkpatch.pl --strict -f drivers/phy/allwinner/phy-sun60i-usb2.c` returned 0 errors, 0 checks.
+  - Validated compilation: Built `drivers/phy/allwinner/phy-sun60i-usb2.o` cleanly with zero warnings using GCC 15.1.0 (`aarch64-linux-gcc`).
+  - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `9dc2249af351`.
+

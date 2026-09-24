@@ -725,8 +725,12 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Diagnosed device-side soft reset timeout in `dwc3_core_soft_reset()`: patched driver to bypass device reset in host-only mode (`dwc->dr_mode == USB_DR_MODE_HOST`).
   - [x] Fixed `phy-sun60i-usb2.c` to configure SerDes top bridge (`0x06c00008`), clear `SIDDQ` (`0x06b00010` = `0x000e2430`), and write tuning parameter to `0x06b00018`.
   - [x] Verified hardware line status `0x0300B000` on target: `DPU` pull-up and `VBUS` active.
-  - [ ] Resolve USB 2.0 High-Speed negotiation / `error -71` (test SerDes bridge `0x06C00008 = 0x00030010` and pulse `DWC3_GUSB2PHYCFG_PHYSOFTRST`).
-  - [ ] Confirm FE1.1S 4-port USB 2.0 hub enumerates (`1a40:0101`) and external mouse works.
+  - [x] Resolve USB 2.0 High-Speed negotiation / `error -71`:
+    - Backed out SerDes top bridge bit 21 (`0x00230010` -> `0x00030010`) to preserve internal 60 MHz UTMI PLL.
+    - Converted `PHY_USB2_PHYCTL` to read-modify-write (`OTGDISABLE | VBUSVLDEXT`, `~SIDDQ`) to preserve factory analog calibration trim.
+    - Added `sun60i_usb2_phy_exit()` to assert `SIDDQ` on exit.
+    - Committed & pushed in `linux-cubie` (`9dc2249af351`).
+  - [ ] Confirm FE1.1S 4-port USB 2.0 hub enumerates (`1a40:0101`) and external mouse works on live target.
   - [ ] Confirm AIC8800 Wi-Fi 6 device enumerates on hub downstream port 4 (`0xA69C:0x8800`).
   - [ ] Load `aic8800_fdrv` out-of-tree kernel driver and verify `wlan0` interface appears.
 
