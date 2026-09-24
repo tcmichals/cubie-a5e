@@ -78,6 +78,19 @@ Comprehensive schematic tracing, register auditing, and vendor BSP cross-referen
   * Secondary divider bleed: $R_{64} + R_{65} = 200\,\text{k}\Omega$.
   * Device Tree specification `off-on-delay-us = <200000>` (200 ms) guarantees a full bleed-off margin regardless of component tolerances or board revisions.
 
+### AIC8800 Wi-Fi 6 Module (`U3` FCU760K) Schematic Netlist
+* **USB Interface Routing**:
+  * `U3` Pin 13 (`USB_DP`): Wired to `USB4_DP` $\rightarrow$ `U6` (FE1.1S hub downstream port 4, pin 26).
+  * `U3` Pin 12 (`USB_DM`): Wired to `USB4_DM` $\rightarrow$ `U6` (FE1.1S hub downstream port 4, pin 25).
+  * Operating Speed: USB 2.0 High-Speed (480 Mbps).
+  * Device Identity: Vendor ID `0xA69C`, Product ID `0x8800` (or `0x8D80`/`0x8D81`/`0x8D83`).
+* **Power Architecture & Gating**:
+  * `VBAT` (Pin 11): Powered by `WIFI_3V3`, filtered by capacitor bank $C_{103}$ ($100\text{ nF}$) + $C_{104}$ ($10\,\mu\text{F}$) + $C_{101}$ ($22\,\mu\text{F}$).
+  * High-Side Power Switch `Q8` (WPM2015 P-channel MOSFET): Switches `VCC-WIFI` to `WIFI_3V3`.
+  * Gate Control: `Q8` gate is pulled up to `VCC-WIFI` via $R_{33}$ ($10\,\text{k}\Omega$) and pulled down by $Q_9$ (MMBT3904 NPN).
+  * `Q9` Base: Driven through $R_{41}$ ($10\,\text{k}\Omega$) by SoC GPIO `PM0` (`USB_WIFI_PWR`). Driving `PM0` high turns on $Q_9$, which pulls $Q_8$ gate low and asserts `WIFI_3V3`.
+  * Chip Enable: Pin 18 (`CHIP_EN`) driven by SoC GPIO `PM1` (`WL_REG_ON`). Driving `PM1` high takes the AIC8800 out of shutdown.
+
 ---
 
 ## 3. Mainline Upstream Architecture & Clean Implementation
