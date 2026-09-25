@@ -9,5 +9,5 @@
 # overlays=cubie-a7a-flight-stack.dtbo cubie-a7a-uio.dtbo
 
 # Optional extra kernel arguments:
-extra_bootargs=
+extra_bootargs=usbcore.old_scheme_first=1
 

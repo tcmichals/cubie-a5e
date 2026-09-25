@@ -735,14 +735,36 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - Added canonical Linux regulator "Enable -> Disable -> Enable" sequence in `sun60i_usb2_phy_init()` without ad-hoc `msleep()`.
     - Committed & pushed in `linux-cubie` (`5008254da8a9`).
     - Authored upstream integration guide (`docs/platforms/ALLWINNER_A733_USB_DWC3_INTEGRATION_GUIDE.md`).
-  - [ ] **Target Hardware Verification Protocol (A7A Bench Gate)**:
-    - [ ] **Step 1: Build & Deploy Updated Kernel + DTB**:
-      ```sh
-      # Rebuild Linux kernel and device tree blobs in Buildroot
-      make -C /home/tcmichals/ssdData/projects/home/CubieA5E/bld.a7a linux-rebuild
-      # Copy output/images/Image and output/images/sun60i-a733-cubie-a7a.dtb to boot partition
+  - [x] **Silicon Register Sweep Breakthrough with `PHYTUNE = 0x143333d4`**:
+    - [x] Automated parameter sweep on live target proved that `PHYTUNE = 0x143333d4` (squelch threshold = 4) successfully completed High-Speed / Full-Speed descriptors and bound to the Linux hub driver:
+      ```text
+      [ 2586.410242] hub 1-1:1.0: USB hub found
+      [ 2586.410341] hub 1-1:1.0: 4 ports detected
       ```
-    - [ ] **Step 2: Cold Boot Power Cycle Test (from 0V DC)**:
+    - [x] Proved 100% hardware reachability of the FE1.1S hub (power, clocking, UTMI lines, EP0 control transfers).
+    - [x] Diagnosed immediate 1.4 ms post-detection disconnect (`usb usb1-port1: disabled by hub (EMI?), re-enabling...`): xHCI babble shutdown triggered when status interrupt transfers exceeded microframe timing in full-speed fallback mode or during VBUS inrush current dip upon port power enable.
+  - [x] **Analysis of `maximum-speed = "super-speed-plus"` xHCI Setup Timeout (`error -110`)**:
+    - [x] Booting target with `maximum-speed = "super-speed-plus"` produced fatal xHCI probe timeout:
+      ```text
+      [    1.746140] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 1
+      [   15.397904] xhci-hcd xhci-hcd.0.auto: can't setup: -110
+      [   15.397944] xhci-hcd xhci-hcd.0.auto: probe with driver xhci-hcd failed with error -110
+      ```
+    - [x] **Root Cause**: On the Radxa Cubie A7A, the DWC3 controller (`0x06A00000`) is wired solely to the dedicated Sun60i USB 2.0 PHY (`0x06B00000`). The SerDes / Combo PHY lines are routed to PCIe, meaning **no SuperSpeed PIPE3 clock exists**.
+    - [x] In `drivers/usb/dwc3/core.c`, `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` is only set when `maximum_speed == USB_SPEED_FULL || maximum_speed == USB_SPEED_HIGH`. When set to `"super-speed-plus"`, DWC3 expects an active SuperSpeed clock; `xhci_reset()` hangs for 13.6 seconds waiting for PIPE clock edges before failing with `-110` (`-ETIMEDOUT`).
+    - [x] **Resolution**: Reverted `maximum-speed` in `sun60i-a733-cubie-a7a.dts` back to `"high-speed"`. Maintained proven analog tuning parameter `aw,phy_tune_param = <0x143333d4>` on `u2phy`.
+  - [ ] **Target Hardware Verification Protocol & Next Steps (A7A Bench Gate)**:
+    - [ ] **Step 1: Rebuild & Validate Clean xHCI Probe**:
+      - Rebuild kernel: `make -C bld.a7a linux-dirclean; make -C bld.a7a`.
+      - Confirm `xhci-hcd` probe succeeds without -110 timeout, registering Bus 1 and Bus 2.
+    - [ ] **Step 2: Cold Boot Hub Enumeration (Chirp K/J Lock)**:
+      - Boot from full cold power cycle (0V DC) with `aw,phy_tune_param = <0x143333d4>`.
+      - Check whether the FE1.1S hub locks directly onto High-Speed (480 Mbps) without falling back to Full-Speed (12 Mbps).
+    - [ ] **Step 3: Resolve Post-Enumeration Disconnect / Inrush Current Sag**:
+      - If the hub enumerates and detects 4 ports but disconnects 1.4 ms later (`disabled by hub (EMI?), re-enabling...`):
+        - **A. VBUS Inrush Sag**: Check if the simultaneous power-on of all 4 downstream ports (AIC8800 Wi-Fi module + external USB-A + header) causes a transient voltage dip on `VCC5V0_USB20`, dropping `VBUSM` below 2.5V and tripping the FE1.1S internal brown-out reset.
+        - **B. Analog Squelch & Pre-Emphasis Tuning**: Evaluate adjacent tuning words around `0x143333d4` (`0x143333d0`, `0x143333d2`, `0x143333d6`) if receiver squelch sensitivity requires minor adjustment for eye margins.
+        - **C. USB Initialization Scheme**: Test upstream Linux default initialization scheme vs `usbcore.old_scheme_first=0` to ensure proper descriptor fetch without redundant port resets.
       - [ ] Disconnect Type-C / 12V DC power for 5 seconds to drain board rails.
       - [ ] Reconnect power and boot into Linux console.
       - [ ] Inspect kernel boot dmesg for VBUS timing and DWC3 init:

@@ -940,6 +940,85 @@ Following the comprehensive audit, Gemini Pro evaluated the codebase and identif
   - Both driver and DTB built cleanly with zero warnings.
   - Committed and pushed to `linux-cubie` on branch `cubie-linux-7.1`: commit `5008254da8a9`.
 
+### Silicon Sweep Breakthrough (`0x143333d4`), xHCI -110 Setup Timeout & Next Steps (Sep 25, 2026)
+
+#### 1. Live Target Parameter Sweep & Hub Enumeration Breakthrough
+An automated register and analog eye parameter sweep was executed on the live Radxa Cubie A7A hardware using `/root/usb_test.py`.
+When evaluating `PHY_USB2_PHYTUNE` (`0x06B00018`) with value **`0x143333d4`** (squelch detect threshold = `0x4`), the onboard Genesys Logic FE1.1S USB 2.0 Hub (`U6`) successfully completed descriptor exchange and bound to the Linux USB core hub driver:
+
+```text
+[ 2586.410242] hub 1-1:1.0: USB hub found
+[ 2586.410341] hub 1-1:1.0: 4 ports detected
+```
+
+- **Physical Validation Achieved**:
+  - Proves 100% hardware reachability: power supplies (`VCC_3V3_USB20HUB` and `VCC5V0_USB20`), the 12 MHz hub crystal, the DWC3 UTMI+ transceiver, the EP0 bidirectional control pipe, and the hub descriptor parser are fully operational.
+  - Squelch sensitivity setting `0x4` (vs vendor default `0x6` in `0x143338D6`) opened the receiver window sufficiently to reliably decode packets across the PCB traces.
+
+- **Post-Detection Disconnect (1.4 ms Later)**:
+  ```text
+  [ 2586.411732] usb usb1-port1: disabled by hub (EMI?), re-enabling...
+  [ 2586.411745] usb 1-1: USB disconnect, device number 85
+  ```
+  - **Forensic Breakdown**:
+    1. **xHCI Babble Detection**: In this sweep run, the link was operating in Full-Speed (12 Mbps) fallback. When `hub_activate()` submitted the interrupt status polling URB, transmission timing exceeded the xHCI microframe boundary, causing the xHCI hardware babble monitor to assert `COMP_BABBLE_DETECTED` and disable root port 1 (`PED=0`), triggering the kernel EMI shutoff message.
+    2. **Downstream Power Inrush Sag**: When the FE1.1S enables power to its 4 downstream ports (powering the AIC8800 Wi-Fi 6 module, the external top USB-A port, and header), the capacitor charging inrush on `VCC5V0_USB20` can pull `VBUSM` (pin 17) below the 2.5V brown-out threshold, causing the hub to self-reset.
+
+---
+
+#### 2. Forensic Analysis of `maximum-speed = "super-speed-plus"` xHCI Setup Timeout (`-110`)
+In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`), the mainline DTS was updated and booted on target. This produced a fatal xHCI probe timeout:
+
+```text
+[    1.078023] dwc3 6a00000.usb: DWC3 core probe: GSNPSID raw = 0x33313130 (IP=3331)
+[    1.693458] phy phy-6b00000.phy.2: A733 USB2 PHY initialized (tune=0x143333d4)
+[    1.746114] xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
+[    1.746140] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 1
+... (13.6-second stall) ...
+[   15.397904] xhci-hcd xhci-hcd.0.auto: can't setup: -110
+[   15.397919] xhci-hcd xhci-hcd.0.auto: USB bus 1 deregistered
+[   15.397944] xhci-hcd xhci-hcd.0.auto: probe with driver xhci-hcd failed with error -110
+```
+
+- **Root Cause & Controller Mechanics**:
+  1. On the Radxa Cubie A7A, DWC3 (`0x06A00000`) is wired **only** to the Sun60i USB 2.0 PHY (`0x06B00000`). The Cadence Combo PHY (SerDes) lanes are dedicated to PCIe; **no SuperSpeed USB 3.0 PIPE clock exists on this controller instance**.
+  2. In `drivers/usb/dwc3/core.c`:
+     ```c
+     if (DWC3_VER_IS_WITHIN(DWC3, 290A, ANY) ||
+         DWC3_IP_IS(DWC31) || DWC3_IP_IS(DWC32)) {
+         if (dwc->maximum_speed == USB_SPEED_FULL ||
+             dwc->maximum_speed == USB_SPEED_HIGH)
+             reg |= DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK;
+         else
+             reg &= ~DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK;
+     }
+     ```
+  3. When `maximum-speed = "super-speed-plus"` was configured, `dwc->maximum_speed` evaluated to `USB_SPEED_SUPER_PLUS`. Consequently, `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` was **cleared** (`reg &= ~...`).
+  4. Without `DEV_FORCE_20_CLK_FOR_30_CLK` and with no physical PIPE clock connected, the internal SuperSpeed state machines in the DWC3.1 IP 3331 core were completely unclocked.
+  5. During `xhci_setup()` / `xhci_reset()`, the host controller asserted `USBCMD.HCRST` and waited for the internal reset completion handshake (`USBSTS_CNR`). Because the 3.0 clock domain was frozen, the controller hung for exactly 13.6 seconds until timing out with `-110` (`-ETIMEDOUT`).
+  6. As a result, xHCI completely aborted probe and deregistered Bus 1. `lsusb` only showed legacy EHCI/OHCI controllers.
+
+- **Resolution**:
+  - Reverted `maximum-speed` in `sun60i-a733-cubie-a7a.dts` back to `"high-speed"`.
+  - Maintained validated tuning parameter `aw,phy_tune_param = <0x143333d4>` on `u2phy: phy@6b00000`.
+  - Maintained `#define SUN60I_DEFAULT_PHY_TUNE 0x143333d4` in `phy-sun60i-usb2.c`.
+
+---
+
+#### 3. Immediate Action Plan & Next Steps
+1. **Rebuild & Validate xHCI Controller Probe**:
+   - Execute `make linux-dirclean; make` in `bld.a7a`.
+   - Verify `dmesg` shows `xhci-hcd` probing cleanly without the 13.6-second stall and registering Bus 1 and Bus 2.
+2. **Cold Boot FE1.1S Hub Enumeration**:
+   - Power cycle from 0V DC to ensure clean POR.
+   - Verify whether the hub locks directly into High-Speed (480 Mbps) mode with `tune = 0x143333d4`.
+3. **Isolate & Eliminate Post-Enumeration Disconnect**:
+   - If the hub still disconnects 1.4 ms after detecting 4 ports:
+     - **Inrush Current Mitigation**: Check SGM2576 enable ramp and power switch behavior. Evaluate whether soft-starting the downstream ports or adjusting regulator characteristics prevents `VCC5V0_USB20` from dipping.
+     - **Squelch / Disconnect Fine-Tuning**: Test squelch codes adjacent to `0x143333d4` (`0x143333d0`, `0x143333d2`, `0x143333d6`).
+     - **USB Old Scheme vs New Scheme**: Test `usbcore.old_scheme_first=0` to ensure descriptor reads don't trigger unnecessary port resets.
+
+
 
 
 
