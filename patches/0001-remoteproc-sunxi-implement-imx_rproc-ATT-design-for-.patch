@@ -1,5 +1,5 @@
 From c5217232de174e1442df9571ac8c30b3c65b5220 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
+From: Tim Michals <tcmichals@gmail.com>
 Date: Wed, 23 Sep 2026 14:27:08 -0500
 Subject: [PATCH] remoteproc: sunxi: implement imx_rproc ATT design for address
  translation
