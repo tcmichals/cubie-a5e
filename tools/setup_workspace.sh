@@ -84,6 +84,14 @@ if [ -f "${SCRIPT_DIR}/WORKSPACE_README.md" ]; then
     cp "${SCRIPT_DIR}/WORKSPACE_README.md" "${WORKSPACE_ROOT}/README.md"
 fi
 
+# 6. Synchronize .agents rules and prompt guidelines to workspace root
+if [ -d "${SCRIPT_DIR}/../.agents" ]; then
+    echo ""
+    echo "[5/5] Synchronizing .agents rules to workspace root..."
+    mkdir -p "${WORKSPACE_ROOT}/.agents"
+    cp -r "${SCRIPT_DIR}/../.agents/"* "${WORKSPACE_ROOT}/.agents/"
+fi
+
 
 echo ""
 echo "======================================================================"
