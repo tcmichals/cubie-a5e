@@ -183,6 +183,7 @@ Tim Michals (7):
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
+base-commit: 5c4d4169604b335c38bbc79bc1fc03042981fc6f
 -- 
 2.43.0
 
