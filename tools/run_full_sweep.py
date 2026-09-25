@@ -180,7 +180,7 @@ def wait_for_target(max_attempts=30):
 
 def set_overlay_and_reboot(overlay_str, cmdline_str=None):
     print(f"\n[CONFIG] Setting overlay: '{overlay_str}'")
-    run_ssh(f"sed -i 's/^dtoverlay=.*/dtoverlay={overlay_str}/' /boot/config.txt")
+    run_ssh(f"sed -i '/^[# ]*dtoverlay=/d' /boot/config.txt; echo 'dtoverlay={overlay_str}' >> /boot/config.txt")
     run_ssh("sed -i '/^cmdline=uio_pdrv_genirq/d' /boot/config.txt")
     if cmdline_str:
         run_ssh(f"echo '{cmdline_str}' >> /boot/config.txt")
