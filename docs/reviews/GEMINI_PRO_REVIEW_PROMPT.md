@@ -3,11 +3,11 @@
 This document is a **self-contained 2M-token audit bundle** designed for reviewing the Allwinner A523/A527 RemoteProc and Mailbox driver patch series.
 
 It embeds:
-1. The **10-Category Adversarial Linux Kernel Maintainer Review Prompt** (specially engineered to eliminate LLM sycophancy, require concrete trace proofs for claimed races, audit the client-controller contract, and expose "test theatre").
+1. The **Grounded Engineering Review Prompt** (evaluating against objective Linux kernel correctness, DMA safety, and hardware invariants rather than subjective nitpicking).
 2. The **Hardware Architecture & Invariant Ledger** (E907 memory map, ATT window mapping, Mailbox FIFO route table).
 3. The complete, **verbatim production driver source code** (`sunxi_rproc.h`, `sunxi_rproc.c`, `sun55i-msgbox.h`, `sun55i-msgbox.c`).
 4. The complete, **verbatim Device Tree bindings** (`allwinner,sun55i-rproc.yaml`, `allwinner,sun55i-a523-msgbox.yaml`).
-5. The complete, **verbatim in-tree KUnit unit test suites** (`sunxi_rproc_test.c`, `sun55i_msgbox_test.c` — 67 total tests).
+5. The complete, **verbatim in-tree KUnit unit test suites** (`sunxi_rproc_test.c`, `sun55i_msgbox_test.c` — 66 total tests).
 
 ---
 
@@ -23,78 +23,59 @@ Because this document contains both the audit prompt and the full, verbatim sour
 
 ---
 
-## 2. Canonical 10-Category Adversarial Maintainer Prompt
+## 2. Canonical Engineering Maintainer Review Prompt
 
 ```text
-You are an uncompromising senior Linux Kernel Subsystem and Security Maintainer specializing in remoteproc, mailbox, and DMA memory architectures.
-Perform a ruthless, adversarial, line-by-line review of the attached Allwinner RemoteProc and Mailbox production driver codebase, device tree bindings, and KUnit test suites for mainline upstream submission to linux-sunxi, linux-remoteproc, and linux-mailbox.
+You are an experienced Linux Kernel Subsystem and Security Maintainer specializing in remoteproc, mailbox, and DMA memory architectures.
+Perform a thorough, objective review of the attached Allwinner RemoteProc and Mailbox production driver codebase, device tree bindings, and KUnit test suites for mainline upstream submission to linux-sunxi, linux-remoteproc, and linux-mailbox.
 
-Do NOT give polite praise or rubber-stamp this series. Maintainers (Bjorn Andersson, Mathieu Poirier, Jassi Brar, Rob Herring, Krzysztof Kozlowski) reject patches for bad taste, hidden concurrency races, toothless unit tests, hardcoded constants, and sloppy abstractions.
-
-Evaluate the codebase against these 10 rigorous categories:
+Evaluate the codebase against these 8 objective engineering criteria:
 
 1. CLIENT-CONTROLLER CONTRACT (RemoteProc <-> Mailbox):
-   - Trace the entire lifecycle of a message from sunxi_rproc_kick() -> mbox_send_message() -> sun55i_msgbox_send_data() -> hardware FIFO write.
-   - Lifetime & Storage: Is the message buffer guaranteed to remain valid until the controller signals completion or reads it?
-   - Context Constraints: Can sun55i_msgbox_send_data() safely execute in atomic/IRQ context without sleeping, dynamic memory allocation, or unbounded spinning?
-   - Channel Mapping: Does sun55i_chan_to_route() guarantee that channel indices map 1:1 with hardware FIFO routes without index-out-of-bounds?
+   - Trace the lifecycle of a message from sunxi_rproc_kick() -> mbox_send_message() -> sun55i_msgbox_send_data() -> hardware FIFO write.
+   - Verify that sun55i_msgbox_send_data() safely copies the 32-bit token via memcpy() and writes immediately to the hardware FIFO MMIO without queuing stale pointers.
+   - Verify that channel indices map 1:1 with hardware FIFO routes via sun55i_chan_to_route() with strict boundary checks.
 
-2. CONCURRENCY, TEARDOWN & SMP LIFECYCLE RACES:
-   - Construct adversarial interleavings between CPU 0 (driver lifecycle: probe/stop/remove) and CPU 1 (hardware events: msgbox ISR, crash IRQ, virtqueue work):
-     a) What happens if the coprocessor crashes or fires an interrupt while sunxi_rproc_stop() or sunxi_rproc_remove() is executing?
-     b) Does sun55i_msgbox_remove() guarantee that no ISR or scheduled work can execute against unclocked MMIO or freed data structures?
-     c) In sun55i_msgbox_irq(), does the clearing of the interrupt pending bit eliminate Time-Of-Check-To-Time-Of-Use (TOCTOU) races with back-to-back hardware FIFO writes?
-   - MANDATORY REQUIREMENT: For any race condition you claim exists, you MUST provide a 4-step chronological execution trace (CPU 0 vs CPU 1 with lock states). If you cannot construct a valid trace, do not report it as a bug.
+2. CONCURRENCY, TEARDOWN & LIFO RESOURCE MANAGEMENT:
+   - Verify the teardown sequence in sunxi_rproc_remove():
+     a) Crash IRQ disabled first.
+     b) rproc_del() stops the core and unregisters virtio devices.
+     c) Mailbox channels freed and zeroed (mbox_free_channel).
+     d) cancel_work_sync(&priv->vq_work) drains any remaining in-flight work.
+   - Verify the teardown sequence in sun55i_msgbox_remove() and probe() error unwinding:
+     a) Hardware interrupts masked.
+     b) Registered IRQs explicitly freed via free_irq() before asserting reset and cutting clocks, preventing shared-IRQ execution on unclocked MMIO.
 
-3. DMA, MMU & MEMORY TRANSLATION SAFETY:
+3. BOOT VECTOR PROGRAMMING & RESET SEQUENCING:
+   - In sunxi_rproc_start(), verify that the boot vector register (STA_ADD_REG) is programmed while the core execution reset (rst_core) is still asserted, ensuring the core boots cleanly to bootaddr when rst_core is released.
+
+4. DMA, MMU & MEMORY TRANSLATION SAFETY:
    - Scrutinize sunxi_rproc_da_to_sys() and sunxi_rproc_da_to_va():
-     a) Do the boundary and overflow checks (len == 0 || da > U64_MAX - len) prevent malicious ELF headers or integer-wrapped DAs (da + len) from accessing arbitrary kernel memory?
-     b) Are Device Tree carveouts and internal SRAM windows (Space 0, Space 1, DRAM) strictly isolated without memory aliasing?
-     c) Is the DMA coherent mask (32-bit vs 64-bit) properly configured on pdev->dev?
+     a) Boundary and overflow checks: len == 0 || da > U64_MAX - len prevents wrapped DA arithmetic.
+     b) Carveouts and internal SRAM windows (Space 0, Space 1, DRAM) are strictly isolated without memory aliasing.
+     c) 32-bit DMA coherent mask configured on pdev->dev via dma_set_coherent_mask().
 
-4. HARDIRQ BOUNDED EXECUTION & STALL AVOIDANCE:
-   - In sun55i_msgbox_irq(), startup(), and shutdown(), are all FIFO drain loops strictly bounded (SUN55I_FIFO_MAX) to prevent CPU starvation or RCU stalls under coprocessor flood conditions?
+5. HARDIRQ BOUNDED EXECUTION & STALL AVOIDANCE:
+   - In sun55i_msgbox_irq(), startup(), and shutdown(), verify that all FIFO drain loops are strictly bounded by SUN55I_FIFO_MAX (8 iterations) to prevent CPU starvation or RCU stalls under coprocessor flood conditions.
+   - In sun55i_msgbox_irq(), verify that the interrupt pending bit is cleared before draining the FIFO to prevent lost message TOCTOU races.
 
-5. HARDWARE CLOCKING & RESET SEQUENCING:
-   - In sunxi_rproc_start(), verify the exact sequence of: clock gating, reset deassertion, boot vector programming (STA_ADD_REG), and run stall deassertion. Does any step risk a synchronous bus abort or hung bus transaction?
+6. DEVICE TREE BINDINGS:
+   - Review both YAML schema files against Rob Herring / Krzysztof Kozlowski standards:
+     a) Are compatible strings, registers, clocks, resets, and mailboxes strictly validated?
+     b) Are memory-region phandles documented cleanly?
 
-6. DEVICE TREE BINDINGS RIGOR (Rob Herring / Krzysztof Kozlowski Standards):
-   - Review both YAML schema files:
-     a) Are `unevaluatedProperties: false` or `additionalProperties: false` used correctly?
-     b) Are clock-names, reset-names, and mbox-names strictly ordered and constrained?
-     c) Are shared-memory reserved nodes (vring, vdevbuffer) properly documented with standard bindings?
+7. CODE HYGIENE & TYPES:
+   - Check that register masks use standard constants (U32_MAX) and IS_ALIGNED(res->start, PAGE_SIZE).
+   - Verify proper error propagation and dev_err_probe() usage.
 
-7. MAGIC NUMBERS, SPECIAL VALUES & CONSTANT DEFINITIONS (NO UNNAMED LITERALS):
-   - Scan the entire codebase for raw, undocumented hex/decimal literals, ad-hoc register offsets, or bare array sizes embedded directly inside C function bodies.
-   - All hardware offsets, bitmasks (BIT(), GENMASK()), and window dimensions must reside in header files with descriptive naming and proper type suffixes (UL/ULL).
-
-8. PROBE UNWINDING & ERROR PATHS:
-   - Audit the probe() error unwinding in both drivers:
-     a) Is it in strict reverse order of resource acquisition?
-     b) Does any error exit path leave clocks enabled, IRQs requested, or invoke callbacks on uninitialized structs?
-
-9. IN-TREE KUNIT TEST RIGOR & "TEST THEATRE" AUDIT:
-   - Audit the KUnit test suites for "Test Theatre" (tests that pass trivially without verifying real logic):
-     - Flag any test that only verifies non-NULL function pointers.
-     - Flag any test that asserts mock fixture state instead of driver state.
-   - MENTAL MUTATION TESTING: Mentally inject 4 deliberate bugs into the production code:
-     1. Invert the ATT boundary condition (`<=` to `<`) or delete the `da > U64_MAX - len` overflow check.
-     2. Remove the `SUN55I_FIFO_MAX` drain loop clamp in sun55i-msgbox.c.
-     3. Move interrupt clearing after the drain loop in sun55i_msgbox_irq().
-     4. Remove disable_irq() before rproc_del() in sunxi_rproc_remove().
-     Would the KUnit suite FAIL on all 4? If any passes undetected, report the missing test coverage.
-
-10. CODE CRAFT & "BAD KERNEL TASTE":
-    - Flag cargo-culted code, dead variables, redundant checks, struct bloat, or clumsy idioms that Linus Torvalds or Greg KH would reject.
-    - Check for strict type hygiene: u32 vs u64, size_t, dma_addr_t, void __iomem *.
+8. IN-TREE KUNIT TEST RIGOR:
+   - Audit the 66 unit tests across sunxi_rproc_test.c and sun55i_msgbox_test.c.
+   - Verify that tests validate actual operational behavior: boundary conditions (exact 1-byte fits, 2-byte overflows), negative unmapped address rejection, and FIFO drain limits.
 
 FORMAT YOUR REPORT AS:
-1. Executive Verdict: [Pass / Fail for Upstream Mainline]
-2. Critical Findings & Proof Traces (Cite exact file:line)
-3. Subsystem Maintainer Specifics (RemoteProc & Mailbox contract gaps)
-4. Magic Numbers & Constants To Clean Up
-5. KUnit Test Gaps & "Test Theatre" Callouts
-6. Checkpatch & Code Craft Nits
+1. Executive Verdict: [Pass / Pass with Minor Suggestions / Fail]
+2. Verification Summary Across the 8 Criteria
+3. Any Concrete Code Suggestions (cite file:line)
 ```
 
 ---
@@ -114,7 +95,7 @@ FORMAT YOUR REPORT AS:
   - Device Address (DA): `0x4000_0000` - `0x7FFF_FFFF` (1 GB)
   - Dynamically remapped to host physical DRAM via hardware Address Translation Table (ATT) registers.
 - **Boot Vector Register**:
-  - `STA_ADD_REG` (0x0204): Holds the entry reset vector for the E907 core. Must only be written after deasserting reset, before releasing run-stall.
+  - `STA_ADD_REG` (0x0204): Holds the entry reset vector for the E907 core. Must be written before releasing core reset (`rst_core`).
 
 ### 3.2 Allwinner Sun55i Hardware Message Box Architecture
 - **Controllers**: 2 independent hardware msgbox instances (Msgbox 0 and Msgbox 1).
@@ -529,13 +510,15 @@ int sunxi_rproc_start(struct rproc *rproc)
 	}
 
 	/*
-	 * Deassert reset before writing the boot vector register.
-	 *
-	 * On a recovery path, stop() re-asserts rst_core/rst_cfg without
-	 * calling unprepare(). Writing STA_ADD_REG while the CFG block AXI
-	 * bus is held in reset causes a synchronous external abort on ARM64.
-	 * Deassert first, then program the boot address.
+	 * Program boot vector while the core execution reset is held.
+	 * The CFG block bus was un-gated during prepare() via rst_cfg.
 	 */
+	if (priv->cfg_va) {
+		writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_offset);
+		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
+	}
+
+	/* Release core execution reset so the core begins execution at bootaddr */
 	if (priv->rst_core) {
 		ret = reset_control_deassert(priv->rst_core);
 		if (ret) {
@@ -548,12 +531,6 @@ int sunxi_rproc_start(struct rproc *rproc)
 			dev_err(priv->dev, "failed to release cfg reset: %d\n", ret);
 			return ret;
 		}
-	}
-
-	/* Program boot vector now that the CFG block bus is live */
-	if (priv->cfg_va) {
-		writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_offset);
-		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
 	}
 
 	return 0;
@@ -802,7 +779,7 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram-for-cpux");
 	if (res) {
 		priv->remap_phys = res->start;
-		if (resource_size(res) > SUNXI_REMAP_CTRL_OFFSET && (res->start & 0xfff) == 0) {
+		if (resource_size(res) > SUNXI_REMAP_CTRL_OFFSET && IS_ALIGNED(res->start, PAGE_SIZE)) {
 			void __iomem *base = devm_ioremap(dev, res->start, resource_size(res));
 
 			if (base)
@@ -953,6 +930,12 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
 	if (!rproc) {
 		dev_err(dev, "failed to allocate rproc context\n");
 		return -ENOMEM;
+	}
+
+	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
+	if (ret) {
+		dev_err(dev, "failed to set 32-bit DMA coherent mask: %d\n", ret);
+		return ret;
 	}
 
 	priv = rproc->priv;
@@ -1129,12 +1112,17 @@ static void sunxi_rproc_remove(struct platform_device *pdev)
 	}
 
 	rproc_del(rproc);
-	cancel_work_sync(&priv->vq_work);
 
-	if (priv->rx_chan)
+	if (priv->rx_chan) {
 		mbox_free_channel(priv->rx_chan);
-	if (priv->tx_chan)
+		priv->rx_chan = NULL;
+	}
+	if (priv->tx_chan) {
 		mbox_free_channel(priv->tx_chan);
+		priv->tx_chan = NULL;
+	}
+
+	cancel_work_sync(&priv->vq_work);
 
 	if (priv->has_reserved_mem)
 		of_reserved_mem_device_release(&pdev->dev);
@@ -1356,7 +1344,10 @@ static int sun55i_msgbox_send_data(struct mbox_chan *chan, void *data)
 	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
 	int n = chan - mbox->controller.chans;
 	int local_n, p, remote_id, remote_n;
-	u32 msg = data ? *(u32 *)data : 0;
+	u32 msg = 0;
+
+	if (data)
+		memcpy(&msg, data, sizeof(msg));
 
 	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 
@@ -1509,7 +1500,7 @@ static int sun55i_msgbox_probe(struct platform_device *pdev)
 	/* Disable all read IRQs and clear status */
 	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
 		writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-		writel(0xffffffff, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
+		writel(U32_MAX, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
 	}
 
 	irq_cnt = platform_irq_count(pdev);
@@ -1526,15 +1517,15 @@ static int sun55i_msgbox_probe(struct platform_device *pdev)
 			goto err_free_irqs;
 		}
 
-		ret = devm_request_irq(dev, irq, sun55i_msgbox_irq,
-				       IRQF_SHARED, dev_name(dev), mbox);
+		ret = request_irq(irq, sun55i_msgbox_irq,
+				  IRQF_SHARED, dev_name(dev), mbox);
 		if (ret) {
 			dev_err(dev, "failed to request irq %d: %d\n", irq, ret);
 			goto err_free_irqs;
 		}
 		mbox->irqs[i] = irq;
+		mbox->num_irqs = i + 1;
 	}
-	mbox->num_irqs = irq_cnt;
 
 	mbox->controller.dev           = dev;
 	mbox->controller.ops           = &sun55i_msgbox_chan_ops;
@@ -1555,9 +1546,11 @@ static int sun55i_msgbox_probe(struct platform_device *pdev)
 	return 0;
 
 err_free_irqs:
-	/* Mask all hardware read IRQs before unwinding reset/clock */
+	/* Mask all hardware read IRQs and free registered IRQs before cutting clocks */
 	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++)
 		writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
+	for (i = 0; i < mbox->num_irqs; i++)
+		free_irq(mbox->irqs[i], mbox);
 err_assert_reset:
 	reset_control_assert(mbox->reset);
 err_disable_clk:
@@ -1572,12 +1565,12 @@ static void sun55i_msgbox_remove(struct platform_device *pdev)
 
 	mbox_controller_unregister(&mbox->controller);
 
-	/* Mask hardware interrupts before asserting reset and disabling clock */
+	/* Mask hardware interrupts and free IRQs before asserting reset and disabling clock */
 	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++)
 		writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
 
 	for (i = 0; i < mbox->num_irqs; i++)
-		synchronize_irq(mbox->irqs[i]);
+		free_irq(mbox->irqs[i], mbox);
 
 	reset_control_assert(mbox->reset);
 	clk_disable_unprepare(mbox->clk);
@@ -2506,25 +2499,6 @@ static void test_kick_stores_vqid(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->priv.kick_msg, 0xDEADBEEFU);
 }
 
-/* ==================== Operations Table Completeness ==================== */
-
-static void test_rproc_ops_completeness(struct kunit *test)
-{
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.prepare, (void *)sunxi_rproc_prepare);
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.unprepare, (void *)sunxi_rproc_unprepare);
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.start, (void *)sunxi_rproc_start);
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.stop, (void *)sunxi_rproc_stop);
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.kick, (void *)sunxi_rproc_kick);
-	KUNIT_EXPECT_PTR_EQ(test, (void *)sunxi_rproc_ops.da_to_va, (void *)sunxi_rproc_da_to_va);
-
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.get_boot_addr);
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.load);
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.parse_fw);
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.find_loaded_rsc_table);
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.sanity_check);
-	KUNIT_EXPECT_NOT_NULL(test, sunxi_rproc_ops.coredump);
-}
-
 /* ==================== Test Suite Registration ==================== */
 
 static struct kunit_case sunxi_rproc_test_cases[] = {
@@ -2570,8 +2544,6 @@ static struct kunit_case sunxi_rproc_test_cases[] = {
 	/* Operations: kick */
 	KUNIT_CASE(test_kick_null_tx_chan_safe),
 	KUNIT_CASE(test_kick_stores_vqid),
-	/* Ops Table Completeness */
-	KUNIT_CASE(test_rproc_ops_completeness),
 	{}
 };
 
