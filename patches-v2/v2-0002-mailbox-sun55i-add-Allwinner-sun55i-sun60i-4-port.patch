@@ -1,6 +1,6 @@
-From c08706ae04b033831ce5de1f5fd57f9aef9b5ddc Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:15:01 -0500
+From 27252654d7711540f89532c11a5832705defe5c7 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v2 2/7] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port
  Message Box driver
 

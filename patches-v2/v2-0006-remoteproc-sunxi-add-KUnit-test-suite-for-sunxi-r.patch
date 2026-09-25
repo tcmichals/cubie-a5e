@@ -1,6 +1,6 @@
-From 8e6ee82875740286a30f772061e2d261a4767584 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:16:50 -0500
+From 29fb15bd23cf52f6ce187329f9aed73d879ba36a Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v2 6/7] remoteproc: sunxi: add KUnit test suite for sunxi
  remoteproc driver
 

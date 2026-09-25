@@ -1,6 +1,6 @@
-From 86ab056d0d6eda9c56255c65111caca214fb08ab Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:15:25 -0500
+From db69fdea393a4711bb6c6baeea6ee6547e29a1a5 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v2 3/7] mailbox: sun55i: add KUnit test suite for sun55i
  msgbox driver
 

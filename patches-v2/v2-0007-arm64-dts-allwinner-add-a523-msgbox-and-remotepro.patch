@@ -1,6 +1,6 @@
-From 5b1c2024fabf977ec9c82ef491050ab513529d31 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:17:54 -0500
+From d3d4da6e3b36e5752547ed5b94118c8209f0bc07 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v2 7/7] arm64: dts: allwinner: add a523 msgbox and remoteproc
  nodes
 

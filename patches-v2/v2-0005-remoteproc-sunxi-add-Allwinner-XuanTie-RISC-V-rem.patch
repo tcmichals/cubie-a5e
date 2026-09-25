@@ -1,6 +1,6 @@
-From 7643235c86b322ad4bf0151aca217167711336b6 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:16:18 -0500
+From fed63b95722cb4dac76daea146cfa40d7271a364 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v2 5/7] remoteproc: sunxi: add Allwinner XuanTie RISC-V
  remoteproc driver
 

@@ -1,6 +1,6 @@
-From f838af4c0d330239540fc3557cf03c0b35341aae Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:13:51 -0500
+From 74dd0f4c834046976e4113dd53d60f3ee7b659fc Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v2 1/7] dt-bindings: mailbox: add Allwinner sun55i msgbox
  schema
 

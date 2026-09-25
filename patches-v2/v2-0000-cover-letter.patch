@@ -1,5 +1,5 @@
 From 5b1c2024fabf977ec9c82ef491050ab513529d31 Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
+From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:18:06 -0500
 Subject: [PATCH v2 0/7] remoteproc: sunxi: Add Allwinner XuanTie E907 RemoteProc and Message Box support
 

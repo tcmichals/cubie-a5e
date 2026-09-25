@@ -1,6 +1,6 @@
-From eadf14690ab12311ae1d745e4888ec4cd70dcbae Mon Sep 17 00:00:00 2001
-From: Tim Michals <tcmichals@verityinst.com>
-Date: Fri, 25 Sep 2026 14:15:43 -0500
+From 3b19eb409f5b9e54516b5ef84cb8b8218273c043 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v2 4/7] dt-bindings: remoteproc: add Allwinner sun55i-rproc
  schema
 
