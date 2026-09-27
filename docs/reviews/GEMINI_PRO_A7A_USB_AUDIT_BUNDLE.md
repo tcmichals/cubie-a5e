@@ -16,9 +16,23 @@ Perform an adversarial, technically uncompromising system-level audit of our mai
 You have the complete hardware schematic netlist, chronological debugging history, negative invariant blacklist, latest silicon boot logs, mainline driver source code, and working vendor BSP reference drivers provided below in this document.
 
 ================================================================================
-PART 1: HARDWARE & SCHEMATIC GROUND TRUTH (Radxa Cubie A7A V1.10)
+ARCHITECTURAL MANDATES (STRICT ENFORCEMENT)
 ================================================================================
-1. Physical USB Topology:
+1. DRIVER CHANGES ONLY FOR A733:
+   - Driver C code modifications are strictly permitted ONLY in the Allwinner A733 PHY driver:
+     `drivers/phy/allwinner/phy-sun60i-usb2.c`
+   - FORBIDDEN: Do NOT propose changes, quirks, or patches to core generic subsystems
+     (`drivers/usb/dwc3/`, `drivers/usb/host/xhci*`, `drivers/usb/core/`). Upstream maintainers
+     will reject any architecture-specific hacks in core USB/DWC3 code.
+2. EVERYTHING ELSE IS DEVICE TREE MODIFICATIONS FOR CUBIE A7A:
+   - All board-specific configurations (GPIOs, pinmux, regulator delays, bleed-off times,
+     power domains, and tuning properties) MUST be expressed cleanly as Device Tree modifications
+     in `arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts`.
+
+================================================================================
+PART 1: HARDWARE SCHEMATIC NETLIST & CHIP REGISTER MANUAL REFERENCE
+================================================================================
+1. Physical USB Topology & Schematic Netlist (Radxa Cubie A7A V1.10):
    - Bottom USB Port (CON_U3_U2): Direct point-to-point wiring to SoC balls E36/F36 (USB1-DP/USB1-DM).
      Driven by SoC EHCI1/OHCI1 (0x04200000) and phy-sun4i-usb. 5V VBUS is switched by U2 (SGM2576) via PL2 (USB0-DRVVBUS).
      STATUS: Always works reliably (completely bypasses DWC3 and the hub).
@@ -26,17 +40,48 @@ PART 1: HARDWARE & SCHEMATIC GROUND TRUTH (Radxa Cubie A7A V1.10)
      All wire to downstream ports 1, 2, 3, and 4 of an onboard Genesys Logic FE1.1S USB 2.0 Hub (U6).
    - Upstream FE1.1S Hub (U6):
      Pins DPU (pin 15) and DMU (pin 14) route through 0-ohm resistors R53 and R69 directly to SoC balls C36 and B37 (USB2-DP and USB2-DM).
-     STATUS: Driven exclusively by SoC DWC3 (0x06A00000, Synopsys DWC3.1 IP v1.90a) and the Sun60i USB 2.0 Analog PHY (0x06B00000).
+     STATUS: Driven exclusively by SoC DWC3 (0x06A00000, Synopsys DWC3.1 IP v1.90a / IP 3331) and the Sun60i USB 2.0 Analog PHY (0x06B00000).
+   - Downstream Port Routing from FE1.1S (U6):
+     * Downstream Port 1 (pins 20/21, DP1/DM1): Routes to Top USB 2.0 Type-A Port (CON1).
+     * Downstream Ports 2 & 3 (pins 22/23 DP2/DM2, pins 24/25 DP3/DM3): Route to Internal USB Header (J4).
+     * Downstream Port 4 (pins 26/27, DP4/DM4): Routes to onboard AIC8800 Wi-Fi 6 / BT 5.2 module (U3 FCU760K, pins 13/12).
 
 2. Power Architecture & Reset Circuits for FE1.1S Hub (U6):
-   - Hub Core Power: 3.3V (VCC_3V3_USB20HUB) supplied by DCDC1 via 0-ohm resistor R58. This is a permanent board rail; it is NEVER power-gated during warm reboot or runtime.
+   - Hub Core Power: 3.3V (VCC_3V3_USB20HUB) supplied by DCDC1 via 0-ohm resistor R58 to VDD (pin 5).
+     This is a permanent board rail; it is NEVER power-gated during warm reboot or runtime.
    - Hardware Reset (XRSTJ, pin 16): There is NO SoC GPIO reset line connected to the hub. Pin 16 is tied to an RC delay network off the permanent 3.3V rail consisting of pull-up resistor R60 (10k 1%) and filter capacitor C155 (100nF 10V). Time constant: tau = 1 ms.
-   - 5V VBUS Rail (VCC5V0_USB20): Switched by U5 (SGM2576 power switch).
+   - 5V VBUS Rail (VCC5V0_USB20): Switched by U5 (SGM2576 single-channel power switch).
      - Enable pin EN (pin 4) is driven by SoC GPIO PM5 (USB_HOST_EN). Active high.
      - Internal Discharge FET: SGM2576 integrates an internal ~100-ohm discharge N-MOSFET on VOUT when EN is pulled low.
      - Output VOUT (pin 1) supplies 5V to the downstream USB ports and charges a 20 uF capacitor bank (C151 10uF + C153 10uF).
      - VBUS Monitor (VBUSM, pin 17 of FE1.1S): Driven by a 50% voltage divider from VCC5V0_USB20 formed by R64 (100k 1%) and R65 (100k 1%). Hub detects VBUS valid when VBUSM >= 2.5V.
      - CRITICAL RESET MECHANISM: Because XRSTJ is tied to the permanent 3.3V rail, the FE1.1S internal Serial Interface Engine (SIE) and USB state machine reset EXCLUSIVELY when VBUSM drops below ~2.5V (i.e. VCC5V0_USB20 drops below 5V). If VBUS never drops below 2.5V, the hub NEVER undergoes a cold Power-On Reset (POR).
+
+3. Allwinner A733 Chip Specification & Register Manual Reference:
+   - Synopsys DWC3.1 Controller (0x06A00000 - 0x06AFFFFF):
+     * GSNPSID: 0x06A0C120 (Reads 0x33313130 -> Synopsys DWC3.1 v1.90a, IP=3331).
+     * GUCTL1:  0x06A0C11C (Bit 26: DEV_FORCE_20_CLK_FOR_30_CLK).
+     * GUSB2PHYCFG(0): 0x06A0C200 (Bit 31: PHYSOFTRST, Bits [13:10]: USBTRDTIM = 9 for 8-bit UTMI 60MHz).
+     * OCFG:    0x06A0CC00 (Bit 3: SFTRSTMASK prevents xHCI reset from clearing PHY/OTG state).
+   - Sun60i USB 2.0 PHY (0x06B00000 - 0x06B007FF):
+     * ISCR:    0x06B00000 (0x0000B000 = Force ID low, Force VBUS valid).
+     * PHYCTL:  0x06B00010 (Bit 10: OTGDISABLE, Bit 5: VBUSVLDEXT, Bit 3: SIDDQ sleep, Bits [1:0]: VATESTENB eFuse factory wafer trim).
+     * PHYTUNE: 0x06B00018 (Analog calibration parameter: squelch, pre-emphasis, DCAP impedance).
+   - SerDes Top Configuration Subsystem (0x06C00000 - 0x06C05FFF):
+     * SERDES_TOP_SUBSYS_BGR: 0x06C00008 (Bit 17: ACLK_EN, Bit 16: HCLK_EN, Bit 4: USB2P0_PHY_RSTN, Bit 21: USB3P1_ONLY_UTMI_CLK_SEL must remain 0).
+   - SYSCFG Resistor Calibration (0x03000000):
+     * RESCAL_CTRL: 0x03000160 (Bit 10: PCIE_USB 200-ohm trim select, Bit 0: CAL_EN must be 0 during transfers).
+     * RES1_CTRL:   0x03000168 (Bits [15:8]: manual trim, cleared to allow auto-calibration baseline).
+   - Main CCU (0x02002000):
+     * CLK_USB2_U2_REF:  0x02003348 (24 MHz UTMI reference clock, Bit 31 gate).
+     * CLK_USB2_SUSPEND: 0x02003350 (24 MHz PHY suspend clock, Bit 31 gate).
+     * CLK_USB2_MF:      0x02003354 (400 MHz master transport core clock from PLL_PERIPH0).
+     * RST_BUS_USB2:     0x0200335C (Bit 16: DWC3 hardware deassert reset).
+     * USB2_AHB_GATE:    0x02003A00 (Bit 3: AHB bus interface gate for DWC3 MMIO).
+   - Power Management & PMIC:
+     * PCK-600 Power Domain 8 (PD_USB2): 0x07068000 (PPU_PWPR = 0x8 energizes domain).
+     * AXP8191 PMIC ELDO4: VDD-USB 0.8V (digital core supply for DWC3).
+     * AXP PMIC ALDO1: 3.3V (VCC-PL / VCC-PM I/O domain supplying PM5 and PL2).
 
 ================================================================================
 PART 2: CHRONOLOGICAL DEBUGGING HISTORY & PROVEN OUTCOMES
@@ -162,7 +207,6 @@ PART 5: COMPLETE VERBATIM CODE & VENDOR REFERENCE ATTACHMENTS
  * Allwinner A733 (sun60iw2) USB 2.0 PHY driver for DWC3
  */
 
-#include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -171,7 +215,7 @@ PART 5: COMPLETE VERBATIM CODE & VENDOR REFERENCE ATTACHMENTS
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
-#define SUN60I_DEFAULT_PHY_TUNE	0x143338d6
+#define SUN60I_DEFAULT_PHY_TUNE	0x143333d4
 
 struct sun60i_usb2_phy {
 	void __iomem *base;
@@ -184,67 +228,61 @@ struct sun60i_usb2_phy {
 #define PHY_USB2_PHYTUNE	0x18
 #define SERDES_TOP_SUBSYS_BGR	0x06c00008
 
-#define PHYCTL_VBUSVLDEXT	BIT(5)
-#define PHYCTL_SIDDQ		BIT(3)
-#define PHYCTL_COMMONONN	BIT(2)
-#define PHYCTL_RESET		BIT(0)
-
 static void sun60i_usb2_phy_hw_init(struct sun60i_usb2_phy *priv)
 {
 	void __iomem *subsys_bgr;
-	void __iomem *syscfg;
 	u32 val;
 
-	/* 1. SerDes Top Bridge: ACLK/HCLK clock and reset deassertion */
+	/*
+	 * Deassert PHY reset and enable ACLK/HCLK in SerDes top bridge.
+	 * Strictly enables ACLK_EN, HCLK_EN, and USB2P0_PHY_RSTN via read-modify-write
+	 * matching vendor combo_usb2_clk_set / combo_usb_clk_set without touching Bit 21.
+	 */
 	subsys_bgr = ioremap(SERDES_TOP_SUBSYS_BGR, 4);
 	if (subsys_bgr) {
 		val = readl(subsys_bgr);
 		val |= BIT(17) | BIT(16) | BIT(4); /* ACLK_EN, HCLK_EN, USB2P0_PHY_RSTN */
-		val &= ~BIT(21); /* Clear USB3P1_ONLY_UTMI_CLK_SEL: preserve 60MHz internal PLL */
 		writel(val, subsys_bgr);
 		iounmap(subsys_bgr);
 	}
 
-	/* 2. SYSCFG: Resistor Auto-Calibration (200-ohm target) */
-	syscfg = ioremap(0x03000160, 0x10);
-	if (syscfg) {
-		/* Set target trim to 0xc8 (200 ohm decimal) */
-		val = readl(syscfg + 0x08);
-		val &= ~GENMASK(15, 8);
-		val |= (0xc8 << 8);
-		writel(val, syscfg + 0x08);
+	/* Configure 200-ohm resistor calibration in SYSCFG (0x03000000) */
+	{
+		void __iomem *syscfg = ioremap(0x03000160, 0x10);
 
-		/* Enable PCIE_USB 200 ohm trim and trigger auto-calibration */
-		val = readl(syscfg + 0x00);
-		val |= BIT(10) | BIT(0);
-		writel(val, syscfg + 0x00);
-		iounmap(syscfg);
+		if (syscfg) {
+			/*
+			 * RESCAL_CTRL (0x160): select PCIE_USB 200 ohm trim
+			 * (bit 10), clear CAL_EN (bit 0).
+			 */
+			val = readl(syscfg + 0x00);
+			val &= ~BIT(0);
+			val |= BIT(10);
+			writel(val, syscfg + 0x00);
+
+			/* RES1_CTRL (0x168): clear manual trim bits [15:8] for auto-calibration */
+			val = readl(syscfg + 0x08);
+			val &= ~GENMASK(15, 8);
+			writel(val, syscfg + 0x08);
+
+			iounmap(syscfg);
+		}
 	}
 
-	/* Wait for analog bias and calibration currents to stabilize */
-	usleep_range(200, 500);
-
-	/* 3. ISCR: Force VBUS valid and ID low to lock Host mode */
+	/* Force ID low and VBUS valid in ISCR to guarantee host mode */
 	writel(0x0000b000, priv->base + PHY_USB2_ISCR);
 
-	/* 4. Apply Analog Tuning Parameters before releasing reset */
-	writel(priv->tune_param, priv->base + PHY_USB2_PHYTUNE);
-
-	/* 5. PHYCTL: Assert analog macro reset, power on transceiver, clear SIDDQ */
+	/*
+	 * Clear SIDDQ (bit 3) and set OTGDISABLE (bit 10) | VBUSVLDEXT (bit 5) in PHYCTL
+	 * using read-modify-write to preserve factory analog calibration trim.
+	 */
 	val = readl(priv->base + PHY_USB2_PHYCTL);
-	val |= 0x000e2434;
-	val &= ~PHYCTL_SIDDQ;
-	val |= PHYCTL_RESET;
+	val |= BIT(10) | BIT(5);
+	val &= ~BIT(3);
 	writel(val, priv->base + PHY_USB2_PHYCTL);
 
-	udelay(20);
-
-	/* Deassert macro reset */
-	val &= ~PHYCTL_RESET;
-	writel(val, priv->base + PHY_USB2_PHYCTL);
-
-	/* Allow 60 MHz UTMI clock and PLL lock */
-	usleep_range(1500, 2000);
+	/* Apply analog tuning (squelch threshold, pre-emphasis, DCAP) */
+	writel(priv->tune_param, priv->base + PHY_USB2_PHYTUNE);
 }
 
 static int sun60i_usb2_phy_init(struct phy *phy)
@@ -253,14 +291,28 @@ static int sun60i_usb2_phy_init(struct phy *phy)
 	int ret;
 
 	if (priv->vbus) {
+		/*
+		 * If U-Boot or prior boot stage left PM5 (VBUS) high,
+		 * cycle the regulator off to force a clean Power-On Reset.
+		 * The Linux regulator core automatically enforces off-on-delay-us
+		 * (200ms) to bleed the 20uF capacitor bank before asserting PM5,
+		 * and startup-delay-us (100ms) for the crystal to settle.
+		 */
 		ret = regulator_enable(priv->vbus);
 		if (ret)
 			return ret;
-		/* Let 20uF downstream rail charge and FE1.1S RC delay clear */
-		msleep(50);
+
+		ret = regulator_disable(priv->vbus);
+		if (ret)
+			return ret;
+
+		ret = regulator_enable(priv->vbus);
+		if (ret)
+			return ret;
 	}
 
 	sun60i_usb2_phy_hw_init(priv);
+	dev_info(&phy->dev, "A733 USB2 PHY initialized (tune=0x%08x)\n", priv->tune_param);
 	return 0;
 }
 
@@ -271,7 +323,7 @@ static int sun60i_usb2_phy_exit(struct phy *phy)
 
 	val = readl(priv->base + PHY_USB2_PHYCTL);
 	val &= ~(BIT(10) | BIT(5));
-	val |= PHYCTL_SIDDQ;
+	val |= BIT(3); /* Assert SIDDQ */
 	writel(val, priv->base + PHY_USB2_PHYCTL);
 
 	if (priv->vbus)
@@ -327,10 +379,10 @@ static int sun60i_usb2_phy_probe(struct platform_device *pdev)
 		return PTR_ERR(provider);
 	}
 
-	/* Initialize hardware registers and ungate SerDes bus bridge */
+	/* Initialize hardware registers and ungate SerDes bus bridge for DWC3 GSNPSID */
 	sun60i_usb2_phy_hw_init(priv);
 
-	dev_info(dev, "Allwinner A733 USB 2.0 PHY registered at %pr (tune=0x%08x)\n",
+	dev_info(dev, "Allwinner A733 USB 2.0 PHY probed at %pr (tune=0x%08x)\n",
 		 platform_get_resource(pdev, IORESOURCE_MEM, 0), priv->tune_param);
 
 	return 0;
@@ -366,8 +418,6 @@ MODULE_LICENSE("GPL");
 		regulator-max-microvolt = <5000000>;
 		gpios = <&r_pio 1 5 GPIO_ACTIVE_HIGH>; /* PM5 (USB_HOST_EN) */
 		enable-active-high;
-		regulator-always-on;
-		regulator-boot-on;
 		off-on-delay-us = <200000>; /* 200ms to bleed 20uF capacitor bank */
 		startup-delay-us = <100000>; /* 100ms for FE1.1S 12MHz crystal to settle */
 		status = "okay";
@@ -378,7 +428,7 @@ MODULE_LICENSE("GPL");
 		reg = <0x06b00000 0x800>;
 		power-domains = <&pck600 PD_USB2>;
 		vbus-supply = <&reg_usb1_vbus>;
-		aw,phy_tune_param = <0x143338d6>;
+		aw,phy_tune_param = <0x143333d4>;
 		#phy-cells = <0>;
 		status = "okay";
 	};
@@ -405,7 +455,7 @@ MODULE_LICENSE("GPL");
 		snps,dis-u2-entry-quirk;
 		snps,dis_u3_susphy_quirk;
 		snps,dis_u2_susphy_quirk;
-		snps,parkmode_disable_hs_quirk;
+		snps,usb2-lpm-disable;
 		status = "okay";
 	};
 ```

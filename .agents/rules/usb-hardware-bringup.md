@@ -5,6 +5,19 @@ It prevents regression, eliminates "shotgun debugging", and keeps both AI assist
 
 ---
 
+## 0. Strict Architectural Boundary Rule
+
+1. **Driver Changes ONLY for A733**:
+   - C code modifications are strictly permitted ONLY in the Allwinner A733 PHY driver:
+     `drivers/phy/allwinner/phy-sun60i-usb2.c`
+   - **FORBIDDEN**: Do NOT propose changes, quirks, or patches to core generic subsystems (`drivers/usb/dwc3/`, `drivers/usb/host/xhci*`, `drivers/usb/core/`). Upstream maintainers will reject architecture-specific hacks in core generic USB code.
+2. **Device Tree Modifications ONLY for Cubie A7A**:
+   - All board-specific wiring, pinmux, GPIO regulators, bleed-off timings, power domains, and transceiver tuning parameters MUST be configured cleanly in Devicetree:
+     `arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts`
+
+
+---
+
 ## 1. Absolute Hardware Invariants (NEVER VIOLATE)
 
 Any proposal, patch, or commit that violates these invariants is **automatically rejected**:
