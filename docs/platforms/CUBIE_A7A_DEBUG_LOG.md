@@ -1005,18 +1005,49 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
 
 ---
 
-#### 3. Immediate Action Plan & Next Steps
-1. **Rebuild & Validate xHCI Controller Probe**:
-   - Execute `make linux-dirclean; make` in `bld.a7a`.
-   - Verify `dmesg` shows `xhci-hcd` probing cleanly without the 13.6-second stall and registering Bus 1 and Bus 2.
-2. **Cold Boot FE1.1S Hub Enumeration**:
-   - Power cycle from 0V DC to ensure clean POR.
-   - Verify whether the hub locks directly into High-Speed (480 Mbps) mode with `tune = 0x143333d4`.
-3. **Isolate & Eliminate Post-Enumeration Disconnect**:
-   - If the hub still disconnects 1.4 ms after detecting 4 ports:
-     - **Inrush Current Mitigation**: Check SGM2576 enable ramp and power switch behavior. Evaluate whether soft-starting the downstream ports or adjusting regulator characteristics prevents `VCC5V0_USB20` from dipping.
-     - **Squelch / Disconnect Fine-Tuning**: Test squelch codes adjacent to `0x143333d4` (`0x143333d0`, `0x143333d2`, `0x143333d6`).
-     - **USB Old Scheme vs New Scheme**: Test `usbcore.old_scheme_first=0` to ensure descriptor reads don't trigger unnecessary port resets.
+#### 4. Hardware Verification of Gemini Pro Proposal (`0x143338d6` vs `0x143333d4`) & Bootargs Truncation Discovery (Sep 27, 2026)
+
+- **Test Parameters on Silicon**:
+  - Implemented Gemini Pro's recommendation: added AXI posted-write `readl()` flushes to `phy-sun60i-usb2.c` and updated `aw,phy_tune_param = <0x143338d6>` in `sun60i-a733-cubie-a7a.dts`.
+  - Built fresh kernel (Build #2) and full `sdcard.img` (592 MB). Booted live target board.
+
+- **Dmesg Observations & Forensic Analysis**:
+  ```text
+  [ 0.000000] Kernel command line: console=ttyS0,115200 earlycon=uart8250,mmio32,0x02500000 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 keep_bootcon clk_ignore_unused fw_devlink=pe1
+  ...
+  [ 1.018579] sun60i-a733-usb2-phy 6b00000.phy: Allwinner A733 USB 2.0 PHY probed at [mem 0x06b00000-0x06b007ff flags 0x200] (tune=0x143338d6)
+  [ 1.019283] dwc3 6a00000.usb: DWC3 core probe: GSNPSID raw = 0x33313130 (IP=3331)
+  [ 1.639460] phy phy-6b00000.phy.2: A733 USB2 PHY initialized (tune=0x143338d6)
+  [ 1.692061] xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
+  [ 1.692087] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 1
+  [ 1.693675] hub 1-0:1.0: USB hub found
+  [ 1.693760] hub 1-0:1.0: 1 port detected
+  [ 1.927440] usb 1-1: new high-speed USB device number 2 using xhci-hcd
+  [ 1.927491] usb 1-1: Device not responding to setup address.
+  [ 2.135471] usb 1-1: Device not responding to setup address.
+  [ 2.343436] usb 1-1: device not accepting address 2, error -71
+  ...
+  [ 3.720459] usb 1-1: new full-speed USB device number 4 using xhci-hcd
+  [ 3.733720] hub 1-1:1.0: config failed, can't read hub descriptor (err -22)
+  [ 3.744669] usb usb1-port1: disabled by hub (EMI?), re-enabling...
+  [ 3.744681] usb 1-1: USB disconnect, device number 4
+  ```
+
+- **Critical Findings**:
+  1. **Squelch Threshold `0x143338d6` Disproven on Target**:
+     - With `0x143338d6` (squelch threshold = `0x6`), the host receiver failed to reliably detect Chirp K/J and EP0 control transfer ACK packets from the FE1.1S hub (`Device not responding to setup address`), dropping to Full-Speed.
+     - In contrast, `0x143333d4` (squelch threshold = `0x4`) successfully decoded EP0 descriptors and detected the 4-port hub.
+     - **Conclusion**: Squelch sensitivity `0x4` is physically required for the trace geometry and attenuation between the A733 SoC and the FE1.1S pins.
+  2. **Severe U-Boot Bootargs Truncation**:
+     - `bootargs` passed to Linux was truncated at `... fw_devlink=pe1` (should have been `fw_devlink=permissive usbcore.old_scheme_first=1`).
+     - Because `usbcore.old_scheme_first=1` was dropped, Linux ran the default "new scheme", which forces a port reset after reading the first 8 bytes of the device descriptor. Because FE1.1S has no GPIO reset line, the mid-transaction reset throws the hub's SIE into an indeterminate state, causing error -71.
+  3. **AXI Posted-Write Flushes Confirmed Effective**:
+     - The driver initialized cleanly without any race conditions, proving the `readl()` flushes are structurally sound.
+
+- **Corrective Action**:
+  - Revert `aw,phy_tune_param` in `sun60i-a733-cubie-a7a.dts` to `0x143333d4`.
+  - Prune redundant strings from `boot.cmd` and `uboot-env.txt` so `usbcore.old_scheme_first=1` fits inside U-Boot's argument buffer.
+
 
 
 

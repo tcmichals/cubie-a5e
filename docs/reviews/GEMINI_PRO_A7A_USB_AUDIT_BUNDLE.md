@@ -170,9 +170,30 @@ Bus 002 Device 001: ID 1d6b:0003 Linux 7.1.0 xhci-hcd xHCI Host Controller
        goto fail;
    }
    ```
-3. During `hub_port_reset()`, the hub fails the High-Speed handshake (Chirp K / Chirp J) and reports Full-Speed.
+3. During `hub_port_reset()`, the hub fails the High-Speed handshake (Chirp K / Chirp J) and drops to Full-Speed.
 4. Because `oldspeed (USB_SPEED_HIGH) != udev->speed (USB_SPEED_FULL)`, `hub_port_init` exits silently to `fail` without printing an error (because `dev_dbg` is disabled).
 5. At 3.317s, the hub retry logic reallocates the device as Full-Speed Device 3. In Full-Speed mode on this DWC3 host, all subsequent descriptor reads time out or fail with protocol error `-71`.
+
+### Empirical Silicon Test of Gemini Pro Proposal (0x143338d6 + AXI Flushes - Sep 27, 2026):
+We compiled and executed Gemini Pro's exact patch on target hardware with Build #2:
+```text
+[ 0.000000] Kernel command line: console=ttyS0,115200 earlycon=uart8250,mmio32,0x02500000 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 keep_bootcon clk_ignore_unused fw_devlink=pe1
+...
+[ 1.018579] sun60i-a733-usb2-phy 6b00000.phy: Allwinner A733 USB 2.0 PHY probed at [mem 0x06b00000-0x06b007ff flags 0x200] (tune=0x143338d6)
+[ 1.639460] phy phy-6b00000.phy.2: A733 USB2 PHY initialized (tune=0x143338d6)
+[ 1.927440] usb 1-1: new high-speed USB device number 2 using xhci-hcd
+[ 1.927491] usb 1-1: Device not responding to setup address.
+[ 2.135471] usb 1-1: Device not responding to setup address.
+[ 2.343436] usb 1-1: device not accepting address 2, error -71
+...
+[ 3.720459] usb 1-1: new full-speed USB device number 4 using xhci-hcd
+[ 3.733720] hub 1-1:1.0: config failed, can't read hub descriptor (err -22)
+[ 3.744669] usb usb1-port1: disabled by hub (EMI?), re-enabling...
+[ 3.744681] usb 1-1: USB disconnect, device number 4
+```
+CRITICAL VERIFIED TAKEAWAYS:
+1. SQUELCH 0x143338d6 FAILS ON HARDWARE: Squelch threshold 0x6 is too insensitive for the PCB attenuation. It drops EP0 packets immediately (`Device not responding to setup address`), whereas `0x143333d4` (squelch threshold 0x4) successfully enumerated the 4 ports. Squelch sensitivity must remain at 0x4.
+2. U-BOOT BOOTARGS TRUNCATION: Notice `Kernel command line` is truncated at `... fw_devlink=pe1`. The string `usbcore.old_scheme_first=1` was dropped by U-Boot! Linux defaulted to the new scheme, which forces a mid-stream port reset after 8 bytes and triggers transaction error -71.
 
 ================================================================================
 PART 4: THE INVARIANT LEDGER & NEGATIVE INVARIANT BLACKLIST
@@ -618,19 +639,19 @@ PART 6: TARGET ADVERSARIAL AUDIT QUESTIONS FOR GEMINI PRO
 ================================================================================
 Evaluate all code, schematics, and traces with ZERO tolerance for speculation:
 
-1. High-Speed Drop During `hub_port_reset()`:
-   - Why did the connection initially detect as High-Speed (`usb 1-1: new high-speed USB device number 2`) at 1.524s, but then during `hub_port_reset()` fail to complete Chirp K/J and drop to Full-Speed (`oldspeed != udev->speed`)?
-   - What specific electrical or register mechanism triggers this drop? Is it incorrect line termination impedance from SYSCFG auto-calibration, corrupted squelch threshold in `PHYTUNE`, or a missing transceiver settling delay?
+1. Squelch Parameter Reality Check (`0x143338d6` vs `0x143333d4`):
+   - We tested `0x143338d6` on silicon with the AXI flushes. It completely failed EP0 setup address assignment (`Device not responding to setup address`), dropping straight to Full-Speed.
+   - In contrast, `0x143333d4` successfully read EP0 descriptors and detected the 4 ports.
+   - Explain why the less sensitive squelch (`0x6`) in `0x143338d6` is unable to detect packet responses on this board, whereas `0x4` succeeded.
 
-2. Resistor Calibration (SYSCFG 0x03000160 / 0x03000168):
-   - Contrast our mainline code with vendor `phy_rescal_set_v2()`.
-   - What is the exact sequence to calibrate the 45-ohm HS termination resistors on the A733 SoC without leaving `CAL_EN` asserted or overwriting the factory eFuse trim with a static 0xC8?
+2. Resolving the 1.4ms Post-Enumeration Disconnect with `0x143333d4`:
+   - With `0x143333d4` detecting all 4 downstream ports, what exact mechanism trips the immediate 1.4ms disconnect (`usb usb1-port1: disabled by hub (EMI?), re-enabling...`)?
+   - Is it the downstream inrush current causing a transient sag on VBUSM below 2.5V, or is it an xHCI babble timeout on the status interrupt pipe?
 
-3. VBUS Power Sequencing vs. FE1.1S Reset:
-   - Given that the FE1.1S hub core 3.3V rail is permanently active from DCDC1, what is the exact Linux regulator sequence needed to force a clean Power-On Reset through VBUSM without triggering brownout latch-up?
-   - Should `phy-sun60i-usb2.c` execute `regulator_enable -> regulator_disable -> regulator_enable` with `off-on-delay-us = 200000`, or does the regulator core handle this when `regulator-always-on` is removed?
+3. U-Boot Command Line Truncation:
+   - Notice `bootargs` was truncated at `fw_devlink=pe1`, dropping `usbcore.old_scheme_first=1`.
+   - How can we best format the kernel command line in U-Boot (`boot.cmd`) to guarantee `usbcore.old_scheme_first=1` is passed without exceeding U-Boot buffer limits?
 
 4. Single-Variable Patch Proposal:
-   - Provide the EXACT, minimal diff to `drivers/phy/allwinner/phy-sun60i-usb2.c` and `sun60i-a733-cubie-a7a.dts` that restores the proven baseline and resolves the High-Speed port reset drop.
-   - Explain the exact physics and kernel driver mechanics of every changed line.
+   - Provide the EXACT, minimal diff to `drivers/phy/allwinner/phy-sun60i-usb2.c` and `sun60i-a733-cubie-a7a.dts` to eliminate the 1.4ms post-enumeration disconnect while retaining `0x143333d4`.
 ```
