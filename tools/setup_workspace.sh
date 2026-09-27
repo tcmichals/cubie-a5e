@@ -33,6 +33,7 @@ else
     (
         cd linux-cubie
         git fetch origin "${KERNEL_BRANCH}" || true
+        git checkout "${KERNEL_BRANCH}" || true
         echo "  -> Current branch: $(git branch --show-current)"
     )
 fi

@@ -18,7 +18,7 @@ All patch series, cover letters, reviewer discussions, and automated AI review t
 | **v2** | *Reviewed* | [20260927002021.797069-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/) | 68 KUnit tests added; Sashiko AI review received |
 | **v3** | **Ready for Submission** | *Threaded under v1/v2* | **All 17 Sashiko AI review items fixed**; 100% checkpatch clean; builds with 0 errors |
 
-See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md) and [`upstream-remoteproc/reviews/REVIEW_TRACKER.md`](upstream-remoteproc/reviews/REVIEW_TRACKER.md) for the complete issue resolution matrix.
+See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream-remoteproc/reviews/sashiko_protocols.md`](upstream-remoteproc/reviews/sashiko_protocols.md), and [`upstream-remoteproc/reviews/REVIEW_TRACKER.md`](upstream-remoteproc/reviews/REVIEW_TRACKER.md) for the complete protocol execution guide and issue resolution matrix.
 
 ---
 

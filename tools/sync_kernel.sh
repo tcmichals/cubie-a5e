@@ -37,6 +37,10 @@ case "${CMD}" in
         if [ -d "${WORKSPACE_ROOT}/bld.a5e" ]; then
             make -C "${WORKSPACE_ROOT}/bld.a5e" linux-rebuild
         fi
+        if [ -d "${WORKSPACE_ROOT}/bld.a7a" ]; then
+            echo "==> Rebuilding kernel in bld.a7a..."
+            make -C "${WORKSPACE_ROOT}/bld.a7a" linux-rebuild
+        fi
         echo "✅ Pull and rebuild complete!"
         ;;
     rebuild)
