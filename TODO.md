@@ -557,7 +557,61 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-### 5.4 Deep Mainline Driver Audit, Lifecycle Race Hardening & KUnit Architecture
+### 5.4 v3 Review Response & Hardening Dashboard — Sashiko AI Feedback
+
+> **Context**: RFC v2 submitted on 2026-09-26 to `linux-remoteproc` and `linux-sunxi` received detailed static taint analysis review from **Sashiko-bot** (10 issues on rproc, 4 issues on msgbox, 3 issues on tests/Kconfig). All 17 items below are being addressed for v3.
+
+#### Group 1: `drivers/mailbox/sun55i-msgbox.c` (Patch 2/7)
+- [x] **M1 [High]**: Out-of-bounds array write in probe due to unbounded DT `irq_cnt`.
+  - *Fix*: Added `if (irq_cnt > SUN55I_MAX_PROCESSORS) return -EINVAL;` before looping over `mbox->irqs[i]`.
+- [x] **M2 [High]**: Broken `last_tx_done` polling condition breaks TX semantics.
+  - *Fix*: Return `count == 0` (message fully drained/consumed by peer), NOT `count < SUN55I_FIFO_MAX`.
+- [x] **M3 [High]**: NULL pointer dereference in IRQ handler during teardown.
+  - *Fix*: Mask MMIO read IRQs and call `synchronize_irq()` on all registered IRQs *before* `mbox_controller_unregister()`.
+- [x] **M4 [High]**: Lockless multi-IRQ concurrency causes FIFO underflow / TOCTOU race.
+  - *Fix*: Enclose status check, status clear, and FIFO read in `spin_lock_irqsave(&mbox->lock, flags)`.
+
+#### Group 2: `drivers/mailbox/` Kconfig & KUnit Test (Patch 3/7)
+- [x] **T1 [Low]**: Missing `SUN55I_MSGBOX` dependency in `drivers/mailbox/Kconfig`.
+  - *Fix*: Change `depends on KUNIT` to `depends on SUN55I_MSGBOX && KUNIT`.
+- [x] **T2 [Medium]**: MMIO endianness bug in mock registers causes test failures on Big-Endian.
+  - *Fix*: Use `readl()`/`writel()` or endian-safe macros (`cpu_to_le32`) when accessing mock memory fixtures.
+- [x] **T3 [Low]**: Mock bypass causes `startup()` flush test to silently succeed via failsafe.
+  - *Fix*: Properly simulate FIFO count decrement in `test_functional_startup_flushes_stale_fifo()`.
+
+#### Group 3: `drivers/remoteproc/sunxi_rproc.c` & `.h` (Patch 5/7)
+- [x] **R1 [High]**: Unbalanced `disable_irq` via `crash_irq_enabled` race.
+  - *Fix*: Protect `crash_irq_enabled` transitions under `priv->lock` spinlock; call `devm_free_irq()` at start of `remove()`.
+- [x] **R2 [High]**: Race on `kick_msg` and immediate `txdone` corrupts mailbox.
+  - *Fix*: Remove `priv->kick_msg`, `cl.knows_txdone`, and `mbox_client_txdone()`. Pass stack-local `vqid` safely copied by msgbox.
+- [x] **R3 [High]**: Double mapping of DT regions with conflicting attributes (WB vs WC).
+  - *Fix*: In `parse_memory_regions()`, assign `va = priv->trace_va` (or `priv->dram_va`) and skip secondary `ioremap_wc()`.
+- [x] **R4 [High]**: Premature core execution due to broken reset fallback logic.
+  - *Fix*: Strictly require `rst_core` as execution reset in `start()`; remove flawed fallback to `rst_cfg`.
+- [x] **R5 [High]**: UAF of virtqueues due to late mailbox interrupts in remove.
+  - *Fix*: Free mailbox channels (`mbox_free_channel`) and `cancel_work_sync(&priv->vq_work)` *before* calling `rproc_del()`.
+- [x] **R6 [High]**: UAF of `priv` in probe error path due to workqueue teardown order.
+  - *Fix*: Free mailbox channels before calling `cancel_work_sync(&priv->vq_work)`.
+- [x] **R7 [High]**: UAF of `rproc` in remove due to `crash_irq_enabled` data race.
+  - *Fix*: Call `devm_free_irq(&pdev->dev, priv->crash_irq, priv)` (which synchronizes with running ISR) before `rproc_del()`.
+- [x] **R8 [Medium]**: `da_to_va` translates unmatched ATT addresses as host PAs.
+  - *Fix*: If `da_to_sys()` matches an ATT entry, return `NULL` immediately if unmapped; never fall through to compare `da` with host PAs.
+- [x] **R9 [Medium]**: Missing teardown of crash IRQ on start failure leaks state.
+  - *Fix*: Enable crash IRQ only after all reset deassertions and writes succeed in `start()`.
+- [x] **R10 [Medium]**: Missing write flush of boot address causes execution race.
+  - *Fix*: Perform a dummy read-back `readl()` of `STA_ADD_REG` to flush interconnect write before deasserting `rst_core`.
+
+#### Group 4: `drivers/remoteproc/` Kconfig & KUnit Test (Patch 6/7)
+- [x] **K1 [Low]**: Missing `SUNXI_REMOTEPROC` dependency in `drivers/remoteproc/Kconfig`.
+  - *Fix*: Change `depends on KUNIT` to `depends on SUNXI_REMOTEPROC && KUNIT`.
+- [x] **K2 [Medium]**: KUnit test mock MMIO reads fail on Big-Endian.
+  - *Fix*: Use `readl()` for mock register assertions in `test_start_bootaddr_programming` and `test_prepare_and_unprepare_remap`.
+- [x] **K3 [Medium]**: False positive KUnit test for `kick_msg`.
+  - *Fix*: Update kick test to validate the new stack-local message passing.
+
+---
+
+### 5.5 Deep Mainline Driver Audit, Lifecycle Race Hardening & KUnit Architecture
 
 - [x] **Audit 1 (Mainline Comparison)**: Function-by-function comparison matrix of `sunxi_rproc.c` and `sun55i-msgbox.c` against reference mainline Linux drivers (`imx_rproc`, `stm32_rproc`, `ti_k3_r5_remoteproc`, `rcar_rproc`, `ingenic_rproc`, `sun6i-msgbox`).
 - [x] **Audit 2 (Architecture Guide)**: Created permanent, comprehensive developer guide [`cubie-a5e/docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`](docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md).
@@ -649,8 +703,8 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - Profile 1 (DDR VirtIO RPMsg)
   - Profile 2 (On-Chip SRAM Space 1 VirtIO)
   - Profile 3 (Userspace UIO Direct Mailbox)
-- [ ] **S6.13**: Generate clean v2 7-patch series and update cover letter with hardware validation proof
-- [ ] **S6.14**: Submit v2 patch set to `linux-remoteproc@vger.kernel.org` and `linux-sunxi@lists.linux.dev`
+- [x] **S6.13**: Generate clean v2 7-patch series and update cover letter with hardware validation proof
+- [x] **S6.14**: Submit v2 patch set to `linux-remoteproc@vger.kernel.org` and `linux-sunxi@lists.linux.dev` (Submitted via git-send-email on 2026-09-26)
 
 ---
 
@@ -891,4 +945,120 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [ ] Verify if any additional USB hub reset timing or VBUS enable delays are specified.
 - [ ] **XuanTie E902 Co-Processor Initialization**:
   - [ ] Check if SyterKit contains early bootstrap code or linker scripts for the A733 E902 core running out of System SRAM A2 (`0x00040000`).
+
+---
+
+# Part IV: AbstractX & Firmware Quality Engineering: Sashiko-Grade Adversarial Review & CppUTest Integration
+
+* **Context & Motivation**:
+  - AI code assistants routinely fail on embedded C++20 bare-metal firmware (such as AbstractX, XuanTie E907/E902 coprocessor firmware, and dual-SPI flight stacks). They hallucinate requirements, miss subtle lifetime invariants, introduce hidden heap allocations, botch coroutine frame destruction, and introduce memory-ordering races in lock-free ring buffers.
+  - Sashiko-bot succeeded on the Linux kernel RemoteProc/Mailbox drivers because it dismantled monolithic evaluation into a **5-stage decomposed adversarial protocol** with non-negotiable invariant checklists.
+  - Applying these identical adversarial review protocols combined with **CppUTest** (embedded test-driven development, memory leak detection, and hardware mock contracts) establishes an ironclad, automated quality gate that prevents AI regressions.
+
+---
+
+## 1. Architectural Strategy: The Dual-Pillar Quality Gate
+
+```text
++-----------------------------------------------------------------------------------+
+|                           AI Firmware Development Loop                            |
++-----------------------------------------------------------------------------------+
+                                         │
+                                         ▼
+                 [ Step 1: Read CppUTest Spec & Mocks ]
+           AI ingests executable unit test requirements and mock
+           expectations before generating or altering any C++ code
+                                         │
+                                         ▼
+                 [ Step 2: Code Implementation / Refactor ]
+           C++20 coroutines, HAL drivers, lock-free ring buffers,
+           ETL data structures (-fno-exceptions, -fno-rtti)
+                                         │
+                                         ▼
+                 [ Step 3: Local CppUTest Host Execution ]
+           Host simulation build (ctest / ninja test-all). Must pass:
+           • 100% test assertions pass
+           • CppUTest MemoryLeakDetector reports 0 leaks
+           • MockSupport verifies 100% expected hardware calls
+                                         │
+                                         ▼
+                 [ Step 4: 5-Stage Sashiko-Grade Adversarial Audit ]
+           Multi-stage decomposed static and semantic invariant checks:
+           1. Zero-Heap Allocation & HALO Elision
+           2. Coroutine Frame Lifecycle & Double-Resume Guards
+           3. Lock-Free Atomics & Memory Ordering (Acquire/Release)
+           4. Hardware Protocol, Endianness & Arithmetic Wraparound
+           5. Gatekeeper & Test Coverage Completeness
+                                         │
+                                         ▼
+                      [ Final Verified Commit / Deploy ]
+```
+
+---
+
+## 2. The 5 AbstractX Embedded Invariants (Sashiko Equivalent)
+
+1. **Zero-Heap & Compiler Invariant**:
+   - Embedded targets must compile with `-fno-exceptions`, `-fno-rtti`.
+   - Dynamic allocations (`malloc`, global `operator new`) in fast paths, ISRs, and coroutine execution loops are strictly forbidden.
+   - C++20 coroutine Heap Allocation of Lookup Operations (HALO) elision must be preserved or backed by custom static `promise_type::operator new(size_t, ...)` placement allocators (e.g. ETL memory pools).
+2. **Coroutine Frame Lifetime & Reentrancy**:
+   - `initial_suspend()` and `final_suspend()` must return `std::suspend_always` to prevent premature destruction of the coroutine frame while external handles or ISRs hold references.
+   - Re-entrancy of `IsrDispatcher::post(handle)` must be strictly guarded against double-resumption of already-running or completed coroutines.
+3. **Lock-Free Concurrency & Memory Ordering**:
+   - Single-Producer Single-Consumer (SPSC) ring buffers and inter-core mailboxes must use explicit memory ordering (`std::memory_order_release` when publishing items, `std::memory_order_acquire` when reading items).
+   - Volatile MMIO register reads/writes must not be conflated with CPU cache memory-ordering atomics.
+4. **Hardware Protocol & Boundary Safety**:
+   - Dual-SPI protocol frames must enforce packed alignment (`[[gnu::packed]]`), explicit endianness conversion (`etl::endian` / host-to-wire), and sequence counter overflow handling.
+   - All pointer arithmetic and buffer slice indexing must have explicit upper-bound checks to prevent out-of-bounds SRAM memory corruption.
+5. **CppUTest Harness & Mock Contract Invariant**:
+   - Every peripheral driver (SPI, Mailbox, UART, Timer) must have a companion CppUTest suite utilizing `CppUTestExt/MockSupport.h`.
+   - The AI must read the test file first to internalize the hardware contract, error paths, and expected states.
+
+---
+
+## 3. Active Implementation Roadmap
+
+- [x] **Task 1: CppUTest Integration into AbstractX Host Build System**:
+  - [x] Add CppUTest submodule / CMake `FetchContent` into `AbstractX/third_party/cpputest`.
+  - [x] Resolve ETL placement `new` conflict in `third_party/etl/` when compiling with CppUTest memory leak detectors (disable CppUTest macro overrides in ETL translation units).
+  - [x] Integrate CppUTest runner into `CMakeLists.txt` under `ABSTRACTX_TARGET=host` (`add_test` / `ninja test-all`).
+  - [x] Create baseline CppUTest test runner (`tests/test_main.cpp`, `test_sitl_imu`, `test_sitl_gps`, `test_sitl_fusion`).
+
+- [x] **Task 2: AI Prompting & Review Protocol for CppUTest Grounding**:
+  - [x] Establish mandatory AI workflow rule: **"Always Read CppUTest Suites Before Code Generation"**.
+  - [x] Require AI to extract:
+    1. Pre-conditions and post-conditions of the tested function.
+    2. Mock hardware register reads/writes (`mock().expectOneCall("write32").withParameter(...)`).
+    3. Error injection cases (timeouts, CRC errors, ring buffer full).
+  - [x] Implement AI test-generator mode: for every new driver or coroutine service, generate the CppUTest harness *first* (TDD) before implementing logic.
+
+- [x] **Task 3: Automated AbstractX Adversarial Audit Tool (`run_adversarial_audit.py`) & Engineering Guide**:
+  - [x] Authored comprehensive guide: `AbstractX/docs/SASHIKO_ADVERSARIAL_REVIEW_AND_CPPUTEST_GUIDE.md`.
+  - [x] Created executable audit tool: `AbstractX/tools/run_adversarial_audit.py` with 5-stage decomposed adversarial checks.
+  - [x] Indexed in `AbstractX/README.md` and `AbstractX/docs/README.md`.
+  - [x] Stage 1 Regex/AST Checks:
+    - Scans for forbidden dynamic heap allocations (`std::malloc`, non-placement `new`, `std::vector`, `std::string`, `<mutex>`, `<thread>`).
+  - [x] Stage 2 Coroutine & Non-Blocking Lifecycle Checks:
+    - Scans for blocking HAL methods (`transfer_sync`, `read_sync`, `delay_ms`).
+  - [x] Stage 3 ISR Boundary Checks:
+    - Flags direct `.resume()` calls from ISR contexts (Rule 4.2) and unmasked queue pushes.
+  - [x] Stage 4 Wire Protocol Checks:
+    - Validates wire packet framing and Big-Endian protocol rules.
+  - [x] Stage 5 Test Coverage Verification:
+    - Verifies companion unit test suite presence.
+
+- [ ] **Task 4: Gemini Pro / Flash Audit Bundle for AbstractX**:
+  - [ ] Author `docs/reviews/GEMINI_PRO_ABSTRACTX_AUDIT_BUNDLE.md` containing the 5-stage prompt templates tailored for C++20 coroutines, ETL integration, and bare-metal RISC-V firmware.
+  - [ ] Verify workflow by running the audit bundle against `AbstractX/src/runtime.cpp`, `firmware/common/hal/spi.cpp`, and `firmware/common/hal/uart.cpp`.
+
+
+
+- [x] **Task 5: FPGA Verilator RTL Co-Simulation & Live Telemetry Mirror**:
+  - [x] Cocotb + Verilator co-simulation with Python sensor VIP `CocotbICM42688P` (`sim/cocotb/test_asp_tlp_64b_cocotb.py`).
+  - [x] Hardware DRDY pin trigger, autonomous 10 MHz SPI master Auto-DMA, and 9.57 µs doorbell IRQ assertion verification.
+  - [x] Real-time Dual-SPI readout and UDP port 9870 telemetry streaming.
+  - [x] Primary Flight Display (PFD) and 3D quadcopter attitude visualizer (`apps/gps_imu_app/tools/flight_display.py`).
+  - [x] Symmetrical Hardware/Software mirror proving FPGA RTL and Processor C++ emit identical 64-byte TLPs.
+  - [x] High-res animated walkthrough video (`docs/media/end_to_end_walkthrough.gif`) embedded into `README.md` for GitHub rendering.
 

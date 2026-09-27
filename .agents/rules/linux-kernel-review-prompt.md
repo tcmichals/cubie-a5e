@@ -35,16 +35,21 @@ For every expression of the form `da + len`, `base + offset`, `phys + size`:
 
 ---
 
-## CHECK GROUP 2: Stack Use-After-Free via Async Kernel APIs
+## CHECK GROUP 2: Async Kernel APIs, Shared Payloads & SMP Data Races
 
 For every call to `mbox_send_message()`, `dma_async_memcpy_pg_offload()`, `call_rcu()`, timer callbacks, or any API documented as non-blocking or deferred:
 
 1. What is the type and storage class of the `data` pointer argument?
-2. Is the pointer a local stack variable (function parameter or `auto` variable)?
-3. Does the calling function return before the kernel framework has consumed the pointed-to data?
-4. Is `tx_block = false` set anywhere in the mailbox client config? If yes, `mbox_send_message()` **will** return before the hardware has read the message.
-
-**Expected answer:** All message data passed to async APIs lives in `struct` members, static storage, or dynamically allocated memory — never on the call stack.
+2. Is the pointer a local stack variable? If so:
+   - Does the underlying driver's `send_data` callback copy the payload synchronously before returning (e.g., via `memcpy` or `writel`)?
+   - If yes: a local stack variable is safe and avoids shared-state races.
+   - If no (the framework or driver queues the pointer itself): the pointer MUST point to memory that remains valid until completion.
+3. If message data lives in a `struct` member (e.g. `priv->kick_msg`):
+   - Can multiple CPUs call this function concurrently (e.g., virtqueue kicks on different cores)?
+   - If yes: is the assignment to the struct member protected by a spinlock? Without locking, concurrent calls will overwrite the shared variable, causing dropped or corrupted payloads.
+4. Does the client set `cl.knows_txdone = true`?
+   - Does the underlying controller already manage TX completion via `txdone_poll = true` or `txdone_irq = true`?
+   - If the controller manages TX completion, the client must NOT set `cl.knows_txdone = true` and must NEVER call `mbox_client_txdone()`. Calling it immediately breaks the controller's FIFO pacing.
 
 ---
 
@@ -84,22 +89,28 @@ In `start()` and `recovery` paths:
 
 ---
 
-## CHECK GROUP 6: Inverted Teardown Order (UAF in remove/stop)
+## CHECK GROUP 6: Teardown and Error-Unwind Order (Preventing Use-After-Free)
 
 In `remove()`:
 
-1. What is the exact sequence of: `rproc_del()`, `cancel_work_sync()`, `mbox_free_channel()`?
-2. Can `rproc_del()` internally trigger the `stop()` callback, which asserts reset and causes the firmware to stop sending mailbox interrupts?
-3. If `cancel_work_sync()` is called BEFORE `rproc_del()`, is there a window where `rproc_del()`'s internal `stop()` causes a late mailbox IRQ to re-queue `vq_work`, which then executes after `mbox_free_channel()` has freed `rx_chan`?
+1. **Cut off event generation FIRST:** Free or disable the external interrupt/mailbox sources (`devm_free_irq()`, `mbox_free_channel()`) so no new incoming hardware events or interrupts can be received.
+2. **Drain in-flight async workers SECOND:** Call `cancel_work_sync()` to ensure any work items already queued have completely finished executing.
+3. **Destroy framework objects LAST:** Only after interrupt sources are closed and workqueues are idle, call `rproc_del()`, `mbox_controller_unregister()`, etc.
+   - *Why?* If `rproc_del()` is called while the mailbox channel is still open, late interrupts will trigger `sunxi_rproc_vq_work` which calls `rproc_vq_interrupt()` on already-destroyed virtqueues, causing a kernel crash!
+
+In `probe()` error unwind (`err_mbox_release`):
+
+1. Does `mbox_free_channel()` run **before** `cancel_work_sync()`?
+2. If `cancel_work_sync()` runs before freeing the channel, an incoming interrupt can re-queue the work item *after* the cancellation. When probe fails and devres frees `priv`, the work item executes on freed memory.
 
 In `stop()`:
 
-1. Does `cancel_work_sync()` run before or after `reset_control_assert()`?
-2. If the remote core is still running when `cancel_work_sync()` runs, can it send a mailbox interrupt that re-queues the work after `cancel_work_sync()` returns?
+1. `reset_control_assert()` (halt core to prevent new interrupts) → `disable_irq()` → `cancel_work_sync()` (drain work).
 
 **Expected answer:**
-- `remove()`: `rproc_del()` → `cancel_work_sync()` → `mbox_free_channel()`
-- `stop()`: `reset_control_assert()` (halt core) → `cancel_work_sync()` (drain work)
+- `remove()`: `devm_free_irq()` → `mbox_free_channel()` → `cancel_work_sync()` → `rproc_del()`
+- `probe()` error: `mbox_free_channel()` → `cancel_work_sync()`
+- `stop()`: `reset_control_assert()` → `disable_irq()` → `cancel_work_sync()`
 
 ---
 
@@ -248,6 +259,65 @@ These are not caught by automated tools — they are upstream maintainer style r
 
 ---
 
+---
+
+## CHECK GROUP 18: SMP Concurrency, Shared ISRs, and State Flag Data Races
+
+1. **Shared Interrupt Handlers on SMP:**
+   - If the same ISR handler is registered for multiple interrupts via `request_irq()`, can two remote cores fire interrupts simultaneously on CPU 0 and CPU 1?
+   - If both CPUs execute the ISR concurrently, does the ISR inspect, clear, or drain hardware registers/FIFOs without a spinlock?
+   - **Rule:** Status register read, status clear, and FIFO read MUST be enclosed in `spin_lock_irqsave(&lock, flags)` to prevent TOCTOU races where a second CPU reads from an empty FIFO (hardware underflow / corrupt packet).
+2. **State Flag Concurrency Across Process and Interrupt Context:**
+   - Are boolean flags like `crash_irq_enabled` checked and modified locklessly?
+   - If `stop()` or `remove()` executes `if (priv->crash_irq_enabled) disable_irq()` concurrently with the ISR doing the same, both can call `disable_irq_nosync()`. This increments the IRQ disable depth to 2, causing the IRQ to be permanently masked when `start()` only calls `enable_irq()` once.
+   - **Rule:** Any state transition between enabled/disabled MUST be protected by a dedicated spinlock (`priv->lock`).
+3. **Interrupt Handler Teardown Synchronization:**
+   - Does `remove()` call `devm_free_irq()` or `synchronize_irq()` BEFORE freeing or deleting data structures (like `rproc` or `priv`) accessed by the ISR?
+   - **Rule:** Never rely solely on devres to free interrupts at the very end of remove. Explicitly free or synchronize IRQs before unregistering core frameworks.
+
+---
+
+## CHECK GROUP 19: Architecture Portability, Endianness & Test Dependencies
+
+1. **MMIO Endianness in Unit Tests:**
+   - Device accessors `readl()` and `writel()` enforce little-endian byte order and perform automatic byte-swapping on Big-Endian architectures (s390, Sparc).
+   - If a KUnit test fixture uses a native `u32` array for mock memory, does the test assert directly against the raw array (e.g. `mock_regs[index]`)?
+   - **Rule:** Tests must use `readl()` or `le32_to_cpu()` when asserting mock register state written by driver `writel()` calls.
+2. **Kconfig Dependencies for Unit Tests:**
+   - Does `config FOO_KUNIT_TEST` declare `depends on FOO && KUNIT`?
+   - If it only declares `depends on KUNIT`, and `FOO` is built as a module (`=m`) while `FOO_KUNIT_TEST` is built-in (`=y`), linking `vmlinux` will fail with undefined references.
+
+---
+
+## CHECK GROUP 20: Subsystem API Semantic Contracts
+
+1. **Mailbox Pacing (`last_tx_done`):**
+   - In the Linux mailbox framework, what does `last_tx_done()` mean?
+   - It does NOT mean "is there space in the FIFO to queue another message".
+   - It means **"has the previously transmitted message been consumed by the remote core?"**
+   - **Rule:** For a hardware message FIFO, `last_tx_done()` must return `true` only when the channel FIFO is completely drained (`count == 0`), not when `count < FIFO_MAX`.
+2. **RemoteProc Address Translation Fall-through:**
+   - In `da_to_va()`, if an address matches an Address Translation Table (ATT) entry (`sunxi_rproc_da_to_sys() == 0`), the address is definitively an ATT-governed core address.
+   - If that translated system address does not fall within any mapped hardware window (SRAM, DRAM carveout), it MUST return `NULL` immediately.
+   - **Rule:** Never fall through from a failed ATT match to compare core `da` against host physical addresses (`trace_phys`). A numerical overlap will return an invalid kernel virtual pointer!
+3. **RemoteProc Execution Reset vs Bus Reset:**
+   - If a core reset (`rst_core`) and a bus/config reset (`rst_cfg`) both exist, never fall back to deasserting `rst_cfg` as the execution start if `rst_cfg` was already deasserted in `prepare()`. Doing so causes premature code execution before firmware is loaded.
+
+---
+
+## CHECK GROUP 21: Device Tree Input Bounds and MMIO Posted Writes
+
+1. **Unbounded Device Tree Array Properties:**
+   - Does the driver retrieve `platform_irq_count(pdev)` or count phandles with `of_count_phandle_with_args()` and loop without an upper bound check?
+   - **Rule:** If the driver stores results in a fixed-size array (e.g. `mbox->irqs[4]`), explicitly assert:
+     `if (irq_cnt > ARRAY_SIZE(mbox->irqs)) return -EINVAL;`
+2. **MMIO Posted Writes Before Reset Deassertion:**
+   - On modern ARM/ARM64 SoC interconnects (AXI/AHB), memory-mapped writes (`writel`) are posted.
+   - If the CPU writes the boot vector (`STA_ADD_REG`) and immediately deasserts the core execution reset without a read-back, the reset deassertion can arrive at the hardware block before the boot address write finishes posting.
+   - **Rule:** Always perform a dummy read-back (`readl()`) of the control/boot register immediately following `writel()` to flush posted interconnect transactions before deasserting reset.
+
+---
+
 ## UPDATED FINAL GATE: Before Every `git send-email`
 
 - [ ] `checkpatch.pl --strict` → 0 errors, 0 warnings
@@ -257,8 +327,9 @@ These are not caught by automated tools — they are upstream maintainer style r
 - [ ] Compiled with target toolchain (`ARCH=arm64 CROSS_COMPILE=...`) → 0 warnings
 - [ ] DT binding examples use raw hex constants OR cross-patch dependency is documented
 - [ ] Patch series based on `linux-next` or latest `-rc1` (noted in cover letter if different)
-- [ ] All 17 check groups above answered with "Expected answer"
+- [ ] All 21 check groups above answered with "Expected answer"
 - [ ] KUnit tests call real driver functions directly (zero duplicate/mirrored code)
+- [ ] KUnit tests pass on both Little-Endian and Big-Endian architectures
 - [ ] Cover letter references the previous version's thread
 - [ ] Full CC list on every patch (no split CC across patches)
 - [ ] Commit messages explain WHY, not just what

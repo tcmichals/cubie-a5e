@@ -1,269 +1,150 @@
-# Allwinner T527 & A733 Flight Controller Stack (Cubie A5E, Avaota A1, Cubie A7A, Cubie A7Z)
+# Allwinner sun55i (T527/A527) & sun60i (A733) Mainline Linux BSP
 
-This repository contains the files to build a custom Linux distribution for the **Radxa Cubie A5E**, **Yuzuki / Pine64 Avaota A1** (Allwinner A527/T527), and **Radxa Cubie A7A / A7Z** (Allwinner A733) single-board computers and run the flight controller application stack.
+This repository provides reproducible **Mainline Linux (7.1+)** bring-up, device drivers, and Buildroot integration for the **Radxa Cubie A5E**, **Yuzuki / Pine64 Avaota A1** (Allwinner A527/T527), and **Radxa Cubie A7A / A7Z** (Allwinner A733) single-board computers.
 
-> **Active A7A restart checklist**: [`TODO.md`](TODO.md). The chronological hardware evidence is in [`docs/platforms/CUBIE_A7A_DEBUG_LOG.md`](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
->
-> 🚀 **Multi-PC Development & Quick Setup**:
-> * **New Machine Setup**: `git clone git@github.com:tcmichals/cubie-a5e.git && ./cubie-a5e/tools/setup_workspace.sh`
-> * **Sync Kernel Across PCs**: `./cubie-a5e/tools/sync_kernel.sh [push|pull|rebuild|status]`
-> * See **[Quick Start Guide](#quick-start-multi-pc-setup--build)** for full details.
+The primary mission of this project is **upstream kernel enablement**: replacing legacy vendor BSP kernels (Linux 5.10 with out-of-tree blobs) with modern, clean, upstream-submissible drivers, pure FOSS stacks, and `PREEMPT_RT` real-time support.
 
 ---
 
-## Why This Repository? (Mainline vs. Vendor BSP)
+## 📢 Upstream Linux Kernel Patch Submissions
 
-If you've used the default Radxa Debian or Ubuntu images, you know the pain: ancient, heavily patched kernels (often Linux 5.10 or older), proprietary binary blobs, out-of-tree drivers that break on updates, and zero real-time determinism. 
+We are actively upstreaming drivers for the Allwinner sun55i/sun60i platform to the official Linux kernel mailing lists (`linux-sunxi@lists.linux.dev`, `linux-remoteproc@vger.kernel.org`, `devicetree@vger.kernel.org`).
 
-**This project fundamentally breaks that mold.**
+All patch series, cover letters, reviewer discussions, and automated AI review tracking are organized in **[`upstream-remoteproc/`](upstream-remoteproc/)**:
 
-Here is why this stack is superior for robotics, aerospace, and high-performance embedded engineering:
+| Series | Status | Lore Mailing List Thread | Notes / Feedback |
+| :---: | :---: | :--- | :--- |
+| **RFC v1** | *Superseded* | [20260922034711.190253-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/) | 7 patches; initial schema & driver feedback |
+| **v2** | *Reviewed* | [20260927002021.797069-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/) | 68 KUnit tests added; Sashiko AI review received |
+| **v3** | **Ready for Submission** | *Threaded under v1/v2* | **All 17 Sashiko AI review items fixed**; 100% checkpatch clean; builds with 0 errors |
 
-1. **Zero Bloat, Pure Mainline (Linux 7.1+)**: We discarded the bloated vendor BSP entirely. This OS is built from scratch using Buildroot, targeting the absolute bleeding-edge mainline Linux kernel. If a driver isn't in mainline, we upstream it ourselves (like the FOSS Etnaviv NPU driver and our cleanly refactored Wi-Fi stack).
-2. **Hard Real-Time Determinism (`PREEMPT_RT`)**: The default Radxa image is built for general-purpose desktop use. This image is built for flight. We patch the kernel with `PREEMPT_RT`, strictly isolate CPU cores, and utilize bare-metal RISC-V co-processors to guarantee microsecond-level execution loops without OS jitter.
-3. **Reproducibility**: No more flashing mysterious pre-compiled images and praying. Every single configuration, device tree overlay, kernel patch, and compiler flag is codified in our Buildroot external tree. Run `make` and you get an identical, bit-for-bit reproducible operating system every time.
-4. **Architectural Transparency**: Vendor images hide hardware complexity behind opaque HALs and blobs. We expose it. Every subsystem—from the Mailbox IPC synchronization to the memory-mapped Camera pipelines—is documented with engineering blueprints and KUnit tests.
+See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md) and [`upstream-remoteproc/reviews/REVIEW_TRACKER.md`](upstream-remoteproc/reviews/REVIEW_TRACKER.md) for the complete issue resolution matrix.
 
 ---
 
-## Supported Boards & Hardware Comparison
+## 🚦 Hardware & Mainline Driver Status Matrix
+
+> [!IMPORTANT]
+> **Please read carefully if you are evaluating this repository:**
+> Mainline Linux support for Allwinner A527/T527 and A733 is under active bring-up. Below is an honest, verified status matrix of what is working today on real silicon versus what is still under active development.
+
+| Subsystem | Cubie A5E (A527/T527) | Cubie A7A / A7Z (A733) | Driver / Implementation Status |
+| :--- | :---: | :---: | :--- |
+| **Bootloader & BROM** | **Working** | **Working** | U-Boot 2026.01 + TF-A BL31 + OP-TEE + auto-training LPDDR5/LPDDR4X |
+| **Mainline Kernel** | **Working** | **Working** | Linux 7.1.0 with `PREEMPT_RT` patchset, 8-core SMP boot |
+| **Serial Debug Console** | **Working** | **Working** | `ttyS0` @ 115200 baud (standard 8250/dw-uart) |
+| **eMMC / MicroSD (MMC)** | **Working** | **Working** | Mainline `sunxi-mmc` driver |
+| **Gigabit Ethernet (GMAC)** | **Working** | **Working** | Mainline `dwmac-sun55i` / `dwmac-sun8i` |
+| **PMIC & Power Regulators** | **Working** | **Working** | AXP717 + AXP323 (A5E) / AXP8191 via RSB (A7A) |
+| **Message Box (Mailbox IPC)**| **Working** | **Working** | 4-port hardware crossbar (`sun55i-msgbox.c`), v3 upstream ready |
+| **RISC-V E907 / E902 Core** | **Working** | **Working** | Linux `remoteproc` standard (`sunxi_rproc.c`), v3 upstream ready |
+| **HiFi4 Audio DSP Core** | **Working** | **Planned** | Remoteproc + SRAM mapping + dedicated ELF test suite |
+| **Wi-Fi 6 (AIC8800)** | **Working (SDIO)** | **In Progress (USB)** | Clean FOSS mainline driver (`aic8800-upstream`), 25 MHz SDIO stabilized |
+| **NPU AI Accelerator** | **Working** | **Working** | 2.0/3.0 TOPS via open-source Etnaviv DRM driver (`/dev/dri/card0`) + Teflon |
+| **3D GPU Core** | **Working** | **Under Dev** | Panfrost Mali-G57 (A5E) / Imagination BXM-4-64 driver needed (A7A) |
+| **USB 2.0 / 3.0 Host** | **Working** | **In Progress** | EHCI/OHCI (A5E) / DWC3 + PCK-600 power sequencing bring-up (A7A) |
+| **MIPI CSI-2 Cameras** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: V4L2 ISP & media controller bindings not yet mainlined |
+| **MIPI DSI Display / HDMI** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: DRM display engine (DE33) driver requires mainline porting |
+| **Hardware Video Codec** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: Stateless Cedrus VPU support pending sun55i/sun60i tables |
+
+---
+
+## 🛠️ Supported Boards
 
 | Hardware Feature | Radxa Cubie A5E | Yuzuki Avaota A1 | Radxa Cubie A7A | Radxa Cubie A7Z |
 | :--- | :--- | :--- | :--- | :--- |
-| **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | **Ultra-Compact Zero (65×30 mm)** |
-| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Arm Cortex-A76 + 6× Cortex-A55 | 2× Arm Cortex-A76 + 6× Cortex-A55 |
-| **Real-Time Co-Processor** | XuanTie E906/E907 RISC-V (`remoteproc`) | XuanTie E906/E907 RISC-V (`remoteproc`) | XuanTie E902 RISC-V (Dual-Mode: `scp.fex` / `remoteproc`) | XuanTie E902 RISC-V (Dual-Mode: `scp.fex` / `remoteproc`) |
-| **NPU AI Accelerator** | 2.0 TOPS (Teflon / TFLite) | 2.0 TOPS (Teflon / TFLite) | 3.0 TOPS (Teflon / TFLite Delegate) | 3.0 TOPS (Teflon / TFLite Delegate) |
-| **Video Engine (VPU)** | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) | 4K H.265 / H.264 Encoder (Cedrus) |
-| **GPU Core** | Arm Mali-G57 MC1 | Arm Mali-G57 MC1 | Imagination BXM-4-64 MC1 | Imagination BXM-4-64 MC1 |
-| **System RAM** | LPDDR4 / LPDDR4X | LPDDR4 / LPDDR4X | LPDDR5 (Auto-Trained) | LPDDR5 (Auto-Trained) |
-| **Ethernet** | Gigabit RJ45 | Dual Gigabit RJ45 | Dual Gigabit RJ45 (`GMAC0`/`GMAC1`) | *None (Wi-Fi 6 / USB Ethernet)* |
-| **Wi-Fi 6 & Bluetooth 5.4** | AicSemi AIC8800 (**SDIO**) | Wi-Fi 6 + BT 5.4 | AicSemi AIC8800 (**USB / SDIO**) | AicSemi AIC8800 (**SDIO** Bus) |
-| **Video Out** | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Full-Size HDMI + MIPI DSI | Micro-HDMI + MIPI DSI |
-| **Camera Port** | 2-Lane MIPI CSI-2 | 2-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 | 2/4-Lane MIPI CSI-2 (15-pin FPC) |
-| **Storage Interfaces** | MicroSD / eMMC / SPI NOR | MicroSD / eMMC / SPI NOR | MicroSD / eMMC Module / UFS / SPI NOR | MicroSD / eMMC Module / SPI NOR |
-| **Linux Kernel Target** | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) | Mainline Linux 7.1 (`PREEMPT_RT`) |
-| **Device Tree Base** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun55i-t527-avaota-a1.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
-
-```text
-+-----------------------------------------------------------------------------------------+
-|                    ALLWINNER T527 / A527 (CUBIE A5E) ARCHITECTURE                       |
-|                                                                                         |
-|  +-------------------------------------+   +-----------------------------------------+  |
-|  |             CPUX Cluster            |   |               Co-Processors             |  |
-|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | 8x ARM Cortex-A55 @ 1.80 GHz  |  |   |  | Cadence Tensilica HiFi4 Audio DSP |  |  |
-|  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
-|  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
-|  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
-|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906/E907 RISC-V Core     |  |  |
-|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
-|                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
-|  +-------------------------------------+   |  +-----------------------------------+  |  |
-|  |             NPU Engine              |   |  +-----------------------------------+  |  |
-|  |  - 2.0 TOPS VIP9000 (0x07122000)    |   |  | Hardware Message Box (Doorbell)   |  |  |
-|  +-------------------------------------+   +-----------------------------------------+  |
-|                                                                                         |
-|  +-----------------------------------------------------------------------------------+  |
-|  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 128 KB Shared PubSRAM C (0x00020000) [Default RemoteProc Boot & Runtime]        |  |
-|  |  - 256 KB Dedicated High SRAM (0x3ffc0000 Core / 0x07280000 Host) [Zero-Wait-State] |  |
-|  |  - 64 KB ITCM & 64 KB DTCM [Private Zero-Wait Core Memories, Stage-Loaded at Boot]  |  |
-|  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
-|  |  - Up to 4 GiB LPDDR4/4X System RAM (0x40000000)                                  |  |
-|  +-----------------------------------------------------------------------------------+  |
-+-----------------------------------------------------------------------------------------+
-```
-
+| **SoC** | Allwinner A527 / T527 | Allwinner A527 / T527 | Allwinner A733 | Allwinner A733 |
+| **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Ultra-Compact Zero (65×30 mm) |
+| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Cortex-A76 + 6× Cortex-A55 | 2× Cortex-A76 + 6× Cortex-A55 |
+| **Co-Processors** | XuanTie E907 RISC-V + HiFi4 DSP | XuanTie E907 RISC-V + HiFi4 DSP | XuanTie E902 RISC-V | XuanTie E902 RISC-V |
+| **System RAM** | 2 GiB / 4 GiB LPDDR4X | 2 GiB / 4 GiB LPDDR4X | 4 GiB / 6 GiB LPDDR5 | 2 GiB / 4 GiB LPDDR5 |
+| **Wi-Fi / BT** | AIC8800D80 (SDIO) | AIC8800D80 (SDIO) | AIC8800D80 (USB) | AIC8800D80 (SDIO) |
+| **Device Tree File** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun55i-t527-avaota-a1.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
 
 ---
 
-### Shared Hardware Pinout & Flight Bus Continuity
-Both the **Cubie A5E** and **Cubie A7A** share the identical 40-pin GPIO physical header assignment:
-- **SPI0 (Pins 19, 21, 23, 24):** Dedicated Link A for ultra-low latency IMU attitude estimation.
-- **SPI1 (Pins 12, 35, 38, 40):** Dedicated Link B for bidirectional AbstractX FPGA coprocessor communication.
-- **SPI2 (Pins 7, 15, 16, 18):** General Purpose expansion SPI bus.
-- **I2C1 (Pins 3, 5) & I2C3 (Pins 27, 28):** Dual I2C buses for external compass, barometer, and flight telemetry.
-- **UART0 (Pins 8, 10):** Mainline Linux serial debug console.
-- **Isolated Core 7:** Core 7 is isolated for jitter-free real-time flight loops (dynamic userspace `cpuset` isolation after clean SMP boot).
+## 🚀 Quick Start: Building the OS
 
----
-
-## Project Mantra & Core Philosophies
-
-1. **Mainline First:** We reject ancient, bloated vendor BSP kernels. We target the absolute latest mainline Linux kernel releases and push for pure FOSS (Free and Open-Source Software) drivers (e.g., Etnaviv for the NPU, V4L2 for camera pipelines). 
-2. **ArduPilot-Grade Determinism:** Flight loops must not jitter. We achieve microsecond-level hard real-time execution by isolating the real-time flight loop (`PREEMPT_RT`, `taskset -c 7`, `mlockall`, `SCHED_FIFO`) and offloading zero-tolerance timing to the bare-metal RISC-V and FPGA co-processors.
-3. **Zero-Cost Abstractions:** Embedded code doesn't have to be unsafe C macros. We embrace modern C++ (C++20) for strict type safety and `std::atomic` lock-free IPC, compiling with `-fno-exceptions` to generate perfectly optimized, bloat-free assembly.
-4. **Transparent Engineering:** We document the "why," not just the "how." Every register map, architectural decision, and debugging nightmare is extensively logged so future aerospace engineers can learn from the hardware up.
-
----
-## Current Project Status
-
-As of the current bring-up phase, here is the functional status of the flight stack hardware and software components:
-
-* **✅ Base OS & Bootloader (100% OPERATIONAL & VERIFIED ON HARDWARE):** 
-  - **Radxa Cubie A5E (Allwinner A527/T527):** Mainline Linux 7.1 (`PREEMPT_RT`) fully operational on real silicon. Ext4 rootfs read-write mounting, real-time CPU Core 7 flight isolation, Etnaviv NPU (GC9000 rev 9003), Panfrost GPU (Mali-G57 MC1), dual Gigabit Ethernet MACs (`dwmac-sun55i` / `dwmac-sun8i`), and AXP717 + AXP323 PMICs.
-  - **Radxa Cubie A7A (Allwinner A733):** Full multi-stage boot chain verified on real silicon: `BootROM` $\rightarrow$ `boot0` (6 GiB LPDDR5 auto-training) $\rightarrow$ `TOC1` $\rightarrow$ `TF-A BL31` $\rightarrow$ `OP-TEE` $\rightarrow$ `Mainline U-Boot 2026.01-rc1` (4KB page-aligned at `0x4a001000`) $\rightarrow$ `Mainline Linux 7.1.0 PREEMPT_RT` booted across all 8 SMP cores (6× Cortex-A55 + 2× Cortex-A78) with 6 GiB RAM.
-  - **Multi-Board Device Trees:** Native upstream support for Radxa Cubie A5E (`sun55i-a527-cubie-a5e.dtb`), Radxa Cubie A7A (`sun60i-a733-cubie-a7a.dtb`), and Radxa Cubie A7Z (`sun60i-a733-cubie-a7z.dtb`).
-
-* **✅ Mainline Wi-Fi 6 Driver (100% OPERATIONAL & DUAL-BUS READY):** 
-  - **Unified Dual-Bus Architecture:** Mainline kernel driver (`aic8800-upstream`) unified with modular transport HAL backends:
-    - **SDIO Transport (Radxa Cubie A5E):** Multi-module `aic8800_bsp.ko` + `aic8800_fdrv.ko` verified on real silicon with sub-300ms firmware upload and full Wi-Fi 6 association.
-    - **USB Transport (Radxa Cubie A7A):** Driver package ready (`BR2_PACKAGE_AIC8800_DRIVER_USB=y`), with power delivered by the AXP8191 PMIC (`DCDC1`) initialized via U-Boot `scp.fex`.
-  - **Bus Timing & Probe Wakeup Stabilized:** Guarded internal IOPAD delay registers (`0xF0`/`0xF8`/`0xF1`) to prevent MMC data errors at 25 MHz, added explicit chip wakeup during probe, and implemented safe BootROM fallback.
-  - **Linux 7.1 PREEMPT_RT Verified:** Clean 0-warning, 0-error compilation across both `bld.a5e` and `bld.a7a` target buildroots.
-  - **RFC v3 Mainline Preparation:** Clean 4-patch series codified under [`docs/upstream_patches/`](docs/upstream_patches/) and tracked in the [Action Plan](docs/buildroot/AIC8800_Porting_Action_Plan.md).
-
-* **✅ Real-Time Determinism & Core Isolation (100% OPERATIONAL):**
-  - **Flight Loop Isolation:** CPU Core 7 is strictly isolated for microsecond-level determinism.
-  - **IRQ Priority Elevation:** [`/etc/init.d/S15realtime`](project-cubie-a5e/board/radxa/cubie_a5e/rootfs-overlay/etc/init.d/S15realtime) dynamically steers IRQ affinities away from Core 7 to Cores 0–6 and elevates SPI/I2C kernel IRQ thread priorities to **85** (preempting the flight loop at 80).
-
-* **✅ T527 RISC-V Real-Time Co-Processor (100% OPERATIONAL via `remoteproc` on Cubie A5E):**
-  - **Mainline Linux RemoteProc Standard (`sunxi_rproc.c`):** Dedicated XuanTie E906/E907 co-processor managed seamlessly via `/sys/class/remoteproc/remoteproc0/state`.
-  - **Hardware Resources:** Shared PubSRAM C (`0x00020000`, 128 KB) default boot memory, Dedicated High SRAM (`0x3ffc0000` Core / `0x07280000` Host, 256 KB), and private 1-cycle ITCM/DTCM, controlled via MCU CCU MMIO registers (`0x07102120`, `0x07102124`).
-  - **High-Throughput Diagnostics:** Live firmware telemetry exposed via debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`), dedicated serial console (`S_UART0` @ `0x02500000` / 115200 baud), and lock-free shared SRAM ring buffers in PubSRAM C (`0x00020000`).
-  - **AbstractX Integration:** Powered by the open-source [AbstractX](https://github.com/tcmichals/AbstractX) C++20 coroutine engine for zero-allocation cooperative multitasking and HALO compiler elision (19x faster context-switching vs. FreeRTOS).
-
-* **📌 Allwinner A733 / Cubie A7A & A7Z E902 Architecture (Dual-Mode Support):**
-  - **Mode 1 (Standard Power Management / Suspend & Resume):** E902 runs `scp.fex` packaged in TOC1, driving AXP8191 PMIC power sequencing over RSB (`r_rsb`) and handling S3 deep sleep via BL31 SCPI PSCI handlers.
-  - **Mode 2 (Real-Time Control / Linux RemoteProc):** When suspend/resume is unneeded (24/7 industrial/embedded control), TF-A BL31 unlocks `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`) to Non-Secure world, allowing Linux `sunxi_rproc.c` to load bare-metal RV32EMC firmware into System SRAM A2 (`0x00040000`, 208 KB) or DRAM carveout (`0x4E000000`), with U-Boot powering PMIC `DCDC1`/`ALDO1` directly over RSB.
-  - **Reference Documentation:** Complete dual-mode specification is documented in [`docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md`](docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md).
-
-* **🔍 Direct Memory Debug (`dmem`) / OpenOCD Architecture:**
-  - **Comparison with Other SoCs:** SoCs from Texas Instruments (AM62x / AM64x / K3) and STMicroelectronics (STM32MP1 / STM32MP2) implement a memory-mapped `dmem` bus interface that exposes core debug registers directly to the system interconnect, enabling native, JTAG-less OpenOCD and GDB remote debugging.
-  - **Allwinner T527 Reality:** Current Allwinner T527 silicon does not route a memory-mapped `dmem` bus interface for the XuanTie RISC-V Debug Module to the non-secure ARM interconnect, and direct userspace physical memory access is strictly disallowed by the kernel.
-  - **Future Silicon Hope:** We hope Allwinner will incorporate a memory-mapped `dmem` bus interface in future SoC revisions so the open-source Linux community can run self-hosted OpenOCD and GDB directly on Allwinner targets.
-  - **Active T527 Debugging:** Diagnostics on current T527 silicon rely on Linux RemoteProc trace buffers (`trace0`), dedicated serial console (`S_UART0`), lock-free shared SRAM ring buffers, and external physical JTAG debug probes.
-
-* **⚠️ NPU / TinyML (Compiled in, Integration Ready):** Open-source Etnaviv DRM kernel drivers (GC9000 NPU bound on `/dev/dri/card0`) and the Teflon TensorFlow Lite delegate (`libteflon.so`) are built into the rootfs, ready for vision pipeline testing.
-
----
-## Architectural Documentation & Technical Articles
-
-1. **[Bringing Up Heterogeneous RISC-V on Allwinner SoCs (4-Part Technical Series)](docs/articles/README.md)**:
-   * **[Part 1: Architecture and Memory-Mapped Debugging](docs/articles/part1_heterogeneous_riscv_intro_architecture.md)** — Silicon taxonomy (`T527`/`A733`/`sun55i`), TRM memory maps, and JTAG-less on-chip debugging over OpenOCD.
-   * **[Part 2: Building the Linux `remoteproc` Driver and Proving Hardware State](docs/articles/part2_building_remoteproc_and_hardware_proof.md)** — `sunxi_rproc.c` driver, surgical ELF mapping, debugfs trace logs, and automated Python DMI hardware verification.
-   * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](docs/articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)** — Zero-wait TCM determinism, lightweight lock-free shared SRAM ring buffers + Mailbox interrupts, and live GDB workflows.
-   * **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](docs/articles/part4_deep_dive_baremetal_cpp_coroutines.md)** — Deploying AbstractX on bare-metal RISC-V, HALO compiler optimizations (0 cycles / 0 bytes), benchmarks vs FreeRTOS (19x speedup), and non-blocking hardware awaiters.
-
-2. **[Heterogeneous Avionics Architecture & Bring-Up Guide](docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md)**:
-   Comprehensive system architecture covering the Cortex-A76 isolated Core 7 flight loop, C++20 Coroutine Async Engine (`when_any`, `when_all`), 16-channel DMA partitioning, MSGBOX mailbox doorbells, and Dual-SPI FPGA TLP packet streaming.
-
-3. **[Allwinner XuanTie RISC-V Co-Processor & RemoteProc Guide](docs/buildroot/HowToRISCV.md)**:
-   Technical deep-dive into the XuanTie E907 co-processor, mainline Linux 7.1 RemoteProc driver (`drivers/remoteproc/sunxi_rproc.c`), standalone kernel patch, device tree schemas, on-chip SRAM memory mapping, and `/sys/class/remoteproc/` user-space control.
-
-4. **[Radxa Cubie A7A Platform Specification & Patch Roadmap](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
-   Hardware specs, LPDDR5 dynamic training architecture, GICv3 interrupt controller mapping, and upstream patch series tracking ([`tools/watch_a733_upstream.py`](tools/watch_a733_upstream.py)).
-
-5. **[Allwinner A733 Boot Architecture & Disk Geometry](docs/buildroot/A733_Boot_Architecture_And_Disk_Layout.md)**:
-   Exhaustive analysis of the A733 BROM 128 KB search offset, multi-stage bootloader staging, and 16 MB partition alignment.
-
-6. **[Buildroot OS Documentation](docs/buildroot/)**:
-   How we use Buildroot to configure, build, and package the custom Linux operating system (`sdcard.img`). Includes the **[Avaota A1 Build & Bring-Up Guide](docs/buildroot/AvaotaA1HowTo.md)**.
-
-7. **[Flight Controller Application Documentation](docs/flightcontroller/)**:
-   High-level flight logic, rate PID dynamics, TinyML/NPU models, and real-time FPGA co-processor communication over SPI.
-
-8. **[Flight Controller Carrier & 40-Pin Hardware Pinouts](docs/flightcontroller_pinouts/README.md)**:
-   Hardware-level schematic and PCB layout specifications for custom carrier boards ([Cubie A5E](docs/flightcontroller_pinouts/A5E_FLIGHT_CONTROLLER_PINOUT.md) and [Cubie A7A](docs/flightcontroller_pinouts/A7A_FLIGHT_CONTROLLER_PINOUT.md)).
-
-9. **[Avaota A1 Platform Guide](docs/platforms/AVAOTA_A1_PLATFORM_GUIDE.md)**:
-   Hardware architecture, memory map, and XuanTie E907 coprocessor configuration for the Yuzuki / Pine64 Avaota A1.
-
----
-
-## AI Assistant & IDE Context
-
-This repository includes project-context and prompt configurations that are automatically read by AI coding assistants to enforce system architecture, package layouts, and coding conventions:
-* **Antigravity Profiles:** Loads architectural bounds and engineering mandates from [`.antigravity/profiles.json`](.antigravity/profiles.json). This defines the host domain (ARM Cortex-A55 / A76 mainline Linux) vs. the real-time domain (XuanTie RISC-V bare-metal/Melis), and states mandates like using mainline Linux syntax/vb2_dma_contig allocator and compiling the AIC8800 driver against standard mainline wireless stacks.
-* **Cursor / Antigravity Rules:** Enforces workspace rules via [`.cursorrules`](.cursorrules) on workspace startup.
-* **VS Code Copilot:** Reads [`.github/copilot-instructions.md`](.github/copilot-instructions.md) to bootstrap chat and inline completion context.
-
-### Workspace Prompts & Blueprints
-
-We maintain structured engineering blueprints under [`workspace_prompts/`](workspace_prompts/) to guide phased development, alongside their completed target diagnostics and memory maps:
-1. **[Camera Media Controller Linkage](workspace_prompts/prompt1_mainline_camera.md)**
-2. **[Stateless VEU Encoder Driver](workspace_prompts/prompt2_mainline_veu_encoder.md)**
-3. **[XuanTie RISC-V Ring-Buffer Ingestion](workspace_prompts/prompt3_riscv_ingestion.md)** — See Bring-up Guide: [HowToRISCV.md](docs/buildroot/HowToRISCV.md) and Memory Map: [prompt3_riscv_tcm_map.md](workspace_prompts/prompt3_riscv_tcm_map.md)
-4. **[Bidirectional Mailbox IPC Synchronization](workspace_prompts/prompt4_mailbox_sync.md)** — See Trace Log: [prompt4_mailbox_sync_trace.md](workspace_prompts/prompt4_mailbox_sync_trace.md), Kernel Driver: [sunxi_t527_rproc.c](bld/build/linux-7.1/drivers/remoteproc/sunxi_t527_rproc.c), RPMsg Example: [rpmsg_host_example.c](project-cubie-a5e/rpmsg_host_example.c), and Kernel Patch: [.antigravity/patches/0003-mailbox-sunxi-t527-driver.patch](.antigravity/patches/0003-mailbox-sunxi-t527-driver.patch)
-5. **[Local JTAG-less Debugging via ARM MMIO](workspace_prompts/prompt5_riscv_debug_bridge.md)** — **See Debug Guide: [HowToDebugRISCV.md](docs/buildroot/HowToDebugRISCV.md)**
-6. **[Mainline Linux Wi-Fi Integration](workspace_prompts/prompt6_mainline_wifi.md)** — See FOSS Guide: [HowToNPU.md](docs/buildroot/HowToNPU.md)
-
-#### How to Use These Prompts
-These files are designed to bootstrap an AI coding agent (like Cursor or Antigravity) with precise context for a given engineering goal:
-1. **Feed the Prompt:** Copy the contents of the chosen blueprint (e.g., `prompt6_mainline_wifi.md`) or reference it directly in your AI chat (using `@prompt6_mainline_wifi.md` or equivalent).
-2. **Execute Phases:** Instruct the AI assistant to work through the defined **Implementation Phases** sequentially.
-3. **Enforce Mandated Rules:** The AI will automatically adhere to the **Mandated Rules** (such as avoiding legacy vendor drivers, enforcing zero-copy vb2 memory buffers, or maintaining isolated CPU cores).
-4. **Generate Trace Logs:** As execution proceeds, the AI must output the required trace logs (e.g., `prompt6_wifi_mainline_diagnostics.md`) to document exactly how registers and symbols were mapped, providing a clear educational history for future developers.
-
-These configurations keep AI agents aligned on the OS/Application boundaries, custom package layouts, U-Boot device tree overlays (`fdt apply`), and workspace defaults.
-
----
-
-## Quick Start (Multi-PC Setup & Build)
-
-### 1. Automated Workspace Setup (New Machine)
-To set up this entire environment on any development PC (clones `cubie-a5e`, `linux-cubie`, and `buildroot`, and configures `local.mk` for both A5E and A7A):
-
+### 1. One-Time Machine Setup
+Clone the repository and run the setup script to initialize the workspace and toolchains:
 ```bash
 git clone git@github.com:tcmichals/cubie-a5e.git
-./cubie-a5e/tools/setup_workspace.sh
+cd cubie-a5e
+./tools/setup_workspace.sh
 ```
 
-### 2. Multi-PC Development & Synchronization Helper
-Use [`tools/sync_kernel.sh`](tools/sync_kernel.sh) so you don't need to remember git commands across multiple machines:
-
+### 2. Multi-PC Git Synchronization
+If you develop across multiple machines, use `tools/sync_kernel.sh` to keep your local kernel repository in sync:
 ```bash
-# Check status across both cubie-a5e and linux-cubie:
-./cubie-a5e/tools/sync_kernel.sh status
-
-# Push your kernel commits to GitHub before switching PCs:
-./cubie-a5e/tools/sync_kernel.sh push
-
-# Pull latest kernel commits from GitHub & rebuild on another PC:
-./cubie-a5e/tools/sync_kernel.sh pull
-
-# Rebuild kernel incrementally in Buildroot (bld.a5e and bld.a7a):
-./cubie-a5e/tools/sync_kernel.sh rebuild
+./tools/sync_kernel.sh status     # Check git status across repos
+./tools/sync_kernel.sh push       # Push working commits
+./tools/sync_kernel.sh pull       # Pull latest commits
+./tools/sync_kernel.sh rebuild    # Trigger kernel rebuild in Buildroot
 ```
 
-### 3. Build Full System OS Images
+### 3. Build Full System SD Card Images
 
-* **Radxa Cubie A5E (Allwinner A527 / T527 — SDIO Wi-Fi 6):**
+* **Radxa Cubie A5E (Allwinner A527 / T527):**
   ```bash
   make -C bld.a5e
   ```
-* **Radxa Cubie A7A (Allwinner A733 — USB Wi-Fi 6):**
+  Output image: `bld.a5e/images/sdcard.img`
+
+* **Radxa Cubie A7A (Allwinner A733):**
   ```bash
   make -C bld.a7a
   ```
+  Output image: `bld.a7a/images/sdcard.img`
 
-The resulting bootable images are generated at `bld.a5e/images/sdcard.img` and `bld.a7a/images/sdcard.img`.
-
-
----
-
-## Flashing the Image
-
-Write the image to your SD card (replace `/dev/sdX` with your SD card device node):
-
+### 4. Flashing to MicroSD Card
 ```bash
-sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress
+sudo dd if=bld.a5e/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress
 sync
 ```
-
-> [!WARNING]
-> Double-check `/dev/sdX` before running `dd` to avoid overwriting the wrong drive.
+*(Replace `/dev/sdX` with your target SD card device; double check to avoid data loss).*
 
 ---
 
-## Acknowledgments & Credits
+## 📁 Repository Structure
 
-Thanks to the following projects and developers whose work I referenced during bring-up:
+```text
+cubie-a5e/
+├── upstream-remoteproc/         # Upstream Linux RemoteProc & Mailbox patch hub (v1, v2, v3)
+│   ├── README.md                # Submission tracking, lore links, and guidelines
+│   ├── scripts/                 # Automated review download and tracker generation scripts
+│   ├── reviews/                 # Audit prompts, review tracker matrix, incoming emails
+│   ├── v1/, v2/, v3/            # Formatted patch sets and cover letters
+│   └── lore_emails/             # Archived raw emails from lore.kernel.org
+├── project-cubie-a5e/           # Buildroot external tree (BR2_EXTERNAL)
+│   ├── board/radxa/cubie_a5e/   # Linux kernel configs, genimage configs, rootfs overlays
+│   └── package/                 # Custom Buildroot packages (AIC8800 driver, etc.)
+├── riscv-firmware/              # XuanTie E907 bare-metal firmware & test applications
+├── dsp-hifi4/                   # Tensilica HiFi4 Audio DSP bare-metal firmware
+├── docs/                        # Architecture documentation, register maps, hardware specs
+│   ├── platforms/               # Platform bring-up guides (Cubie A7A, Avaota A1)
+│   ├── architecture/            # RemoteProc & Mailbox developer guides
+│   └── reviews/                 # Hardware audit bundles (A7A USB, etc.)
+└── tools/                       # Workspace setup, kernel synchronization, and test scripts
+```
 
-* **[YuzukiHD](https://github.com/YuzukiHD)**:
-  * [**SyterKit**](https://github.com/YuzukiHD/SyterKit): Bare-metal firmware framework for Allwinner SoCs. I used its register definitions and DTS mappings to cross-check memory layout and clock/reset sequencing on the T527 and A733.
-  * [**FreeRTOS-HIFI4-DSP**](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP): FreeRTOS port and GCC toolchain for the HiFi4 DSP on Allwinner silicon, used as a reference for the DSP message box and remoteproc work.
-* **The Linux Sunxi Community**: For documenting and mainline-supporting Allwinner hardware.
-* **Radxa**: For the Cubie A5E, Cubie A7A, and Cubie A7Z hardware.
+---
 
+## 📖 Deep-Dive Architecture Guides
+
+1. **[Linux RemoteProc and Mailbox Driver Guide](docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md)**:
+   Architectural invariants, lifecycle state machines, SMP concurrency, and MMIO memory mapping for heterogeneous cores.
+2. **[Radxa Cubie A7A Platform Specification & Bring-Up Guide](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
+   Hardware specs, LPDDR5 training, GICv3 interrupt controller, and register maps.
+3. **[Radxa Cubie A7A Chronological Hardware Debug Log](docs/platforms/CUBIE_A7A_DEBUG_LOG.md)**:
+   Detailed lab debug notes tracing power rail sequencing, PMIC registers, and peripheral bring-up.
+4. **[AIC8800 Wi-Fi 6 SDIO/USB Architecture](docs/buildroot/AIC8800_Porting_Action_Plan.md)**:
+   Detailed transport separation, IOPAD delay tuning, and firmware upload stability notes.
+
+---
+
+## 🤝 Acknowledgments & Credits
+
+* **[The Linux-Sunxi Community](https://linux-sunxi.org/)**: Invaluable documentation, mainline porting efforts, and hardware reverse engineering.
+* **[YuzukiHD](https://github.com/YuzukiHD)**: For [SyterKit](https://github.com/YuzukiHD/SyterKit) and [FreeRTOS-HIFI4-DSP](https://github.com/YuzukiHD/FreeRTOS-HIFI4-DSP) reference implementations.
+* **[Radxa](https://radxa.com/)**: For engineering the Cubie A5E, Cubie A7A, and Cubie A7Z single-board computers.
+* **Linux Kernel RemoteProc & Mailbox Subsystem Maintainers**: For thorough architectural reviews and feedback.

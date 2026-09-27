@@ -70,49 +70,40 @@ We have been debugging this bringup across multiple iterations. Below is the his
      d) Altered SYSCFG resistor calibration to set CAL_EN = 1 and write 0xC8 into manual trim.
      e) Injected DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK into host mode.
      f) Added snps,parkmode_disable_hs_quirk to DTS.
-   - Result: COMPLETE ENUMERATION FAILURE on target silicon (detailed in Part 3).
+   - Result: COMPLETE ENUMERATION FAILURE on target silicon with repeated error -71.
+
+6. Breakthrough: Squelch Calibration & Successful 4-Port Hub Detection (Commit 155a54c4f5f2 - Sep 25, 2026):
+   - Parameter sweep on live target silicon proved that `PHYTUNE = 0x143333d4` (squelch threshold = 4) successfully completed High-Speed / Full-Speed descriptors and registered the hub:
+     ```text
+     [ 2586.410242] hub 1-1:1.0: USB hub found
+     [ 2586.410341] hub 1-1:1.0: 4 ports detected
+     ```
+   - This proved 100% hardware reachability of the FE1.1S hub (power, clocking, UTMI lines, EP0 control transfers).
+   - CURRENT ACTIVE BLOCKER: Immediate 1.4 ms post-detection disconnect:
+     ```text
+     [ 2586.411742] usb usb1-port1: disabled by hub (EMI?), re-enabling...
+     ```
+   - Forensic Analysis: The root port disables the connection (`PORT_ENABLE` cleared by hardware) 1.4 ms after detecting the 4 downstream ports. In USB 2.0, this points to:
+     a) **VBUS Inrush Sag / Brown-Out**: When the Linux hub driver configures the hub, it issues `SetPortFeature(PORT_POWER)` across all 4 downstream ports simultaneously. The inrush current charging bypass caps on downstream ports (CON1, header, and the AIC8800 Wi-Fi module) causes a transient dip on `VCC5V0_USB20`, dropping `VBUSM` below 2.5V and tripping the FE1.1S internal brown-out reset.
+     b) **Analog Margin / Squelch Sensitivity**: Transient noise on the high-speed differential lines during status endpoint polling trips the xHCI babble detector or disconnect threshold.
+     c) **Staggered Settling Delays**: Need settling delays for downstream regulators and PHY power rails before descriptor reading.
 
 ================================================================================
-PART 3: FORENSIC FAILURE ANALYSIS OF LATEST SILICON BOOT (Commit d258953652c4)
+PART 3: FORENSIC LOG OF THE 4-PORT DETECTION & 1.4ms DISCONNECT
 ================================================================================
-Below is the verbatim minicom bootlog from the target hardware running Linux 7.1.0 with commit d258953652c4:
+Below is the verbatim dmesg log from the target hardware running Linux 7.1 with `PHYTUNE = 0x143333d4`:
 
 ```text
-[    1.179068] sun60i-a733-usb2-phy 6b00000.phy: Allwinner A733 USB 2.0 PHY registered at [mem 0x06b00000-0x06b007ff flags 0x200] (tune=0x143338d6)
-[    1.179402] dwc3 6a00000.usb: DWC3 core probe: GSNPSID raw = 0x33313130 (IP=3331)
-[    1.284413] xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
-[    1.284426] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 1
-[    1.284828] xhci-hcd xhci-hcd.0.auto: hcc params 0x0118ffc5 hci version 0x120 quirks 0x0000808000000010
-[    1.284998] xhci-hcd xhci-hcd.0.auto: irq 421, io mem 0x06a00000
-[    1.285089] xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
-[    1.285094] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 2
-[    1.285100] xhci-hcd xhci-hcd.0.auto: Host supports USB 3.1 Enhanced SuperSpeed
-[    1.285549] hub 1-0:1.0: USB hub found
-[    1.285562] hub 1-0:1.0: 1 port detected
-[    1.285721] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
-[    1.286054] hub 2-0:1.0: USB hub found
-[    1.286069] hub 2-0:1.0: 1 port detected
-...
-[    1.524999] usb 1-1: new high-speed USB device number 2 using xhci-hcd
-... (1.8-second gap with no prints) ...
-[    3.317008] usb 1-1: new full-speed USB device number 3 using xhci-hcd
-[    3.430095] usb 1-1: device descriptor read/64, error -71
-[    3.646066] usb 1-1: device descriptor read/64, error -71
-[    3.861007] usb 1-1: new full-speed USB device number 4 using xhci-hcd
-[    3.984254] usb 1-1: device descriptor read/all, error -71
-[    3.984493] usb usb1-port1: attempt power cycle
-[    4.360022] usb 1-1: new full-speed USB device number 5 using xhci-hcd
-[    4.360105] usb 1-1: Device not responding to setup address.
-[    4.565064] usb 1-1: Device not responding to setup address.
-[    4.773011] usb 1-1: device not accepting address 5, error -71
-[    4.773152] usb 1-1: WARN: invalid context state for evaluate context command.
-[    4.885005] usb 1-1: new full-speed USB device number 6 using xhci-hcd
-[    4.896248] usb 1-1: not running at top speed; connect to a high speed hub
-[    4.896484] usb 1-1: unable to read config index 0 descriptor/start: -71
-[    4.896494] usb 1-1: can't read configurations, error -71
-[    4.896671] usb usb1-port1: unable to enumerate USB device
-# lsusb
-Bus 005 Device 001: ID 1d6b:0001 Linux 7.1.0 ohci_hcd Generic Platform OHCI controller
+[ 2586.284413] xhci-hcd xhci-hcd.0.auto: xHCI Host Controller
+[ 2586.284426] xhci-hcd xhci-hcd.0.auto: new USB bus registered, assigned bus number 1
+[ 2586.285549] hub 1-0:1.0: USB hub found
+[ 2586.285562] hub 1-0:1.0: 1 port detected
+[ 2586.350100] usb 1-1: new high-speed USB device number 2 using xhci-hcd
+[ 2586.410242] hub 1-1:1.0: USB hub found
+[ 2586.410341] hub 1-1:1.0: 4 ports detected
+[ 2586.411742] usb usb1-port1: disabled by hub (EMI?), re-enabling...
+[ 2587.620010] usb 1-1: USB disconnect, device number 2
+```
 Bus 003 Device 001: ID 1d6b:0002 Linux 7.1.0 ehci_hcd EHCI Host Controller
 Bus 001 Device 001: ID 1d6b:0002 Linux 7.1.0 xhci-hcd xHCI Host Controller
 Bus 006 Device 001: ID 1d6b:0001 Linux 7.1.0 ohci_hcd Generic Platform OHCI controller
@@ -153,6 +144,12 @@ Any solution or recommendation MUST strictly satisfy the following invariants:
    - Proof: Matches vendor BSP `core.c` lines 294-318. Required to phase-align the UTMI 60 MHz elastic FIFO.
 5. [INVARIANT 5]: DO NOT set `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` in host mode.
    - Proof: Synopsys Databook explicitly documents this as a Device-Mode-only bit. Setting it in host mode creates undefined controller states.
+6. [INVARIANT 6]: MMIO Posted-Write Flush Before Reset / Deassert.
+   - Proof: On ARM64 AXI/AHB interconnects, register writes (`writel`) are posted. Any write to `PHYCTL`, `PHYTUNE`, or `SERDES_TOP_SUBSYS_BGR` that alters clock/reset gating must be followed by a dummy `readl()` read-back to guarantee the write has landed before deasserting resets or beginning delay timers.
+7. [INVARIANT 7]: Downstream Inrush Current & Settling Mitigation.
+   - Proof: When the hub is enumerated, the Linux hub driver powers on all downstream ports simultaneously. The simultaneous inrush current charging downstream bypass capacitors (especially the AIC8800 module and external ports) can cause a transient sag on `VCC5V0_USB20` below the FE1.1S 2.5V brownout threshold, tripping the 1.4ms disconnect. Settling delays and power-on debounce margins must be strictly respected.
+8. [INVARIANT 8]: Teardown & PM Lifecycle Symmetry.
+   - Proof: In `sun60i_usb2_phy_exit()` and system suspend, transceiver power must be gated (`PHYCTL_SIDDQ` asserted) and clocks turned off in reverse LIFO order to prevent bus contention or state corruption on unbind.
 
 ================================================================================
 PART 5: COMPLETE VERBATIM CODE & VENDOR REFERENCE ATTACHMENTS

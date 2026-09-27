@@ -31,50 +31,53 @@ Perform a thorough, objective review of the attached Allwinner RemoteProc and Ma
 
 Evaluate the codebase against these 8 objective engineering criteria:
 
-1. CLIENT-CONTROLLER CONTRACT (RemoteProc <-> Mailbox):
-   - Trace the lifecycle of a message from sunxi_rproc_kick() -> mbox_send_message() -> sun55i_msgbox_send_data() -> hardware FIFO write.
-   - Verify that sun55i_msgbox_send_data() safely copies the 32-bit token via memcpy() and writes immediately to the hardware FIFO MMIO without queuing stale pointers.
-   - Verify that channel indices map 1:1 with hardware FIFO routes via sun55i_chan_to_route() with strict boundary checks.
+1. CLIENT-CONTROLLER CONTRACT & MAILBOX PACING (RemoteProc <-> Mailbox):
+   - In sunxi_rproc_kick(): verify that kicks pass a stack-local msg (safely copied synchronously by sun55i_msgbox_send_data) rather than an unprotected shared struct member that races across concurrent CPU kicks.
+   - Verify that client does NOT declare cl.knows_txdone = true and does NOT call mbox_client_txdone(), because the underlying controller already manages completion via txdone_poll = true. Calling mbox_client_txdone() directly breaks FIFO pacing.
+   - In sun55i_msgbox_last_tx_done(): verify that it returns true ONLY when the transmitted message has been drained by the remote core (count == 0), NOT merely when the FIFO is not full (count < FIFO_MAX).
 
 2. CONCURRENCY, TEARDOWN & LIFO RESOURCE MANAGEMENT:
    - Verify the teardown sequence in sunxi_rproc_remove():
-     a) Crash IRQ disabled first.
-     b) rproc_del() stops the core and unregisters virtio devices.
-     c) Mailbox channels freed and zeroed (mbox_free_channel).
-     d) cancel_work_sync(&priv->vq_work) drains any remaining in-flight work.
-   - Verify the teardown sequence in sun55i_msgbox_remove() and probe() error unwinding:
-     a) Hardware interrupts masked.
-     b) Registered IRQs explicitly freed via free_irq() before asserting reset and cutting clocks, preventing shared-IRQ execution on unclocked MMIO.
+     a) devm_free_irq(&pdev->dev, priv->crash_irq, priv) first to synchronize and ensure no running crash handler can race with rproc_del() or trigger UAF.
+     b) Free and zero mailbox channels (mbox_free_channel(priv->rx_chan)) so no further incoming mailbox interrupts can be raised.
+     c) cancel_work_sync(&priv->vq_work) drains any in-flight work item.
+     d) rproc_del() called LAST: virtqueues and virtio devices are destroyed only after all IRQ sources are closed and workqueues are idle.
+   - In sunxi_rproc_probe() error unwind (err_mbox_release): verify that mbox_free_channel() precedes cancel_work_sync() to prevent a late IRQ from re-queuing work after cancellation and running on freed memory.
+   - Verify the teardown sequence in sun55i_msgbox_remove():
+     a) Hardware interrupts masked in MMIO.
+     b) synchronize_irq() called on all registered IRQs BEFORE mbox_controller_unregister(), preventing a concurrent IRQ on another CPU from invoking mbox_chan_received_data() with a NULL chan->cl.
 
-3. BOOT VECTOR PROGRAMMING & RESET SEQUENCING:
-   - In sunxi_rproc_start(), verify that the boot vector register (STA_ADD_REG) is programmed while the core execution reset (rst_core) is still asserted, ensuring the core boots cleanly to bootaddr when rst_core is released.
+3. MULTI-CORE SMP CONCURRENCY & SHARED IRQ SYNCHRONIZATION:
+   - In sun55i_msgbox_irq(): verify that status register read, status clear, and FIFO drain are enclosed in spin_lock_irqsave(&mbox->lock, flags) to prevent concurrent multi-CPU execution of the shared handler from racing on the same channel FIFO and causing hardware underflow.
+   - In sunxi_rproc: verify that transitions of priv->crash_irq_enabled are guarded by a spinlock (priv->lock) to prevent concurrent IRQ vs stop/remove races from causing unbalanced disable_irq() calls that permanently mask the interrupt.
 
-4. DMA, MMU & MEMORY TRANSLATION SAFETY:
-   - Scrutinize sunxi_rproc_da_to_sys() and sunxi_rproc_da_to_va():
+4. BOOT VECTOR PROGRAMMING & RESET SEQUENCING:
+   - In sunxi_rproc_start(), verify that the boot vector register (STA_ADD_REG) is written while the core execution reset (rst_core) is asserted, followed by an explicit read-back readl() to flush posted interconnect writes before deasserting rst_core.
+   - Verify that rst_core is strictly required as the execution reset and that code does NOT fall back to deasserting rst_cfg in start() if rst_cfg was already deasserted in prepare().
+   - In start() error path, verify crash IRQ is disabled if reset deassertion fails.
+
+5. DMA, MMU & MEMORY TRANSLATION SAFETY:
+   - In sunxi_rproc_da_to_va():
      a) Boundary and overflow checks: len == 0 || da > U64_MAX - len prevents wrapped DA arithmetic.
-     b) Carveouts and internal SRAM windows (Space 0, Space 1, DRAM) are strictly isolated without memory aliasing.
-     c) 32-bit DMA coherent mask configured on pdev->dev via dma_set_coherent_mask().
+     b) If sunxi_rproc_da_to_sys() matches an ATT entry but the translated address does not fall within any mapped window, it must return NULL immediately. It must NEVER fall through to compare DA against host physical addresses (trace_phys).
+     c) In sunxi_rproc_parse_memory_regions(): verify that regions mapped with MEMREMAP_WB (trace, dram) do NOT fall through to be remapped with devm_ioremap_wc(), preventing conflicting WB+WC aliases on ARM64.
 
-5. HARDIRQ BOUNDED EXECUTION & STALL AVOIDANCE:
-   - In sun55i_msgbox_irq(), startup(), and shutdown(), verify that all FIFO drain loops are strictly bounded by SUN55I_FIFO_MAX (8 iterations) to prevent CPU starvation or RCU stalls under coprocessor flood conditions.
-   - In sun55i_msgbox_irq(), verify that the interrupt pending bit is cleared before draining the FIFO to prevent lost message TOCTOU races.
+6. INPUT BOUNDS CHECKING & DEVICE TREE ROBUSTNESS:
+   - In sun55i_msgbox_probe(), verify that platform_irq_count(pdev) is explicitly checked:
+     if (irq_cnt > SUN55I_MAX_PROCESSORS) return -EINVAL;
+     preventing out-of-bounds writes into the fixed-size mbox->irqs array.
 
-6. DEVICE TREE BINDINGS:
-   - Review both YAML schema files against Rob Herring / Krzysztof Kozlowski standards:
-     a) Are compatible strings, registers, clocks, resets, and mailboxes strictly validated?
-     b) Are memory-region phandles documented cleanly?
-
-7. CODE HYGIENE & TYPES:
-   - Check that register masks use standard constants (U32_MAX) and IS_ALIGNED(res->start, PAGE_SIZE).
-   - Verify proper error propagation and dev_err_probe() usage.
-
-8. IN-TREE KUNIT TEST RIGOR:
-   - Audit the 66 unit tests across sunxi_rproc_test.c and sun55i_msgbox_test.c.
-   - Verify that tests validate actual operational behavior: boundary conditions (exact 1-byte fits, 2-byte overflows), negative unmapped address rejection, and FIFO drain limits.
+7. IN-TREE KUNIT TEST RIGOR & ARCHITECTURE PORTABILITY:
+   - Audit sunxi_rproc_test.c and sun55i_msgbox_test.c:
+     a) Verify that mock MMIO register assertions use readl() or endian-safe macros (cpu_to_le32) rather than raw array reads, preventing failures on Big-Endian architectures.
+     b) Verify that test_functional_startup_flushes_stale_fifo() simulates actual FIFO decrements rather than silently relying on the SUN55I_FIFO_MAX cap.
+     c) Verify drivers/remoteproc/Kconfig and drivers/mailbox/Kconfig enforce:
+        depends on SUNXI_REMOTEPROC && KUNIT
+        depends on SUN55I_MSGBOX && KUNIT
 
 FORMAT YOUR REPORT AS:
 1. Executive Verdict: [Pass / Pass with Minor Suggestions / Fail]
-2. Verification Summary Across the 8 Criteria
+2. Verification Summary Across the 7 Criteria
 3. Any Concrete Code Suggestions (cite file:line)
 ```
 
