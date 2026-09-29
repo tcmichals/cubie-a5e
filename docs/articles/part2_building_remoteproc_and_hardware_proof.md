@@ -1,9 +1,9 @@
 # Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 2): Building the Linux `remoteproc` Driver and Hardware Verification Suite
 
-In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, we laid the architectural foundation for the **Allwinner T527 / A527** (`sun55i`) SoC, derived the physical memory map from the Technical Reference Manual (TRM), detailed the ITCM/DTCM memory interfaces, and explored the on-chip memory-mapped debugging paradigm.
+In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, we laid the architectural foundation for the **Allwinner T527 / A527** (`sun55i`) SoC, derived the physical memory map from the Technical Reference Manual (TRM), established the dedicated on-chip SRAM architecture (no ITCM/DTCM), and explored the on-chip memory-mapped debugging paradigm.
 
 In this article (**Part 2**), we move directly into the code and system bring-up:
-1. **Building the Linux 7.1 `sunxi_rproc.c` RemoteProc driver** with complete multi-segment memory routing across ITCM, DTCM, PubSRAM C, Dedicated MCU SRAM, and DDR carveouts.
+1. **Building the Linux 7.1 `sunxi_rproc.c` RemoteProc driver** with complete multi-segment memory routing across Dedicated MCU SRAM (Space 0 & Space 1) and DDR carveouts.
 2. **Exposing live debugfs trace logs** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) via `.resource_table` without dedicated UART cables.
 3. **Deploying the all-new `riscv-firmware/apps` test suite** to systematically prove co-processor boot, memory subsystems, hardware FPU, exception handling, and high-performance IPC paradigms.
 
@@ -180,7 +180,7 @@ Upstream automated bots (Smatch, Sparse, Coccinelle, Sashiko AI) and kernel main
 
 ## 2. Automatic Trace Logging via `.resource_table`
 
-One of the biggest friction points during co-processor bring-up is having to solder USB-to-UART adapters to physical pins just to read serial `printf` output.
+While serial diagnostics are easily accessible via simple jumper wires connecting the board header directly to a 3.3V TTL USB-to-UART adapter, needing dedicated serial cables and terminals just to inspect early boot and runtime debug output adds friction.
 
 The actual resource table in [`riscv-firmware/common/arch_riscv/resource_table.c`](../../riscv-firmware/common/arch_riscv/resource_table.c) uses a compile-time macro to select between trace-only mode and full RPMsg + trace mode:
 
