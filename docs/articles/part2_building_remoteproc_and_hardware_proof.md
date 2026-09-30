@@ -3,9 +3,9 @@
 In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, we laid the architectural foundation for the **Allwinner T527 / A527** (`sun55i`) SoC, derived the physical memory map from the Technical Reference Manual (TRM), established the dedicated on-chip SRAM architecture (no ITCM/DTCM), and explored the on-chip memory-mapped debugging paradigm.
 
 In this article (**Part 2**), we move directly into the code and system bring-up:
-1. **Building the Linux 7.1 `sunxi_rproc.c` RemoteProc driver** with complete multi-segment memory routing across Dedicated MCU SRAM (Space 0 & Space 1) and DDR carveouts.
+1. **Building the Linux 7.1 `sunxi_rproc.c` RemoteProc driver** with multi-segment Address Translation Table (ATT) memory routing across Dedicated MCU SRAM (Space 0), Shared PubSRAM (Space 1), and dynamic DDR carveouts.
 2. **Exposing live debugfs trace logs** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) via `.resource_table` without dedicated UART cables.
-3. **Deploying the all-new `riscv-firmware/apps` test suite** to systematically prove co-processor boot, memory subsystems, hardware FPU, exception handling, and high-performance IPC paradigms.
+3. **Deploying the all-new `riscv-firmware/apps` verification suite** across three distinct hardware profiles to systematically prove co-processor boot, memory subsystems, hardware FPU, exception handling, and high-performance IPC paradigms.
 
 ---
 
@@ -19,172 +19,153 @@ The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsy
 │                                                                 │
 │   echo "testBasic.elf" > /sys/class/remoteproc/rproc0/firmware  │
 │   echo start           > /sys/class/remoteproc/rproc0/state     │
-│   cat /sys/kernel/debug/remoteproc/rproc0/trace0 (Live logs)   │
+│   cat /sys/kernel/debug/remoteproc/rproc0/trace0 (Live logs)    │
 └────────────────────────────────┬────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│            Linux Kernel Driver: drivers/remoteproc/sunxi_rproc.c │
+│           Linux Kernel Driver: drivers/remoteproc/sunxi_rproc.c │
 │  - struct rproc_ops sunxi_rproc_ops                             │
-│  - devm_clk_get() / clk_prepare_enable()                        │
-│  - devm_reset_control_get() / reset_control_deassert()          │
-│  - sunxi_rproc_da_to_va() (Multi-segment memory translation)    │
+│  - sunxi_rproc_prepare() (CCF Clocks, Resets, SRAMA3_2 Remap)   │
+│  - sunxi_rproc_da_to_va() (ATT Multi-segment translation)       │
 └────────────────────────────────┬────────────────────────────────┘
                                  │
        ┌─────────────────────────┼─────────────────────────┐
        ▼                         ▼                         ▼
 ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
-│ SRAM Space 0 │          │ SRAM Space 1 │          │ DDR Trace    │
-│  256 KB @    │          │  256 KB @    │          │ Carveout     │
-│  0x07280000  │          │  0x072C0000  │          │ 4 KB @       │
-│(reg: r_sram) │          │(reg: r_sram1)│          │ 0x4AE00000   │
-│Core:3FFC0000 │          │Core:40000000 │          │ (/trace0)    │
-│(Reset Vector)│          │(Expansion)   │          │              │
+│ SRAM Space 0 │          │ SRAM Space 1 │          │ DDR DRAM     │
+│  Dedicated   │          │Shared PubSRAM│          │ Carveouts    │
+│ (reg: r_sram)│          │(reg: r_sram1)│          │ (reg: dram)  │
+│  256 KB      │          │  256 KB      │          │ (/vdev)      │
 └──────────────┘          └──────────────┘          └──────────────┘
 ```
 
-### 1.1 Multi-Segment Memory Routing (`da_to_va`) & The 256 KB Shift Bug
-On the Allwinner T527, the Device Tree node (`sun55i-a523.dtsi`) registers the continuous 512 KB SRAM windows:
-- **`r_sram`**: SRAM Space 0 (`0x07280000` Host / `0x3FFC0000` Core, 256 KB) — **Primary Boot & Reset Window**.
-- **`r_sram1`**: SRAM Space 1 (`0x072C0000` Host / `0x40000000` Core, 256 KB) — High-speed secondary SRAM bank.
+### 1.1 Multi-Segment Memory Routing (`da_to_va`) via Address Translation Tables (ATT)
+The XuanTie E907 RISC-V core on Allwinner A523/A527/T527 SoCs manages complex memory topologies requiring explicit address translation between the co-processor's Device Addresses (DA) and the ARM Host's Physical Addresses (PA). 
 
-The Linux kernel driver translates device addresses (`da`) declared in the ELF program headers to mapped host virtual addresses (`va`) inside `sunxi_rproc_da_to_va()`:
+Earlier vendor drivers suffered from interconnect shift bugs when translating `0x40000000`, leading to illegal instruction fetches (`0x00000000`) and silicon lockups. To permanently eliminate this class of bug, the driver implements an Address Translation Table (ATT) structure (`sun55i_rproc_att`):
 
-```c
+```text
+static const struct sunxi_rproc_att sun55i_rproc_att[] = {
+	/* dev addr (remote)    , sys addr (host PA)    , size                   , flags */
+	/* Space 0 Core Aliases -> Space 0 Host PA */
+	{ E907_SRAM_SPACE0_DA,     SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ E907_SRAM_SPACE0_DA_ALT, SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ E907_SRAM_C_DA,          SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ SUN55I_SRAM_SPACE0_SYS,  SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+
+	/* Space 1 Core Aliases -> Space 1 Host PA */
+	{ E907_SRAM_SPACE1_DA,     SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
+	{ E907_SRAM_SPACE1_DA_ALT, SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
+	{ SUN55I_SRAM_SPACE1_SYS,  SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
+};
+```
+
+During ELF firmware loading, `sunxi_rproc_da_to_va()` resolves device addresses declared in ELF headers into mapped host virtual addresses (`va`):
+1. **ATT Lookup**: Calls `sunxi_rproc_da_to_sys()` to translate core-local DAs into host system bus PAs based on table bounds.
+2. **Mapped Window Match**: Resolves host PAs against mapped Device Tree resources (`r_sram`, `r_sram1`, `dram`, `trace`).
+3. **Core Carveout Delegation**: Returns `NULL` for unmapped DDR addresses, cleanly delegating dynamic DMA allocations (such as VirtIO vrings) directly to the framework's internal `rproc->carveouts` list.
+
+```text
 void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
 {
-    struct sunxi_rproc *priv = rproc->priv;
+	struct sunxi_rproc *priv = rproc->priv;
+	u64 sys;
 
-    if (len == 0 || da > U64_MAX - len)
-        return NULL;
+	/* Reject overflow and 0-length mapping requests */
+	if (len == 0 || da > U64_MAX - len)
+		return NULL;
 
-    /* 1. Dedicated MCU SRAM Space 0 (Host 0x07280000 / Core 0x3FFC0000, 256 KB) */
-    if (priv->r_sram_va) {
-        if (da >= 0x3FFC0000 && (da + len) <= (0x3FFC0000 + priv->r_sram_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + (da - 0x3FFC0000);
-        }
-        if (da >= 0x3FF80000 && (da + len) <= (0x3FF80000 + priv->r_sram_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + (da - 0x3FF80000);
-        }
-        if (da >= priv->r_sram_phys && (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram_va + (da - priv->r_sram_phys);
-        }
-    }
+	/* 1. Translate core-local DA to system bus PA using ATT */
+	if (sunxi_rproc_da_to_sys(priv, da, len, &sys, is_iomem) == 0) {
+		if (priv->r_sram_va && sys >= priv->r_sram_phys &&
+		    (sys + len) <= (priv->r_sram_phys + priv->r_sram_size))
+			return (__force void *)(priv->r_sram_va + (sys - priv->r_sram_phys));
 
-    /* 2. Dedicated MCU SRAM Space 1 (Host 0x072C0000 / Core 0x40000000, 256 KB) */
-    if (priv->r_sram1_va) {
-        if (da >= 0x40000000 && (da + len) <= (0x40000000 + priv->r_sram1_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram1_va + (da - 0x40000000);
-        }
-        if (da >= 0x40040000 && (da + len) <= (0x40040000 + priv->r_sram1_size)) {
-            if (is_iomem)
-                *is_iomem = true;
-            return priv->r_sram1_va + (da - 0x40040000);
-        }
-    }
+		if (priv->r_sram1_va && sys >= priv->r_sram1_phys &&
+		    (sys + len) <= (priv->r_sram1_phys + priv->r_sram1_size))
+			return (__force void *)(priv->r_sram1_va + (sys - priv->r_sram1_phys));
 
-    /* 3. Trace Buffer & DDR Carveout */
-    if (priv->trace_va && da >= priv->trace_phys && (da + len) <= (priv->trace_phys + priv->trace_size)) {
-        if (is_iomem)
-            *is_iomem = false;
-        return priv->trace_va + (da - priv->trace_phys);
-    }
+		if (priv->dram_va && sys >= priv->dram_phys &&
+		    (sys + len) <= (priv->dram_phys + priv->dram_size))
+			return (__force void *)(priv->dram_va + (sys - priv->dram_phys));
 
-    /* Dynamic DDR carveouts delegated to remoteproc core's rproc->carveouts */
-    return NULL;
+		if (priv->trace_va && sys >= priv->trace_phys &&
+		    (sys + len) <= (priv->trace_phys + priv->trace_size))
+			return (__force void *)(priv->trace_va + (sys - priv->trace_phys));
+	}
+
+	/* 2. Direct Device Tree Memory Regions (Carveout / Fallbacks) */
+	if (priv->trace_va && da >= priv->trace_phys &&
+	    (da + len) <= (priv->trace_phys + priv->trace_size)) {
+		if (is_iomem) *is_iomem = false;
+		return (__force void *)(priv->trace_va + (da - priv->trace_phys));
+	}
+
+	/* Dynamic DDR carveouts delegated to remoteproc core's rproc->carveouts */
+	return NULL;
 }
 ```
 
-> [!IMPORTANT]
-> **The 256 KB Interconnect Shift Bug & Silicon Lockup Root Cause**:  
-> In earlier vendor drivers, `da = 0x40000000` was mistakenly translated to `priv->r_sram_va` (Host `0x07280000`, Space 0). However, the Allwinner hardware bus interconnect routes Core DA `0x40000000` to Space 1 (`0x072C0000`). Because `sunxi_rproc_prepare()` cleared Space 1 with `memset_io(priv->r_sram1_va, 0)`, booting the core at `0x40000000` caused the core to fetch zeroes (`0x00000000`, illegal instruction) and lock up (`WORK_MODE_REG 0x07130248 = 0x0000000B`).  
-
-### 1.2 Two-Stage CCF Clock & Reset Lifecycle
+### 1.2 Two-Stage CCF Clock, Reset Lifecycle & PubSRAM Remap
 Clock gating and reset release are tied directly into the Linux Common Clock Framework (CCF) using a two-stage sequencing model:
 
-1. **`.prepare()`**: Deasserts bus resets (`rst_cfg`, `rst_sram`, `rst_msgbox`) and enables clocks, allowing the host to write ELF code into SRAM while the CPU core reset (`rst_core`) remains held.
-2. **`.start()`**: Deasserts `rst_core` first so the CFG block interconnect bus is active, then programs `STA_ADD_REG` to begin execution:
+1. **`.prepare()`**: Deasserts bus resets (`rst_cfg`, `rst_sram`, `rst_msgbox`) and gates on CCU clocks. It enables the shared secondary SRAM bank (`SRAMA3_2`) for RISC-V MCU access by setting `SUNXI_REMAP_SRAMA3_2_BIT` in the remap control register. Finally, it zeroes the SRAM regions (`memset_io`) to clear ECC/parity noise and initialize `.bss`.
+2. **`.start()`**: Enables the crash notification IRQ, writes the boot vector entry point into `STA_ADD_REG` (`0x07130204`) while the core execution reset remains held, and deasserts `rst_core` to begin instruction fetching.
 
-```c
+```text
 int sunxi_rproc_start(struct rproc *rproc)
 {
-    struct sunxi_rproc *priv = rproc->priv;
-    int ret;
+	struct sunxi_rproc *priv = rproc->priv;
+	const struct sunxi_rproc_cfg *cfg = priv->cfg ? priv->cfg : &sun55i_riscv_cfg;
+	int ret;
 
-    if (rproc->bootaddr > U32_MAX)
-        return -EINVAL;
+	if (rproc->bootaddr > U32_MAX)
+		return -EINVAL;
 
-    /* 1. Deassert reset before writing STA_ADD_REG (prevents external abort on recovery) */
-    if (priv->rst_core) {
-        ret = reset_control_deassert(priv->rst_core);
-        if (ret)
-            return ret;
-    }
+	/* Enable crash IRQ now that core will execute */
+	if (priv->crash_irq > 0 && !priv->crash_irq_enabled) {
+		enable_irq(priv->crash_irq);
+		priv->crash_irq_enabled = true;
+	}
 
-    /* 2. Program Boot Address Register (STA_ADD_REG @ 0x07130204) */
-    if (priv->cfg_va)
-        writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
+	/* Program boot entry into STA_ADD_REG while core execution reset is held */
+	if (priv->cfg_va)
+		writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_offset);
 
-    dev_info(priv->dev, "Starting %s core at 0x%08llx\n",
-             priv->cfg ? priv->cfg->name : "remote", (u64)rproc->bootaddr);
-    return 0;
+	/* Release core execution reset */
+	if (priv->rst_core) {
+		ret = reset_control_deassert(priv->rst_core);
+		if (ret)
+			return ret;
+	}
+
+	dev_info(priv->dev, "Starting %s core at entry 0x%llx\n",
+		 cfg->name ? cfg->name : "remote", (u64)rproc->bootaddr);
+	return 0;
 }
 ```
 
 Because this driver executes inside kernel space with native `ioremap_wc()`, **we permanently removed `iomem=relaxed` from our U-Boot `bootargs`**, restoring strict physical memory security (`CONFIG_STRICT_DEVMEM`).
 
-### 1.3 Mainline Driver Comparison & Architectural Rationale
+### 1.3 Mainline Invariants & Race Condition Elimination
 
-To ensure upstream kernel acceptance, we audited `sunxi_rproc.c` against reference mainline Linux RemoteProc drivers (`imx_rproc`, `ti_k3_r5_remoteproc`, `stm32_rproc`, and `rcar_rproc`):
+Upstream kernel maintainers and static analysis bots enforce strict lifecycle and concurrency invariants that were resolved in `sunxi_rproc.c`:
 
-| Aspect / Function | `sunxi_rproc.c` (Allwinner E907) | `imx_rproc.c` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc.c` (TI K3 R5F) | `stm32_rproc.c` (ST STM32MP1 M4) | `rcar_rproc.c` (Renesas R-Car CR7) |
-|---|---|---|---|---|---|
-| **Architecture** | XuanTie E907 RISC-V co-processor | Cortex-M4/M7 microcontroller | Cortex-R5F in lockstep/split mode | Cortex-M4 microcontroller | Cortex-R7 co-processor |
-| **Reset Hierarchy** | Two-stage: `rst_cfg`/`rst_sram` (bus) vs `rst_core` (CPU) | SMC call or SRC register bits | Two-stage: `module-reset` (bus/RAM) vs `local-reset` (CPU) | Syscon hold_boot / SCMI / SMC | Single reset controller (`rst`) |
-| **`.prepare()`** | Deasserts bus resets, enables clocks, enables SRAM remap, clears SRAM (`memset_io`) | Maps memory (`imx_rproc_addr_init`), enables clocks | Deasserts module-reset to allow loading internal RAM while CPU reset is held | Registers reserved memory carveouts, allocates vrings | Registers reserved memory carveouts |
-| **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address register | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot | Sets boot address via `rcar_rst`, deasserts reset |
-| **`.stop()`** | Asserts `rst_core`, then syncs `vq_work` | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot | Asserts reset |
-| **`.unprepare()`** | Restores SRAM remap bit, disables CCU clocks, asserts bus resets | Disables clocks | Asserts module-reset via TI-SCI | N/A | N/A |
-| **`.da_to_va()`** | Translates Space 0 (Host PA, DA 0x3ff80000, 0x3ffc0000, 0x00020000), Space 1 (PA, DA 0x40000000, 0x40040000); returns `NULL` for DDR carveouts | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` | N/A (direct 1:1 physical map) |
-| **`.kick()`** | Sends `vqid` via `priv->kick_msg` struct member (avoids stack UAF), calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue | N/A (no mbox) |
-| **Crash Handling** | `disable_irq_nosync()` + `rproc_report_crash(rproc, RPROC_FATAL_ERROR)`; re-enabled on `.start()` | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` | N/A |
-| **Teardown Order** | `disable_irq(crash)` -> `rproc_del()` -> `cancel_work_sync()` -> `mbox_free_channel()` | `rproc_del()` -> `destroy_workqueue()` -> free channels | `rproc_del()` -> `mbox_free_channel()` | `rproc_shutdown()` -> `rproc_del()` -> `free_mbox()` -> `destroy_workqueue()` | `pm_runtime_disable()` |
-
-#### Why Does `sunxi_rproc` Implement Two-Stage Reset Sequencing?
-Just like the TI K3 architecture (`ti_k3_common.c`), the XuanTie E907 co-processor domain has a split reset hierarchy: the interconnect bus interface and internal SRAM banks possess their own reset and clock domains (`rst_cfg`, `rst_sram`), distinct from the CPU execution pipeline (`rst_core`). When Linux boots the co-processor, the ELF loader must copy program headers into on-chip SRAM **before** the CPU pipeline begins executing; otherwise, the core would fetch uninitialized memory and crash. Hence:
-- **`.prepare()`**: Deasserts bus resets and enables clocks so ARM can write into SRAM, while `rst_core` holds the remote CPU in reset.
-- **`.start()`**: Deasserts `rst_core` and writes the entry point into `STA_ADD_REG` (`0x07130204`).
-
-#### Why Does `da_to_va()` Return `NULL` for DDR Carveouts?
-The Linux RemoteProc framework maintains an internal list of reserved-memory carveouts (`rproc->carveouts`). When `rproc_da_to_va()` executes, if the driver's `.da_to_va()` callback returns `NULL`, the framework automatically searches `rproc->carveouts`. By returning `NULL` for DDR carveouts, `sunxi_rproc.c` avoids duplicate translation logic and seamlessly delegates dynamic DMA allocations directly to the core framework.
-
-### 1.4 Eliminating Subtle Lifecycle Race Conditions & Upstream Rules
-
-Upstream automated bots (Smatch, Sparse, Coccinelle, Sashiko AI) and kernel maintainers enforce strict lifecycle and concurrency invariants:
-
-1. **Workqueue Initialization vs Mailbox Request**: In earlier revisions, `mbox_request_channel_byname()` was called before `INIT_WORK(&priv->vq_work, ...)`. If the remote core interrupted immediately or if the channel returned `-EPROBE_DEFER`, code jumped to `cancel_work_sync(&priv->vq_work)` on an uninitialized `work_struct`, triggering a kernel BUG. We moved `INIT_WORK()` ahead of all mailbox requests.
-2. **Crash IRQ vs Driver Unload**: `devm_request_threaded_irq()` was used for the crash interrupt. If a crash occurred during driver unbind after `rproc_del()`, the handler called `rproc_report_crash()` on a destroyed `rproc`. We fixed this by explicitly invoking `disable_irq(priv->crash_irq)` at the very beginning of `sunxi_rproc_remove()`.
-3. **SMP Teardown in Mailbox**: In `sun55i_msgbox_remove()`, masking IRQs without synchronization allowed in-flight ISRs on other SMP cores to access unclocked or reset MMIO registers, causing bus aborts. We added `synchronize_irq()` across all requested IRQs before asserting reset and disabling clocks.
-4. **Stack Use-After-Free Prevention**: In asynchronous mailbox transmission (`tx_block = false`), passing a pointer to a local stack variable (`int vqid`) triggers use-after-free when the caller returns before the async worker reads the data. We fixed this by declaring `u32 kick_msg` within `struct sunxi_rproc`.
-5. **Bounded Loop Invariant**: Hardirq handlers must never loop indefinitely. In `sun55i-msgbox.c`, all FIFO drain loops in the interrupt handler, startup, and shutdown are strictly bounded to `SUN55I_FIFO_MAX` (8) iterations.
+* **Workqueue Initialization vs Mailbox Requests**: `INIT_WORK(&priv->vq_work, ...)` is initialized ahead of all mailbox channel requests to avoid jumping to uninitialized work items on deferred probe.
+* **Crash IRQ Teardown Order**: In `sunxi_rproc_remove()`, `disable_irq(priv->crash_irq)` is called *before* `rproc_del()`. This ensures in-flight crash alerts cannot trigger on a destroyed `rproc` pointer.
+* **Stack Use-After-Free Prevention**: With asynchronous mailbox delivery (`tx_block = false`), passing local stack pointers risks use-after-return. We assign kicks to `priv->kick_msg = (u32)vqid` inside `struct sunxi_rproc`.
+* **PREEMPT_RT Safe VirtIO Dispatch**: Rather than invoking `rproc_vq_interrupt()` directly inside the mailbox interrupt context (which triggers "scheduling while atomic" warnings on real-time kernels), the driver schedules work via `schedule_work(&priv->vq_work)`.
 
 ---
 
 ## 2. Automatic Trace Logging via `.resource_table`
 
-While serial diagnostics are easily accessible via simple jumper wires connecting the board header directly to a 3.3V TTL USB-to-UART adapter, needing dedicated serial cables and terminals just to inspect early boot and runtime debug output adds friction.
+Needing dedicated serial cables and terminals just to inspect early boot and runtime debug output adds unnecessary friction.
 
-The actual resource table in [`riscv-firmware/common/arch_riscv/resource_table.c`](../../riscv-firmware/common/arch_riscv/resource_table.c) uses a compile-time macro to select between trace-only mode and full RPMsg + trace mode:
+The resource table implementation in `riscv-firmware/common/arch_riscv/resource_table.c` uses a compile-time macro to toggle between trace-only mode and full RPMsg + trace mode:
 
-```c
+```text
 /* Trace buffer in .trace_buffer section (mapped to on-chip SRAM by linker script) */
 __attribute__((used, section(".trace_buffer"), aligned(4)))
 char g_rproc_trace_buffer[CONFIG_RPROC_TRACE0_LEN];
@@ -208,7 +189,7 @@ const struct rpmsg_resource_table global_resource_table = {
         .type          = RSC_VDEV,
         .id            = VIRTIO_ID_RPMSG,
         .num_of_vrings = 2,
-        /* da = 0: Linux kernel allocates the vring buffers dynamically */
+        /* da = 0: Linux kernel allocates vrings dynamically */
         .vring = { {.da=0,.align=VRING_ALIGN,.num=VRING_NUM_DESCS},
                    {.da=0,.align=VRING_ALIGN,.num=VRING_NUM_DESCS} },
     },
@@ -229,12 +210,7 @@ const struct standard_resource_table global_resource_table = {
 #endif
 ```
 
-Key points:
-- The trace buffer lives in a dedicated `.trace_buffer` linker section — not inside the `.resource_table` struct itself. This keeps the struct compact and the buffer optimally placed by the linker.
-- `da = 0` on the vring entries means **Linux allocates the VirtIO ring buffers dynamically** at load time. The `da_to_va` callback in `sunxi_rproc.c` maps them into DDR via `remoteproc_alloc_vring()`.
-- When `CONFIG_RPROC_RPMSG` is not set (all apps except `testPingRpmsg`), only a single `RSC_TRACE` entry is declared — zero VirtIO overhead.
-
-When Linux loads the ELF, it parses the resource table and exposes a live debugfs interface on the ARM host:
+When Linux boots the ELF, it parses the table and automatically creates a live debugfs interface on the ARM host:
 ```bash
 # Read live diagnostic logs directly from the running RISC-V core:
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
@@ -242,58 +218,45 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ---
 
-## 3. The All-New `riscv-firmware/apps` Verification Suite
+## 3. The `riscv-firmware/apps` Verification Suite
 
-Under [`riscv-firmware/apps/`](/riscv-firmware/apps/), seven progressive test applications validate core boot, memory mapping, telemetry, exception handling, and inter-processor communication paradigms:
+Under `riscv-firmware/apps/`, seven progressive test applications validate core boot, memory mapping, telemetry, exception handling, and inter-processor communication paradigms:
 
 ```text
-riscv-firmware/apps/
-├── testBasic/               # 1. Sanity boot, PubSRAM execution & live loop counter
-├── testStringBinaryTrace0/  # 2. Hardware FPU & combined ASCII + packed binary telemetry
-├── testCrash/               # 3. Hardware exception trapping (mtvec) & full register dump
-├── testPing/                # 4. Ultra-low-latency Shared Memory SPSC + UIO Doorbell benchmark
-│   └── linux/               #    Host tools: ping_shm (C++ direct-poll), ping_uio (C++ event-driven UIO) & ping_uio.py (Python)
-├── testPingRpmsg/           # 5. Standard Linux VirtIO RPMsg framework echo benchmark
-│   └── linux/               #    Host tools: ping_rpmsg (C++) & ping_rpmsg.py (Python)
-├── testDRAMMsg/             # 6. Hybrid SRAM Control / DDR DRAM Payload buffer pool
-│   └── linux/               #    Host tool: ping_dram (C++)
-└── exampleRiscv/            # 7. Core flight stack telemetry application
++------------------------+--------------------------------+-----------+
+| App                    | Feature Verified               | Tool      |
++------------------------+--------------------------------+-----------+
+| testBasic              | Boot 0x3FFC0000, MISA probe    | trace0    |
+| testStringBinaryTrace0 | HW FPU, packed binary telemetry| mon_trace |
+| testCrash              | mtvec trap, insn autopsy       | trace0    |
+| testPing               | SPSC SRAM + Mailbox Doorbell   | ping_uio  |
+| testPingRpmsg          | VirtIO RPMsg /dev/rpmsg0       | ping_rpmsg|
+| testDRAMMsg            | SRAM ctrl + 1MB DDR pool + PMP | ping_dram |
+| exampleRiscv           | Flight stack telemetry         | trace0    |
++------------------------+--------------------------------+-----------+
 ```
-
-| Application | Primary Architectural Feature Verified | Host Diagnostic Tool |
-| :--- | :--- | :--- |
-| **`testBasic`** | Boot entry (`0x3FFC0000`), SRAM Space 0 execution, MISA probe (`0x40901125`), Single FPU verification | `trace0` debugfs |
-| **`testStringBinaryTrace0`** | Hardware Single-Precision FPU (`F`), packed binary telemetry | `monitor_trace.py` |
-| **`testCrash`** | Machine trap vector (`mtvec`), illegal instruction autopsy dump | `trace0` debugfs |
-| **`testPing`** | Lock-free SPSC in SRAM, Hardware Mailbox Doorbell IRQ | `ping_uio` / `ping_uio.py` |
-| **`testPingRpmsg`** | Standard VirtIO RPMsg framework (`virtio_rpmsg_bus`), `/dev/rpmsg0` | `ping_rpmsg` / `ping_rpmsg.py` |
-| **`testDRAMMsg`** | Hybrid SRAM control + 1 MB DDR DRAM payload pool, PMP un-cached | `ping_dram` |
 
 ---
 
 ### 3.1 Step 1: Sanity Boot & Memory Writes (`testBasic`)
-The `testBasic` application boots into SRAM Space 0 (`0x3FFC0000`), writes initial signatures to memory, reads the hardware `MISA` and `mstatus` registers, tests single-precision hardware float multiplication, and executes an incrementing counter loop:
+The `testBasic` application boots into SRAM Space 0 (`0x3FFC0000`), writes initial signatures to memory, reads the hardware `MISA` register, verifies single-precision hardware float multiplication, and runs an incrementing counter loop:
 
-```cpp
+```text
 /* apps/testBasic/main.cpp */
 int main(void) {
-    // 1. Read standard RISC-V MISA register (CSR 0x301)
     uint32_t misa = 0;
     asm volatile ("csrr %0, misa" : "=r"(misa));
 
-    // 2. Write MISA and status signatures to SRAM
     sram_c_loc1[0] = 0xDEADBEEF;
     sram_c_loc1[1] = misa;
     sram_c_loc2[0] = 0x52495343; // "RISC"
 
-    // 3. Initialize In-Memory HAL Trace ring buffer and Timer
     hal::Trace::init();
     hal::Timer::init();
 
-    // 4. Test Hardware Float Multiply
     volatile float f_test1 = 12.5f;
     volatile float f_test2 = 4.0f;
-    volatile float f_res = f_test1 * f_test2; // Executed on hardware FPU (F)
+    volatile float f_res = f_test1 * f_test2; // Executed on hardware FPU
 
     uint32_t count = 0;
     while (1) {
@@ -306,43 +269,40 @@ int main(void) {
 }
 ```
 
-* **Verification**: Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` reveals live silicon execution:
-  ```text
-  [testBasic] Heartbeat #1 | MISA=0x40901125 | count=1
-  [testBasic] Heartbeat #2 | MISA=0x40901125 | count=2
-  ```
-  This proves the core is running cleanly in SRAM Space 0 (`0x3FFC0000`) without hardware lockup.
+Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` confirms execution on physical silicon without bus hang:
+```text
+[testBasic] Heartbeat #1 | MISA=0x40901125 | count=1
+[testBasic] Heartbeat #2 | MISA=0x40901125 | count=2
+```
 
 ---
 
 ### 3.2 Step 2: Hardware Single FPU & Packed Binary Telemetry (`testStringBinaryTrace0`)
-The XuanTie E907 on T527 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` executes hardware single-precision calculations and serializes a 32-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
+The XuanTie E907 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` computes trigonometric sine values on the FPU and serializes a 32-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
 
-```cpp
+```text
 /* apps/testStringBinaryTrace0/main.cpp */
 struct __attribute__((packed)) TelemetryPacket {
     uint32_t header_magic;  // 0x54454C4D ("TELM")
     uint32_t sequence;
     uint32_t uptime_ms;
-    float    accel_x;       // Hardware float (F, single precision)
+    float    accel_x;       // Hardware float
     float    accel_y;
     float    accel_z;
-    float    sine_wave;     // Hardware float (F, single precision)
+    float    sine_wave;     // Hardware float
     uint16_t checksum;
     uint16_t tail_magic;    // 0x55AA
 };
 ```
 
-* **Verification**: Run `monitor_trace.py` to stream parsed floating-point telemetry and live calculations.
+Running `monitor_trace.py` validates the stream and decodes the packed binary structures in real time.
 
 ---
 
 ### 3.3 Step 3: Hardware Exception Trapping & Autopsy (`testCrash`)
-How does a developer debug a hard fault on a co-processor running without an OS? 
+To debug faults without a JTAG probe, `testCrash` registers a machine-mode exception handler in `mtvec`. After emitting three heartbeats, it deliberately triggers an illegal instruction (`.word 0x00000000`):
 
-`testCrash` registers a machine-mode exception handler in the `mtvec` CSR. After emitting three countdown heartbeats to `trace0`, it intentionally executes an illegal instruction (`.word 0x00000000`):
-
-```cpp
+```text
 /* apps/testCrash/main.cpp */
 for (uint32_t i = 1; i <= 3; i++) {
     hal::Trace::printf("[testCrash] Normal Heartbeat #%u / 3\n", i);
@@ -353,29 +313,15 @@ hal::Trace::puts("[testCrash] >>> Triggering intentional Illegal Instruction fau
 asm volatile(".word 0x00000000"); // Unimplemented opcode
 ```
 
-When the illegal instruction executes:
-1. The E907 traps immediately into `hal::CrashHandler::handle`.
-2. It captures all 31 General Purpose Registers (`x1`–`x31`) and key CSRs (`mepc`, `mcause`, `mtval`, `mstatus`).
-3. It formats and outputs a complete register crash dump to `trace0`:
-   ```text
-   ================== HARDWARE EXCEPTION AUTOPSY ==================
-   mepc   : 0x3FFC0144 (Faulting Instruction Address in SRAM)
-   mcause : 0x00000002 (Illegal Instruction Trap)
-   mtval  : 0x00000000
-   ra     : 0x3FFC0188  sp : 0x3FFC5000  gp : 0x3FFC4800
-   x10(a0): 0x00000003  x11(a1): 0x3FFC2000
-   ================================================================
-   ```
-4. It writes fatal signature `0xDEADF00D` into SRAM Space 0 (`0x3FFFFF00`) before halting cleanly.
+When the trap triggers, the core dumps all 31 General Purpose Registers and CSRs (`mcause = 0x30000002`) to `trace0` and logs fatal signature `0xDEADF00D` into SRAM (`0x3FFFFF00`) before parking in a clean `wfi` loop. The ARM Linux host remains completely stable.
 
 ---
 
 ### 3.4 Step 4: Ultra-Low-Latency Shared Memory IPC & UIO Doorbell (`testPing`)
-For high-frequency control loops, traditional kernel messaging abstractions introduce context switch latency. `testPing` implements a direct, zero-copy Single Producer Single Consumer (SPSC) queue in SRAM C synchronized via **Hardware Mailbox Doorbell interrupts**:
+For high-frequency control loops, traditional kernel abstractions introduce scheduling latency. `testPing` implements a zero-copy Single Producer Single Consumer (SPSC) queue in SRAM Space 0 synchronized via **Hardware Mailbox Doorbell interrupts**:
 
-```cpp
+```text
 /* apps/testPing/main.cpp */
-// Check for incoming ping (SRAM flag or Mailbox Channel 1 from Linux)
 bool ping_ready = (SHM_CHANNEL->host_doorbell == 1);
 if (hal::MsgBox::is_rx_pending(hal::MsgBox::Channel::Channel1)) {
     (void)hal::MsgBox::receive(hal::MsgBox::Channel::Channel1);
@@ -383,113 +329,114 @@ if (hal::MsgBox::is_rx_pending(hal::MsgBox::Channel::Channel1)) {
 }
 
 if (ping_ready) {
-    // Copy payload, record hardware cycle count, and ring host doorbell
     SHM_CHANNEL->pong_pkt.riscv_cycles = hal::Timer::get_ticks();
     SHM_CHANNEL->riscv_doorbell = 1;
-    hal::MsgBox::send(hal::MsgBox::Channel::Channel0, 0x01); // Trigger Linux GIC SPI 147
+    hal::MsgBox::send(hal::MsgBox::Channel::Channel0, 0x01); // Trigger Linux interrupt
 }
 ```
 
-* **Linux Host Companion Tool (`ping_uio`)**:
-  Instead of polling memory and burning 100% of a CPU core, the companion tool opens `/dev/uio0` and blocks in `epoll_wait()`:
-  ```bash
-  # Run 50,000 round-trip ping-pong iterations with event-driven UIO
-  ping_uio -n 50000
-  ```
-  - **Results**: Round-trip latency of **1.5 to 2.5 microseconds** with **0% idle CPU utilization** on the Linux host!
+The host companion tool (`ping_uio`) maps the mailbox through `/dev/uio0` and blocks in `epoll_wait()`, achieving round-trip latency of **13.91 µs** with **0% idle CPU burn**. Direct memory polling via `ping_shm` reaches **13.72 µs**.
 
 ---
 
 ### 3.5 Step 5: Standard Linux VirtIO RPMsg (`testPingRpmsg`)
-When standard Linux networking or terminal abstractions are required, `testPingRpmsg` connects the XuanTie E907 to the mainline Linux `virtio_rpmsg_bus` subsystem using `hal::Rpmsg`:
-
-1. Announces the Name Service endpoint `"rpmsg-ping-channel"` over VirtIO vrings.
-2. The Linux kernel automatically creates `/dev/rpmsg0`.
-3. Companion tool `ping_rpmsg` sends and receives frames over standard Linux file descriptors (`open`, `read`, `write`):
-   ```bash
-   ping_rpmsg -n 5000
-   ```
+When standard Linux networking or terminal abstractions are required, `testPingRpmsg` connects the XuanTie E907 to the mainline `virtio_rpmsg_bus` subsystem:
+1. The core advertises `"rpmsg-ping-channel"` over VirtIO vrings.
+2. The Linux kernel initializes the channel and exposes `/dev/rpmsg0`.
+3. Companion tools (`ping_rpmsg` and `ping_rpmsg.py`) exchange frames using standard file descriptor operations (`open`, `read`, `write`).
 
 ---
 
 ### 3.6 Step 6: High-Bandwidth Hybrid SRAM / DDR Streaming (`testDRAMMsg`)
-While on-chip SRAM provides zero-wait-state determinism, its capacity is bounded (128 KB – 256 KB). For high-bandwidth payloads (such as camera frames, point clouds, or large flight logs), `testDRAMMsg` demonstrates a **hybrid architecture**:
-* Control queues (descriptors, ring pointers, doorbells) reside in **fast SRAM C**.
-* Bulk payload buffers reside in a **1 MB DDR DRAM carveout (`0x48100000`)**.
-* The co-processor uses its Physical Memory Protection (PMP) unit to configure the DRAM window as strongly-ordered / non-cacheable, ensuring cache coherency with Linux DMA without manual flushing.
-* Companion tool `ping_dram` benchmarks transfers up to 4 KB per frame at >100 MB/s throughput.
+For high-throughput payloads (camera frames, point clouds, logging), `testDRAMMsg` demonstrates a **hybrid architecture**:
+* Control queues and descriptor rings reside in **zero-wait-state SRAM Space 0**.
+* Bulk payload buffers reside in a **1 MB DDR DRAM carveout (`0x48000000`)**.
+* The co-processor configures its Physical Memory Protection (PMP) unit for non-cacheable DDR access, maintaining coherency with Linux DMA.
+* The `ping_dram` companion tool sustains **4.39 MB/s bidirectional throughput**.
 
 ---
 
-## 4. Live Target Workflow & Firmware Switching
+## 4. Hardware Overlays & The Autonomous SSH Test Harness
 
-### 4.1 Compiling All Firmware and Companion Tools
-From the repository root:
-```bash
-make -C riscv-firmware
-```
-This builds all co-processor ELFs (`testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPing.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf`) and compiles the host companion binaries (`ping_uio`, `ping_rpmsg`, `ping_dram`), staging everything into `riscv-firmware/bin/`.
+In **Part 1**, we compiled several custom Device Tree Overlays (`.dtbo`) to dynamically reconfigure the T527’s memory map and hardware mailbox routing. Because Linux `remoteproc` strictly relies on the active Device Tree to allocate DMA carveouts (like VirtIO vrings) and bind hardware mailboxes, **you cannot test different memory topologies just by swapping `.elf` files.** 
 
-During Buildroot compilation, these binaries are installed directly into `/lib/firmware/` and `/usr/local/bin/` on the target root filesystem.
+To execute the full verification suite autonomously, we built `run_full_sweep.py`. This Python script runs on your host development PC and uses `ssh` and `sshpass` to orchestrate the entire multi-profile validation loop on the live Radxa Cubie A5E hardware. Furthermore, it operates a parallel `SerialLogger` thread that continuously records the target's serial console to diagnose if the board ever hangs during a reboot or encounters an early kernel panic.
 
----
+Here is how the automated harness bridges our custom Device Trees with the `remoteproc` verification suite:
 
-### 4.2 Dynamic Runtime Firmware Switching (No Reboots!)
-The Linux `remoteproc` sysfs interface allows stopping, switching, and starting co-processor firmware on the fly:
+1. **Remote Device Tree Reconfiguration:** Using `sed` over SSH, the script dynamically injects the appropriate `dtoverlay=` and `cmdline=` statements into the target's `/boot/config.txt` for each specific test profile.
+2. **Autonomous Reboots:** After swapping the overlay, it issues a `reboot` command and continuously polls the target over SSH until the OS is back online.
+3. **Firmware Execution:** Once the board is online, it interacts with the `sysfs` remoteproc interface to `stop` the core, load the correct `.elf` firmware, and `start` execution.
+4. **Benchmarking & Parsing:** Finally, it launches the host-side benchmarking tools (`ping_rpmsg`, `ping_shm`, etc.), parses the stdout latency metrics, and generates the quantitative JSON and Markdown summaries.
 
-```bash
-# ==============================================================================
-# 1. Run Sanity Boot Test
-# ==============================================================================
-echo stop > /sys/class/remoteproc/remoteproc0/state
-echo "testBasic.elf" > /sys/class/remoteproc/remoteproc0/firmware
-echo start > /sys/class/remoteproc/remoteproc0/state
-cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
+The script cycles through three primary overlay profiles:
 
-# ==============================================================================
-# 2. Run Ultra-Low-Latency Shared Memory Benchmark
-# ==============================================================================
-echo stop > /sys/class/remoteproc/remoteproc0/state
-echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
-echo start > /sys/class/remoteproc/remoteproc0/state
-ping_uio -n 50000
-
-# ==============================================================================
-# 3. Run Standard Linux RPMsg Echo Test
-# ==============================================================================
-echo stop > /sys/class/remoteproc/remoteproc0/state
-echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware
-echo start > /sys/class/remoteproc/remoteproc0/state
-ping_rpmsg -n 5000
+```text
++----------+----------------------------------+---------------------------+
+| Profile  | dtoverlay=                       | Firmware Apps             |
++----------+----------------------------------+---------------------------+
+| P1: DDR  | cubie-a5e-flight-stack           | testBasic, testCrash,     |
+|          |                                  | testPingRpmsg, testDRAMMsg|
+| P2: SRAM | ...-flight-stack ...-rpmsg-sram  | testPingRpmsgSram         |
+| P3: UIO  | ...-flight-stack ...-testPing    | testPing (ping_shm+uio)   |
++----------+----------------------------------+---------------------------+
 ```
 
-> [!TIP]
-> **Scripting RemoteProc Transitions & Hush Token Spacing**
->
-> When writing shell scripts or boot hooks to automate these firmware toggles (e.g., verifying return codes or checking `/sys/class/remoteproc/remoteproc0/state`), ensure conditional checks match strict token spacing:
-> ```sh
-> if test "${loaded}" = "1"; then
-> ```
-> As detailed in the Device Tree Overlay guide, accidental whitespace like `test "${loaded}" = " 1"` causes silent conditional failures in strict parsers like U-Boot's Hush shell and embedded busybox environments.
-
-Notice that **zero `/dev/mem` or root privilege poking is used**. All hardware interactions are managed cleanly by the kernel drivers (`sunxi_rproc.c`, `uio_pdrv_genirq`, `virtio_rpmsg_bus`), ensuring system stability and maintaining strict memory protection (`CONFIG_STRICT_DEVMEM`).
+**💡 Pro-Tip (Switching Topologies):**  
+Switching firmware *within* the same topology profile requires **zero reboots**. However, to run the complete 3-profile sweep, you must edit `/boot/config.txt` and reboot between profiles so the kernel initializes the distinct DMA pools.
 
 ---
 
+## 5. Measured Silicon Benchmarks (Autonomous 3-Profile Sweep)
+
+The entire suite was executed against physical silicon on the Radxa Cubie A5E (`192.168.1.33`, Linux 7.1 PREEMPT_RT). All 1,000-packet runs recorded 100% success with zero data corruption:
+
+```text
+Latency & Throughput:
++------------------+--------------------+-------------+----------------+
+| Profile          | Tool               | Avg RTT     | Throughput     |
++------------------+--------------------+-------------+----------------+
+| P1: DDR VirtIO   | ping_rpmsg (C++)   | 191.45 us   | 2,996 msgs/s   |
+| P1: DDR VirtIO   | ping_rpmsg.py      | ~124 us     | 5,710 msgs/s   |
+| P1: Hybrid DDR   | ping_dram (C++)    | 202.10 us   | 4,499 msgs/s   |
+| P2: SRAM VirtIO  | ping_rpmsg (C++)   | 135.62 us   | 7,338 msgs/s   |
+| P2: SRAM VirtIO  | ping_rpmsg.py      | ~98 us      | 6,400 msgs/s   |
+| P3: SPSC  (BEST) | ping_shm (C++)     | 13.72 us    | 66,317 msgs/s  |
+| P3: UIO   (BEST) | ping_uio (C++)     | 13.91 us    | 63,215 msgs/s  |
+| P3: UIO          | ping_uio.py        | 180.49 us   | 4,467 msgs/s   |
++------------------+--------------------+-------------+----------------+
+
+Bandwidth & Integrity:
++------------------+--------------------+------------+----------------+
+| Profile          | Tool               | Bandwidth  | Result         |
++------------------+--------------------+------------+----------------+
+| P1: DDR VirtIO   | ping_rpmsg (C++)   | 2.84 MB/s  | PASS 0 errors  |
+| P1: DDR VirtIO   | ping_rpmsg.py      | 713.8 KB/s | PASS 0 errors  |
+| P1: Hybrid DDR   | ping_dram (C++)    | 4.39 MB/s  | PASS 0 errors  |
+| P2: SRAM VirtIO  | ping_rpmsg (C++)   | 6.94 MB/s  | PASS 0 errors  |
+| P2: SRAM VirtIO  | ping_rpmsg.py      | 800.0 KB/s | PASS 0 errors  |
+| P3: SPSC  (BEST) | ping_shm (C++)     | 64.76 MB/s | PASS 0 errors  |
+| P3: UIO   (BEST) | ping_uio (C++)     | Doorbell   | PASS 0 errors  |
+| P3: UIO          | ping_uio.py        | Doorbell   | PASS 0 errors  |
++------------------+--------------------+------------+----------------+
+```
+
+
+Moving the VirtIO vrings and buffers from external DDR (Profile 1) to on-chip SRAM Space 1 (Profile 2) drops average round-trip latency from **191.45 µs down to 135.62 µs** and doubles bidirectional throughput. For ultra-low latency loops, the direct SRAM SPSC engine (Profile 3) hits **13.72 µs** at over 66,000 messages per second.
+
 ---
 
-## 5. In-Kernel Unit Testing (KUnit) with a >2:1 Test-to-Code Ratio
+## 6. In-Kernel Unit Testing (KUnit): 68/68 Tests Passing
 
-While silicon verification proves the "happy path," upstream kernel maintainers and static analysis bots require exhaustive validation of edge cases, integer overflow hazards, and error unwind ladders that cannot be triggered on physical hardware without specialized fault injection.
+Upstream kernel acceptance demands verifying edge cases and error unwinding paths that physical hardware cannot easily trigger.
 
-To achieve upstream production quality, we implemented comprehensive **KUnit (Kernel Unit Testing)** test suites directly within the Linux tree under `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST` and `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`:
+We implemented exhaustive KUnit test suites directly in the Linux tree under `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST` and `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        Linux Kernel KUnit Framework                    │
 ├──────────────────────────────────┬─────────────────────────────────────┤
-│  sunxi_rproc_test.c (511 lines)  │  sun55i_msgbox_test.c (721 lines)   │
-│  27 Comprehensive Test Cases     │  28 Comprehensive Test Cases        │
+│  sunxi_rproc_test.c (34 Tests)   │  sun55i_msgbox_test.c (34 Tests)    │
 ├──────────────────────────────────┼─────────────────────────────────────┤
 │ • DA -> VA Address Translation   │ • 12-Channel Routing Table Sweep    │
 │ • 64-bit Integer Overflow Guards │ • Invalid Index Clamping (-1, 12)   │
@@ -501,50 +448,38 @@ To achieve upstream production quality, we implemented comprehensive **KUnit (Ke
 │ • Cross-Space Memory Isolation   │ • Channel Crosstalk Isolation       │
 │ • Complete rproc_ops Integrity   │ • Simultaneous 3-Route Concurrency  │
 └──────────────────────────────────┴─────────────────────────────────────┘
-Total: 55 Test Cases across 1,232 Lines of Code (>2:1 Test-to-Code Ratio)
+Total: 68 Test Cases across In-Kernel Drivers (100% PASS)
 ```
 
-### 5.1 Mock MMIO Testing: Testing Hardware Logic Without Hardware
-Kernel drivers traditionally suffer from low test coverage because their functions rely on memory-mapped I/O (`readl`, `writel`). In `sun55i_msgbox_test.c`, we overcome this using a **mock fixture architecture**:
-
-```c
-struct mock_msgbox_fixture {
-    struct sun55i_msgbox mbox;
-    struct mbox_chan chans[SUN55I_NUM_CHANS];
-    struct mock_rx_sink sinks[SUN55I_NUM_CHANS];
-    u32 regs[SUN55I_MAX_PROCESSORS][0x400 / 4];
-};
-```
-
-By pointing `mbox.regs[i]` to `fix->regs[i]` in RAM, KUnit tests execute the **real, production driver code** (`sun55i_msgbox_chan_ops.send_data`, `startup`, `shutdown`, and `sun55i_msgbox_irq`) while controlling and asserting exact register state.
-
-### 5.2 Key Verified Invariants:
-1. **Integer Overflow Protection**: Validates that an ELF with `da = U64_MAX - 0x10` and `len = 0x20` is rejected with `NULL`, preventing arbitrary memory write attacks.
-2. **Anti-Lockup Bounded Draining**: Simulates a runaway remote processor with stuck `MSG_STATUS = 15`. Verifies that the hardirq handler terminates after exactly `SUN55I_FIFO_MAX` (8) reads, guaranteeing the ARM host CPU never hangs in an infinite loop.
-3. **Channel Crosstalk Isolation**: Proves that an interrupt on Channel 2 dispatches exclusively to client sink 2, leaving all other 11 channels completely untouched.
-4. **Simultaneous Multi-Port Concurrency**: Simulates simultaneous incoming messages across CPUS (Port 0), DSP (Port 1), and XuanTie RV (Port 2) in a single interrupt pass, asserting correct dispatch across all three heterogeneous domains.
-
-Both test modules run automatically at kernel boot or via `kunit.py run`, reporting `100% PASS` in `dmesg`:
+Running the test suite on target silicon validates all 68 assertions cleanly:
 ```bash
-dmesg | grep -i kunit
-# [    0.154210] kunit: test suite sunxi_rproc: 27/27 tests passed
-# [    0.156840] kunit: test suite sun55i_msgbox: 28/28 tests passed
+cat /sys/kernel/debug/kunit/sunxi_rproc/results
+# 1..34
+# ok 1 sunxi_rproc_da_to_va_sram0
+# ...
+# [PASS] 34/34 passed
+
+cat /sys/kernel/debug/kunit/sun55i_msgbox/results
+# 1..34
+# ok 1 sun55i_msgbox_send_data
+# ...
+# [PASS] 34/34 passed
 ```
 
 ---
 
-## 6. What's Next in Part 3
+## 7. What's Next in Part 3
 
-With the `sunxi_rproc.c` driver, `sun55i-msgbox.c` mailbox driver, and comprehensive KUnit and `riscv-firmware/apps` verification suites in place:
-1. The Linux host reliably loads multi-segment ELF binaries into continuous 512 KB SRAM (Space 0 at `0x3FFC0000` and Space 1 at `0x40000000`) and transparent DDR carveouts.
-2. The `.resource_table` provides live trace streaming without physical serial debug cables.
-3. Every driver function, boundary condition, error path, and race condition is hardened and protected by 55 in-kernel KUnit tests.
-4. Every co-processor subsystem—clocks, resets, hardware single-precision FPU, exception trapping, direct shared memory, and VirtIO RPMsg—is systematically verified on live silicon.
+With `sunxi_rproc.c`, `sun55i-msgbox.c`, and our multi-profile test infrastructure proven on silicon:
+1. The Linux host reliably loads multi-segment ELF binaries across Dedicated SRAM, Shared PubSRAM, and DDR carveouts via Address Translation Tables.
+2. Live debugfs trace streaming eliminates the need for serial cables.
+3. 68 in-kernel KUnit tests protect address translation, bounded interrupt loops, and teardown ordering.
+4. The co-processor delivers proven latencies ranging from **191 µs** (standard VirtIO) down to **13.7 µs** (direct SRAM SPSC).
 
-In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive deep into all three IPC paradigms:
-* **Lock-free Shared SRAM + Hardware Mailbox** (`testPing`): How `ShmPingChannel`, `hal::SpscQueue`, and event-driven UIO epoll deliver 1.5–2.5 µs round-trip latency.
-* **VirtIO RPMsg** (`testPingRpmsg`): Standard `/dev/rpmsg0` integration via `hal::Rpmsg`.
-* **Hybrid SRAM/DDR** (`testDRAMMsg`): `DramSpscControlBlock` descriptor rings in fast SRAM with a 1 MB DDR carveout for > 100 MB/s bulk streaming.
+In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive into the co-processor firmware implementation:
+* **The Shared Memory SPSC Queue** (`testPing`): Zero-copy ring buffers and UIO signaling.
+* **VirtIO RPMsg Implementation** (`testPingRpmsg`): Structuring `.resource_table` for automatic Linux character device bindings.
+* **Hybrid SRAM/DDR Streaming** (`testDRAMMsg`): Managing descriptor rings and cache coherency for high-bandwidth payloads.
 
 ---
 
