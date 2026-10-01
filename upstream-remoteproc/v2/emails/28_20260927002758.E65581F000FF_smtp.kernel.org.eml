@@ -1,0 +1,119 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id C6F7924E4C6;
+	Sun, 27 Sep 2026 00:27:59 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790468880; cv=none;
+ b=TlN2jl8CQNJ7euOGBaA+jctqBgSz+bvoTDYB7GRrJ+8ac3t9h1MjaZ/AT9tS1W2HGK2X/+8JYuvHUlqByqnRZShX2Vwe6yTPlwQthsji6LAl4MnxBZAEb38Z6MmrR/0Z7OtQ7cwqxlmIvpvbyFO3rItIa6dgWKFXP1Nnw7ubisc=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790468880; c=relaxed/simple;
+	bh=pU2oqt1KSRhUUEgePbm/psqSUmYBWGcpDt1Jr3+h5aI=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=g3r9eFngNw+v1IQYIitQygxfds7w1+EKM0gMn4GuU/JM0WhOpYCwMYXdD0Wyee8WSsQ8TtyV3RAsl9iCavDhoLui221qAI9DeT1Q8dYZ4SOK802bgq9sGcv7uR1PCiVgRXqlePuiCAg56XsOkKc345GdzjETbLxZIwwkUsvc4/k=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=mr0HS2jC; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="mr0HS2jC"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id E65581F000FF;
+	Sun, 27 Sep 2026 00:27:58 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790468879;
+	bh=/MnnG7I1tR3vc8iv4Uy5LePLqYm2RRXSQjMe51xO/nk=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=mr0HS2jCIXFu7gaCikIlILVVzftyglDnj3W4LetcWlwOzcvu7SHEjsrLORPaJc4ao
+	 lF0EVdSUPteGNs3gCp1VzPWcbmLC5G9i2HlwhrK2Ic66YfOpXT2lHe9U6wna2RHvy6
+	 q/cp8P6HuvzQJXe0Dd2o4uXHdsoRfF+eKeSfu8VNe8K+uX/Phll0DlWHf3j/MIgX2Y
+	 n7sSmEfjaF5Ab3ctue8nLOjuawy4U4rWsFU8cvhP8ILXa+Px3CPRUt/0j/bPU0UOnU
+	 gyBi3QLbAuc3fbJN5Ak3drKAE2nErpKYBm2xa4Rc/G1NGS7zM/rMlMBSsQ6+snjYt9
+	 fjnilslgQxJCA==
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH v2 4/7] dt-bindings: remoteproc: add Allwinner
+ sun55i-rproc schema
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: devicetree@vger.kernel.org, conor+dt@kernel.org, robh@kernel.org,
+ linux-sunxi@lists.linux.dev
+In-Reply-To: <20260927002021.797069-5-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260927002021.797069-1-tcmichals@gmail.com>
+ <20260927002021.797069-5-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Sun, 27 Sep 2026 00:27:58 +0000
+Message-Id: <20260927002758.E65581F000FF@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 1 potential issue(=
+s) to consider:
+- [Medium] dt-bindings: missing constraint for required 'r_sram'/'r_sram1' =
+in reg-names
+--
+
+commit cc7b4893d8220b754d0e23e60a9d997c33b1c0c3
+Author: Tim Michals <tcmichals@gmail.com>
+Subject: dt-bindings: remoteproc: add Allwinner sun55i-rproc schema
+
+This commit adds a Device Tree binding schema for the Allwinner XuanTie
+E906/E907 RISC-V remoteproc on sun55i SoCs. It defines resources such as
+memory-mapped registers, clocks, resets, and mailboxes required to manage
+the co-processor.
+
+> diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55=
+i-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55=
+i-rproc.yaml
+> new file mode 100644
+> index 0000000000000..53e3f4faaa768
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc=
+.yaml
+
+[ ... ]
+
+> +  reg:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description:
+> +      Memory-mapped register regions. The following named regions are
+> +      supported (all optional except at least one of r_sram or r_sram1) -
+> +      "cfg" for RISC-V core control and boot-vector registers,
+> +      "r_sram" for dedicated MCU SRAM Space 0,
+> +      "r_sram1" for switchable MCU SRAM Space 1,
+> +      "remap" for the hardware remap control register.
+> +
+> +  reg-names:
+> +    minItems: 1
+> +    maxItems: 4
+> +    items:
+> +      enum:
+> +        - cfg
+> +        - r_sram
+> +        - r_sram1
+> +        - remap
+
+[Severity: Medium]
+The description for reg explicitly states that at least one of r_sram or
+r_sram1 is required, but the schema for reg-names allows any single item
+from the enum (such as just cfg) to pass validation.
+
+If a device tree node is created with only cfg or remap in reg-names, it
+will silently pass offline device tree validation despite lacking the
+required SRAM regions.
+
+Should an additional constraint be added to enforce the presence of at least
+one SRAM region so that incomplete device trees are caught during validatio=
+n?
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260927002021.7970=
+69-1-tcmichals@gmail.com?part=3D4

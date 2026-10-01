@@ -1,0 +1,177 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 2B4B636A03B;
+	Tue, 22 Sep 2026 03:56:47 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790049409; cv=none;
+ b=aIpkdA0T/E4DN6Aq+jsTxo5a5OFHTmD+5of03vXCp0VwjTu+QPopy/cYArM1FUPlZ0pVNEq/2tb07FIVLJsJx8MV1tDz67G2tBQIUZwUBxzCUgJAG5BU99kIt9mmdWtq+FkX+X3AoesMJy+UrueQXujB5s9UwmHNJqEElFBT050=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790049409; c=relaxed/simple;
+	bh=FaIMqSvzbC5HX5qIGHsANQxlIvMyTEI3Ac8uJQWS8YE=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=DriU2aKcEhU4B08wtv8aHzLtgcCKWohQAkEIt7EkS40+RtAPqKOpdGBTcOJHWG1wJ2bblx6Y1pZ2pXJk26tzuZIUr3HHlabUeSri+wcAkWis51E5p+yGDN4rWiuK+U3knpUySCq+qWrXnTi0g5KN+aqfwTrbgD6fAgCCAz0szv4=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=c1931yrc; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="c1931yrc"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 7B7F41F000FF;
+	Tue, 22 Sep 2026 03:56:47 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790049407;
+	bh=/+abOMlvVlfpDWabpTczbGG95/HwhmL7UkctiMK/mcU=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=c1931yrcxHPz5E3i+lgYEg9PrFB5zqtZsYT1qLyLEHrPCARroQhr43IbVIHQnvbMj
+	 55vNQyrEMAHv4bgN047wfI972MaL+Vyl0xP1QVS/nEIPOUoDljarGkDUGNgAeXhkHE
+	 oAHmd+9pnS0CEG04GrqwMeTxNHFPiwDx4B0JRJ9tRANNM9J57vh7YCOH87MGGJmtWl
+	 Fsld7HPCYR+eHMMvCMILX/Wkrf7jM3u3/g5Gbs6bCll6jJuRBIradAHcdUnwwUZF4O
+	 TUrIA/Ac9BZoBpSovbSght3jAD3OxaL3pcdsbqmrcI4ZtL4jmeQFG2JAuBMZJnSkPa
+	 UuYtuI4s0yoTw==
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH 4/7] dt-bindings: remoteproc: add allwinner sun55i rproc
+ binding
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: robh@kernel.org, conor+dt@kernel.org, linux-sunxi@lists.linux.dev,
+ devicetree@vger.kernel.org
+In-Reply-To: <20260922034711.190253-5-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260922034711.190253-5-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Tue, 22 Sep 2026 03:56:47 +0000
+Message-Id: <20260922035647.7B7F41F000FF@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 5 potential issue(=
+s) to consider:
+- [Low] dt-bindings: missing closing brace in device tree example
+- [Low] dt-bindings: missing schema constraints for memory-region-names
+- [Low] dt-bindings: missing schema enforcement for required r_sram regions
+- [Low] dt-bindings: unnecessary status property redeclaration
+- [Low] dt-bindings: unused arm-gic.h include in example
+--
+
+commit 1c1864dc9cdb1b1b685e0f8e7074d843ba81bbee
+Author: Tim Michals <tcmichals@gmail.com>
+
+dt-bindings: remoteproc: add allwinner sun55i rproc binding
+   =20
+Add Device Tree binding schema for the Allwinner XuanTie E906/E907
+RISC-V remote processor found on A523, A527, and T527 SoCs.
+
+> diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55=
+i-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55=
+i-rproc.yaml
+> new file mode 100644
+> index 0000000000000..5d8b929f60b67
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc=
+.yaml
+> @@ -0,0 +1,152 @@
+
+[ ... ]
+
+> +  reg:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description: |
+> +      Memory-mapped register regions. The following named regions are
+> +      supported (all optional except at least one of r_sram or r_sram1):
+> +        "cfg"    - RISC-V core control and boot-vector registers (0x0713=
+0000)
+> +        "r_sram" - Dedicated MCU SRAM Space 0 (0x07280000 / 0x07200000; =
+256-512 KB)
+> +        "r_sram1"- Switchable MCU SRAM Space 1 / SRAMA3_2 (0x072c0000 / =
+0x07280000; 256-512 KB)
+> +        "remap"  - Hardware Remap Control Register (offset 0x364)
+> +
+> +  reg-names:
+> +    minItems: 1
+> +    maxItems: 4
+> +    items:
+> +      enum: [cfg, r_sram, r_sram1, remap]
+
+[Severity: Low]
+The description mentions a hardware requirement that at least one of "r_sra=
+m"
+or "r_sram1" must be present. Should this constraint be enforced in the sch=
+ema
+(for example, using an anyOf block with contains on reg-names) so that a
+device tree omitting both won't silently pass validation?
+
+[ ... ]
+
+> +  memory-region-names:
+> +    description:
+> +      Names corresponding to the memory-region phandle list entries.
+> +      Recognized values are "vram", "dram", and "trace".
+
+[Severity: Low]
+Does this property need JSON schema constraints to enforce the allowed stri=
+ng
+values? Without items and enum definitions, the schema allows any string
+value or arbitrary array lengths to pass validation silently.
+
+[ ... ]
+
+> +  interrupt-names:
+> +    items:
+> +      - const: crash
+> +
+> +  status: true
+
+[Severity: Low]
+Is this redeclaration of the status property needed? Core device tree schem=
+as
+already declare the status property globally, so redeclaring it here without
+strict constraints seems unnecessary.
+
+[ ... ]
+
+> +examples:
+> +  - |
+> +    #include <dt-bindings/clock/sun55i-a523-ccu.h>
+> +    #include <dt-bindings/reset/sun55i-a523-ccu.h>
+> +    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+[Severity: Low]
+Is this include needed? There are no interrupts defined in the example node,
+so the macros from arm-gic.h appear to be unused dead code.
+
+> +
+> +    remoteproc@7130000 {
+> +        compatible =3D "allwinner,sun55i-a523-rproc";
+> +        reg =3D <0x07130000 0x1000>,
+> +              <0x07280000 0x40000>,
+> +              <0x072c0000 0x40000>,
+> +              <0x07010364 0x4>;
+> +        reg-names =3D "cfg", "r_sram", "r_sram1", "remap";
+> +        clocks =3D <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
+> +                 <&mcu_ccu CLK_MCU_RISCV>;
+> +        clock-names =3D "bus", "core";
+> +        resets =3D <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
+> +                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
+> +        reset-names =3D "cfg", "core";
+> +        mboxes =3D <&msgbox 0>, <&msgbox 1>;
+> +        mbox-names =3D "rx", "tx";
+> +        firmware-name =3D "testBasic.elf";
+
+[Severity: Low]
+Is there a missing closing brace and semicolon at the end of this example
+node? Without it, dtc may report a syntax error when the dt_binding_check
+build target compiles the example.
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260922034711.1902=
+53-1-tcmichals@gmail.com?part=3D4

@@ -1,0 +1,103 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8F5BF283142;
+	Tue, 22 Sep 2026 03:54:51 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790049292; cv=none;
+ b=YApMYPUYr0QIxNdqcGPfkm5OWDpRidcA2FhZJWQZKeDeU0MfIb64PnUtb/uJF1Ls7XT7cvFQdwDOu809G2Pb84i58oYloEulD0LwHOvg5bOXjBrHGAe0Uk1epsT8phthmj3S4p66LTaAF+iTp2f4+DAiqV4+BxY2IUajBScHAQg=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790049292; c=relaxed/simple;
+	bh=r6u/bAa1DzOAfN6wf6toLVqmgbVRZ+Q00n+ENIHtkqM=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=h3JYNolXKBfKN3KGExNl6vdYqJRtlkuUVpm+CeY12OYEKu1mZcJKQzaKdnmwe0gKAzqR/volZ1rxJHyEntSXlWzolCPzYb/P/+kt5SrzHWrR1zjBbC9kM9pciZ8NQbJaqfvCcO056DEkhwn4v252E1msdj3uWGN5VxITQhwFt10=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=QT1Av47C; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="QT1Av47C"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id DAB4E1F00893;
+	Tue, 22 Sep 2026 03:54:50 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790049291;
+	bh=I6EyGj7t9w8CDp4emGP0rX0rqsvWBkilFYAgrVzf0t4=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=QT1Av47C01JXKlsOlS3c7DliZ1r2xCcR83Jh28BsEZA5xvcVLtRPnI5UVxN4btJFx
+	 fSHK6/BSgfX7vjTlogQFC3jJZov9uCDAtSoDUpqDG4uTvhO7WIxSceFjkNWw0ykeDh
+	 EIoFilfOZaOGIirCEMFnJWWFQ40qmNxsEWQMQ36wrxMtnyH8WzzFqPr3Lswjf4pAub
+	 MbtGchej/JmSfFLsO8mzLoyw3Et5qWNuKJ4r0cDZwo6AQinKZPXqjLNXIfgt8Ety0b
+	 vqkl+RPNWO+09sgffT3nPWVATn1Aze94QqgPyehkjRFg5Z9UHPoPO82tCt6Y3+k8JZ
+	 ks31IxSGUW1Eg==
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH 1/7] dt-bindings: mailbox: add Allwinner sun55i msgbox
+ schema
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, devicetree@vger.kernel.org, robh@kernel.org,
+ conor+dt@kernel.org
+In-Reply-To: <20260922034711.190253-2-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260922034711.190253-2-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Tue, 22 Sep 2026 03:54:50 +0000
+Message-Id: <20260922035450.DAB4E1F00893@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 1 potential issue(=
+s) to consider:
+- [Medium] dt-bindings: mailbox: missing interrupt-names for optional multi=
+-port interrupts
+--
+
+commit 10a4254c3034665a213647db7d6bda7467878d9f
+Author: Tim Michals <tcmichals@gmail.com>
+
+dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+
+Add Device Tree binding schema for the Allwinner 4-port hardware
+Message Box controller found on sun55i (A523, A527, T527) and
+sun60i (A733) SoCs.
+
+> diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a=
+523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55=
+i-a523-msgbox.yaml
+> new file mode 100644
+> index 0000000000000..4b73543c7902f
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msg=
+box.yaml
+[ ... ]
+> +  interrupts:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description: |
+> +      One interrupt per processor port. The host port interrupt is requi=
+red;
+> +      remote port interrupts are optional.
+
+[Severity: Medium]
+This block defines a variable-length list of interrupts, but lacks an
+interrupt-names definition or a strict items array constraint.
+
+If a board designer attempts to specify a partial list of interrupts (for
+instance, providing the ARM and RISC-V interrupts, but skipping the DSP),
+is there a way for the hardware configuration to retain the correct index
+context without an interrupt-names list?
+
+Without explicit descriptions or names per index, does this establish a
+permanently ambiguous ABI for boards that do not connect all 4 interrupt
+lines?
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260922034711.1902=
+53-1-tcmichals@gmail.com?part=3D1

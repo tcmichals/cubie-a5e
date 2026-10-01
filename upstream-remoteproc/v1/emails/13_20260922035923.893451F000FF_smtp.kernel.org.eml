@@ -1,0 +1,292 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 1BD9E3E1228
+	for <linux-sunxi@lists.linux.dev>; Tue, 22 Sep 2026 03:59:23 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790049565; cv=none;
+ b=Bm5AtwDiIntsavmriEwHis3OZff3C1OzqTC1UaXqLx2pmH1N7MDknnA4i9dZY4Gay+1PlSRfxVB8G8AxZhx/3NSCXA4yyanlLsY4MV4IfT937MhXKOFUuPgxPw6QHu569N4I4gr5GlyuHFje5LMi4iwLeDe3ib1/khX+3cgOCWY=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790049565; c=relaxed/simple;
+	bh=aPvEoxr2gh9pMfoKtAMXtWZBD9L7EuoaV4q4uG7Zoz4=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=Wh00bNJDhw0u54fRbhpqrLW9zZJxs4xSbsFbecS9++ParMDmtMT7863VI4owrrojskbzYPMDnwL45bj6b2qPcW5XqsCY8RUpCUF5hpFe1aJ8ZT5ste8suQ9Hr7Ij4mj+2vjmahroKc+bjQDN16AMIqgX1qULim2FeeAYNoqm5hc=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=bfBYQ2Fm; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="bfBYQ2Fm"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 893451F000FF;
+	Tue, 22 Sep 2026 03:59:23 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790049563;
+	bh=qyscGxjx3gDYw8kyyjRePL/GnMXbcldCwwCNhCswA/Q=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=bfBYQ2FmGn54VL8EX0l4EmIW8o1bbZ54WBXI8LYcu13cTCmKiejVOHXTa2AltfKAn
+	 Piu50EJbEYDAJ3rv+J3BKZGW9oZGBBwmvdULnBHXW+OoBe3FcpXS8tE2xUj3yt6Nlp
+	 dOrxl0zsCAv3d7nlW0WALxBnQkRI2IFKHCENu0qBfY2qr7jh58/+0A8pIFzwVPEJ9K
+	 4Cn5zjkfrIaBsHeSSJCbQrU4V7pMHoljFnWth+tywD2Mu8WT3Kt5L02sUxfRDd8QZ5
+	 IUDteQ2SSE+8QU3UyL3LifR1M4hB6A9SLnWY7jzagH7zi1zvF/EaF/OgGtGwT0/eS6
+	 ty3+J6mYk5qkg==
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH 5/7] remoteproc: sunxi: add allwinner riscv remoteproc
+ driver
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev
+In-Reply-To: <20260922034711.190253-6-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260922034711.190253-6-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Tue, 22 Sep 2026 03:59:22 +0000
+Message-Id: <20260922035923.893451F000FF@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 7 potential issue(=
+s) to consider:
+- [Critical] remoteproc: integer overflow in da_to_va() enables arbitrary k=
+ernel memory read/write
+- [High] remoteproc: redundant memory regions parsing creates conflicting W=
+C and WB aliases
+- [High] remoteproc: panic on deferred rx mailbox probe due to ERR_PTR dere=
+f and uninit work
+- [High] remoteproc: incorrect bounds check intercepts Space 1 memory acces=
+ses
+- [High] remoteproc: bus fault during recovery due to writing registers und=
+er reset
+- [High] remoteproc: UAF in workqueue due to inverted stop and remove teard=
+own order
+- [High] remoteproc: stack use-after-free by passing local variable to mbox=
+_send_message()
+--
+
+commit e3392de86ee7ea419c734b1a14f8a424ed2fb7b6
+Author: Tim Michals <tcmichals@gmail.com>
+Subject: remoteproc: sunxi: add allwinner riscv remoteproc driver
+
+This commit adds a remoteproc driver for the XuanTie E906/E907 RISC-V remote
+processor on Allwinner SoCs. It integrates with the Common Clock Framework
+and Reset Framework, maps internal TCM and dedicated SRAM windows, and conn=
+ects
+with hardware mailboxes for VirtIO RPMsg IPC.
+
+> diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_=
+rproc.c
+> new file mode 100644
+> index 0000000000000..4cbffc7b8277a
+> --- /dev/null
+> +++ b/drivers/remoteproc/sunxi_rproc.c
+[ ... ]
+> +static int sunxi_rproc_start(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +	int ret;
+> +
+> +	dev_info(priv->dev, "Starting %s core at entry 0x%llx\n",
+> +		 priv->cfg ? priv->cfg->name : "remote", (u64)rproc->bootaddr);
+> +
+> +	if (rproc->bootaddr > U32_MAX)
+> +		return -EINVAL;
+> +
+> +	/* XuanTie RISC-V boot sequence */
+> +	if (priv->cfg_va) {
+> +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
+> +		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
+> +	}
+> +
+> +	/* Release core reset to begin execution */
+> +	if (priv->rst_core) {
+> +		ret =3D reset_control_deassert(priv->rst_core);
+> +		if (ret) {
+> +			dev_err(priv->dev, "failed to release core reset: %d\n", ret);
+> +			return ret;
+> +		}
+> +	} else if (priv->rst_cfg) {
+> +		ret =3D reset_control_deassert(priv->rst_cfg);
+
+[Severity: High]
+If we trigger a recovery sequence (which calls stop() and then start() dire=
+ctly
+without calling prepare()), rst_cfg will still be asserted here. Doesn't
+writing to STA_ADD_REG slightly above while the interconnect bus is in reset
+cause a synchronous external abort (bus fault)?
+
+[ ... ]
+> +static int sunxi_rproc_stop(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +
+> +	cancel_work_sync(&priv->vq_work);
+> +
+> +	dev_info(priv->dev, "Halting %s core...\n",
+> +		 priv->cfg ? priv->cfg->name : "remote");
+> +
+> +	if (priv->rst_core)
+> +		reset_control_assert(priv->rst_core);
+
+[Severity: High]
+Does calling cancel_work_sync() before actually halting the core or disabli=
+ng
+the mailbox interrupt leave a window for the work to be rescheduled?
+
+[ ... ]
+> +static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +	int ret;
+> +
+> +	if (!priv->tx_chan)
+> +		return;
+> +
+> +	ret =3D mbox_send_message(priv->tx_chan, (void *)&vqid);
+
+[Severity: High]
+Since priv->cl.tx_block is set to false during probe, mbox_send_message() w=
+ill
+place the pointer in a queue and return immediately if the hardware mailbox=
+ is
+busy. Does passing a pointer to the local stack variable vqid cause a stack
+use-after-free when the mailbox asynchronous ticker later reads this pointer
+after the function has already returned?
+
+[ ... ]
+> +static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t le=
+n, bool *is_iomem)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +
+> +	if (len =3D=3D 0)
+> +		return NULL;
+> +
+> +	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram") */
+> +	if (priv->r_sram_va) {
+> +		/* Host physical address view (e.g., 0x07280000, 0x07200000, 0x0002000=
+0) */
+> +		if (da >=3D priv->r_sram_phys &&
+> +		    (da + len) <=3D (priv->r_sram_phys + priv->r_sram_size)) {
+
+[Severity: Critical]
+The da value is a 64-bit address read directly from the ELF segment header.
+If a maliciously crafted ELF provides a very large da (for example, close to
+U64_MAX), does the addition da + len overflow and wrap around? This would
+bypass the upper limit check and allow arbitrary kernel memory to be mapped
+and overwritten during the firmware loading phase.
+
+> +			if (is_iomem)
+> +				*is_iomem =3D true;
+> +			return priv->r_sram_va + (da - priv->r_sram_phys);
+> +		}
+> +		/* Core DA view: 0x40000000 */
+> +		if (da >=3D 0x40000000 &&
+> +		    (da + len) <=3D (0x40000000 + priv->r_sram_size)) {
+
+[Severity: High]
+The address 0x40000000 is the start address for SRAM Space 1
+(E907_SRAM_SPACE1_DA), whereas Space 0 should map to 0x3ff80000 or 0x3ffc00=
+00.
+Does checking da >=3D 0x40000000 here intercept valid Space 1 accesses and
+incorrectly translate them into Space 0's mapping?
+
+[ ... ]
+> +static int sunxi_rproc_parse_memory_regions(struct rproc *rproc)
+> +{
+[ ... ]
+> +		if (name && (strstr(name, "trace") || of_node_name_eq(rmem_np, "trace"=
+))) {
+> +			priv->trace_phys =3D res.start;
+> +			priv->trace_size =3D resource_size(&res);
+> +			priv->trace_va =3D devm_memremap(dev, res.start, resource_size(&res),
+> +						       MEMREMAP_WB);
+[ ... ]
+> +		} else if (name && (strstr(name, "dram") || strstr(name, "vram"))) {
+> +			priv->dram_phys =3D res.start;
+> +			priv->dram_size =3D resource_size(&res);
+> +			priv->dram_va =3D devm_memremap(dev, res.start, resource_size(&res),
+> +						      MEMREMAP_WB);
+[ ... ]
+> +		}
+> +
+> +		/* Reuse existing SRAM mapping if region overlaps, else ioremap */
+> +		if (priv->r_sram1_va && res.start =3D=3D priv->r_sram1_phys)
+> +			va =3D priv->r_sram1_va;
+> +		else if (priv->r_sram_va && res.start =3D=3D priv->r_sram_phys)
+> +			va =3D priv->r_sram_va;
+> +		else
+> +			va =3D devm_ioremap_wc(dev, res.start, resource_size(&res));
+
+[Severity: High]
+The trace and dram regions were already mapped earlier in
+sunxi_rproc_register_mem(). Does re-mapping them here overwrite those initi=
+al
+pointers and leak the mappings?
+
+Also, there is no return or continue inside the if blocks handling trace and
+dram. This allows execution to fall through to the else branch, mapping the
+exact same physical region a third time using devm_ioremap_wc(). Does having
+simultaneous Write-Back (WB) and Write-Combining (WC) aliases to the same
+physical memory violate ARM64 constraints?
+
+[ ... ]
+> +static int sunxi_rproc_probe(struct platform_device *pdev)
+> +{
+[ ... ]
+> +	if (priv->tx_chan) {
+> +		priv->rx_chan =3D mbox_request_channel_byname(&priv->cl, "rx");
+> +		if (IS_ERR(priv->rx_chan)) {
+> +			if (PTR_ERR(priv->rx_chan) =3D=3D -EPROBE_DEFER) {
+> +				ret =3D -EPROBE_DEFER;
+> +				goto err_mbox_release;
+> +			}
+> +			dev_info(dev, "no rx mailbox channel configured\n");
+> +			priv->rx_chan =3D NULL;
+> +		}
+> +	}
+[ ... ]
+> +err_mbox_release:
+> +	cancel_work_sync(&priv->vq_work);
+> +	if (priv->rx_chan)
+> +		mbox_free_channel(priv->rx_chan);
+
+[Severity: High]
+If we hit the -EPROBE_DEFER path above, the code jumps directly to
+err_mbox_release before INIT_WORK() is called on priv->vq_work. Doesn't cal=
+ling
+cancel_work_sync() on an uninitialized work struct trigger a BUG or warning?
+
+Furthermore, priv->rx_chan holds an ERR_PTR in this failure path. Because it
+is not NULL, the if (priv->rx_chan) check will succeed, and mbox_free_chann=
+el()
+will be called with the ERR_PTR, causing a kernel panic when it dereference=
+s it.
+
+[ ... ]
+> +static void sunxi_rproc_remove(struct platform_device *pdev)
+> +{
+> +	struct rproc *rproc =3D platform_get_drvdata(pdev);
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +
+> +	cancel_work_sync(&priv->vq_work);
+> +	rproc_del(rproc);
+> +
+> +	if (priv->rx_chan)
+> +		mbox_free_channel(priv->rx_chan);
+
+[Severity: High]
+Similar to the logic in stop(), the work synchronization barrier is executed
+before the interrupt sources are stopped. Can a late interrupt re-queue the
+work just before the driver context is freed by devres, leading to a
+use-after-free when the delayed work eventually executes?
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260922034711.1902=
+53-1-tcmichals@gmail.com?part=3D5

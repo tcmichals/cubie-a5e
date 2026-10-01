@@ -1,0 +1,178 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 98DCE5FDA7;
+	Sun, 27 Sep 2026 00:32:17 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790469138; cv=none;
+ b=uGnjQXkX1YSbq7sIjcxlAH/yDSX6/xxtHWTOvJiGmnypMUtRxIfCt6qMuS+YEBDvKdpRb5Drlo5yzLSVPi6+gIhsrgIe5jf6MRKwfyXbyD4PUjS6YXpdgJ6qkWNE88MDkrwiEUskSv6W2dXe0LI1Lmxr46vvc9vCUhUGFZwXGeg=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790469138; c=relaxed/simple;
+	bh=Jxmv543NS8Am2xgs+1ivvnkUlMgIWjcEtimKgs6GYjM=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=ZbtY8glVMbeDPLcDzZbd0+DgCS41IMvTZGFI1TlTjbZSTjoYOKTMi1i68nU3eaw54n3B6pzis7m4rgPlOeoTcn0TfPW8oYVoswmrNfbrcUmSk3SwIXzMl5jCUtNSbqSXOzdBmFIe6OGvjopDcd5++Apt92qym8LfaF3O8iMzaHE=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id F400B1F000FF;
+	Sun, 27 Sep 2026 00:32:16 +0000 (UTC)
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH v2 6/7] remoteproc: sunxi: add KUnit test suite for
+ sunxi remoteproc driver
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, robh@kernel.org, devicetree@vger.kernel.org,
+ conor+dt@kernel.org
+In-Reply-To: <20260927002021.797069-7-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260927002021.797069-1-tcmichals@gmail.com>
+ <20260927002021.797069-7-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Sun, 27 Sep 2026 00:32:16 +0000
+Message-Id: <20260927003216.F400B1F000FF@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 3 potential issue(=
+s) to consider:
+- [Medium] remoteproc: sunxi: KUnit test mock MMIO reads fail on big-endian
+- [Medium] remoteproc: sunxi: false positive KUnit test for kick_msg
+- [Low] remoteproc: sunxi: missing Kconfig dependency for KUnit tests
+--
+
+commit a4fcce16cf194ed8872772bf791e111976827604
+Author: Tim Michals <tcmichals@gmail.com>
+
+remoteproc: sunxi: add KUnit test suite for sunxi remoteproc driver
+   =20
+Add comprehensive in-kernel KUnit unit test suite (34 tests) for the
+Allwinner sunxi remoteproc driver.
+
+> diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+> index d35b033b9106d..c2bddfd955665 100644
+> --- a/drivers/remoteproc/Kconfig
+> +++ b/drivers/remoteproc/Kconfig
+[ ... ]
+> @@ -396,6 +396,16 @@ config SUNXI_REMOTEPROC
+>  	  co-processor on Allwinner A523, A527, and T527 SoCs via the
+>  	  remote processor framework.
+> =20
+> +config SUNXI_REMOTEPROC_KUNIT_TEST
+> +	tristate "KUnit tests for Allwinner sunxi remoteproc" if !KUNIT_ALL_TES=
+TS
+> +	depends on KUNIT
+
+[Severity: Low]
+Will this allow incompatible build configurations?
+
+If the test is built-in (=3Dy) but the driver is built as a module (=3Dm) or
+disabled (=3Dn), the linker will fail with undefined references since vmlin=
+ux
+cannot link against module-only symbols. Should this include a
+depends on SUNXI_REMOTEPROC statement to enforce proper dependencies?
+
+> +	default KUNIT_ALL_TESTS
+> +	help
+> +	  KUnit tests for the Allwinner sunxi_rproc driver, covering
+> +	  da_to_va() address translation logic and boundary conditions
+> +	  across dedicated SRAM spaces, DRAM carveouts, and trace regions.
+> +	  Say Y here to run these tests during boot or via kunit.py.
+> +
+>  endif # REMOTEPROC
+
+> diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/s=
+unxi_rproc_test.c
+> new file mode 100644
+> index 0000000000000..2546f850f30bd
+> --- /dev/null
+> +++ b/drivers/remoteproc/sunxi_rproc_test.c
+[ ... ]
+> +static void test_start_bootaddr_programming(struct kunit *test)
+> +{
+> +	struct test_context *ctx =3D create_test_ctx(test);
+> +	int ret;
+> +
+> +	ctx->priv.cfg_va =3D (void __iomem *)ctx->mock_cfg_regs;
+> +	ctx->rproc.bootaddr =3D 0x40014000;
+> +
+> +	ret =3D sunxi_rproc_start(&ctx->rproc);
+> +	KUNIT_EXPECT_EQ(test, ret, 0);
+> +
+> +	/* Check that bootaddr was written to STA_ADD_REG (offset 0x204) */
+> +	KUNIT_EXPECT_EQ(test, ctx->mock_cfg_regs[E906_STA_ADD_REG / 4], 0x40014=
+000U);
+
+[Severity: Medium]
+Could this direct array read cause spurious test failures on big-endian
+architectures?
+
+The driver code uses writel() for I/O register programming, which mandates a
+little-endian memory layout and performs automatic byte-swapping on
+big-endian CPUs. Directly reading the raw u32 array elements bypasses this.
+On a big-endian architecture, the direct read will interpret the
+little-endian bytes in memory as a big-endian integer, returning a
+byte-swapped value instead of the expected 0x40014000. Should this test use
+readl() to retrieve the value in CPU-endian format?
+
+[ ... ]
+> +static void test_prepare_and_unprepare_remap(struct kunit *test)
+> +{
+> +	struct test_context *ctx =3D create_test_ctx(test);
+> +	int ret;
+[ ... ]
+> +	/* prepare() should set SUNXI_REMAP_SRAMA3_2_BIT (bit 1) */
+> +	ret =3D sunxi_rproc_prepare(&ctx->rproc);
+> +	KUNIT_EXPECT_EQ(test, ret, 0);
+> +	KUNIT_EXPECT_EQ(test, ctx->mock_remap_reg & SUNXI_REMAP_SRAMA3_2_BIT,
+> +			SUNXI_REMAP_SRAMA3_2_BIT);
+
+[Severity: Medium]
+Does this bitwise check need to account for endianness as well?
+
+Because writel() wrote the bit in little-endian order, this native bitwise
+check against mock_remap_reg will also fail on big-endian systems.
+
+[ ... ]
+> +static void test_kick_stores_vqid(struct kunit *test)
+> +{
+> +	struct test_context *ctx =3D create_test_ctx(test);
+> +
+> +	/* Verify kick_msg stores the passed vqid to avoid stack UAF */
+> +	ctx->priv.kick_msg =3D 0xDEADBEEF;
+> +	ctx->priv.tx_chan =3D NULL; /* Avoid mbox_send_message dispatch */
+> +
+> +	sunxi_rproc_kick(&ctx->rproc, 1);
+> +	/* Without tx_chan, returns before writing kick_msg */
+> +	KUNIT_EXPECT_EQ(test, ctx->priv.kick_msg, 0xDEADBEEFU);
+
+[Severity: Medium]
+Is this test validating the intended assignment?
+
+The test intentionally sets ctx->priv.tx_chan to NULL to prevent dispatchin=
+g.
+However, looking at sunxi_rproc_kick(), this triggers an early return guard:
+
+void sunxi_rproc_kick(struct rproc *rproc, int vqid)
+{
+        ...
+        if (!priv->tx_chan)
+                return;
+
+        priv->kick_msg =3D (u32)vqid;
+        ...
+}
+
+Consequently, the assignment to priv->kick_msg never occurs. The test then
+asserts against the unmodified initial 0xDEADBEEFU value, which passes
+spuriously without actually exercising the assignment logic.
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260927002021.7970=
+69-1-tcmichals@gmail.com?part=3D6

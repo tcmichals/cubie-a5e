@@ -1,141 +1,1309 @@
-# Upstream Review Feedback & Mailing List Comments: RFC v1
+# Upstream Review Feedback & Mailing List Archive: RFC v1
 
-- **Submission Date**: 2026-09-22 03:47 UTC
+- **Submission Date**: Mon, 21 Sep 2026 22:47:05 -0500 (2026-09-22 03:47 UTC)
 - **Lore Master Thread**: [https://lore.kernel.org/linux-sunxi/20260922034711.190253-1-tcmichals@gmail.com/](https://lore.kernel.org/linux-sunxi/20260922034711.190253-1-tcmichals@gmail.com/)
-- **Series Subject**: `[PATCH 0/7] remoteproc/mailbox: add Allwinner A523/A527/T527 E907 RISC-V support`
+- **Total Review Emails Received**: 11
+- **Raw Email Archive Directory**: `cubie-a5e/upstream-remoteproc/v1/emails/`
 
-This document preserves the raw comments and reviewer feedback received on the RFC v1 series so you never have to re-scrape the mailing list.
+This document contains the complete, unabridged record of all reviewer feedback, maintainer critiques, and automated bot findings received on the RFC v1 patch series directly from the `lore.kernel.org` mailing list archive.
 
 ---
 
-## 1. Chen-Yu Tsai (`wens@kernel.org`) - Series Architecture & Distribution
+## Table of Contents
+1. [Maintainer Reviews](#maintainer-reviews)
+   - [Chen-Yu Tsai (Series Architecture & Distribution)](#1-chen-yu-tsai-wenskernelorg---series-architecture--distribution)
+   - [Krzysztof Kozlowski (Patch 1/7 - Mailbox DT Binding)](#2-krzysztof-kozlowski-krzkkernelorg---patch-17-mailbox-dt-binding)
+   - [Krzysztof Kozlowski (Patch 4/7 - RemoteProc DT Binding)](#3-krzysztof-kozlowski-krzkkernelorg---patch-47-remoteproc-dt-binding)
+   - [Rob Herring (Patch 4/7 - DT Binding Check & Build Failure)](#4-rob-herring-robhkernelorg---patch-47-dt-binding-check)
+2. [Sashiko AI Bot Reviews](#sashiko-bot-automated-reviews)
+   - [Patch 1/7: dt-bindings: mailbox](#5-sashiko-bot---patch-17-dt-bindings-mailbox)
+   - [Patch 2/7: mailbox: sun55i driver](#6-sashiko-bot---patch-27-mailbox-driver)
+   - [Patch 3/7: mailbox: sun55i KUnit test](#7-sashiko-bot---patch-37-mailbox-kunit-test)
+   - [Patch 4/7: dt-bindings: remoteproc](#8-sashiko-bot---patch-47-dt-bindings-remoteproc)
+   - [Patch 5/7: remoteproc: sunxi driver](#9-sashiko-bot---patch-57-remoteproc-driver)
+   - [Patch 6/7: remoteproc: sunxi KUnit test](#10-sashiko-bot---patch-67-remoteproc-kunit-test)
+   - [Patch 7/7: arm64: dts: sun55i node enablement](#11-sashiko-bot---patch-77-dts-nodes)
+
+---
+
+## Maintainer Reviews
+
+### 1. Chen-Yu Tsai (`wens@kernel.org`) - Series Architecture & Distribution
 - **Date**: Tue, 22 Sep 2026 14:34:39 +0800
 - **Message-ID**: `<CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com>`
-- **Link**: [https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/](https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/)
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/](https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/16_CAGb2v66_AaPnwErV72eF_KQ2k15spXA2UJcugnOcGcp5PAKVXw_mail.gmail.com.eml`
 
-### Verbatim Feedback:
-> There are many review comments from Sashiko, even a critical one. Please go through them.
+#### Verbatim Maintainer Comment:
+> There are many review comments from Sashiko, even a critical one.
+> Please go through them.
 >
-> Also, please use just one compatible string for the SoC family, unless you have knowledge of some differences. They are the same die and the IP cores should be identical.
+> Also, please use just one compatible string for the SoC family, unless
+> you have knowledge of some differences. They are the same die and the
+> IP cores should be identical.
 >
-> Last, please send the full series to all parties involved. Do not send different patches to different people. Everyone should get the same stuff so we all have the full picture. Unless you split the series in two, one for the mailbox and one for the remoteproc.
+> Last, please send the full series to all parties involved. Do not send
+> different patches to different people. Everyone should get the same
+> stuff so we all have the full picture. Unless you split the series in
+> two, one for the mailbox and one for the remoteproc.
 
-### Resolution for v2:
-- Replaced multiple compatibles (`allwinner,sun55i-a523-rproc`, `a527-rproc`, `t527-rproc`) with a single const string: `allwinner,sun55i-a523-rproc`.
-- Distributed all 7 patches across the full recipient list on v2.
+#### Action Taken for v2:
+1. Replaced multiple compatible strings (`allwinner,sun55i-a523-rproc`, `allwinner,sun55i-a527-rproc`, `allwinner,sun55i-t527-rproc`) with a single SoC family const: `allwinner,sun55i-a523-rproc`.
+2. Fixed recipient lists in `git send-email` so all reviewers receive the complete 7-patch set.
+3. Systematically fixed all Sashiko and maintainer findings.
 
 ---
 
-## 2. Krzysztof Kozlowski (`krzk@kernel.org`) - Patch 1/7 (`dt-bindings: mailbox`)
-- **Date**: Tue, 22 Sep 2026 10:54:12 +0200
+### 2. Krzysztof Kozlowski (`krzk@kernel.org`) - Patch 1/7 (Mailbox DT Binding)
+- **Date**: Tue, 22 Sep 2026 10:54:56 +0200
 - **Message-ID**: `<c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org>`
-- **Link**: [https://lore.kernel.org/linux-sunxi/c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org/](https://lore.kernel.org/linux-sunxi/c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org/)
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org/](https://lore.kernel.org/linux-sunxi/c13dd4d8-0e35-4840-99d4-fb62bac661e9@kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/17_c13dd4d8-0e35-4840-99d4-fb62bac661e9_kernel.org.eml`
 
-### Verbatim Feedback:
-> 1. *Commit message*: "Please drop the autogenerated scripts/get_maintainer.pl CC-entries from commit msg. There is no single need to store automated output of get_maintainers.pl in the git log. It can be easily re-created at any given time, thus its presence in the git history is redundant and obfuscates the log. If you need it for your own patch management purposes, keep it under the --- separator."
->
-> 2. *reg minItems*:
-> ```yaml
->   reg:
->     minItems: 4
-> ```
-> "You can drop minItems."
->
-> 3. *Formatting pipe*:
-> ```yaml
->     description: |
-> ```
-> "Do not need '|' unless you need to preserve formatting."
->
-> 4. *Clocks/Resets description*:
-> ```yaml
->   clocks:
->     maxItems: 1
->     description: bus clock
-> ```
-> "Redundant description, drop." (Same for resets: "Also here").
->
-> 5. *Interrupts*:
-> ```yaml
->   interrupts:
->     minItems: 1
->     maxItems: 4
-> ```
-> "How interrupt could be optional? It either is or is not there."
+#### Verbatim Maintainer Critique:
+```text
+On 22/09/2026 05:47, Tim Michals wrote:
+> Add Device Tree binding schema for the Allwinner 4-port hardware
+> Message Box controller found on sun55i (A523, A527, T527) and
+> sun60i (A733) SoCs.
+
+Thank you for your patch. There is something to discuss/improve.
+
+
+> 
+> The message box connects the ARM Cortex-A55 host cluster to the
+> HiFi4 Audio DSP, Power Management Unit (CPUS), and XuanTie RISC-V
+> co-processor across 12 logical channels with 8-entry hardware FIFOs.
+> 
+> Cc: Jassi Brar <jaswinder.singh@linaro.org>
+> Cc: Samuel Holland <samuel@sholland.org>
+> Cc: Jernej Skrabec <jernej.skrabec@gmail.com>
+> Cc: Rob Herring <robh@kernel.org>
+> Cc: Krzysztof Kozlowski <krzk+dt@kernel.org>
+> Cc: devicetree@vger.kernel.org
+> Cc: linux-arm-kernel@lists.infradead.org
+> Cc: linux-sunxi@lists.linux.dev
+
+Please drop the autogenerated scripts/get_maintainer.pl CC-entries from
+commit msg. There is no single need to store automated output of
+get_maintainers.pl in the git log. It can be easily re-created at any
+given time, thus its presence in the git history is redundant and
+obfuscates the log.
+
+If you need it for your own patch management purposes, keep it under the
+--- separator.
+
+> Signed-off-by: Tim Michals <tcmichals@gmail.com>
+> ---
+>  .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 93 +++++++++++++++++++
+>  1 file changed, 93 insertions(+)
+>  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+> 
+> diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+> new file mode 100644
+> index 000000000000..4b73543c7902
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+> @@ -0,0 +1,93 @@
+> +# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+> +%YAML 1.2
+> +---
+> +$id: http://devicetree.org/schemas/mailbox/allwinner,sun55i-a523-msgbox.yaml#
+> +$schema: http://devicetree.org/meta-schemas/core.yaml#
+> +
+> +title: Allwinner sun55i 4-Port Message Box
+> +
+> +maintainers:
+> +  - Tim Michals <tcmichals@gmail.com>
+> +  - Samuel Holland <samuel@sholland.org>
+> +
+> +description: |
+> +  The hardware message box on sun55i (A523, A527, T527) and sun60i (A733)
+> +  SoCs is a 4-port multi-processor mailbox controller connecting the ARM
+> +  Cortex-A55 host cluster, HiFi4 Audio DSP, Power Management Unit (CPUS),
+> +  and XuanTie RISC-V co-processor.
+> +
+> +  It features independent 256-byte register banks for each processor port,
+> +  12 logical channels on the host (4 per remote processor), and 8-entry
+> +  hardware FIFOs with level interrupts.
+> +
+> +properties:
+> +  compatible:
+> +    enum:
+> +      - allwinner,sun55i-a523-msgbox
+> +      - allwinner,sun55i-t527-msgbox
+> +      - allwinner,sun60i-a733-msgbox
+> +
+> +  reg:
+> +    minItems: 4
+
+You can drop minItems
+
+> +    maxItems: 4
+> +    description: |
+
+Do not need '|' unless you need to preserve formatting.
+
+> +      Register banks for each of the four processor ports. Each port has
+> +      an independent 256-byte register bank.
+> +
+> +  reg-names:
+> +    items:
+> +      - const: arm
+> +      - const: dsp
+> +      - const: cpus
+> +      - const: rv
+> +
+> +  clocks:
+> +    maxItems: 1
+> +    description: bus clock
+
+Redundant description, drop.
+
+> +
+> +  resets:
+> +    maxItems: 1
+> +    description: bus reset
+
+Also here
+
+> +
+> +  interrupts:
+> +    minItems: 1
+> +    maxItems: 4
+
+How interrupt could be optional? It either is or is not there.
+
+> +    description: |
+> +      One interrupt per processor port. The host port interrupt is required;
+> +      remote port interrupts are optional.
+> +
+> +  '#mbox-cells':
+> +    const: 1
+> +    description: "channel number (0-11: 0-3 CPUS, 4-7 DSP, 8-11 RISC-V)"
+> +
+> +required:
+> +  - compatible
+> +  - reg
+> +  - reg-names
+> +  - clocks
+> +  - resets
+> +  - interrupts
+> +  - '#mbox-cells'
+> +
+> +additionalProperties: false
+
+
+
+
+Best regards,
+Krzysztof
+```
+
+#### Action Taken for v2:
+1. Stripped automated `scripts/get_maintainer.pl` CC output from git commit messages.
+2. Dropped redundant `minItems: 4` on `reg`.
+3. Dropped unnecessary formatting `|` pipe on single-line descriptions.
+4. Dropped redundant descriptions (`description: bus clock`, `description: bus reset`).
 
 ---
 
-## 3. Krzysztof Kozlowski (`krzk@kernel.org`) - Patch 4/7 (`dt-bindings: remoteproc`)
+### 3. Krzysztof Kozlowski (`krzk@kernel.org`) - Patch 4/7 (RemoteProc DT Binding)
 - **Date**: Tue, 22 Sep 2026 10:58:03 +0200
 - **Message-ID**: `<14f2baec-41d5-49e1-8b49-04388b64e38a@kernel.org>`
-- **Link**: [https://lore.kernel.org/linux-sunxi/14f2baec-41d5-49e1-8b49-04388b64e38a@kernel.org/](https://lore.kernel.org/linux-sunxi/14f2baec-41d5-49e1-8b49-04388b64e38a@kernel.org/)
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/14f2baec-41d5-49e1-8b49-04388b64e38a@kernel.org/](https://lore.kernel.org/linux-sunxi/14f2baec-41d5-49e1-8b49-04388b64e38a@kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/18_14f2baec-41d5-49e1-8b49-04388b64e38a_kernel.org.eml`
 
-### Verbatim Feedback:
-> 1. *Subject line*: "A nit, subject: drop second/last, redundant 'binding'. The 'dt-bindings' prefix is already stating that these are bindings."
->
-> 2. *Enums in names (reg-names, reset-names, clock-names)*:
-> ```yaml
->   reset-names:
->     minItems: 1
->     maxItems: 4
->     items:
->       enum: [cfg, core, sram, msgbox]
-> ```
-> "Nope, this cannot be flexible. Please open existing code to see how this is done. Same comments everywhere else. I don't get why your previous patch had it correct and here you decided to implement it completely different style which almost does not exist in the kernel."
->
-> 3. *mboxes minItems*:
-> ```yaml
->   mboxes:
->     minItems: 2
-> ```
-> "Drop."
->
-> 4. *firmware-name type*:
-> ```yaml
->   firmware-name:
->     $ref: /schemas/types.yaml#/definitions/string
-> ```
-> "Drop. Instead maxItems. See existing code."
->
-> 5. *memory-region*:
-> ```yaml
->   memory-region:
->     description: Optional phandle list...
-> ```
-> "List the items instead." (Same for memory-region-names: "List the items instead.")
->
-> 6. *status property*:
-> ```yaml
->   status: true
-> ```
-> "Drop."
+#### Verbatim Maintainer Critique:
+```text
+On 22/09/2026 05:47, Tim Michals wrote:
+> Add Device Tree binding schema for the Allwinner XuanTie E906/E907
+> RISC-V remote processor found on A523, A527, and T527 SoCs.
+> 
+
+A nit, subject: drop second/last, redundant "binding". The "dt-bindings"
+prefix is already stating that these are bindings.
+See also:
+https://elixir.bootlin.com/linux/v7.1-rc7/source/Documentation/devicetree/bindings/submitting-patches.rst#L23
+
+...
+
+> +  resets:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description: |
+> +      CCU reset lines. Typical resets are "cfg" (configuration block),
+> +      "core" (CPU core), "sram" (SRAM interconnect), and "msgbox" (mailbox interconnect).
+> +
+> +  reset-names:
+> +    minItems: 1
+> +    maxItems: 4
+> +    items:
+> +      enum: [cfg, core, sram, msgbox]
+
+Nope, this cannot be flexible. Please open existing code to see how this
+is done.
+
+Same comments everywhere else. I don't get why your previous patch had
+it correct and here you decided to implement it completely different
+style which almost does not exist in the kernel.
+
+> +
+> +  mboxes:
+> +    minItems: 2
+
+Drpo
+
+> +    maxItems: 2
+> +    description:
+> +      Exactly two mailbox channels from the Allwinner CPUX_MSGBOX controller —
+> +      one receive channel (RISC-V-to-ARM) and one transmit channel
+> +      (ARM-to-RISC-V) — used for VirtIO RPMsg kick notifications.
+> +
+> +  mbox-names:
+> +    items:
+> +      - const: rx
+> +      - const: tx
+> +
+> +  firmware-name:
+> +    $ref: /schemas/types.yaml#/definitions/string
+
+Drop. Instead maxItems. See existing code.
+
+> +    description:
+> +      Name of the ELF firmware image to load from /lib/firmware/.
+> +      Defaults to "riscv-firmware.elf" if not specified.
+> +
+> +  memory-region:
+> +    description:
+> +      Optional phandle list of reserved memory regions for VirtIO vring
+> +      buffers or DDR carveouts. Region names "vram" and "dram" are
+> +      recognized; "trace" selects the RemoteProc trace buffer carveout.
+
+List the items instead.
+
+> +
+> +  memory-region-names:
+> +    description:
+> +      Names corresponding to the memory-region phandle list entries.
+> +      Recognized values are "vram", "dram", and "trace".
+
+List the items instead.
+
+> +
+> +  interrupts:
+> +    maxItems: 1
+> +    description:
+> +      Optional hardware crash-notification interrupt. When present the
+> +      driver calls rproc_report_crash() on assertion.
+> +
+> +  interrupt-names:
+> +    items:
+> +      - const: crash
+> +
+> +  status: true
+> +
+
+Drop
+
+
+Best regards,
+Krzysztof
+```
+
+#### Action Taken:
+1. Removed trailing redundant 'binding' from patch subject lines.
+2. Converted flexible enums in `reset-names` and `clock-names` into fixed positional `items:`.
+3. Dropped redundant `minItems` on `mboxes`.
+4. Dropped explicit string `$ref` on `firmware-name`, replaced with `maxItems: 1`.
+5. Listed explicit items for `memory-region`.
+6. Dropped `status: true`.
 
 ---
 
-## 4. Rob Herring (`robh@kernel.org`) - Patch 4/7 (`dt-bindings: remoteproc`)
+### 4. Rob Herring (`robh@kernel.org`) - Patch 4/7 (DT Binding Check)
 - **Date**: Tue, 22 Sep 2026 07:46:42 -0500
 - **Message-ID**: `<179008111726.3145450.12515884714286046202.robh@kernel.org>`
-- **Link**: [https://lore.kernel.org/linux-sunxi/179008111726.3145450.12515884714286046202.robh@kernel.org/](https://lore.kernel.org/linux-sunxi/179008111726.3145450.12515884714286046202.robh@kernel.org/)
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/179008111726.3145450.12515884714286046202.robh@kernel.org/](https://lore.kernel.org/linux-sunxi/179008111726.3145450.12515884714286046202.robh@kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/19_179008111726.3145450.12515884714286046202.robh_kernel.org.eml`
 
-### Verbatim Feedback:
-> My bot found errors running 'make dt_binding_check' on your patch:
-> ```text
-> Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:29.32-53 Unexpected 'CLK_BUS_MCU_RISCV_CFG'
-> Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:30.32-45 Unexpected 'CLK_MCU_RISCV'
-> Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:32.32-53 Unexpected 'RST_BUS_MCU_RISCV_CFG'
-> Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:33.32-54 Unexpected 'RST_BUS_MCU_RISCV_CORE'
-> Error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:40.3-41.1 syntax error
-> FATAL ERROR: Unable to parse input tree
-> ```
-> *(Resolution: Header files with macros were not yet upstream in core dt-bindings include; replaced with raw numbers in example DTS)*
+#### Verbatim Maintainer Critique:
+```text
+On Mon, 21 Sep 2026 22:47:08 -0500, Tim Michals wrote:
+> Add Device Tree binding schema for the Allwinner XuanTie E906/E907
+> RISC-V remote processor found on A523, A527, and T527 SoCs.
+> 
+> The remoteproc node manages the co-processor lifecycle (clocks, resets,
+> boot vector) and IPC (hardware mailbox). Memory regions are expressed
+> via reg entries named "cfg", "r_sram", "r_sram1", and "remap".
+> 
+> Cc: Bjorn Andersson <andersson@kernel.org>
+> Cc: Mathieu Poirier <mathieu.poirier@linaro.org>
+> Cc: Jernej Skrabec <jernej.skrabec@gmail.com>
+> Cc: Samuel Holland <samuel@sholland.org>
+> Cc: Rob Herring <robh@kernel.org>
+> Cc: Krzysztof Kozlowski <krzk+dt@kernel.org>
+> Cc: linux-remoteproc@vger.kernel.org
+> Cc: devicetree@vger.kernel.org
+> Cc: linux-arm-kernel@lists.infradead.org
+> Cc: linux-sunxi@lists.linux.dev
+> Signed-off-by: Tim Michals <tcmichals@gmail.com>
+> ---
+>  .../remoteproc/allwinner,sun55i-rproc.yaml    | 152 ++++++++++++++++++
+>  1 file changed, 152 insertions(+)
+>  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+> 
+
+My bot found errors running 'make dt_binding_check' on your patch:
+
+yamllint warnings/errors:
+
+dtschema/dtc warnings/errors:
+Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:29.32-53 Unexpected 'CLK_BUS_MCU_RISCV_CFG'
+Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:30.32-45 Unexpected 'CLK_MCU_RISCV'
+Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:32.32-53 Unexpected 'RST_BUS_MCU_RISCV_CFG'
+Lexical error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:33.32-54 Unexpected 'RST_BUS_MCU_RISCV_CORE'
+Error: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dts:40.3-41.1 syntax error
+FATAL ERROR: Unable to parse input tree
+make[2]: *** [scripts/Makefile.dtbs:140: Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.example.dtb] Error 1
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [/builds/robherring/linux-dt-review/Makefile:1714: dt_binding_check] Error 2
+make: *** [Makefile:248: __sub-make] Error 2
+
+doc reference errors (make refcheckdocs):
+
+See https://patchwork.kernel.org/project/devicetree/patch/20260922034711.190253-5-tcmichals@gmail.com
+
+The base for the series is generally the latest rc1. A different dependency
+should be noted in *this* patch.
+
+If you already ran 'make dt_binding_check' and didn't see the above
+error(s), then make sure 'yamllint' is installed and dt-schema is up to
+date:
+
+pip3 install dtschema --upgrade
+
+Please check and re-submit after running the above command yourself. Note
+that DT_SCHEMA_FILES can be set to your schema file to speed up checking
+your schema. However, it must be unset to test all examples with your schema.
+```
+
+#### Action Taken:
+The DT binding check failed because SoC clock and reset header macros (`CLK_BUS_MCU_RISCV_CFG`, `RST_BUS_MCU_RISCV_CORE`, etc.) were not yet committed into the upstream `include/dt-bindings/` tree. Replaced with raw numeric indices in the example dts block so `make dt_binding_check` passes cleanly.
 
 ---
 
-## 5. Sashiko AI Review Bot (`sashiko-bot`) - Drivers & Tests
-- **Date**: 2026-09-22 03:54 - 04:00 UTC
+## Sashiko Bot Automated Reviews
 
-### Key Automated Findings:
-1. `sunxi_rproc.c`: `INIT_WORK(&priv->vq_work)` placed after `mbox_request_channel_byname()` creates a window where an early interrupt triggers `schedule_work()` on an uninitialized work struct.
-2. `sunxi_rproc.c`: `rproc_del()` called after cancelling workqueue in remove allows in-flight mailbox IRQs to race against rproc deletion.
-3. `sunxi_rproc.c`: Stack-allocated `vqid` pointer passed to async `mbox_send_message()` risks stack escape/use-after-free.
-4. `sun55i-msgbox.c`: Missing bounds clamping on channel routing indices.
+### 5. Sashiko Bot - Patch 1/7: dt-bindings: mailbox
+- **Date**: Tue, 22 Sep 2026 03:54:50 +0000
+- **Message-ID**: `<20260922035450.DAB4E1F00893@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035450.DAB4E1F00893@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035450.DAB4E1F00893@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/11_20260922035450.DAB4E1F00893_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 1 potential issue(s) to consider:
+- [Medium] dt-bindings: mailbox: missing interrupt-names for optional multi-port interrupts
+--
+
+commit 10a4254c3034665a213647db7d6bda7467878d9f
+Author: Tim Michals <tcmichals@gmail.com>
+
+dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+
+Add Device Tree binding schema for the Allwinner 4-port hardware
+Message Box controller found on sun55i (A523, A527, T527) and
+sun60i (A733) SoCs.
+
+> diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+> new file mode 100644
+> index 0000000000000..4b73543c7902f
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+[ ... ]
+> +  interrupts:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description: |
+> +      One interrupt per processor port. The host port interrupt is required;
+> +      remote port interrupts are optional.
+
+[Severity: Medium]
+This block defines a variable-length list of interrupts, but lacks an
+interrupt-names definition or a strict items array constraint.
+
+If a board designer attempts to specify a partial list of interrupts (for
+instance, providing the ARM and RISC-V interrupts, but skipping the DSP),
+is there a way for the hardware configuration to retain the correct index
+context without an interrupt-names list?
+
+Without explicit descriptions or names per index, does this establish a
+permanently ambiguous ABI for boards that do not connect all 4 interrupt
+lines?
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=1
+```
+
+---
+
+### 6. Sashiko Bot - Patch 2/7: mailbox: sun55i driver
+- **Date**: Tue, 22 Sep 2026 04:00:10 +0000
+- **Message-ID**: `<20260922040011.3E96A1F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922040011.3E96A1F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922040011.3E96A1F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/15_20260922040011.3E96A1F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 5 potential issue(s) to consider:
+- [High] mbox: sun55i: leak of shared reset control on remove and probe error paths
+- [High] mbox: sun55i: unhandled interrupt storm due to ignored devm_request_irq failure
+- [High] mbox: sun55i: unclocked MMIO access panic due to early clock disable
+- [High] mbox: sun55i: dropped interrupts due to TOCTOU race in status clearing
+- [Medium] mbox: sun55i: CPU hard lockup via unbounded FIFO read loop in hardirq
+--
+
+commit 87081d025c7634be651f61e5ab219367cae289d0
+Author: Tim Michals <tcmichals@gmail.com>
+
+mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
+
+Add support for the 4-port hardware Message Box present on Allwinner
+A523/A527/T527 (sun55i) and A733 (sun60i) SoCs. This hardware block
+provides 12 hardware FIFO channels connecting the Cortex-A55 host,
+HiFi4 DSP, CPUS, and XuanTie E907 RISC-V coprocessors.
+
+> diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
+> new file mode 100644
+> index 0000000000000..b36f26670a461
+> --- /dev/null
+> +++ b/drivers/mailbox/sun55i-msgbox.c
+
+[ ... ]
+
+> +			chan_idx = local_n * SUN55I_CHANS_PER_PROC + p;
+> +			while (readl(local_base +
+> +				     SUNXI_MSGBOX_MSG_STATUS(local_n, p)) & MSG_NUM_MASK) {
+> +				u32 msg = readl(local_base + SUNXI_MSGBOX_MSG_FIFO(local_n, p));
+> +
+> +				mbox_chan_received_data(&mbox->controller.chans[chan_idx], &msg);
+> +			}
+
+[Severity: Medium]
+Does this unbounded loop adequately protect the host CPU against continuous
+transmissions from a remote coprocessor?
+
+If a remote coprocessor (e.g., DSP or RISC-V) continuously writes messages to
+the FIFO, the loop condition might never evaluate to false, leaving the host
+CPU stuck in a hardirq context. This could lead to RCU stalls or watchdog
+timeouts.
+
+> +
+> +			writel(RD_IRQ_PEND_BIT(p),
+> +			       local_base + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
+
+[Severity: High]
+Does this sequence inadvertently clear the interrupt status for a newly arrived
+message without processing it?
+
+If a new message arrives from the coprocessor immediately after the while loop
+evaluates to false, but before the writel() clears the pending interrupt, the
+newly latched interrupt status could be erroneously cleared. The message would
+remain unread in the FIFO and no interrupt would be generated for it.
+
+> +			ret = IRQ_HANDLED;
+> +		}
+> +	}
+> +
+> +	return ret;
+> +}
+
+[ ... ]
+
+> +static int sun55i_msgbox_startup(struct mbox_chan *chan)
+> +{
+> +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
+> +	int n = chan - mbox->controller.chans;
+> +	int local_n, p, remote_id, remote_n;
+> +	unsigned long flags;
+> +	u32 val;
+> +
+> +	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
+> +
+> +	/* Flush any stale receive data */
+> +	while (readl(mbox->regs[0] + SUNXI_MSGBOX_MSG_STATUS(local_n, p)) & MSG_NUM_MASK)
+> +		readl(mbox->regs[0] + SUNXI_MSGBOX_MSG_FIFO(local_n, p));
+> +
+> +	/* Clear pending status */
+> +	writel(RD_IRQ_PEND_BIT(p),
+> +	       mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
+
+[Severity: High]
+Is there a race condition here similar to the one in the interrupt handler?
+
+If a message arrives after the while loop finishes but before the pending
+status is cleared, the interrupt could be lost.
+
+> +
+> +	/* Enable receive IRQ */
+
+[ ... ]
+
+> +static int sun55i_msgbox_probe(struct platform_device *pdev)
+> +{
+> +	struct device *dev = &pdev->dev;
+> +	struct mbox_chan *chans;
+> +	struct sun55i_msgbox *mbox;
+> +	int i, ret, irq_cnt, local_n;
+
+[ ... ]
+
+> +	mbox->reset = devm_reset_control_get_optional_shared(dev, NULL);
+> +	if (IS_ERR(mbox->reset)) {
+> +		ret = PTR_ERR(mbox->reset);
+> +		goto err_disable_clk;
+> +	}
+> +
+> +	ret = reset_control_deassert(mbox->reset);
+> +	if (ret)
+> +		goto err_disable_clk;
+
+[Severity: High]
+Will this shared reset control be correctly balanced on failure and removal?
+
+The shared reset control is manually deasserted here, incrementing its usage
+count, but it appears there are no corresponding reset_control_assert() calls
+in the err_disable_clk error path or in sun55i_msgbox_remove().
+
+This can prevent the physical hardware reset line from ever being asserted
+again, affecting other devices sharing the reset line.
+
+> +
+> +	/* Disable all read IRQs and clear status */
+
+[ ... ]
+
+> +	for (i = 0; i < irq_cnt; i++) {
+> +		int irq = platform_get_irq(pdev, i);
+> +
+> +		if (irq > 0) {
+> +			ret = devm_request_irq(dev, irq, sun55i_msgbox_irq,
+> +					       IRQF_SHARED, dev_name(dev), mbox);
+> +			if (ret)
+> +				dev_warn(dev, "failed to request irq %d: %d\n", irq, ret);
+
+[Severity: High]
+If devm_request_irq() fails, could this cause an unhandled interrupt storm?
+
+The driver ignores the failure and only prints a warning. Later,
+sun55i_msgbox_startup() unconditionally unmasks the hardware receive interrupt.
+
+If the hardware asserts the IRQ line and there is no registered handler,
+the IRQ core will eventually disable the shared IRQ line permanently,
+breaking all devices sharing it.
+
+> +		}
+> +	}
+> +
+> +	chans = devm_kcalloc(dev, SUN55I_NUM_CHANS, sizeof(*chans), GFP_KERNEL);
+
+[ ... ]
+
+> +	return 0;
+> +
+> +err_disable_clk:
+> +	clk_disable_unprepare(mbox->clk);
+> +	return ret;
+> +}
+
+[Severity: High]
+Does this error path leak the shared reset control?
+
+Since reset_control_deassert() was called earlier, returning here without
+calling reset_control_assert() leaves the usage count unbalanced.
+
+> +
+> +static void sun55i_msgbox_remove(struct platform_device *pdev)
+> +{
+> +	struct sun55i_msgbox *mbox = platform_get_drvdata(pdev);
+> +
+> +	mbox_controller_unregister(&mbox->controller);
+> +	clk_disable_unprepare(mbox->clk);
+> +}
+
+[Severity: High]
+Could this lead to an unclocked MMIO access panic if an interrupt fires during
+module unload?
+
+The shared interrupt is registered using devm_request_irq() in probe, which
+means devres will unregister it after this remove function returns.
+
+Because the hardware clock is manually disabled here before the IRQ handler
+is unregistered by devres, if another device sharing the IRQ line triggers an
+interrupt in this window, sun55i_msgbox_irq() will execute and try to read
+from unclocked MMIO registers, resulting in a system crash.
+
+Additionally, because devres cleans up resources in reverse order,
+the mbox->controller.chans array will be freed before the IRQ is unregistered,
+leading to a use-after-free if the interrupt fires.
+
+Also, does this function need to call reset_control_assert() to balance the
+deassert call from probe?
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=2
+```
+
+---
+
+### 7. Sashiko Bot - Patch 3/7: mailbox: sun55i KUnit test
+- **Date**: Tue, 22 Sep 2026 03:54:08 +0000
+- **Message-ID**: `<20260922035409.5B7661F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035409.5B7661F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035409.5B7661F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/09_20260922035409.5B7661F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 2 potential issue(s) to consider:
+- [Medium] mailbox: sun55i: KUnit test is tautological and does not test driver code
+- [Medium] mailbox: sun55i: missing functional tests claimed in documentation
+--
+
+commit a9fdd95e30715804dfb79ed10565c095aa6e7ce9
+Author: Tim Michals <tcmichals@gmail.com>
+
+mailbox: sun55i: add KUnit tests for routing and registers
+
+This commit introduces a KUnit test suite for the sun55i-msgbox driver. It
+adds pure-logic tests meant to verify channel routing, register offsets, IRQ
+bit positions, and driver constants without requiring real hardware.
+
+>     Add KUnit test suite for the sun55i-msgbox driver, verifying:
+>       - Channel routing table entries for CPUX (ARM), CPUS, DSP, and RV
+>       - Local and remote port register offset macros
+>       - Direction flags (rx/tx) and FIFO configurations
+>       - Read IRQ enable/pending bit positions per channel
+>       - Driver constants (NUM_CHANS, FIFO_MAX, MSG_NUM_MASK)
+
+[ ... ]
+
+> diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
+> new file mode 100644
+> index 0000000000000..984870b49db16
+> --- /dev/null
+> +++ b/drivers/mailbox/sun55i_msgbox_test.c
+> @@ -0,0 +1,296 @@
+> +// SPDX-License-Identifier: GPL-2.0
+> +/*
+> + * KUnit tests for Allwinner sun55i 4-port Message Box driver (sun55i-msgbox.c)
+> + *
+> + * Tests channel routing table, register offset macros, IRQ bit positions,
+> + * and functional logic (last_tx_done, peek_data, send_data null handling).
+> + * Pure-logic tests that run without real hardware.
+> + *
+> + * Copyright (C) 2026 Tim Michals <tcmichals@gmail.com>
+> + */
+
+[Severity: Medium]
+Are the functional tests missing from this patch? The commit message claims
+to test direction flags (rx/tx) and FIFO configurations, and this file header
+claims to test functional logic like last_tx_done, peek_data, and send_data
+null handling.
+
+[ ... ]
+
+> +/*
+> + * Mirror of constants and macros from sun55i-msgbox.c.
+> + * Must be kept in sync with the driver. Divergence is a bug.
+> + */
+> +#define SUN55I_MAX_PROCESSORS		4
+> +#define SUN55I_CHANS_PER_PROC		4
+> +#define SUN55I_NUM_CHANS		((SUN55I_MAX_PROCESSORS - 1) * SUN55I_CHANS_PER_PROC)
+> +#define SUN55I_FIFO_MAX			8
+> +
+> +#define SUNXI_MSGBOX_OFFSET(n)			(0x100 * (n))
+> +#define SUNXI_MSGBOX_READ_IRQ_ENABLE(n)		(0x020 + SUNXI_MSGBOX_OFFSET(n))
+
+[Severity: Medium]
+Does this test setup actually verify the driver code? By manually duplicating
+the driver's macros and constants instead of including the driver code
+or headers, the tests appear to be tautological.
+
+If a regression is introduced in the actual driver logic in sun55i-msgbox.c,
+these local duplicate macros will remain unchanged and the test suite will
+continue to silently pass.
+
+Could the test include the actual driver source and test its definitions
+directly, rather than asserting against copies of the macros?
+
+[ ... ]
+
+> +/* Mirror of sun55i_chan_to_route() from sun55i-msgbox.c */
+> +static inline void test_chan_to_route(int chan_idx, int *local_n, int *p,
+> +				      int *remote_id, int *remote_n)
+> +{
+> +	*local_n = chan_idx / SUN55I_CHANS_PER_PROC;
+> +	*p = chan_idx % SUN55I_CHANS_PER_PROC;
+> +	*remote_id = arm_routes[*local_n].remote_id;
+> +	*remote_n = arm_routes[*local_n].remote_n;
+> +}
+
+[Severity: Medium]
+Similar to the regression above, is this function testing the actual routing
+logic? This creates a duplicate of the driver's routing function. Testing
+this function only verifies the duplicate implementation, leaving the real
+sun55i_chan_to_route() untested.
+
+[ ... ]
+
+> +static void test_msg_fifo_offsets_all_channels(struct kunit *test)
+> +{
+> +	int n, p;
+> +
+> +	for (n = 0; n < 3; n++) {
+> +		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {
+> +			u32 expected = 0x070 + 0x100 * n + 0x4 * p;
+> +			u32 actual = SUNXI_MSGBOX_MSG_FIFO(n, p);
+> +
+> +			KUNIT_EXPECT_EQ_MSG(test, actual, expected,
+> +					    "MSG_FIFO(%d,%d): expected 0x%03x got 0x%03x",
+> +					    n, p, expected, actual);
+> +		}
+> +	}
+> +}
+
+[Severity: Medium]
+Because SUNXI_MSGBOX_MSG_FIFO is defined locally in this file, does this loop
+only evaluate the local duplicate macro against its own mathematical expansion?
+
+[ ... ]
+
+> +static struct kunit_case sun55i_msgbox_register_cases[] = {
+> +	KUNIT_CASE(test_msgbox_offset_values),
+> +	KUNIT_CASE(test_read_irq_enable_offsets),
+> +	KUNIT_CASE(test_read_irq_status_offsets),
+> +	KUNIT_CASE(test_msg_fifo_offsets_all_channels),
+> +	KUNIT_CASE(test_msg_status_offsets_all_channels),
+> +	KUNIT_CASE(test_fifo_status_offsets_all_channels),
+> +	KUNIT_CASE(test_rd_irq_en_bit_positions),
+> +	KUNIT_CASE(test_rd_irq_pend_bit_positions),
+> +	KUNIT_CASE(test_num_chans_constant),
+> +	KUNIT_CASE(test_msg_num_mask),
+> +	{}
+> +};
+
+[Severity: Medium]
+Looking at the registered test cases, the claimed tests for direction flags
+and functional logic mentioned in the commit message and file header are not
+present. Could the commit message and documentation be updated to match the
+code, or were these tests accidentally omitted?
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=3
+```
+
+---
+
+### 8. Sashiko Bot - Patch 4/7: dt-bindings: remoteproc
+- **Date**: Tue, 22 Sep 2026 03:56:47 +0000
+- **Message-ID**: `<20260922035647.7B7F41F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035647.7B7F41F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035647.7B7F41F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/12_20260922035647.7B7F41F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 5 potential issue(s) to consider:
+- [Low] dt-bindings: missing closing brace in device tree example
+- [Low] dt-bindings: missing schema constraints for memory-region-names
+- [Low] dt-bindings: missing schema enforcement for required r_sram regions
+- [Low] dt-bindings: unnecessary status property redeclaration
+- [Low] dt-bindings: unused arm-gic.h include in example
+--
+
+commit 1c1864dc9cdb1b1b685e0f8e7074d843ba81bbee
+Author: Tim Michals <tcmichals@gmail.com>
+
+dt-bindings: remoteproc: add allwinner sun55i rproc binding
+    
+Add Device Tree binding schema for the Allwinner XuanTie E906/E907
+RISC-V remote processor found on A523, A527, and T527 SoCs.
+
+> diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+> new file mode 100644
+> index 0000000000000..5d8b929f60b67
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+> @@ -0,0 +1,152 @@
+
+[ ... ]
+
+> +  reg:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description: |
+> +      Memory-mapped register regions. The following named regions are
+> +      supported (all optional except at least one of r_sram or r_sram1):
+> +        "cfg"    - RISC-V core control and boot-vector registers (0x07130000)
+> +        "r_sram" - Dedicated MCU SRAM Space 0 (0x07280000 / 0x07200000; 256-512 KB)
+> +        "r_sram1"- Switchable MCU SRAM Space 1 / SRAMA3_2 (0x072c0000 / 0x07280000; 256-512 KB)
+> +        "remap"  - Hardware Remap Control Register (offset 0x364)
+> +
+> +  reg-names:
+> +    minItems: 1
+> +    maxItems: 4
+> +    items:
+> +      enum: [cfg, r_sram, r_sram1, remap]
+
+[Severity: Low]
+The description mentions a hardware requirement that at least one of "r_sram"
+or "r_sram1" must be present. Should this constraint be enforced in the schema
+(for example, using an anyOf block with contains on reg-names) so that a
+device tree omitting both won't silently pass validation?
+
+[ ... ]
+
+> +  memory-region-names:
+> +    description:
+> +      Names corresponding to the memory-region phandle list entries.
+> +      Recognized values are "vram", "dram", and "trace".
+
+[Severity: Low]
+Does this property need JSON schema constraints to enforce the allowed string
+values? Without items and enum definitions, the schema allows any string
+value or arbitrary array lengths to pass validation silently.
+
+[ ... ]
+
+> +  interrupt-names:
+> +    items:
+> +      - const: crash
+> +
+> +  status: true
+
+[Severity: Low]
+Is this redeclaration of the status property needed? Core device tree schemas
+already declare the status property globally, so redeclaring it here without
+strict constraints seems unnecessary.
+
+[ ... ]
+
+> +examples:
+> +  - |
+> +    #include <dt-bindings/clock/sun55i-a523-ccu.h>
+> +    #include <dt-bindings/reset/sun55i-a523-ccu.h>
+> +    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+[Severity: Low]
+Is this include needed? There are no interrupts defined in the example node,
+so the macros from arm-gic.h appear to be unused dead code.
+
+> +
+> +    remoteproc@7130000 {
+> +        compatible = "allwinner,sun55i-a523-rproc";
+> +        reg = <0x07130000 0x1000>,
+> +              <0x07280000 0x40000>,
+> +              <0x072c0000 0x40000>,
+> +              <0x07010364 0x4>;
+> +        reg-names = "cfg", "r_sram", "r_sram1", "remap";
+> +        clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
+> +                 <&mcu_ccu CLK_MCU_RISCV>;
+> +        clock-names = "bus", "core";
+> +        resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
+> +                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
+> +        reset-names = "cfg", "core";
+> +        mboxes = <&msgbox 0>, <&msgbox 1>;
+> +        mbox-names = "rx", "tx";
+> +        firmware-name = "testBasic.elf";
+
+[Severity: Low]
+Is there a missing closing brace and semicolon at the end of this example
+node? Without it, dtc may report a syntax error when the dt_binding_check
+build target compiles the example.
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=4
+```
+
+---
+
+### 9. Sashiko Bot - Patch 5/7: remoteproc: sunxi driver
+- **Date**: Tue, 22 Sep 2026 03:59:22 +0000
+- **Message-ID**: `<20260922035923.893451F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035923.893451F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035923.893451F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/13_20260922035923.893451F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 7 potential issue(s) to consider:
+- [Critical] remoteproc: integer overflow in da_to_va() enables arbitrary kernel memory read/write
+- [High] remoteproc: redundant memory regions parsing creates conflicting WC and WB aliases
+- [High] remoteproc: panic on deferred rx mailbox probe due to ERR_PTR deref and uninit work
+- [High] remoteproc: incorrect bounds check intercepts Space 1 memory accesses
+- [High] remoteproc: bus fault during recovery due to writing registers under reset
+- [High] remoteproc: UAF in workqueue due to inverted stop and remove teardown order
+- [High] remoteproc: stack use-after-free by passing local variable to mbox_send_message()
+--
+
+commit e3392de86ee7ea419c734b1a14f8a424ed2fb7b6
+Author: Tim Michals <tcmichals@gmail.com>
+Subject: remoteproc: sunxi: add allwinner riscv remoteproc driver
+
+This commit adds a remoteproc driver for the XuanTie E906/E907 RISC-V remote
+processor on Allwinner SoCs. It integrates with the Common Clock Framework
+and Reset Framework, maps internal TCM and dedicated SRAM windows, and connects
+with hardware mailboxes for VirtIO RPMsg IPC.
+
+> diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
+> new file mode 100644
+> index 0000000000000..4cbffc7b8277a
+> --- /dev/null
+> +++ b/drivers/remoteproc/sunxi_rproc.c
+[ ... ]
+> +static int sunxi_rproc_start(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv = rproc->priv;
+> +	int ret;
+> +
+> +	dev_info(priv->dev, "Starting %s core at entry 0x%llx\n",
+> +		 priv->cfg ? priv->cfg->name : "remote", (u64)rproc->bootaddr);
+> +
+> +	if (rproc->bootaddr > U32_MAX)
+> +		return -EINVAL;
+> +
+> +	/* XuanTie RISC-V boot sequence */
+> +	if (priv->cfg_va) {
+> +		writel((u32)rproc->bootaddr, priv->cfg_va + E906_STA_ADD_REG);
+> +		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
+> +	}
+> +
+> +	/* Release core reset to begin execution */
+> +	if (priv->rst_core) {
+> +		ret = reset_control_deassert(priv->rst_core);
+> +		if (ret) {
+> +			dev_err(priv->dev, "failed to release core reset: %d\n", ret);
+> +			return ret;
+> +		}
+> +	} else if (priv->rst_cfg) {
+> +		ret = reset_control_deassert(priv->rst_cfg);
+
+[Severity: High]
+If we trigger a recovery sequence (which calls stop() and then start() directly
+without calling prepare()), rst_cfg will still be asserted here. Doesn't
+writing to STA_ADD_REG slightly above while the interconnect bus is in reset
+cause a synchronous external abort (bus fault)?
+
+[ ... ]
+> +static int sunxi_rproc_stop(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv = rproc->priv;
+> +
+> +	cancel_work_sync(&priv->vq_work);
+> +
+> +	dev_info(priv->dev, "Halting %s core...\n",
+> +		 priv->cfg ? priv->cfg->name : "remote");
+> +
+> +	if (priv->rst_core)
+> +		reset_control_assert(priv->rst_core);
+
+[Severity: High]
+Does calling cancel_work_sync() before actually halting the core or disabling
+the mailbox interrupt leave a window for the work to be rescheduled?
+
+[ ... ]
+> +static void sunxi_rproc_kick(struct rproc *rproc, int vqid)
+> +{
+> +	struct sunxi_rproc *priv = rproc->priv;
+> +	int ret;
+> +
+> +	if (!priv->tx_chan)
+> +		return;
+> +
+> +	ret = mbox_send_message(priv->tx_chan, (void *)&vqid);
+
+[Severity: High]
+Since priv->cl.tx_block is set to false during probe, mbox_send_message() will
+place the pointer in a queue and return immediately if the hardware mailbox is
+busy. Does passing a pointer to the local stack variable vqid cause a stack
+use-after-free when the mailbox asynchronous ticker later reads this pointer
+after the function has already returned?
+
+[ ... ]
+> +static void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
+> +{
+> +	struct sunxi_rproc *priv = rproc->priv;
+> +
+> +	if (len == 0)
+> +		return NULL;
+> +
+> +	/* 1. Dedicated MCU Local SRAM Space 0 (Resource "r_sram" / "sram") */
+> +	if (priv->r_sram_va) {
+> +		/* Host physical address view (e.g., 0x07280000, 0x07200000, 0x00020000) */
+> +		if (da >= priv->r_sram_phys &&
+> +		    (da + len) <= (priv->r_sram_phys + priv->r_sram_size)) {
+
+[Severity: Critical]
+The da value is a 64-bit address read directly from the ELF segment header.
+If a maliciously crafted ELF provides a very large da (for example, close to
+U64_MAX), does the addition da + len overflow and wrap around? This would
+bypass the upper limit check and allow arbitrary kernel memory to be mapped
+and overwritten during the firmware loading phase.
+
+> +			if (is_iomem)
+> +				*is_iomem = true;
+> +			return priv->r_sram_va + (da - priv->r_sram_phys);
+> +		}
+> +		/* Core DA view: 0x40000000 */
+> +		if (da >= 0x40000000 &&
+> +		    (da + len) <= (0x40000000 + priv->r_sram_size)) {
+
+[Severity: High]
+The address 0x40000000 is the start address for SRAM Space 1
+(E907_SRAM_SPACE1_DA), whereas Space 0 should map to 0x3ff80000 or 0x3ffc0000.
+Does checking da >= 0x40000000 here intercept valid Space 1 accesses and
+incorrectly translate them into Space 0's mapping?
+
+[ ... ]
+> +static int sunxi_rproc_parse_memory_regions(struct rproc *rproc)
+> +{
+[ ... ]
+> +		if (name && (strstr(name, "trace") || of_node_name_eq(rmem_np, "trace"))) {
+> +			priv->trace_phys = res.start;
+> +			priv->trace_size = resource_size(&res);
+> +			priv->trace_va = devm_memremap(dev, res.start, resource_size(&res),
+> +						       MEMREMAP_WB);
+[ ... ]
+> +		} else if (name && (strstr(name, "dram") || strstr(name, "vram"))) {
+> +			priv->dram_phys = res.start;
+> +			priv->dram_size = resource_size(&res);
+> +			priv->dram_va = devm_memremap(dev, res.start, resource_size(&res),
+> +						      MEMREMAP_WB);
+[ ... ]
+> +		}
+> +
+> +		/* Reuse existing SRAM mapping if region overlaps, else ioremap */
+> +		if (priv->r_sram1_va && res.start == priv->r_sram1_phys)
+> +			va = priv->r_sram1_va;
+> +		else if (priv->r_sram_va && res.start == priv->r_sram_phys)
+> +			va = priv->r_sram_va;
+> +		else
+> +			va = devm_ioremap_wc(dev, res.start, resource_size(&res));
+
+[Severity: High]
+The trace and dram regions were already mapped earlier in
+sunxi_rproc_register_mem(). Does re-mapping them here overwrite those initial
+pointers and leak the mappings?
+
+Also, there is no return or continue inside the if blocks handling trace and
+dram. This allows execution to fall through to the else branch, mapping the
+exact same physical region a third time using devm_ioremap_wc(). Does having
+simultaneous Write-Back (WB) and Write-Combining (WC) aliases to the same
+physical memory violate ARM64 constraints?
+
+[ ... ]
+> +static int sunxi_rproc_probe(struct platform_device *pdev)
+> +{
+[ ... ]
+> +	if (priv->tx_chan) {
+> +		priv->rx_chan = mbox_request_channel_byname(&priv->cl, "rx");
+> +		if (IS_ERR(priv->rx_chan)) {
+> +			if (PTR_ERR(priv->rx_chan) == -EPROBE_DEFER) {
+> +				ret = -EPROBE_DEFER;
+> +				goto err_mbox_release;
+> +			}
+> +			dev_info(dev, "no rx mailbox channel configured\n");
+> +			priv->rx_chan = NULL;
+> +		}
+> +	}
+[ ... ]
+> +err_mbox_release:
+> +	cancel_work_sync(&priv->vq_work);
+> +	if (priv->rx_chan)
+> +		mbox_free_channel(priv->rx_chan);
+
+[Severity: High]
+If we hit the -EPROBE_DEFER path above, the code jumps directly to
+err_mbox_release before INIT_WORK() is called on priv->vq_work. Doesn't calling
+cancel_work_sync() on an uninitialized work struct trigger a BUG or warning?
+
+Furthermore, priv->rx_chan holds an ERR_PTR in this failure path. Because it
+is not NULL, the if (priv->rx_chan) check will succeed, and mbox_free_channel()
+will be called with the ERR_PTR, causing a kernel panic when it dereferences it.
+
+[ ... ]
+> +static void sunxi_rproc_remove(struct platform_device *pdev)
+> +{
+> +	struct rproc *rproc = platform_get_drvdata(pdev);
+> +	struct sunxi_rproc *priv = rproc->priv;
+> +
+> +	cancel_work_sync(&priv->vq_work);
+> +	rproc_del(rproc);
+> +
+> +	if (priv->rx_chan)
+> +		mbox_free_channel(priv->rx_chan);
+
+[Severity: High]
+Similar to the logic in stop(), the work synchronization barrier is executed
+before the interrupt sources are stopped. Can a late interrupt re-queue the
+work just before the driver context is freed by devres, leading to a
+use-after-free when the delayed work eventually executes?
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=5
+```
+
+---
+
+### 10. Sashiko Bot - Patch 6/7: remoteproc: sunxi KUnit test
+- **Date**: Tue, 22 Sep 2026 03:54:49 +0000
+- **Message-ID**: `<20260922035450.1C8861F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035450.1C8861F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035450.1C8861F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/10_20260922035450.1C8861F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 1 potential issue(s) to consider:
+- [Medium] remoteproc: sunxi: test logic diverges from driver and misses PubSRAM C DA view
+--
+
+commit 2e1cbebc465781878f472c97dd7ec7e6f704ea63
+Author: Tim Michals <tcmichals@gmail.com>
+
+remoteproc: sunxi: add KUnit tests for da_to_va address translation
+
+This commit introduces a KUnit test suite for the sunxi_rproc da_to_va()
+function. It verifies address translation logic across various memory
+window types and boundary conditions.
+
+> diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/sunxi_rproc_test.c
+> new file mode 100644
+> index 0000000000000..ea1a3331bc264
+> --- /dev/null
+> +++ b/drivers/remoteproc/sunxi_rproc_test.c
+
+[ ... ]
+
+> +/*
+> + * Mirror of sunxi_rproc_da_to_va() logic from drivers/remoteproc/sunxi_rproc.c.
+> + * Must be kept in sync with the driver. Divergence is a bug.
+> + */
+> +static void *test_da_to_va(struct test_sunxi_rproc *priv,
+> +			   u64 da, size_t len, bool *is_iomem)
+> +{
+
+[Severity: Medium]
+By duplicating the static driver logic into test_da_to_va() instead of
+testing the actual sunxi_rproc_da_to_va() code, does this circumvent the
+System Under Test and fundamentally defeat the purpose of regression testing?
+
+Any future changes to the actual driver will not be tested by this suite,
+and it relies entirely on manual synchronization.
+
+> +	if (len == 0)
+> +		return NULL;
+> +
+> +	/* 1. Dedicated MCU Local SRAM Space 0 */
+
+[ ... ]
+
+> +		/* High SRAM Space 0 fallback views */
+> +		if (da >= 0x3ff80000 && (da + len) <= (0x3ff80000 + priv->r_sram_size)) {
+> +			if (is_iomem)
+> +				*is_iomem = true;
+> +			return priv->r_sram_va + (da - 0x3ff80000);
+> +		}
+> +		if (da >= 0x3ffc0000 && (da + len) <= (0x3ffc0000 + priv->r_sram_size)) {
+> +			if (is_iomem)
+> +				*is_iomem = true;
+> +			return priv->r_sram_va + (da - 0x3ffc0000);
+> +		}
+> +	}
+> +
+> +	/* 2. Switchable MCU Local SRAM Space 1 */
+
+[Severity: Medium]
+Does this duplicated logic introduce a silent coverage gap by completely
+omitting the PubSRAM C DA view (0x00020000) block that is present in the
+actual driver's translation logic?
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=6
+```
+
+---
+
+### 11. Sashiko Bot - Patch 7/7: arm64: dts: sun55i node enablement
+- **Date**: Tue, 22 Sep 2026 03:59:29 +0000
+- **Message-ID**: `<20260922035930.574341F000FF@smtp.kernel.org>`
+- **Lore Link**: [https://lore.kernel.org/linux-sunxi/20260922035930.574341F000FF@smtp.kernel.org/](https://lore.kernel.org/linux-sunxi/20260922035930.574341F000FF@smtp.kernel.org/)
+- **Raw Email File**: `cubie-a5e/upstream-remoteproc/v1/emails/14_20260922035930.574341F000FF_smtp.kernel.org.eml`
+
+#### Verbatim Review Email:
+```text
+Thank you for your contribution! Sashiko AI review found 2 potential issue(s) to consider:
+- [Low] dts: dt-binding schema violation in remoteproc compatible property
+- [Low] dts: simple-bus node sorting violation for mailbox@3003000
+--
+
+commit 38cf09c8de53fb563929c96a81218691b32c1fef
+Author: Tim Michals <tcmichals@gmail.com>
+
+arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+
+This commit adds the hardware mailbox and XuanTie RISC-V remoteproc nodes for
+Allwinner A523/A527 SoCs. It also connects the remoteproc node to the
+necessary clocks, resets, and mailboxes for lifecycle management and IPC.
+
+> diff --git a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+> index 85ef492ffeae7..7c5c39c568583 100644
+> --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+> +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+> @@ -1144,5 +1144,44 @@ npu: npu@7122000 {
+>  			resets = <&mcu_ccu RST_BUS_MCU_NPU>;
+>  			power-domains = <&ppu PD_NPU>;
+>  		};
+> +
+> +		msgbox: mailbox@3003000 {
+
+[Severity: Low]
+Does this placement violate the device tree simple-bus unit address sorting
+conventions?  Typically, nodes within a simple-bus are sorted sequentially by
+unit address in ascending order.  Placing mailbox@3003000 after npu@7122000
+breaks this ordering.
+
+Should this node be moved earlier in the file to sit between
+dma-controller@3002000 and efuse@3006000 to maintain correct sorting?
+
+> +			compatible = "allwinner,sun55i-a523-msgbox";
+> +			reg = <0x03003000 0x1000>,
+> +			      <0x07094000 0x1000>,
+> +			      <0x07120000 0x1000>,
+> +			      <0x07136000 0x1000>;
+> +			reg-names = "arm", "dsp", "cpus", "rv";
+
+[ ... ]
+
+> +		rproc: remoteproc@7130000 {
+> +			compatible = "allwinner,sun55i-a523-rproc",
+> +				     "allwinner,sun55i-a527-rproc";
+
+[Severity: Low]
+Will this multi-string compatible property pass device tree validation?
+
+The dt-binding for allwinner,sun55i-rproc.yaml defines the compatible
+property strictly as an enum containing allwinner,sun55i-a523-rproc,
+allwinner,sun55i-a527-rproc, and allwinner,sun55i-t527-rproc.
+
+Since the schema uses enum instead of an items list, it requires the value to
+be exactly one of the listed strings.  Could this be changed to specify a
+single compatible string to prevent dtbs_check warnings?
+
+> +			reg = <0x07130000 0x1000>,
+> +			      <0x07280000 0x40000>,
+
+-- 
+Sashiko AI review · https://sashiko.dev/#/patchset/20260922034711.190253-1-tcmichals@gmail.com?part=7
+```
+
+---
+

@@ -1,0 +1,124 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 0C4EF3E315E;
+	Tue, 22 Sep 2026 03:59:30 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790049572; cv=none;
+ b=LUpzMBmLFhysUsJ+EU3jsr2/MBireKvWQqWm75ZWpaIsqkosf93uClyhGOU923rRQs+Co04R/EHOwm6cvmlkDDL/oGQtfQE+NjLBhogjk3ZwJh4G0k5i71g0QUmyobm0clJjTCYObl0NILCZWHnDyFLu2/9wOpy1frniNMWx/ac=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790049572; c=relaxed/simple;
+	bh=rIMhabhsld7aWT/P9bJ+u1zrYltWHl9nqVNnDXIzthY=;
+	h=From:Subject:To:Cc:In-Reply-To:References:Content-Type:Date:
+	 Message-Id;
+ b=LQqhSiwftryu210rHKF6BvYQSZ/eLJGdcE62tWHrq60+Kkp1ICTRxtn+S3/rJy0RwJKLBVFctavV+4HvcNEQCvtNKA1Kmg5S2UPUN4NSpCRBDOwAjqZ/o1JDWnPbGHrWT1rQKwJxdk/dOs6MjG2ig3JM1y9FAPTqMjgM6Mmuxik=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=k4G96OWi; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="k4G96OWi"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 574341F000FF;
+	Tue, 22 Sep 2026 03:59:30 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790049570;
+	bh=B12zAVjOiMw2LNquOPrpi1WpGskE7At8NieYxVeFRFQ=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=k4G96OWiyuvd+rHWRNbXpAaHyS3MuM4ObiZFX9yImElvBORzqVWjCdbcjIP0QF2Sa
+	 LkdX2xrDr3I4wnekamUAKsocSLLB9qzjChXOSZ5iMvfiQPw+ox+TA9td9JQZJ6Fvir
+	 cWfEthPe5TBbX4lHtsI/75k2FXmd3FFz2k998S4EM8Yi/kY64GWJur51CzQj7aFA4a
+	 vBV6NHVR3pi/xcp9gXVBv806IBUWtU3UPq/Ht0+RJ3igdOVFSLPPAXx+/rIdV3ngg0
+	 pHVbdRrHCRWw0tcgVcyNgjVqyiFO/IY0WukL2qrQdV6er+kv+VPtlrd+YVUEWU6H3q
+	 JcHfzVNqaY5UA==
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH 7/7] arm64: dts: allwinner: add a523 msgbox and
+ remoteproc nodes
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, conor+dt@kernel.org,
+ devicetree@vger.kernel.org, robh@kernel.org
+In-Reply-To: <20260922034711.190253-8-tcmichals@gmail.com>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260922034711.190253-8-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Tue, 22 Sep 2026 03:59:29 +0000
+Message-Id: <20260922035930.574341F000FF@smtp.kernel.org>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+
+Thank you for your contribution! Sashiko AI review found 2 potential issue(=
+s) to consider:
+- [Low] dts: dt-binding schema violation in remoteproc compatible property
+- [Low] dts: simple-bus node sorting violation for mailbox@3003000
+--
+
+commit 38cf09c8de53fb563929c96a81218691b32c1fef
+Author: Tim Michals <tcmichals@gmail.com>
+
+arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+
+This commit adds the hardware mailbox and XuanTie RISC-V remoteproc nodes f=
+or
+Allwinner A523/A527 SoCs. It also connects the remoteproc node to the
+necessary clocks, resets, and mailboxes for lifecycle management and IPC.
+
+> diff --git a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi b/arch/arm64/=
+boot/dts/allwinner/sun55i-a523.dtsi
+> index 85ef492ffeae7..7c5c39c568583 100644
+> --- a/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+> +++ b/arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi
+> @@ -1144,5 +1144,44 @@ npu: npu@7122000 {
+>  			resets =3D <&mcu_ccu RST_BUS_MCU_NPU>;
+>  			power-domains =3D <&ppu PD_NPU>;
+>  		};
+> +
+> +		msgbox: mailbox@3003000 {
+
+[Severity: Low]
+Does this placement violate the device tree simple-bus unit address sorting
+conventions?  Typically, nodes within a simple-bus are sorted sequentially =
+by
+unit address in ascending order.  Placing mailbox@3003000 after npu@7122000
+breaks this ordering.
+
+Should this node be moved earlier in the file to sit between
+dma-controller@3002000 and efuse@3006000 to maintain correct sorting?
+
+> +			compatible =3D "allwinner,sun55i-a523-msgbox";
+> +			reg =3D <0x03003000 0x1000>,
+> +			      <0x07094000 0x1000>,
+> +			      <0x07120000 0x1000>,
+> +			      <0x07136000 0x1000>;
+> +			reg-names =3D "arm", "dsp", "cpus", "rv";
+
+[ ... ]
+
+> +		rproc: remoteproc@7130000 {
+> +			compatible =3D "allwinner,sun55i-a523-rproc",
+> +				     "allwinner,sun55i-a527-rproc";
+
+[Severity: Low]
+Will this multi-string compatible property pass device tree validation?
+
+The dt-binding for allwinner,sun55i-rproc.yaml defines the compatible
+property strictly as an enum containing allwinner,sun55i-a523-rproc,
+allwinner,sun55i-a527-rproc, and allwinner,sun55i-t527-rproc.
+
+Since the schema uses enum instead of an items list, it requires the value =
+to
+be exactly one of the listed strings.  Could this be changed to specify a
+single compatible string to prevent dtbs_check warnings?
+
+> +			reg =3D <0x07130000 0x1000>,
+> +			      <0x07280000 0x40000>,
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20260922034711.1902=
+53-1-tcmichals@gmail.com?part=3D7

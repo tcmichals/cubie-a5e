@@ -1,0 +1,221 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8E9ED32B9B5
+	for <linux-sunxi@lists.linux.dev>; Tue, 22 Sep 2026 06:34:56 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790058903; cv=none;
+ b=FX+UuutE+HoW1/2I8ZBiFdI4sqIwNQy3CHVA6v3nzMnvtuCJ6lCsUegZBqRxdldh9+OMHfellN1r9FVl7TrM/sMis0Avx0Rz7C9RHmsscciXJfNJ507dMfDcN7DZG16kyPiKN4OphMARPYZhfvo3u1QF8meOydlOLNqqtcSWPRE=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790058903; c=relaxed/simple;
+	bh=gtIzdKDRrRJHsTR7VVJeCz+WRMfeqWMHi6riR07zm28=;
+	h=MIME-Version:References:In-Reply-To:From:Date:Message-ID:Subject:
+	 To:Cc:Content-Type;
+ b=cK0/zBbkWKEYDhrGXRN6RkMbJB8peAe1GXPi0kMConlT3j0KuTxxG6uaca/LpmKkWciV9t0uNoLC5Mr0ClTzewZjUPFVNqWllbarZ+RTWx4grQW/jUSjDopqtc7zkmydxhxnvTLTqoJnSwD363Tf7KnL5YCMsVtvPQ5FvLbhLZw=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=J8luqjx1; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="J8luqjx1"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 0F1481F00893
+	for <linux-sunxi@lists.linux.dev>; Tue, 22 Sep 2026 06:34:54 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790058894;
+	bh=SkQD57V7JHFau1jup0BLrsztOOqS85TLE+zrMo+mVMw=;
+	h=References:In-Reply-To:Reply-To:From:Date:Subject:To:Cc;
+	b=J8luqjx1maAA/RFdUzkIsV+aAVweDmumzDdQb9JlhC2kWOb6vIuqq5aNJpX7hcbR4
+	 DJWubJ5IJisJUo3NvutO0lzGx0lUMjpZLUQp58VDENcD+sNtxZoxEaWYI2RSiFQXpJ
+	 gr7y/12rsItcE16W+IgVgTbY5UxJOL1s6EEAOAKsxB63KbK6g07nPEKZi5BxjBrtz+
+	 9flhRdviQePTIMvk/WKGWUIMDv0SqwAwaL1NnD7dbbq6ecArSDDIqdF7yrQLQyq3cW
+	 T/vVl39blmETUh44RQ/CRShg2Y1LrHaCgYHtmLe0nMeL6d52tjU2hs3sav2AQTRb7m
+	 XSauLOD4lWQOg==
+Received: by mail-lr2-f16.google.com with SMTP id
+ 38308e7fff4ca-3a2ff176d5bso30334391fa.2
+        for <linux-sunxi@lists.linux.dev>;
+ Mon, 21 Sep 2026 23:34:53 -0700 (PDT)
+X-Gm-Message-State: AFuF++mtijPnqGukecKqQcGvK4Xj0OdnI/Ch0/zOQIpjRRRJUbYh/DTD
+	6mPaYKhVI6/FMIY9ErByL2qDNpN4/Qii67/YC4vseC7PsD2MSEFSX9N6XMxI2mCzhrIbCFuwyGh
+	OsaYa2FdwaYlGnEsb1yR66ZRNODz+clo=
+X-Received: by 2002:a2e:be9a:0:b0:3a5:f044:fcbd with SMTP id
+ 38308e7fff4ca-3a5fc0d325fmr27952131fa.23.1790058892276; Mon, 21 Sep 2026
+ 23:34:52 -0700 (PDT)
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+MIME-Version: 1.0
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+In-Reply-To: <20260922034711.190253-1-tcmichals@gmail.com>
+Reply-To: wens@kernel.org
+From: Chen-Yu Tsai <wens@kernel.org>
+Date: Tue, 22 Sep 2026 14:34:39 +0800
+X-Gmail-Original-Message-ID: 
+ <CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com>
+X-Gm-Features: AcwNN1UIojt2XmXHGQHix01SWO7NXJi2-7p4KR1fGp1WZitbr68Mh7hKMkbttTY
+Message-ID: 
+ <CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com>
+Subject: Re: [PATCH 0/7] remoteproc/mailbox: add Allwinner A523/A527/T527 E907
+ RISC-V support
+To: Tim Michals <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, jernej.skrabec@gmail.com, samuel@sholland.org
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hi,
+
+On Tue, Sep 22, 2026 at 11:47=E2=80=AFAM Tim Michals <tcmichals@gmail.com> =
+wrote:
+>
+> This patch series introduces mainline Linux support for the Alibaba T-Hea=
+d
+> XuanTie E907 (RV32IMAFDC @ 200 MHz) RISC-V auxiliary co-processor and the
+> 4-port hardware Message Box IP integrated into Allwinner A523, A527, and
+> T527 (sun55i) SoCs.
+>
+> The series adds the standalone 4-port hardware Message Box driver with
+> KUnit tests, the XuanTie RemoteProc driver with da_to_va KUnit tests, the
+> associated Devicetree binding schemas, and DTS node enablement.
+>
+> Background & Hardware Architecture
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+> Allwinner sun55i SoCs integrate an octa-core ARM Cortex-A55 cluster
+> alongside an auxiliary XuanTie E907 RISC-V co-processor. The co-processor
+> boots from on-chip dedicated SRAM Space 0 (Host PA 0x07280000 / Core DA
+> 0x3FFC0000, 256 KB), can access secondary switchable SRAM Space 1 (Host
+> PA 0x072C0000 / Core DA 0x40000000, 256 KB), and interacts with external
+> DDR DRAM across the SoC's internal AXI bus.
+>
+> Inter-processor communication (IPC) is coordinated via a 4-port hardware
+> Message Box controller (CPUX_MSGBOX at 0x03003000). The mailbox acts as a
+> star crossbar connecting four processors on the silicon die:
+>   - Port 0: ARM Cortex-A55 host cluster
+>   - Port 1: Cadence Tensilica HiFi4 Audio DSP
+>   - Port 2: Power Management Unit (CPUS)
+>   - Port 3: XuanTie E907 RISC-V co-processor
+>
+> The Cortex-A55 exposes 12 logical channels (4 per remote processor), wher=
+e
+> Channels 8..11 route directly to the XuanTie E907.
+>
+> Hardware Validation & Silicon Evidence
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+> This driver series has been extensively validated on physical silicon usi=
+ng
+> the Radxa Cubie A5E development board (Allwinner A527 / T527) running
+> mainline Linux PREEMPT_RT:
+>
+> 1. In-Kernel KUnit Tests:
+>    - sun55i_msgbox_test: Register mapping, channel routing, and interrupt
+>      mask bit manipulation across all 4 ports.
+>    - sunxi_rproc_test: Comprehensive da_to_va address translation across
+>      SRAM Space 0 (Host PA & Core DA), SRAM Space 1, DDR DRAM carveouts,
+>      and trace memory regions.
+>
+> 2. Target Automated Test Suite:
+>    - testBasic.elf: Core reset de-assertion, SRAM boot, MISA CSR
+>      verification (0x40901125), and heartbeat logging via debugfs trace0.
+>    - testStringBinaryTrace0.elf: Sustained trace0 ring-buffer streaming,
+>      hardware single-precision FPU math (sine wave calculation), and
+>      packed binary telemetry parsing.
+>    - testCrash.elf: Machine-mode exception trap (mtvec) verification,
+>      capturing full register autopsy (mepc, mcause=3D0x2, 31 GPRs) upon
+>      intentional illegal instruction while the host remains stable.
+>    - testPingRpmsg.elf: Full Linux VirtIO RPMsg framework validation
+>      over dynamic DDR CMA buffers. Tested 1,000 round-trip ping-pong
+>      packets with 100% success rate, measuring ~175 us average RTT
+>      latency and 5.37 MB/s bandwidth at 512-byte VirtIO buffer size.
+>
+> PREEMPT_RT Real-Time Compliance
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D
+> When the E907 announces a new RPMsg channel via Name Service announcement=
+,
+> the kernel's rpmsg_char/virtio_rpmsg_bus layers acquire sleeping mutexes
+> (device_register, blocking_notifier_call_chain). Calling these from
+> hard-IRQ context triggers "scheduling while atomic" warnings on PREEMPT_R=
+T
+> kernels. In sunxi_rproc.c, the mailbox callback defers the VirtIO vring
+> interrupt handler via schedule_work(&priv->vq_work), ensuring 100% clean
+> operation on PREEMPT_RT kernels.
+>
+> Design Decisions for Maintainer Review
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+> 1. Standalone drivers/mailbox/sun55i-msgbox.c vs sun6i-msgbox.c:
+>    The existing sun6i-msgbox.c driver is architected around a legacy
+>    2-core point-to-point mailbox with flat global registers. The sun55i
+>    hardware is a 4-processor crossbar where registers are banked per
+>    processor in independent 0x100-byte apertures with hardware routing
+>    tables and 8-entry FIFOs. A clean standalone controller driver
+>    was implemented to avoid extensive conditional branches across every
+>    function.
+>
+> 2. Devicetree YAML Schemas:
+>    Both allwinner,sun55i-a523-msgbox.yaml and allwinner,sun55i-rproc.yaml
+>    have been created and pass dt_binding_check and checkpatch.pl cleanly.
+>
+> Acknowledgements & References
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D
+> Thanks to the Linux-sunxi community and YuzukiHD for SyterKit and
+> FreeRTOS-HIFI4-DSP as independent references to cross-check register
+> offsets, SRAM mappings, and clock/reset sequencing on the T527 and A733.
+>
+>
+> Tim Michals (7):
+>   dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+>   mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
+>   mailbox: sun55i: add KUnit tests for routing and registers
+>   dt-bindings: remoteproc: add allwinner sun55i rproc binding
+>   remoteproc: sunxi: add allwinner riscv remoteproc driver
+>   remoteproc: sunxi: add KUnit tests for da_to_va address translation
+>   arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+
+There are many review comments from Sashiko, even a critical one.
+Please go through them.
+
+Also, please use just one compatible string for the SoC family, unless
+you have knowledge of some differences. They are the same die and the
+IP cores should be identical.
+
+Last, please send the full series to all parties involved. Do not send
+different patches to different people. Everyone should get the same
+stuff so we all have the full picture. Unless you split the series in
+two, one for the mailbox and one for the remoteproc.
+
+
+Thanks
+ChenYu
+
+
+>  .../mailbox/allwinner,sun55i-a523-msgbox.yaml |  93 ++
+>  .../remoteproc/allwinner,sun55i-rproc.yaml    | 152 +++
+>  .../arm64/boot/dts/allwinner/sun55i-a523.dtsi |  39 +
+>  drivers/mailbox/Kconfig                       |  20 +
+>  drivers/mailbox/Makefile                      |   3 +
+>  drivers/mailbox/sun55i-msgbox.c               | 337 +++++++
+>  drivers/mailbox/sun55i_msgbox_test.c          | 296 ++++++
+>  drivers/remoteproc/Kconfig                    |  19 +
+>  drivers/remoteproc/Makefile                   |   2 +
+>  drivers/remoteproc/sunxi_rproc.c              | 905 ++++++++++++++++++
+>  drivers/remoteproc/sunxi_rproc_test.c         | 442 +++++++++
+>  11 files changed, 2308 insertions(+)
+>  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,s=
+un55i-a523-msgbox.yaml
+>  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinne=
+r,sun55i-rproc.yaml
+>  create mode 100644 drivers/mailbox/sun55i-msgbox.c
+>  create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
+>  create mode 100644 drivers/remoteproc/sunxi_rproc.c
+>  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
+>
+> --
+> 2.53.0
+>

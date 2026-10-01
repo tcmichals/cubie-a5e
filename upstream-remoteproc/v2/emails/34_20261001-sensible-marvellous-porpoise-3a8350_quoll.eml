@@ -1,0 +1,100 @@
+Received: from smtp.kernel.org
+ (aws-us-west-2-korg-mail-alma10-1.taild15c8.ts.net [100.103.45.18])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 6C3DE4825B8;
+	Thu,  1 Oct 2026 06:16:13 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=100.103.45.18
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1790835379; cv=none;
+ b=nEo4uPDbojN+qGRi/jp7oeVqmGy6gvY2qyg7bLy2Y/1MfnTKN5yMlu0bFKjJCa2x3QXfG5tH3AGXs2VOTpwC47ZrtLP76JpadCeCsmFLF37RcMEs/IE5VqQd98JcpV2x4KS10n++y76SLlnrwe4B3JrcgT4iSJbA87B6gHcRLQk=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1790835379; c=relaxed/simple;
+	bh=lweIQOL4n1g4o4yGHWV2xUH4wv0Tqd3X0T/pIj9nuKs=;
+	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To;
+ b=Nxe7oAMT38UuppIl8Rt6ZewMDmcEcijoSCGy/SqPY/aOOEdZECdQmLNrDYkGtH0XpbZVyWULlapOTyBjRXHgaEbhR11Pr41sFXQRBIX479GHptAQC0pLdGRWqp52Vl263cQ8ul7bXXPwHJXjvtT+KO7ARh/gtXwzu5FmuM0wNK4=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b=YthR/Bo+; arc=none smtp.client-ip=100.103.45.18
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org
+ header.b="YthR/Bo+"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 0571B1F0089C;
+	Thu,  1 Oct 2026 06:16:11 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1790835373;
+	bh=Zc3A3cOKU+Yffs5eCndyKf9yY8nYExG370G9paaMrfQ=;
+	h=Date:From:To:Cc:Subject:References:In-Reply-To;
+	b=YthR/Bo+j9kwzCk3ljzbQRm4pdDgJBQrIXInI9Ynqwn6exu2r+KWCd0tb2PkjH0eu
+	 KR7hwVtff9yVAP9tvr9F7AegEtzw+QfIzUgkk+5PI1LOCkfpNy35Zmondav0RlR6XV
+	 yNd3ouFvV6A9KYrgV5SivAAagID1kgXc6cfRtV8hCCemRKZjoOBdyAvRX9boz/QIyj
+	 hloFXvsYmPl29hwYMtkDwJaXRD9aa1pX0uGGXHwRBFJdPPCivmHXHFC/bW/BywTbcR
+	 WIYbEpUCa4IuQy8Er5fYcdMobWW73CzAT812uLoARQ5ruYluuvFtCPrirKNC9flcUR
+	 7escPX77rd+BQ==
+Date: Thu, 1 Oct 2026 08:16:08 +0200
+From: Krzysztof Kozlowski <krzk@kernel.org>
+To: Tim Michals <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, linux-remoteproc@vger.kernel.org,
+	devicetree@vger.kernel.org, linux-arm-kernel@lists.infradead.org,
+	linux-kernel@vger.kernel.org, wens@kernel.org, jernej.skrabec@gmail.com,
+ samuel@sholland.org,
+	andersson@kernel.org, mathieu.poirier@linaro.org, jassisinghbrar@gmail.com,
+	robh@kernel.org, krzk+dt@kernel.org, conor+dt@kernel.org
+Subject: Re: [PATCH v2 1/7] dt-bindings: mailbox: add Allwinner sun55i msgbox
+ schema
+Message-ID: <20261001-sensible-marvellous-porpoise-3a8350@quoll>
+References: <20260922034711.190253-1-tcmichals@gmail.com>
+ <20260927002021.797069-1-tcmichals@gmail.com>
+ <20260927002021.797069-2-tcmichals@gmail.com>
+Precedence: bulk
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Disposition: inline
+In-Reply-To: <20260927002021.797069-2-tcmichals@gmail.com>
+
+On Sat, Sep 26, 2026 at 07:20:10PM -0500, Tim Michals wrote:
+> Add Device Tree binding schema for the Allwinner 4-port hardware
+> Message Box controller found on sun55i (A523, A527, T527) and
+> sun60i (A733) SoCs.
+> 
+> The message box connects the ARM Cortex-A55 host cluster to the
+> HiFi4 Audio DSP, Power Management Unit (CPUS), and XuanTie RISC-V
+> co-processor across 12 logical channels with 8-entry hardware FIFOs.
+> 
+> Signed-off-by: Tim Michals <tcmichals@gmail.com>
+> ---
+>  .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 102 ++++++++++++++++++
+>  1 file changed, 102 insertions(+)
+>  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+>
+
+Do not attach (thread) your patchsets to some other threads (unrelated
+or older versions). This buries them deep in the mailbox and might
+interfere with applying entire sets. See also:
+https://elixir.bootlin.com/linux/v6.16-rc2/source/Documentation/process/submitting-patches.rst#L830
+
+...
+
+> +  interrupts:
+> +    minItems: 1
+> +    maxItems: 4
+> +    description:
+> +      One interrupt per processor port in port order (arm, dsp, cpus, rv).
+> +      The ARM host port interrupt is required; remote port interrupts are
+> +      optional. Use interrupt-names to identify which ports are present when
+> +      providing a partial list.
+
+No, this has to be constrained/specific. See writing bindings and any
+existing examples. Also, just list the interrupts with minItems, instead
+of free form text.
+
+
+Best regards,
+Krzysztof
+
