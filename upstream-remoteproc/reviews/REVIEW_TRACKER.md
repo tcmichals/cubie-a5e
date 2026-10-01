@@ -1,6 +1,6 @@
 # Upstream Review & Feedback Tracker (v2 -> v3)
 
-- **Last Updated**: `2026-09-27 01:21:49 UTC`
+- **Last Updated**: `2026-10-01 13:24:00 UTC`
 - **Lore Mailing List Thread**: [https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/)
 - **Sashiko AI Review Dashboard**: [https://sashiko.dev/#/patchset/20260927002021.797069-1-tcmichals@gmail.com](https://sashiko.dev/#/patchset/20260927002021.797069-1-tcmichals@gmail.com)
 
@@ -45,5 +45,8 @@ When new review feedback arrives:
 | **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing SUNXI_REMOTEPROC dependency in Kconfig | **FIXED** |
 | **K2** | `sunxi_rproc_test.c` | **Medium** | KUnit test mock MMIO reads fail on Big-Endian | **FIXED** |
 | **K3** | `sunxi_rproc_test.c` | **Medium** | False positive KUnit test for obsolete kick_msg field | **FIXED** |
+| **D1** | `allwinner,sun55i-rproc.yaml` | **High** | `reg-names` uses `enum` instead of fixed positional `const` list | **FIXED** |
+| **D2** | `allwinner,sun55i-a523-msgbox.yaml` | **High** | `interrupts` has unconstrained free-form text & `enum` names | **FIXED** |
+| **D3** | `git send-email` policy | **Medium** | Chaining v3 as in-reply-to v2 violates upstream patch threading policy | **RESOLVED (Standalone Thread)** |
 
 ---
