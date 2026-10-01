@@ -1,12 +1,56 @@
-# Sashiko-Grade Multi-Stage Adversarial Kernel Review Protocols
+# Sashiko Adversarial Linux Kernel Review Protocols & Official Tooling Guide
 
-This directory contains the four specialized review prompts and the adversarial gatekeeper prompt that replicate the Linux Foundation **Sashiko** multi-stage review protocol.
+This document captures the official architecture, upstream repositories, CLI usage, and formal review protocols of the Linux Foundation **Sashiko** code review system.
 
-## Protocol Execution Flow
+---
+
+## 1. Upstream Project References
+
+* **Official GitHub Repository**: [`https://github.com/sashiko-dev/sashiko`](https://github.com/sashiko-dev/sashiko)
+* **Web Review Dashboard**: [`https://sashiko.dev`](https://sashiko.dev)
+* **Linux Foundation Mailing List**: `sashiko@lists.linux.dev` (automated reviews posted from `sashiko-bot@kernel.org` / `sashiko-reviews@lists.linux.dev`)
+* **Lead Architect**: Roman Gushchin (Linux kernel engineer at Google)
+* **NVIDIA Local CLI Companion**: [`https://github.com/NVIDIA/boro`](https://github.com/NVIDIA/boro) (interactive local patch mending tool)
+
+---
+
+## 2. Running Official Sashiko Locally
+
+Sashiko provides a standalone Rust CLI (`sashiko review`) that runs its multi-stage LLM review pipeline directly over your local git worktree before you submit patches:
+
+### Installation
+```bash
+# Requires Rust 1.90+ (curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh)
+cargo install sashiko
+```
+
+### Configuration
+```bash
+sashiko init
+# Supports Gemini (default), Claude, Vertex AI, AWS Bedrock, OpenAI
+export LLM_API_KEY="your-gemini-or-claude-api-key"
+```
+
+### Execution on Local Commits
+```bash
+cd /path/to/linux-cubie
+
+# Review the 7 commits of the RemoteProc & Mailbox series:
+sashiko review HEAD~7..HEAD
+
+# Review working tree uncommitted changes:
+sashiko review
+```
+
+---
+
+## 3. Official Review Stages Architecture
+
+Sashiko executes a declarative multi-stage workflow defined in `src/workflows/linux_patch_review.rs`:
 
 ```text
                ┌────────────────────────────────────────────────────────┐
-               │                Input Patch / Git Commit                │
+               │           Input Patch Series / Git Commit Range        │
                └───────────────────────────┬────────────────────────────┘
                                            │
          ┌───────────────────┬─────────────┴───────┬───────────────────┐
@@ -30,66 +74,64 @@ This directory contains the four specialized review prompts and the adversarial 
 
 ---
 
-### Stage 1: Hardirq & SMP Concurrency Auditor (`stage1_concurrency.md`)
-**Role:** Adversarial Linux SMP & Interrupt Concurrency Specialist.
-**Strict Focus:**
-1. Assume SMP multi-core environment where CPU 0 and CPU 1 execute ISRs simultaneously.
-2. Trace every shared structure variable (`flags`, `count`, `head`, `tail`, `enabled`).
-3. Verify every MMIO read-modify-write cycle is enclosed in `spin_lock_irqsave(&lock, flags)` or atomic operations.
-4. Flag any TOCTOU (Time-of-Check to Time-of-Use) window where status is read outside a lock, cleared, or looped without lock protection.
-5. Check for hardirq execution bounds (no unbounded while loops that can lock a CPU core).
+## 4. Specialized Review Invariants & Prompt Sources
+
+The official prompt templates live in `sashiko-dev/sashiko` under `third_party/prompts/kernel/subsystem/`. Key subsystem invariants to verify before every submission:
+
+### Stage 1: Hardirq & SMP Concurrency Auditor (`subsystem/locking.md`)
+* **Source**: `third_party/prompts/kernel/subsystem/locking.md`
+* **Invariants**:
+  1. Multi-Core SMP concurrency: Assume CPU 0 and CPU 1 execute the same or related ISR simultaneously.
+  2. MMIO read-modify-write cycles must be enclosed in `spin_lock_irqsave(&lock, flags)` or atomic operations.
+  3. No TOCTOU (Time-of-Check to Time-of-Use) windows where register status is checked outside the lock and then cleared/read inside the lock.
+  4. Execution boundedness: No unbounded while loops in hardirq context without loop iteration limits.
+
+### Stage 2: Resource Lifecycle & Teardown Symmetry (`subsystem/workqueue.md`, `cleanup.md`)
+* **Source**: `third_party/prompts/kernel/subsystem/workqueue.md` and `cleanup.md`
+* **Invariants**:
+  1. Probe error reverse unwind: Every allocated resource must have a corresponding free/disable call in reverse order on error.
+  2. Clocks must remain enabled during MMIO shutdown/clear register writes.
+  3. Strict LIFO Teardown:
+     `free_irq()` $\rightarrow$ `mbox_free_channel()` $\rightarrow$ `cancel_work_sync()` $\rightarrow$ `rproc_del()`.
+     * Calling `rproc_del()` before `mbox_free_channel()` is a fatal virtqueue Use-After-Free.
+     * Calling `cancel_work_sync()` before freeing mailbox channels allows a late IRQ to re-queue work after cancel returns.
+  4. Guard every `mbox_free_channel()` call against `!IS_ERR_OR_NULL()`.
+
+### Stage 3: Subsystem Framework Contracts (`dt-bindings.md`, Framework Pacing)
+* **Source**: `third_party/prompts/kernel/subsystem/dt-bindings.md`
+* **Invariants**:
+  1. **Mailbox Pacing**: `last_tx_done(chan)` returns `true` ONLY when the previously transmitted message is completely consumed by the remote peer (`count == 0`), NOT when FIFO merely has space (`count < MAX`).
+  2. **Device Tree Binding Schemas**:
+     * NEVER use `enum` in `reg-names`, `clock-names`, or `reset-names`. Hardware registers have fixed addresses; always use positional `items:` lists with `- const:`.
+     * Never use freeform narrative text in `description:` for interrupts. Use positional `items:` with `minItems: 1`.
+  3. **RemoteProc ATT & Carveout Translation**:
+     * Strict bounds checking on `da + len` to prevent 64-bit integer overflow.
+     * Memory attributes parity: On-chip SRAM (`mem->is_iomem = true`), System DDR carveouts (`mem->is_iomem = false`). Never double-map as device/non-cacheable.
+
+### Stage 4: Hardware Interconnect, MMIO & Endianness (`subsystem/io-accessors.md`)
+* **Source**: `third_party/prompts/kernel/subsystem/io-accessors.md`
+* **Invariants**:
+  1. **Interconnect Posted Writes**: Register writes to execution boot vectors (`STA_ADD_REG`) or clock gating must be flushed with a dummy `readl()` read-back before deasserting execution resets.
+  2. **Reset Ordering**: Execution resets must never fall back to bus resets. Core execution requires dedicated core reset control.
+  3. **Big-Endian Safe MMIO**:
+     * `writel()` byte-swaps on Big-Endian architectures.
+     * In KUnit test mocks, NEVER inspect registers by direct array indexing (`mock[offset / 4]`). Always read through `readl()`.
+     * Never mix stream accessors (`writesl()`) with register accessors (`writel()`) on the same FIFO.
+
+### Stage 5: Adversarial Gatekeeper & Deduplication
+* Consolidate raw findings across all stages.
+* Eliminate false positives by cross-checking subsystem locking invariants (e.g. `rproc->lock`).
+* Output verified findings classified strictly as `[High]`, `[Medium]`, or `[Low]` with filename, function, exact line number, and remediation diff.
 
 ---
 
-### Stage 2: Resource Lifecycle & Teardown Symmetry (`stage2_lifecycle.md`)
-**Role:** Kernel Resource & Memory Lifetime Specialist.
-**Strict Focus:**
-1. **Probe Error Path Invariants**:
-   - Verify reverse unwind order.
-   - For every allocated resource, confirm corresponding free/disable call on error.
-   - Check if clocks are disabled before MMIO register writes.
-   - Guard every `mbox_free_channel()` call against `IS_ERR_OR_NULL()`.
-2. **Device Remove & Module Unload Invariants**:
-   - Order must strictly follow:
-     `devm_free_irq()` / `disable_irq()` $\rightarrow$ `mbox_free_channel()` $\rightarrow$ `cancel_work_sync()` $\rightarrow$ `rproc_del()`.
-   - Calling `rproc_del()` before `mbox_free_channel()` is a fatal virtqueue Use-After-Free bug.
-   - Calling `cancel_work_sync()` before freeing mailbox channels allows a late IRQ to re-queue work after cancel returns.
+## 5. Local Audit Automation Script
 
----
+The Python script [`cubie-a5e/upstream-remoteproc/scripts/run_adversarial_audit.py`](run_adversarial_audit.py) codifies these 21 invariants and runs them locally without requiring external LLM API calls.
 
-### Stage 3: Subsystem Framework Contracts (`stage3_contracts.md`)
-**Role:** Linux Subsystem Framework Invariant Specialist.
-**Strict Focus:**
-1. **Mailbox Subsystem (`drivers/mailbox/`)**:
-   - `last_tx_done(chan)` semantics: Returns `true` ONLY when the previously transmitted message is completely consumed by the remote peer (`count == 0`), NOT when FIFO has available slots (`count < MAX`).
-   - If controller handles TX polling, the client MUST NOT define `cl.knows_txdone = true` and call `mbox_client_txdone()`.
-   - `send_data()`: Payload pointers must either be copied immediately to MMIO FIFO under lock or safely buffered; stack-local variable pointers must never escape asynchronously.
-2. **RemoteProc Subsystem (`drivers/remoteproc/`)**:
-   - `da_to_va()`: If an address translation entry (ATT) matches, it must never fall through to host physical address ranges.
-   - Check `da + len` 64-bit integer overflow protection on all segments.
-   - DT reserved-memory carveouts: Do not double-map memory with conflicting ARM64 MMU attributes (`MEMREMAP_WB` vs `ioremap_wc`).
-
----
-
-### Stage 4: Hardware Interconnect, MMIO & Endianness (`stage4_hardware.md`)
-**Role:** SoC Silicon Fabric & Hardware Architecture Specialist.
-**Strict Focus:**
-1. **Interconnect Posted Writes**:
-   - Register writes to execution boot vectors (`STA_ADD_REG`) or clock gating must be flushed with a dummy `readl()` read-back before deasserting execution resets.
-2. **Reset Ordering**:
-   - Never fall back to un-gating a bus reset (`rst_cfg`) as an execution reset (`rst_core`). Core execution must strictly require dedicated core reset.
-3. **KUnit Mock Register Endianness**:
-   - Direct array index reads (`regs[i]`) on mock MMIO fixtures after `writel()` will fail on Big-Endian hosts due to byte-swapping. All test assertions must use `readl()`.
-
----
-
-### Stage 5: Adversarial Gatekeeper & Deduplication (`stage5_gatekeeper.md`)
-**Role:** Senior Linux Subsystem Maintainer & Bug Triage Gatekeeper.
-**Strict Focus:**
-1. Consolidate raw findings from Stages 1 through 4.
-2. Interrogate every finding:
-   - Is this an actual bug or a misunderstanding of framework internals?
-   - Can this path be reached in practice?
-   - Is it already protected by an outer subsystem lock (e.g. `rproc->lock`)?
-3. Eliminate false positives.
-4. Output verified findings classified strictly as `[High]`, `[Medium]`, or `[Low]` with filename, function, exact line number, and kernel-standard remediation diff.
+* **Run Command**:
+  ```bash
+  python3 cubie-a5e/upstream-remoteproc/scripts/run_adversarial_audit.py
+  ```
+* **Output Destination**:
+  Results are written automatically to `cubie-a5e/upstream-remoteproc/v3/AUDIT.md`.
