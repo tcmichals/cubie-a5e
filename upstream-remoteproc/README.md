@@ -8,6 +8,8 @@ This workspace consolidates all upstream Linux kernel submissions, Devicetree bi
 
 * 📊 **[Upstream Submission Tracker (SUBMISSION_TRACKER.md)](SUBMISSION_TRACKER.md)**  
   Version status (v1, v2, v3), Lore mailing list thread URLs, and dispatch instructions.
+* 🤖 **[Gemini Pro 2M Context Audit Bundle (GEMINI_PRO_AUDIT_BUNDLE.md)](GEMINI_PRO_AUDIT_BUNDLE.md)**  
+  Self-contained 2M-token audit bundle containing complete driver code, DT bindings, KUnit suites, and adversarial review prompt.
 * 🧠 **[Upstream Lessons Learned & Rules Ledger (UPSTREAM_LESSONS_LEARNED.md)](UPSTREAM_LESSONS_LEARNED.md)**  
   Detailed analysis of reviewer feedback (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson), anti-patterns identified, and the mandatory Linux kernel rules learned.
 * 🛡️ **[v3 Verification & Audit Report (v3/AUDIT.md)](v3/AUDIT.md)**  
@@ -23,6 +25,7 @@ This workspace consolidates all upstream Linux kernel submissions, Devicetree bi
 upstream-remoteproc/
 ├── README.md                   # Workspace overview (this file)
 ├── SUBMISSION_TRACKER.md       # Upstream version dashboard & Lore status
+├── GEMINI_PRO_AUDIT_BUNDLE.md  # 2M-token self-contained code & audit prompt bundle
 ├── UPSTREAM_LESSONS_LEARNED.md # Engineering rules & anti-pattern learning ledger
 ├── scripts/                    # Review fetching and adversarial audit tools
 │   ├── fetch_lore_reviews.py   # Scrapes Lore threads and populates v<N>/emails/

@@ -16,6 +16,8 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
 
 ## 2. Key Documentation & Reference Links
 
+* **[Gemini Pro 2M Context Audit Bundle](GEMINI_PRO_AUDIT_BUNDLE.md)**:  
+  Self-contained 2M-token audit bundle containing complete driver code, DT bindings, KUnit suites, and adversarial review prompt.
 * **[Upstream Lessons Learned & Rules Ledger](UPSTREAM_LESSONS_LEARNED.md)**:  
   Detailed breakdown of why specific patterns were rejected by maintainers (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson) and the exact code patterns required.
 * **[v3 Verification & Audit Results](v3/AUDIT.md)**:  
@@ -33,6 +35,7 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
 upstream-remoteproc/
 ├── README.md                   # Directory landing page & overview
 ├── SUBMISSION_TRACKER.md       # Upstream version dashboard & Lore status (this file)
+├── GEMINI_PRO_AUDIT_BUNDLE.md  # 2M-token self-contained code & audit prompt bundle
 ├── UPSTREAM_LESSONS_LEARNED.md # Engineering rules & anti-pattern learning ledger
 ├── scripts/                    # Review fetching and adversarial audit tools
 │   ├── fetch_lore_reviews.py   # Scrapes Lore threads and populates v<N>/emails/
