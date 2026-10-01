@@ -4,6 +4,9 @@ This document is a permanent engineering ledger of anti-patterns, maintainer fee
 
 Use this guide as an adversarial pre-flight checklist before submitting any future patch series to the Linux kernel mailing lists.
 
+> [!NOTE]
+> For the 5-stage automated audit specification and LLM prompt templates modeling the Linux Foundation review bot, see **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**. The automated static audit runner is located at **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**.
+
 ---
 
 ## 1. Devicetree Schema Bindings (Krzysztof Kozlowski & Rob Herring)
@@ -237,6 +240,19 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
   /* Endian-safe across all CPU architectures */
   KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x40014000U);
   ```
+
+---
+
+## 5. Automated Multi-Stage Adversarial Review Protocols
+
+To prevent regressions against these kernel rules, review checks are codified into formal protocol stages:
+* 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
+  1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
+  2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing, RemoteProc ATT bounds.
+  4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
+  5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
+* 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.
 
 ---
 
