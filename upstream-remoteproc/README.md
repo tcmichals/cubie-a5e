@@ -41,3 +41,42 @@ upstream-remoteproc/
 └── v3/                         # v3 patch series workspace
     └── AUDIT.md                # v3 verification matrix & adversarial audit report (Status: CLEAN)
 ```
+
+---
+
+## Setting Up Sashiko Local Review Tool on Any Machine
+
+Sashiko is the Linux Foundation AI review tool used by `sashiko-bot@kernel.org` on `lore.kernel.org`. You can run it locally to review your commits before submitting patches to the mailing list.
+
+> [!IMPORTANT]
+> **Do NOT use `sudo apt install cargo`**. Ubuntu's packaged Rust (1.75) is too old and fails with `feature edition2024 is required`. Always install modern Rust via `rustup`.
+
+### Step 1: Install Modern Rust via `rustup`
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+```
+
+### Step 2: Install Sashiko CLI
+```bash
+cargo install sashiko
+```
+
+### Step 3: Initialize Configuration & Download Official Prompts
+```bash
+sashiko init
+```
+* This writes `~/.config/sashiko.toml` and installs all official Linux kernel subsystem review prompts to `~/.local/share/sashiko/prompts/.../kernel/`.
+
+### Step 4: Run Review on Local Commits
+```bash
+# Set your LLM API Key (Gemini, Claude, OpenAI, Bedrock, etc.)
+export GEMINI_API_KEY="your-key-here"
+
+# Review the 7 commits of your RemoteProc & Mailbox series:
+cd /path/to/linux-cubie
+sashiko review HEAD~7..HEAD
+
+# Or validate patch extraction without spending API credits:
+sashiko review --no-ai HEAD~7..HEAD
+```
