@@ -807,34 +807,38 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - [x] **Root Cause**: On the Radxa Cubie A7A, the DWC3 controller (`0x06A00000`) is wired solely to the dedicated Sun60i USB 2.0 PHY (`0x06B00000`). The SerDes / Combo PHY lines are routed to PCIe, meaning **no SuperSpeed PIPE3 clock exists**.
     - [x] In `drivers/usb/dwc3/core.c`, `DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK` is only set when `maximum_speed == USB_SPEED_FULL || maximum_speed == USB_SPEED_HIGH`. When set to `"super-speed-plus"`, DWC3 expects an active SuperSpeed clock; `xhci_reset()` hangs for 13.6 seconds waiting for PIPE clock edges before failing with `-110` (`-ETIMEDOUT`).
     - [x] **Resolution**: Reverted `maximum-speed` in `sun60i-a733-cubie-a7a.dts` back to `"high-speed"`. Maintained proven analog tuning parameter `aw,phy_tune_param = <0x143333d4>` on `u2phy`.
+  - [x] **Working Radxa Vendor BSP vs. Mainline Comparative Invariant Audit (Oct 1, 2026)**:
+    - [x] **Analysis of Working Vendor Source (`A7A_kernel/linux-a733`)**:
+      - Vendor PHY Driver: `bsp/drivers/usb/dwc3/phy-sunxi-plat.c`
+      - Vendor Glue Driver: `bsp/drivers/usb/dwc3/dwc3-sunxi-plat.c`
+      - Vendor Board DTS: `docs/extracted_vendor/sun60i-a733-cubie-a7a.dts`
+    - [x] **How the Vendor BSP Handled the "Reset Mess" Without Artificial Bouncing**:
+      1. **VBUS Ownership & Zero Power Bouncing**:
+         - In vendor code, `usb1-vbus` (PM5) was **never attached to the PHY**. It was assigned exclusively to DWC3/xHCI as `drvvbus-supply = <&reg_usb1_vbus>`.
+         - In `dwc3-sunxi-plat.c`, `dwc3_set_vbus()` simply enabled PM5 **once** when entering host mode and left it rock-steady.
+         - In mainline, `vbus-supply` was mistakenly assigned to `u2phy`, and `sun60i_usb2_phy_init()` performed an artificial "Enable -> Disable -> Enable" bounce. Because the FE1.1S hub resets via analog RC on `VBUSM` (pin 17), bouncing the 5V rail right as descriptors are exchanged causes a brownout disconnect.
+      2. **Wi-Fi 6 Downstream Power (Preventing ESD Diode Back-Feeding)**:
+         - In vendor DTS (lines 8896–8920), both `wifi_power_en` (PM0) and `wifi_chip_en` (PM1) are explicitly `regulator-always-on` and `regulator-boot-on`.
+         - In mainline, turning these off caused the unpowered AIC8800 chip to back-feed through its USB D+/D- pins into the FE1.1S downstream port, pulling bus lines to illegal intermediate voltage levels and tripping xHCI babble detection (`COMP_BABBLE_DETECTED` / "EMI?").
+      3. **Untouched `PHY_USB2_ISCR` (Register 0x00)**:
+         - Vendor driver `phy-sunxi-plat.c` (lines 205–213) **does not touch `PHY_USB2_ISCR` in host mode** (`#if IS_ENABLED(CONFIG_USB_DWC3_GADGET)` only).
+         - Mainline `phy-sun60i-usb2.c` forcibly wrote `0x0000b000` (forcing ID and VBUS valid), which conflicts with DWC3 host mode root-hub state detection.
+      4. **Command-Line Buffer Length (`usbcore.old_scheme_first=1`)**:
+         - Mainline Linux 7.1 defaults to the "new scheme" (reading 8 bytes of descriptor, then issuing a USB port reset). Because FE1.1S has no GPIO reset line, this mid-transfer reset crashes the hub's SIE (`error -71`).
+         - U-Boot truncated `bootargs` right before `usbcore.old_scheme_first=1`.
   - [ ] **Target Hardware Verification Protocol & Next Steps (A7A Bench Gate)**:
-    - [ ] **Step 1: Rebuild & Validate Clean xHCI Probe**:
-      - Rebuild kernel: `make -C bld.a7a linux-dirclean; make -C bld.a7a`.
-      - Confirm `xhci-hcd` probe succeeds without -110 timeout, registering Bus 1 and Bus 2.
-    - [ ] **Step 2: Cold Boot Hub Enumeration (Chirp K/J Lock)**:
-      - Boot from full cold power cycle (0V DC) with `aw,phy_tune_param = <0x143333d4>`.
-      - Check whether the FE1.1S hub locks directly onto High-Speed (480 Mbps) without falling back to Full-Speed (12 Mbps).
-    - [ ] **Step 3: Resolve Post-Enumeration Disconnect / Inrush Current Sag**:
-      - If the hub enumerates and detects 4 ports but disconnects 1.4 ms later (`disabled by hub (EMI?), re-enabling...`):
-        - **A. VBUS Inrush Sag**: Check if the simultaneous power-on of all 4 downstream ports (AIC8800 Wi-Fi module + external USB-A + header) causes a transient voltage dip on `VCC5V0_USB20`, dropping `VBUSM` below 2.5V and tripping the FE1.1S internal brown-out reset.
-        - **B. Analog Squelch & Pre-Emphasis Tuning**: Evaluate adjacent tuning words around `0x143333d4` (`0x143333d0`, `0x143333d2`, `0x143333d6`) if receiver squelch sensitivity requires minor adjustment for eye margins.
-        - **C. USB Initialization Scheme**: Test upstream Linux default initialization scheme vs `usbcore.old_scheme_first=0` to ensure proper descriptor fetch without redundant port resets.
-      - [ ] Disconnect Type-C / 12V DC power for 5 seconds to drain board rails.
-      - [ ] Reconnect power and boot into Linux console.
-      - [ ] Inspect kernel boot dmesg for VBUS timing and DWC3 init:
+    - [ ] **Step 1: Check Current State on Hardware**:
+      - Connect board and run:
         ```sh
-        dmesg | grep -E 'dwc3|usb|hub|regulator|phy'
+        dmesg | grep -E 'usb|xhci|hub'
         ```
-      - [ ] Run `lsusb` to confirm the FE1.1S 4-port USB 2.0 hub enumerates cleanly:
-        ```sh
-        lsusb -t
-        # Expected: Bus 01.Port 1: Dev 2, Class=Hub, Driver=hub/4p, 480M (1a40:0101)
-        ```
-      - [ ] Verify **zero** occurrences of `device descriptor read/64, error -71`.
-    - [ ] **Step 3: Warm Reboot Resilience Test**:
-      - [ ] Execute `reboot` command in Linux (tests `VBUSM` reset while `DCDC1` remains 3.3V).
-      - [ ] Once back at console, run `lsusb` and inspect `dmesg`.
-      - [ ] Confirm hub re-enumerates reliably without needing a manual power pull.
+      - Observe whether the link locks at High-Speed (480M) or Full-Speed (12M), and whether error -71 or the 1.4ms disconnect occurs.
+    - [ ] **Step 2: Single-Variable Isolation (Remove Artificial VBUS Bounce)**:
+      - Align `phy-sun60i-usb2.c` with the vendor driver by removing the enable/disable/enable cycle, ensuring VBUS remains stable during enumeration.
+    - [ ] **Step 3: Ensure Wi-Fi Regulators Are Enabled**:
+      - Keep `wifi_power_en` (PM0) and `wifi_chip_en` (PM1) powered to prevent downstream bus contention.
+    - [ ] **Step 4: Verify U-Boot `usbcore.old_scheme_first=1` Delivery**:
+      - Verify `cat /proc/cmdline` contains `usbcore.old_scheme_first=1`.
     - [ ] **Step 4: Top External USB Port (`CON1`) Functional Test**:
       - [ ] Plug USB flash drive or mouse into the top USB-A port (`CON1`).
       - [ ] Verify `dmesg` reports device connection on downstream port 1 at High-Speed (480 Mbps) or Full-Speed (12 Mbps).
