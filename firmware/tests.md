@@ -316,14 +316,14 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
 |   |  - Non-Cacheable DMA Carveout / Reserved Memory Window (1 MB)       |   |
 |   |  - 16x Host->RISC-V Payload Buffers (Up to 4 KB each)               |   |
 |   |  - 16x RISC-V->Host Payload Buffers (Up to 4 KB each)               |   |
-|   |  - PMP / XuanTie Cache attributes configured for zero cache stalls  |   |
+|   |  - Uncached Access / mhcr.DE=0 for coherent zero-copy streaming     |   |
 |   +---------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------+
 ```
 * **Firmware Behavior**:
   - Control block (`DramSpscControlBlock`) mapped in fast on-chip SRAM Space 0 (`0x3FFF2000` Core DA / `0x072B2000` Host Physical).
   - 1 MB payload buffer pool in dedicated DDR DRAM Carveout (`0x48000000` to `0x48100000`, declared in Device Tree as `vdev@48000000`).
-  - Configures RISC-V Physical Memory Protection (PMP) and memory fences (`fence rw, rw`) for DMA-coherent DDR access.
+  - Configures RISC-V PMP access permissions and memory fences (`fence rw, rw`) with D-Cache disabled (`mhcr.DE = 0`) for DMA-coherent DDR access.
 * **Host Benchmark Tool (`ping_dram`)**:
   - Measures throughput (MB/s), latency, and jitter across variable payload sizes (64 B to 4096 B).
 * **Host Execution Commands**:

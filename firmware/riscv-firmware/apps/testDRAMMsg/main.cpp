@@ -7,7 +7,7 @@
  * 1. Control structures (descriptors, head/tail pointers, doorbells) in fast
  *    zero-wait-state On-Chip SRAM A2 (@ 0x00040000).
  * 2. High-capacity payload buffers allocated in DDR DRAM Carveout (@ 0x48100000).
- * 3. PMP / XuanTie Cache Maintenance configuration for un-cached DMA coherence.
+ * 3. PMP access control and uncached DMA coherency via mhcr.DE = 0.
  * 4. Latency and throughput benchmarking compared against pure on-chip SRAM.
  */
 

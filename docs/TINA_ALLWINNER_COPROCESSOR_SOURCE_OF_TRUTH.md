@@ -1064,14 +1064,27 @@ A common misconception is that the E906 (or E907) can configure physical memory 
     * Address matching modes: `OFF`, `TOR`, `NA4`, `NAPOT`.
   * **PMP has zero bits for cacheability or bufferability.** Writing PMP registers cannot mark a DDR or SRAM region as non-cacheable.
 * **T-Head SYSMAP Hardware Attribute Architecture**:
-  * The XuanTie E906 core architecture contains an internal **SYSMAP** (System Memory Map) unit with 8 region descriptors that assigns physical memory attributes (**C** = Cacheable, **B** = Bufferable, **SO** = Strongly Ordered).
-  * In XuanTie cores with an MMU and the `MAEE` (Memory Attribute Enhanced Extension) bit in `mxstatus` enabled, page table entries (PTEs) can configure cache attributes at a 4 KB page granularity.
-  * **On the microcontroller-class E906 in Allwinner A523/T527 silicon (where MMU is disabled / not synthesized)**:
-    * The SYSMAP attributes are **hardwired at ASIC synthesis time**:
-      * Peripheral MMIO space (`0x00000000` - `0x3FFFFFFF` except SRAM) is hard-routed as **Strongly Ordered / Non-cacheable**.
-      * On-chip SRAM (`0x3FFC0000` / `0x40000000`) and external DDR DRAM (`0x40000000`+) are routed as **Normal Cacheable Memory**.
-    * There are **no runtime CSR-programmable PMA registers** on E906 to dynamically carve out non-cached RAM windows inside DDR or SRAM.
-    * When D-Cache is enabled in `mhcr` (`DE = 1`), **all normal RAM accesses pass through the L1 D-Cache**.
+  * The XuanTie E906 core architecture uses an internal **SYSMAP** (System
+    Memory Map) unit to govern Physical Memory Attributes (**C** = Cacheable,
+    **B** = Bufferable, **SO** = Strongly Ordered).
+  * **Hardwired in Silicon at ASIC Synthesis**: On the microcontroller E906
+    integrated into Allwinner T527/A523 silicon, the SYSMAP region descriptors
+    are **completely hardwired into the silicon gates** (there is no runtime
+    MAEE or MMU page table translation; Tina SDK's `mmu.c` literally notes:
+    *"It's a fake mmu, just a e906 perspective translation"*).
+  * **Fixed Hardware Routing**:
+    * Peripheral MMIO space (`0x00000000` - `0x3FFFFFFF` except SRAM) is
+      hardwired as **Strongly Ordered / Non-cacheable**.
+    * Internal on-chip SRAM (`0x3FFC0000` / `0x40000000`) and external DDR DRAM
+      (`0x40000000`+) are hardwired as **Normal Cacheable Memory**.
+  * **The Architectural Consequence**:
+    * There are **no runtime CSR-programmable PMA registers** on E906 to
+      dynamically carve out non-cacheable RAM windows inside DDR or SRAM.
+    * Software CANNOT change a RAM region's cacheability at runtime.
+    * When D-Cache is enabled in `mhcr` (`DE = 1`), **all normal RAM accesses
+      unconditionally pass through the L1 D-Cache**.
+    * When D-Cache is disabled in `mhcr` (`DE = 0`), **all RAM accesses bypass
+      the cache entirely**, hitting the AXI bus directly.
 * **Proof from Allwinner Tina SDK (`rtos-components/thirdparty/openamp/`)**:
   Because memory cannot be marked non-cacheable at runtime, Allwinner’s official OpenAMP and VirtIO drivers **must and do explicitly perform software cache maintenance** using T-Head custom instructions before and after every buffer exchange:
   * Prior to transmitting an RPMsg buffer or descriptor: `hal_dcache_clean((unsigned long)addr, len);`

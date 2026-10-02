@@ -348,68 +348,71 @@ struct DramSpscControlBlock {
 };
 ```
 
-### 4.3 Cache Coherency: The PMP Fallacy, Uncached RemoteProc, and AbstractX
+### 4.3 Cache Coherency: PMP Permissions vs. Hardwired SYSMAP vs. mhcr.DE
 
 When designing shared-memory IPC between Linux and an auxiliary RISC-V core,
-memory coherency is the single biggest engineering pitfall.
+memory coherency is the single biggest engineering pitfall. The XuanTie E906
+implements a specific three-tier memory architecture that governs coherency:
 
-#### 1. The PMP Fallacy (A Common Trap)
-It is tempting to assume that the RISC-V **Physical Memory Protection (PMP)**
-unit behaves like an ARM MPU or MMU, allowing software to mark an address range
-as "non-cacheable" or "strongly-ordered":
+#### 1. Standard RISC-V PMP: Access Control Only
+Standard RISC-V Physical Memory Protection (PMP) strictly manages access control
+and security isolation via Machine-mode CSRs (`pmpcfg0`–`pmpcfg3` and
+`pmpaddr0`–`pmpaddr15`):
+* **Configured Attributes**: Read (R), Write (W), and Execute (X) permissions.
+* **Hardware Limitation**: PMP contains **zero** bits for cacheability or
+  bufferability. It does not know or control whether data passes through the
+  L1 Data Cache or goes straight to the system bus.
 
 ```cpp
-// ⚠️ THE TRAP: PMP CANNOT configure cacheability!
-// Standard RISC-V PMP registers (pmpcfgX) ONLY control R/W/X permissions.
-// On XuanTie E906, DRAM (0x40000000+) is hardwired as cacheable normal memory.
+// ⚠️ PMP configures Read/Write access permissions ONLY:
 hal::Pmp::set_napot_entry(1, DRAM_SPSC_DRAM_ADDR, DRAM_SPSC_DRAM_SIZE,
                           hal::PmpFlags::Read | hal::PmpFlags::Write);
 ```
 
-In standard RISC-V privileged architecture, PMP contains **zero** bits for
-cache attributes. On the XuanTie E906 microcontroller (which lacks an MMU and
-runtime PMA registers), all DRAM access is treated by the interconnect as
-cacheable normal memory whenever the core's Data Cache is enabled.
+#### 2. T-Head SYSMAP: Hardwired Physical Memory Attributes (PMAs)
+Cache properties (Cacheable, Bufferable, Strongly Ordered) are governed by the
+T-Head **SYSMAP** (System Memory Map) unit, NOT by PMP:
+* In application-class XuanTie cores with an MMU and the MAEE (Memory Attribute
+  Enhanced Extension), page table entries can configure cache attributes at
+  runtime.
+* **On Microcontroller Cores (No MMU / No MAEE)**: On the XuanTie E906 core in
+  Allwinner T527/A523 silicon, MAEE is omitted. Consequently, the 8 SYSMAP
+  region descriptors are **completely hardwired at ASIC synthesis time** and
+  cannot be modified by software at runtime.
+* **Hardware-Enforced Routing**: Peripheral MMIO registers are hardwired as
+  Strongly Ordered (Non-cacheable), while external DDR DRAM and internal SRAM
+  are hardwired as **Normal Cacheable Memory**. Runtime non-cacheable RAM
+  carveouts are physically impossible in silicon.
 
-#### 2. The XuanTie Instruction Trap (`CSR_MXSTATUS`)
-If you enable D-Cache (`mhcr.DE = 1`) and attempt to execute XuanTie custom
-cache maintenance opcodes (`dcache.cpa` or `dcache.iva`) to flush dirty lines
-to DRAM, the CPU immediately throws an **Illegal Instruction trap
-(`mcause = 2`)**!
+#### 3. Core Cache Control: mhcr.DE = 0 vs. mhcr.DE = 1
+Because SYSMAP forces all DDR RAM transactions to be cacheable, L1 Data Cache
+behavior is governed entirely by the Data Cache Enable bit (`DE`) in the
+Machine Hardware Control Register (`mhcr.DE`, CSR `0x7C1` bit 1):
 
-Why? Because on XuanTie cores, vendor extension instructions are disabled at
-reset. As proven in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`),
-they require setting **`CSR_MXSTATUS` (0x7C0) bit 22 (`THEADISAEE = 1`)**
-before any cache management instruction can be executed.
+* **When `mhcr.DE = 0` (Our Reference Testbed `riscv-firmware`)**:
+  The L1 Data Cache is entirely disabled. Every memory operation bypasses cache
+  lines completely, achieving 100% deterministic, uncached coherency with Linux
+  DMA at the cost of peak computational throughput. This is the optimal,
+  foolproof choice for validating Linux RemoteProc bring-up.
 
-#### 3. How `riscv-firmware` Fixes Coherency for RemoteProc Validation
-To make the reference RemoteProc testbed bulletproof, deterministic, and
-upstream-verifiable:
-* **D-Cache is intentionally kept disabled (`mhcr.DE = 0`)** in `startup.S`.
-* Because D-Cache is disabled, all CPU load and store instructions bypass
-  cache lines and go directly to the AXI bus and DDR/SRAM.
-* On the Linux host side, the DDR carveout is declared with `no-map` in the
-  Device Tree (`dma_alloc_coherent`), so ARM64 also accesses it uncached.
-* Standard RISC-V memory fences (`fence rw, rw`) ensure bus transaction
-  ordering.
-* PMP functions (`configure_dram_carveout`, `dcache_clean_range`,
-  `dcache_invalidate_range`) are kept in `pmp.cpp` as no-ops with fences for
-  API compatibility without crashing.
+* **When `mhcr.DE = 1` (The AbstractX Production Flight Stack)**:
+  All RAM reads and writes hit the L1 cache. Software cache maintenance via
+  custom T-Head instructions (`dcache.cpa` to clean, `dcache.iva` to
+  invalidate) is strictly required to synchronize shared memory buffers before
+  and after DMA transfers.
 
-This eliminates all cache maintenance bugs, stale descriptor races, and
-invalidation overhead during Linux RemoteProc bring-up.
+#### 4. The XuanTie Instruction Trap (`CSR_MXSTATUS`)
+If `mhcr.DE = 1` is used, executing vendor cache opcodes (`dcache.cpa` or
+`dcache.iva`) without unlocking the CPU triggers an immediate **Illegal
+Instruction exception (`mcause = 2`)**!
 
-#### 4. The Path to AbstractX: High-Performance Flight Stack
-While disabling D-Cache is the ideal, rock-solid strategy for a Linux
-RemoteProc reference testbed, a hard real-time flight stack running complex
-control loops needs maximum memory bandwidth.
+On XuanTie cores, vendor instructions are disabled at reset. As proven in the
+Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`), software must first set
+**`CSR_MXSTATUS` (0x7C0) bit 22 (`THEADISAEE = 1`)** before executing cache
+management instructions.
 
-In **[Part 4](part4_deep_dive_baremetal_cpp_coroutines.md)**, we introduce
-**AbstractX**, where the full high-performance cache architecture is unlocked:
-* Setting `CSR_MXSTATUS.THEADISAEE = 1` to enable vendor cache instructions.
-* Enabling Instruction and Data Caches (`mhcr.IE = 1`, `mhcr.DE = 1`).
-* Executing fine-grained line-by-line flushes and invalidations for
-  high-throughput streaming.
+In **[Part 4](part4_deep_dive_baremetal_cpp_coroutines.md)**, we walk through
+how **AbstractX** implements this complete high-performance cache pipeline.
 
 ### 4.4 Linux Host Tool
 

@@ -332,14 +332,14 @@ ping_rpmsg -n 1000
 |   |  - Non-Cacheable DMA Carveout / Reserved Memory Window (1 MB)       |   |
 |   |  - 16x Host->RISC-V Payload Buffers (Up to 4 KB each)               |   |
 |   |  - 16x RISC-V->Host Payload Buffers (Up to 4 KB each)               |   |
-|   |  - PMP / Memory Fences configured for zero cache stalls             |   |
+|   |  - Uncached Access / mhcr.DE=0 for coherent zero-copy streaming     |   |
 |   +---------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------+
 ```
 * **Functionality**:
   - Control block (`DramSpscControlBlock`) in fast on-chip SRAM Space 0 (`0x3FFF2000`).
   - 1 MB payload buffer pool in dedicated DDR DRAM Carveout (`0x48000000`).
-  - Configures RISC-V Physical Memory Protection (PMP) and memory barriers (`fence rw, rw`) for DMA-coherent access.
+  - Configures RISC-V PMP access permissions and memory barriers (`fence rw, rw`) with D-Cache disabled (`mhcr.DE = 0`) for DMA-coherent access.
 * **Linux Companion Tool**: `ping_dram`
   - Measures throughput (MB/sec), latency, and jitter for variable payload sizes (64B to 4096B).
 

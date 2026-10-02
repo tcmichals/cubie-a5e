@@ -8,19 +8,20 @@ In this article (**Part 2**), we move directly into the code and system bring-up
 3. **Deploying the all-new `riscv-firmware/apps` verification suite** across three distinct hardware profiles to systematically prove co-processor boot, memory subsystems, hardware FPU, exception handling, and high-performance IPC paradigms.
 
 > [!NOTE]
-> ### 📝 Article Update: PMP, Memory Attributes, and Data Cache
-> This article has been updated to reflect the architectural realities of
-> the XuanTie E906 core. Standard RISC-V Physical Memory Protection (PMP)
-> only configures Read/Write/Execute permissions; it contains no bits for
-> cache attributes and cannot configure memory regions as non-cacheable
-> (`no pmp.sysmap`).
+> ### 📝 Architectural Reality: PMP vs. SYSMAP vs. Data Cache
+> This article reflects the hardware architecture of the XuanTie E906 core:
+> 1. **PMP Access Control Only**: Standard RISC-V PMP registers (`pmpcfgX`)
+>    strictly manage R/W/X permissions; they contain zero cache attribute bits.
+> 2. **Hardwired T-Head SYSMAP**: Due to the absence of an MMU and MAEE on this
+>    microcontroller core, the 8 SYSMAP region descriptors are hardwired at
+>    ASIC synthesis time. Runtime non-cacheable RAM carveouts are impossible.
+> 3. **Reference Testbed D-Cache Policy**: In `riscv-firmware`, Data Cache is
+>    kept disabled (`mhcr.DE = 0`) to guarantee deterministic, uncached DMA
+>    coherency with Linux without cache maintenance overhead.
 >
-> In the accompanying reference testbed (`riscv-firmware`), Data Cache is
-> intentionally kept disabled (`mhcr.DE = 0`) to guarantee deterministic,
-> uncached coherency with Linux DMA without cache maintenance complexity.
-> For the complete architectural analysis of D-Cache and PMP, see
+> For the complete architectural analysis, see
 > [Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md) (Section 4.3).
-> For the high-performance cache architecture in AbstractX, see
+> For the high-performance cache implementation (`mhcr.DE = 1`), see
 > [Part 4](part4_deep_dive_baremetal_cpp_coroutines.md) (Section 6).
 
 ---

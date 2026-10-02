@@ -447,8 +447,8 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
   - Lock-free, zero-allocation Single-Producer Single-Consumer circular ring buffer.
   - Utilizes C++11 atomic acquire-release memory fences for synchronization between ARM64 Linux and RISC-V E906 in shared SRAM without locking.
 * **`hal::Pmp` (`hal/pmp.hpp`, `hal/pmp.cpp`)**:
-  - Configures XuanTie E906 Physical Memory Protection (PMP) CSRs (`pmpaddr*`, `pmpcfg*`).
-  - Marks external DDR DMA payload buffers (`0x48100000`) as non-cacheable to eliminate cache invalidation/flush overhead.
+  - Configures XuanTie E906 Physical Memory Protection (PMP) CSRs (`pmpaddr*`, `pmpcfg*`) for access permissions.
+  - Note: PMP only sets R/W/X permissions (it cannot configure cacheability). Coherency with Linux DMA is achieved because D-Cache is kept disabled (`mhcr.DE = 0`) in this testbed firmware.
 * **`hal::Trace` (`hal/trace.hpp`)**:
   - Zero-allocation ASCII string and packed binary ring-buffer logger.
   - Formats telemetry, heartbeats, and sensor readings directly into the RemoteProc debugfs `trace0` buffer.
@@ -473,7 +473,7 @@ apps/
 │   └── linux/               # ping_shm Linux host companion benchmark tool
 ├── testPingRpmsg/           # Standard Linux VirtIO RPMsg (hal::Rpmsg) echo firmware + Linux benchmark
 │   └── linux/               # ping_rpmsg Linux host companion benchmark tool
-└── testDRAMMsg/             # Hybrid SRAM SPSC Queue + DDR DRAM Payload Buffers + PMP non-cacheable
+└── testDRAMMsg/             # Hybrid SRAM SPSC Queue + DDR DRAM Payload Buffers + Uncached DMA
     └── linux/               # ping_dram Linux host companion benchmark tool
 ```
 ## 5. Firmware Test Suite (Walk $\rightarrow$ Run)
