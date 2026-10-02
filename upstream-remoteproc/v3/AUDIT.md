@@ -22,7 +22,7 @@ No race conditions, teardown inversions, MMU attribute conflicts, or endianness 
 
 ## 2. Complete Issue-by-Issue Resolution Matrix
 
-All 23 issues identified across v2 review emails (maintainers + Sashiko) are resolved in the source tree:
+All 24 issues identified across v2 review emails (maintainers + Sashiko) are resolved in the source tree:
 
 ### Devicetree Bindings & Threading Policy
 | ID | Target | Severity | Finding | Resolution in v3 | Status |
@@ -30,6 +30,7 @@ All 23 issues identified across v2 review emails (maintainers + Sashiko) are res
 | **D1** | `allwinner,sun55i-rproc.yaml` | **High** | `reg-names` used `enum` instead of positional list | Replaced with fixed positional `- const:` entries (`cfg`, `r_sram`, `r_sram1`, `remap`). | **FIXED** |
 | **D2** | `allwinner,sun55i-a523-msgbox.yaml` | **High** | `interrupts` had unconstrained narrative text & `enum` names | Replaced with positional `items:` list and `minItems: 1` (`arm`, `dsp`, `cpus`, `rv`). | **FIXED** |
 | **D3** | Upstream Dispatch | **Medium** | Threading v3 under v2 via `In-Reply-To` breaks patch workflow | Dispatch v3 as a fresh, standalone top-level thread. | **RESOLVED** |
+| **D4** | `allwinner,sun55i-a523-msgbox.yaml` & `sun55i-a523.dtsi` | **High** | Mailbox `reg` positional list had DSP and CPUS swapped relative to `reg-names` | Swapped `0x07120000` (DSP) to index 1 and `0x07094000` (CPUS) to index 2 in both DTSI and YAML example to match `reg-names: [arm, dsp, cpus, rv]`. | **FIXED** |
 
 ### Mailbox Driver & Tests (`drivers/mailbox/`)
 | ID | Target | Severity | Finding | Resolution in v3 | Status |
@@ -58,3 +59,21 @@ All 23 issues identified across v2 review emails (maintainers + Sashiko) are res
 | **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing `SUNXI_REMOTEPROC` dependency in Kconfig | Added `depends on REMOTEPROC && SUNXI_REMOTEPROC`. | **FIXED** |
 | **K2** | `sunxi_rproc_test.c` | **Medium** | KUnit test mock MMIO reads fail on Big-Endian | Replaced array indexing with endian-safe `readl(ctx->priv.cfg_va + offset)`. | **FIXED** |
 | **K3** | `sunxi_rproc_test.c` | **Medium** | False positive KUnit test for obsolete `kick_msg` field | Test updated to inspect stack-local transmit buffer. | **FIXED** |
+
+---
+
+## 3. Co-Processor HAL & DT Cross-Subsystem Ground Truth
+
+To guarantee 100% interoperability between the upstream Linux drivers and the co-processor firmware, all mailbox registers and base addresses were audited directly against Allwinner Tina 5.0 source (`rtos-hal`, `rtos-components`, `dsp`):
+
+- **Mailbox Port Mapping**:
+  - `0x03003000`: ARM Cortex-A55 host port (`arm`)
+  - `0x07120000`: HiFi4 Audio DSP port (`dsp`) — verified in DSP memory maps and Tina HAL
+  - `0x07094000`: CPUS / PRCM power management port (`cpus`)
+  - `0x07136000`: XuanTie RISC-V port (`rv`)
+- **Git Sync Commits**:
+  - `linux-cubie` commit `b861276e3e76`: `dt-bindings: mailbox: sun55i: align register order between dtsi and binding example`
+  - `cubie-a5e` commit `1cc2809`: `firmware: purge symlinks, audit HAL against Tina SDK, and document co-processor TRM`
+- **Documentation**:
+  - Full co-processor TRM preserved in `cubie-a5e/docs/TINA_ALLWINNER_COPROCESSOR_SOURCE_OF_TRUTH.md`.
+

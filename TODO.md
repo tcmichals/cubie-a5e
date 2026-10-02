@@ -609,6 +609,14 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [x] **K3 [Medium]**: False positive KUnit test for `kick_msg`.
   - *Fix*: Update kick test to validate the new stack-local message passing.
 
+#### Group 5: Devicetree Bindings & DTS Alignment (Patch 1/7 & 7/7)
+- [x] **D1 [High]**: `allwinner,sun55i-rproc.yaml` `reg-names` used `enum` instead of positional list.
+  - *Fix*: Replaced with fixed positional `- const:` entries (`cfg`, `r_sram`, `r_sram1`, `remap`).
+- [x] **D2 [High]**: `allwinner,sun55i-a523-msgbox.yaml` `interrupts` had unconstrained text and `enum`.
+  - *Fix*: Replaced with positional `items:` list and `minItems: 1` (`arm`, `dsp`, `cpus`, `rv`).
+- [x] **D4 [High]**: Mailbox register positional ordering had DSP and CPUS swapped relative to `reg-names`.
+  - *Fix*: Aligned `reg` list across `sun55i-a523.dtsi` and binding schema example: index 0 is ARM (`0x03003000`), index 1 is DSP (`0x07120000`), index 2 is CPUS (`0x07094000`), and index 3 is RV (`0x07136000`). (Commit `b861276e3e76`).
+
 ---
 
 ### 5.5 Deep Mainline Driver Audit, Lifecycle Race Hardening & KUnit Architecture

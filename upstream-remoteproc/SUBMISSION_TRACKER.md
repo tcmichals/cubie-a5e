@@ -10,7 +10,7 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
 | :---: | :---: | :--- | :--- |
 | **RFC v1** | 2026-09-22 | [`20260922034711.190253-1-tcmichals@gmail.com`](https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/) | **Superseded**<br>Initial RFC submission (7 patches). Reviewed by Krzysztof Kozlowski, Rob Herring, and Chen-Yu Tsai. |
 | **v2** | 2026-09-26 | [`20260927002021.797069-1-tcmichals@gmail.com`](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/) | **Reviewed**<br>Added 68 in-tree KUnit tests. Flagged for: `last_tx_done` pacing (`M2`), big-endian mock MMIO (`K2`), DT `reg-names` enum (`D1`), and unconstrained interrupts (`D2`). |
-| **v3** | *Ready for Dispatch* | **Standalone Top-Level Thread**<br>*(Do NOT thread as in-reply-to v2 per Krzysztof Kozlowski)* | **Code & Schemas 100% Clean**<br>• All 18 Sashiko/maintainer driver & test issues resolved.<br>• DT bindings converted to strict positional lists.<br>• `make dt_binding_check` passed (0 errors, 0 warnings).<br>• `make linux-rebuild` passed on physical silicon target. |
+| **v3** | *Ready for Dispatch* | **Standalone Top-Level Thread**<br>*(Do NOT thread as in-reply-to v2 per Krzysztof Kozlowski)* | **Code & Schemas 100% Clean**<br>• All 18 Sashiko/maintainer driver & test issues resolved.<br>• DT bindings & DTSI converted to strict positional lists with DSP (`0x07120000`) & CPUS (`0x07094000`) aligned to `reg-names`.<br>• Tina 5.0 SDK co-processor HAL & memory map audited and synchronized.<br>• `make dt_binding_check` passed (0 errors, 0 warnings).<br>• `make linux-rebuild` passed on physical silicon target. |
 
 ---
 
@@ -21,7 +21,7 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
 * **[Upstream Lessons Learned & Rules Ledger](UPSTREAM_LESSONS_LEARNED.md)**:  
   Detailed breakdown of why specific patterns were rejected by maintainers (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson) and the exact code patterns required.
 * **[v3 Verification & Audit Results](v3/AUDIT.md)**:  
-  Clean 5-stage adversarial audit report and complete 23-item verification matrix (Status: CLEAN).
+  Clean 5-stage adversarial audit report and complete 24-item verification matrix (Status: CLEAN).
 * **[v2 Review Comments](v2/COMMENTS.md)** & **[v2 Audit Report](v2/AUDIT.md)**:  
   Archived verbatim emails and flagged issues from v2 review cycle.
 * **[v1 Review Comments](v1/COMMENTS.md)**:  
