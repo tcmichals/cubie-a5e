@@ -85,7 +85,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 ┌─────────────────────────┐                               ┌─────────────────────────┐
 │     DMA CONTROLLER      │                               │    UART CONTROLLER      │
 │  Silently copies bytes  │                               │  Detects 4-char IDLE    │
-│  directly to DTCM/SRAM  │                               │  gap on the RX line     │
+│  directly to MCU SRAM   │                               │  gap on the RX line     │
 │  (0% CPU overhead)      │                               │  Asserts RTO Interrupt  │
 └────────────┬────────────┘                               └────────────┬────────────┘
              │                                                         │
@@ -101,7 +101,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 
 ### How the Mechanism Operates:
 1. **Continuous Circular DMA:**
-   * A DMA channel is armed in circular mode targeting an `etl::array<uint8_t, 512>` in DTCM.
+   * A DMA channel is armed in circular mode targeting an `etl::array<uint8_t, 512>` in MCU SRAM.
    * Incoming bytes are transferred directly from `UART2_RBR` (`0x02500800`) to memory without CPU interrupts per byte.
 2. **Hardware 4-Character Idle Detection (RTO):**
    * When FIFO is enabled (`FCR[0] = 1`) and RX interrupt is enabled (`IER[0] = 1`), the UART hardware monitors the RX line.
