@@ -14,14 +14,13 @@ proofs to the production flight software architecture. We deploy the
 onto the **Allwinner T527 / XuanTie E906** co-processor:
 1. **The Architectural Shift**: Why `cubie-a5e/firmware/riscv-firmware` uses
    simple, separate test apps, while `AbstractX` delivers a unified,
-   full-featured C++20 production flight stack.
+   full-featured C++20 production design pattern.
 2. **Unlocking Full Hardware Caching**: Enabling the L1 Data Cache (`mhcr.DE=1`)
    and executing verified Tina SDK maintenance opcodes
    (`dcache.cpa` and `dcache.iva`).
 3. **Polymorphic IPC (`IRpmsg`)**: Encapsulating Linux VirtIO (`Rpmsg`) and
    zero-overhead on-chip SRAM (`RpmsgLiteMetal`) under a single virtual API.
 4. **Pure Asynchrony (Zero Polling)**: Wiring `co_await async_receive()`
-   to the hardware MSGBOX ISR for sub-25 ns wakeup latency.
    to the hardware MSGBOX ISR for sub-25 ns wakeup latency.
 5. **Threshold-Balanced Peripherals**: Direct CPU FIFO for small bursts vs.
    chained DMA awaiters for high-bandwidth streaming.
@@ -36,7 +35,7 @@ Throughout this series, we maintained two parallel codebases:
 
 | Dimension | `riscv-firmware` (Parts 2 & 3) | `AbstractX` (Part 4) |
 | :--- | :--- | :--- |
-| **Role** | Educational hardware proof | 100% full-featured flight stack |
+| **Role** | Educational hardware proof | Full-featured design pattern |
 | **Structure** | Separate isolated apps | Unified C++20 framework |
 | **D-Cache** | Disabled (`mhcr.DE = 0`) | Enabled (`mhcr.DE = 1`) |
 | **IPC Types** | Separate binaries per test | Polymorphic (`IRpmsg`) |
@@ -51,6 +50,49 @@ driver bring-up.
 In **`AbstractX`**, modern C++20 eliminates this fragmentation. A single
 polymorphic hierarchy encapsulates cache maintenance, transport selection,
 and hardware interrupts behind clean, zero-allocation interfaces.
+
+### 1.1 AbstractX Design Philosophy: Linear Coding & Minimal Memory
+
+It is vital to clarify what AbstractX actually is:
+> **The focus of AbstractX is NOT specifically a flight controller.**
+> Flight sensor fusion was simply a demanding proof-of-concept to stress-test
+> high-bandwidth I/O. AbstractX is a **universal embedded design pattern**:
+> a methodology to write **linear, sequential asynchronous code with an
+> ultra-small memory footprint** across bare-metal and RTOS targets.
+
+#### 1. RTOS vs. Bare-Metal Memory Footprint:
+* **The RTOS Stack Problem**: In a traditional RTOS (e.g. FreeRTOS, Zephyr),
+  every task demands its own pre-allocated stack (2 KB – 8 KB). With 10 tasks,
+  20 KB to 80 KB of scarce SRAM is locked up in idle stacks, accompanied by
+  stack-overflow hazards and 32-register context-switching overhead.
+* **AbstractX Single-Stack Architecture**: On bare metal, the processor core
+  runs on a **single execution stack** (1–2 KB total) for all ISRs and nested
+  function calls. Each suspended coroutine requires only a tiny state frame
+  (~64–128 bytes) in static memory. This delivers up to **95% RAM savings**.
+* **Flexible RTOS/Linux Hosting**: AbstractX is not anti-RTOS. It can run
+  inside a *single* FreeRTOS task (e.g. on ESP32-P4) or POSIX thread (on Linux),
+  multiplexing dozens of cooperative coroutines without spawning dozens of heavy
+  OS threads.
+
+#### 2. Linear Programming Beyond Protothreads:
+* Traditional non-blocking embedded software often degenerates into
+  **callback hell** or state machine enum spaghetti.
+* While Adam Dunkels' *Protothreads* introduced stackless C cooperative
+  multithreading via Duff's device, protothreads destroyed local variables
+  across yields and lacked type safety.
+* AbstractX uses **modern C++20 stackless coroutines (`co_await`)**: code reads
+  linearly from top to bottom like synchronous code, but executes asynchronously
+  with full C++ type safety, RAII lifetime, and zero heap allocations.
+
+#### 3. Solving the Cooperative Debugging Problem with Built-in Telemetry:
+* The classic critique of cooperative state machines is: *"How do you debug an
+  async task graph when something hangs?"*
+* AbstractX treats **barectf CTF 1.8 telemetry as a first-class citizen**:
+  the runtime automatically logs coroutine transitions (`coro_spawn`,
+  `coro_suspend` with reason codes, `coro_resume` with queue latency, and
+  `coro_done`) into on-chip SRAM buffers.
+* The AbstractX Studio GUI renders a microsecond-accurate Dual-Plane Gantt
+  timeline, providing 100% visual transparency into every coroutine.
 
 ---
 
