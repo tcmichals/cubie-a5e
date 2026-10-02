@@ -348,10 +348,15 @@ When standard Linux networking or terminal abstractions are required, `testPingR
 ---
 
 ### 3.6 Step 6: High-Bandwidth Hybrid SRAM / DDR Streaming (`testDRAMMsg`)
-For high-throughput payloads (camera frames, point clouds, logging), `testDRAMMsg` demonstrates a **hybrid architecture**:
-* Control queues and descriptor rings reside in **zero-wait-state SRAM Space 0**.
-* Bulk payload buffers reside in a **1 MB DDR DRAM carveout (`0x48000000`)**.
-* The co-processor sets PMP permissions for the DDR carveout, maintaining coherency with Linux DMA (we address the D-cache vs. PMP engineering reality in Part 3).
+For high-throughput payloads (camera frames, point clouds, logging),
+`testDRAMMsg` demonstrates an optimized **hybrid architecture**:
+* **SPSC Control in Zero-Wait SRAM**: Ring pointers, status flags, and
+  descriptors reside in on-chip SRAM Space 0, ensuring single-cycle queue
+  synchronization without stalling the core on external DRAM bus latency.
+* **Bulk Buffers in DRAM**: Payload buffers reside in a **1 MB DDR DRAM
+  carveout (`0x48000000`)**, accommodating payloads exceeding SRAM capacity.
+* The co-processor sets PMP permissions for the DDR carveout, maintaining
+  coherency with Linux DMA (we address D-cache vs. PMP in depth in Part 3).
 * The `ping_dram` companion tool sustains **4.39 MB/s bidirectional throughput**.
 
 ---

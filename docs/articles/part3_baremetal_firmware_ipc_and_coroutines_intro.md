@@ -285,6 +285,28 @@ BULK DATA PLANE — DDR DRAM Carveout (0x48100000, 1 MB)
     Uncached: D-Cache disabled (mhcr.DE = 0) / no-map in ARM64 DT
 ```
 
+#### Why This Split is Essential for Efficiency
+Because the co-processor runs with D-Cache disabled for deterministic RemoteProc
+coherency, **accessing DDR DRAM incurs substantial bus latency** (external AXI
+interconnect arbitration and memory controller cycles).
+
+If the SPSC queue control structures (head/tail ring pointers, status flags,
+timestamps, and descriptor states) were located in DRAM:
+* Every queue check, head/tail pointer advance, and doorbell poll would stall
+  the RISC-V execution pipeline waiting on external memory controller bus turns.
+* Small 4-byte synchronization writes would suffer the full penalty of DRAM
+  latency, collapsing throughput.
+
+By separating the architecture:
+1. **SPSC in SRAM**: High-frequency ring updates, descriptor state transitions,
+   and pointer increments execute in **zero-wait-state on-chip SRAM** (single-
+   cycle access, ~5 ns at 200 MHz) with zero bus arbitration contention.
+2. **Buffers in DRAM**: External DDR is accessed **only** when reading or
+   writing bulk payload buffers (or when handled via DMA).
+
+This gives the system the best of both worlds: ultra-fast, jitter-free queue
+synchronization combined with megabyte-scale payload streaming capacity.
+
 ### 4.2 Protocol Definition
 
 From [`riscv-firmware/common/include/dram_spsc_protocol.h`](../../riscv-firmware/common/include/dram_spsc_protocol.h):
