@@ -8,6 +8,11 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 >
 > While this `README.md` covers the broader architectural background and SoC interconnect overview, **[`tests.md`](tests.md)** provides the direct, concrete developer reference: exact memory maps, build commands, step-by-step target execution commands (`devmem2`, `trace0`, `ping_shm`, `ping_uio.py`), and crash dump forensics.
 
+> [!IMPORTANT]
+> ### 🎯 Architectural Scope: `riscv-firmware` vs. AbstractX
+> * **`riscv-firmware` (This Directory)**: Minimalist, bare-metal reference testbed designed strictly to validate **Linux RemoteProc & Mailbox drivers**. D-Cache is intentionally kept disabled (`mhcr.DE = 0`) to guarantee deterministic zero-copy coherency with Linux and DMA without cache maintenance overhead, proving silicon bring-up for upstream patch review.
+> * **AbstractX**: The high-performance, hard real-time production flight stack. AbstractX implements the complete high-performance cache pipeline (`CSR_MXSTATUS.THEADISAEE = 1`, `mhcr.DE = 1`, `mhcr.IE = 1`), full line-by-line cache maintenance (`dcache.cpa`/`dcache.iva`), C++20 coroutines, and microsecond-deterministic FPGA flight control.
+
 ---
 
 ## 1. Hardware Architecture (Allwinner T527 XuanTie E906)

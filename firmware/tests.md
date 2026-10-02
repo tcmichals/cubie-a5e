@@ -990,10 +990,10 @@ During the hardware validation process on the Radxa Cubie A5E silicon, four crit
 * **Root Cause**: The Name Service handler (`virtio_rpmsg_create_channel`) calls `device_register()` and `blocking_notifier_call_chain()`, which acquire sleeping mutexes. Calling this directly within the hard-IRQ bottom half of the Mailbox driver violates PREEMPT_RT real-time constraints.
 * **Resolution**: Added a `struct work_struct vq_work` to `sunxi_rproc.c`. The mailbox callback now executes `schedule_work(&priv->vq_work)`, deferring the VirtIO vring interrupt handler to process context. This completely eliminated the kernel warning.
 
-### 9.4 XuanTie E906 Instruction Compatibility (Fence vs Cache Opcodes)
-* **Problem**: Calling custom XuanTie cache invalidation opcodes (`.insn r 0x0b, 0, 0, x0, %0, x0`) on DDR memory triggered an illegal instruction exception (`mcause=0x00000002` at `0x3ffc099e`).
-* **Root Cause**: The synthesized E906 silicon revision on Allwinner T527 implements hardware cache-coherent AXI interfaces or does not expose vendor cache maintenance opcodes in Machine mode for the DRAM region.
-* **Resolution**: Replaced the custom opcodes with standard RISC-V memory barriers (`fence rw, rw` and `fence.i`), achieving rock-solid memory synchronization across 1,000+ packet streaming runs.
+### 9.4 XuanTie E906 Instruction Compatibility & D-Cache Policy
+* **Problem**: Calling custom XuanTie cache invalidation opcodes (`.insn r 0x0b, ...`) triggered an illegal instruction exception (`mcause=0x00000002`).
+* **Root Cause**: On the XuanTie E906, custom T-Head instructions are disabled by default at reset. As proven in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`), they require setting `CSR_MXSTATUS` (0x7C0) bit 22 (`THEADISAEE = 1`). Furthermore, standard RISC-V PMP only manages R/W/X permissions and cannot carve out non-cacheable regions.
+* **Resolution in Test Firmware**: In `riscv-firmware`, D-Cache is kept disabled (`mhcr.DE = 0`) and standard RISC-V memory barriers (`fence rw, rw`) are used. This guarantees 100% coherent uncached memory access across SRAM and DDR without cache maintenance complexity for Linux RemoteProc validation. Full high-performance cache architecture (`THEADISAEE=1`, `DE=1`, `IE=1`, line flushes) is deferred to the AbstractX production flight stack.
 
 ### 9.5 Python UIO Device Memory Alignment (SIGBUS 135) & RPMsg Drain
 * **Problem**: In `ping_uio.py`, slice assignments (`sram_mmap[...] = ...`) and composite `struct.pack_into("<IIQQI10I", ...)` triggered immediate fatal Bus Errors (`EXIT=135`), while `ping_rpmsg.py` observed sequence mismatches if an earlier run was aborted mid-stream.
