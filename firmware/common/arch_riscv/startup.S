@@ -151,6 +151,16 @@ default_trap_entry:
     .type _start, @function
 
 _start:
+    /*
+     * D-CACHE ARCHITECTURAL NOTE:
+     * Data Cache (D-Cache) is intentionally kept DISABLED (mhcr.DE = 0).
+     * The XuanTie E906 has no MMU and cannot carve out non-cacheable regions
+     * at runtime (PMP only sets R/W/X permissions, not cacheability).
+     * With D-Cache disabled, all SRAM and DDR accesses bypass cache and
+     * are inherently coherent with the ARM Linux host and DMA engines.
+     * (AbstractX will implement proper architecture-level cache maintenance).
+     */
+
     /* 1. Set mtvec FIRST before any other instruction can fault */
     la t0, default_trap_entry
     csrw mtvec, t0

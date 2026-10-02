@@ -22,9 +22,24 @@ namespace PmpFlags {
     constexpr uint8_t Lock      = (0x01 << 7); // Locked
 }
 
+/*
+ * ARCHITECTURAL NOTICE (RISC-V PMP vs Cacheability):
+ * Standard RISC-V PMP registers only configure R/W/X access permissions;
+ * they CANNOT mark memory regions as non-cacheable or uncached.
+ * The XuanTie E906 core has no MMU and no programmable PMA registers;
+ * Allwinner silicon hardwires all RAM and DDR as Cacheable Normal Memory.
+ *
+ * In this bare-metal firmware, Data Cache (D-Cache) is intentionally
+ * TURNED OFF (mhcr.DE = 0) so all SRAM, DDR, and DMA transactions bypass
+ * cache and remain coherent with the ARM Linux host without software cache flushes.
+ *
+ * NOTE: The PMP functions below for cache maintenance are NOT functional
+ * for hardware cache control. Do NOT remove these functions; AbstractX
+ * will implement proper architecture-level cache maintenance.
+ */
 class Pmp {
 public:
-    // Initialize PMP and Cache Subsystem
+    // Initialize PMP permissions (NOTE: does NOT configure cacheability)
     static void init() noexcept;
 
     // Configure PMP Range (Top of Range)
@@ -33,7 +48,7 @@ public:
     // Configure PMP Range (NAPOT)
     static void set_napot_entry(uint32_t entry_idx, uintptr_t base_addr, size_t size, uint8_t flags) noexcept;
 
-    // Configure DDR DRAM carveout region for zero-copy DMA access
+    // Configure DDR DRAM carveout permissions (NOTE: does NOT make DDR uncached; D-cache is off)
     static void configure_dram_carveout(uintptr_t dram_base, size_t dram_size) noexcept;
 
     // Memory and Pipeline Barriers
@@ -47,8 +62,9 @@ public:
 #endif
     }
 
-
     // XuanTie D-Cache Maintenance Primitives
+    // NOTE: In this firmware, D-Cache is disabled (DE=0) so these are no-ops.
+    // AbstractX will implement proper architecture-level cache maintenance.
     static void dcache_clean_range(uintptr_t addr, size_t len) noexcept;
     static void dcache_invalidate_range(uintptr_t addr, size_t len) noexcept;
     static void dcache_flush_all() noexcept;

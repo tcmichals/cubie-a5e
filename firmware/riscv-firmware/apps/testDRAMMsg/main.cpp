@@ -26,7 +26,12 @@ int main(void) {
     hal::Trace::init();
     hal::Timer::init();
 
-    // 2. Configure PMP & XuanTie Cache Maintenance for DDR Carveout
+    // 2. Configure PMP & Memory Access
+    // NOTE: PMP only configures basic R/W/X permissions in Machine mode;
+    // it CANNOT mark memory as non-cacheable or uncached. The E906 lacks
+    // programmable PMA registers. D-Cache is intentionally kept DISABLED
+    // (mhcr.DE = 0) so DDR accesses bypass cache and remain coherent with
+    // the Linux host. (AbstractX will implement proper cache architecture).
     hal::Pmp::init();
     hal::Pmp::configure_dram_carveout(DRAM_SPSC_DRAM_ADDR, DRAM_SPSC_DRAM_SIZE);
 
@@ -34,7 +39,7 @@ int main(void) {
     hal::Trace::puts("  Allwinner T527 XuanTie E906 testDRAMMsg (Hybrid SRAM/DRAM IPC)\n");
     hal::Trace::puts("  Control Block: Dedicated MCU SRAM C @ 0x07130000 (Zero-Wait)  \n");
     hal::Trace::puts("  Payload Pool : DDR DRAM Carveout @ 0x48100000 (1 MB Window)  \n");
-    hal::Trace::puts("  PMP / Cache  : Direct Uncached / Strongly-Ordered Coherent   \n");
+    hal::Trace::puts("  D-Cache      : Disabled (DE=0) for Coherent Uncached DMA/IPC  \n");
     hal::Trace::puts("================================================================\n");
 
     // 3. Initialize SPSC Control Block in Dedicated MCU SRAM C
@@ -97,7 +102,9 @@ int main(void) {
             volatile uint8_t *tx_dram_buf = DRAM_POOL + tx_dram_offset;
             volatile uint8_t *rx_dram_buf = DRAM_POOL + rx_dram_offset;
 
-            // Invalidate D-cache for DRAM buffer
+            // NOTE: dcache_invalidate_range and dcache_clean_range below are
+            // no-ops because D-Cache is turned off (DE=0). PMP cannot mark
+            // DDR non-cacheable. AbstractX will implement proper cache maintenance.
             hal::Pmp::dcache_invalidate_range((uintptr_t)tx_dram_buf, len);
 
             // Read payload from DRAM and write Pong Echo response to DRAM
@@ -110,7 +117,7 @@ int main(void) {
                 rx_dram_buf[0] = 'D'; rx_dram_buf[1] = 'R'; rx_dram_buf[2] = 'A'; rx_dram_buf[3] = 'M';
             }
 
-            // Clean D-cache for response buffer
+            // Clean D-cache for response buffer (no-op with DE=0; see note above)
             hal::Pmp::dcache_clean_range((uintptr_t)rx_dram_buf, len);
 
             // Populate RX Descriptor in SRAM

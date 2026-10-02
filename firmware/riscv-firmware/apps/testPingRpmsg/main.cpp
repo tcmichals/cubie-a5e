@@ -57,6 +57,9 @@ int main(void) {
     // 1. Initialize HAL
     hal::Trace::init();
     hal::Timer::init();
+    // NOTE: PMP only configures basic R/W/X permissions; it cannot set cacheability.
+    // D-Cache is kept disabled (mhcr.DE = 0) so shared VirtIO vrings and buffers
+    // are coherent with Linux without software cache flushes. (AbstractX will fix this).
     hal::Pmp::init();
 
     hal::Trace::puts("================================================================\n");

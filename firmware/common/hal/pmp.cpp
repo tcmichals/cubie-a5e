@@ -4,6 +4,12 @@ namespace hal {
 
 void Pmp::init() noexcept {
 #if defined(__riscv)
+    // NOTE: PMP only configures basic R/W/X permissions in Machine mode.
+    // It CANNOT configure cacheability or carve out non-cacheable regions.
+    // D-Cache is intentionally kept DISABLED (mhcr.DE = 0) so all memory
+    // accesses bypass cache and remain coherent with the Linux host.
+    // AbstractX will implement proper architecture-level cache management.
+
     // 1. Initial barrier
     memory_fence();
 
@@ -64,10 +70,13 @@ void Pmp::set_napot_entry(uint32_t entry_idx, uintptr_t base_addr, size_t size, 
 
 void Pmp::configure_dram_carveout(uintptr_t dram_base, size_t dram_size) noexcept {
 #if defined(__riscv)
-    // Setup PMP permission for the DDR carveout
+    // NOTE: This PMP entry sets Read/Write permissions only.
+    // It CANNOT make the DRAM region non-cacheable. Memory is coherent
+    // only because D-Cache is kept disabled (mhcr.DE = 0).
+    // AbstractX will implement proper architecture-level cache maintenance.
     set_napot_entry(1, dram_base, dram_size, PmpFlags::Read | PmpFlags::Write);
 
-    // Flush any stale cache lines for the DRAM range
+    // No-op while D-Cache is disabled; preserved for API compatibility
     dcache_invalidate_range(dram_base, dram_size);
     memory_fence();
 #else
@@ -75,6 +84,16 @@ void Pmp::configure_dram_carveout(uintptr_t dram_base, size_t dram_size) noexcep
 #endif
 }
 
+/*
+ * NOTE on Cache Operations:
+ * In this bare-metal firmware, D-Cache is intentionally disabled (DE = 0),
+ * so dcache_clean_range and dcache_invalidate_range are no-ops (fences only).
+ * If D-Cache were enabled (DE = 1), custom T-Head cache instructions
+ * (dcache.cpa, dcache.iva) would be required, which additionally require
+ * setting CSR_MXSTATUS bit 22 (THEADISAEE = 1) to avoid illegal instructions.
+ * Do not remove these functions; AbstractX will implement the complete
+ * high-performance cache architecture.
+ */
 void Pmp::dcache_clean_range(uintptr_t addr, size_t len) noexcept {
     (void)addr; (void)len;
     memory_fence();
@@ -88,6 +107,7 @@ void Pmp::dcache_invalidate_range(uintptr_t addr, size_t len) noexcept {
 void Pmp::dcache_flush_all() noexcept {
 #if defined(__riscv)
     // XuanTie mcor CSR (0x7C2): Bit 6 = Clean & Invalidate all D-Cache
+    // (Operates when D-Cache is enabled; harmless fence when disabled)
     asm volatile (
         "csrw 0x7C2, %0\n"
         :: "r"(1 << 6) : "memory"

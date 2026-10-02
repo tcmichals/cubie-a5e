@@ -148,7 +148,7 @@ The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit R
     (STA_ADD_REG 0x204, WORK_MODE 0x248)              (Control & Lockup Status)
 
   0x48100000 - 0x481FFFFF [   1 MB ] ─────────────> 0x48100000 - 0x481FFFFF (DDR DMA Pool)
-    (DMA Reserved Memory Pool)                        (PMP Non-Cacheable Streaming Payloads Only)
+    (DMA Reserved Memory Pool)                        (D-Cache Disabled for Coherent Uncached DMA)
 +===================================================================================+
 ```
 
