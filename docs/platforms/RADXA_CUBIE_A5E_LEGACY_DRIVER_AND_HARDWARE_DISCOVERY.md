@@ -1,4 +1,4 @@
-# Radxa Cubie A5E (Allwinner A527): XuanTie E907 Vendor BSP Driver & Hardware Discovery Reference
+# Radxa Cubie A5E (Allwinner A527): XuanTie E906 Vendor BSP Driver & Hardware Discovery Reference
 
 **Document Version:** 1.0  
 **Date:** September 12, 2026  
@@ -20,7 +20,7 @@ Early bring-up efforts inherited assumptions from older chips (Allwinner D1, V85
 
 | Architectural Item | Early / Flawed Assumption | Verified Silicon Reality on Radxa Cubie A5E | Source of Truth |
 | :--- | :--- | :--- | :--- |
-| **Processor Model** | XuanTie E906 (Integer / basic FPU) | **Alibaba T-Head XuanTie E907** (RV32IMAFDC + 64-bit Double-Precision FPU) | CSR `misa` = `0x400062B7`, `marchid` = `0x30529073` |
+| **Processor Model** | XuanTie E906 (Integer / basic FPU) | **Alibaba T-Head XuanTie E906** (RV32IMAFDC + 64-bit Double-Precision FPU) | CSR `misa` = `0x400062B7`, `marchid` = `0x30529073` |
 | **Silicon Wrapper IP** | Generic MCU | **`e906-cfg` (Version 1.0 @ `0x07130000`)** | Register `0x07130000` (`VER_REG`) = `0x00010000` |
 | **Silicon Reset Vector** | `0x00000000` or `0x40000000` | **`0x3FFC0000`** (Silicon factory default in `STA_ADD_REG`) | Reading `0x07130204` immediately upon hardware reset |
 | **SRAM Space 0 Mapping** | DA `0x40000000` $\rightarrow$ PA `0x07280000` | **DA `0x3FFC0000`–`0x3FFFFFFF` $\rightarrow$ PA `0x07280000` (256 KB)** | Vendor DTS `reg = <0x07280000 0x40000>`, live probe |
@@ -186,7 +186,7 @@ WORK_MODE after stop : 0x0000000B
 STA_ADD after stop   : 0x3FFC0000   <-- Silicon factory hardware reset vector!
 ```
 
-### 5.3 Architectural CSR Probing: E906 vs E907 Verification
+### 5.3 Architectural CSR Probing: E906 vs E906 Verification
 Script execution on target: `/tmp/read_core_id.sh`
 ```text
 [11751.748005] remoteproc remoteproc0: powering up 7130000.remoteproc
@@ -196,7 +196,7 @@ Script execution on target: `/tmp/read_core_id.sh`
 
 --- Processor Identification Results ---
   CSR marchid (Architecture ID) : 0x30529073 (T-Head XuanTie series)
-  CSR mimpid  (Model & Rev ID)  : 0x30401073 (XuanTie E907 Core IP)
+  CSR mimpid  (Model & Rev ID)  : 0x30401073 (XuanTie E906 Core IP)
   CSR misa    (ISA Features)    : 0x400062B7 (RV32IMAFDC + Double Precision FPU)
   WORK_MODE_REG                 : 0x0000000B
 ```
@@ -205,7 +205,7 @@ Script execution on target: `/tmp/read_core_id.sh`
 - Bit 30 = `0b01` (MXL = 32-bit RISC-V)
 - Bit 0 (`A`) = Atomic extension
 - Bit 2 (`C`) = Compressed instructions
-- Bit 3 (`D`) = **Double-precision 64-bit hardware floating point** (confirms E907)
+- Bit 3 (`D`) = **Double-precision 64-bit hardware floating point** (confirms E906)
 - Bit 5 (`F`) = Single-precision 32-bit hardware floating point
 - Bit 8 (`I`) = Base integer ISA
 - Bit 12 (`M`) = Hardware integer multiply & divide
@@ -240,8 +240,8 @@ hexdump -C /sys/firmware/devicetree/base/soc/remoteproc@7130000/mboxes
 | File | Role & Purpose |
 | :--- | :--- |
 | [`HowToRISCV.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/buildroot/HowToRISCV.md) | Comprehensive engineering guide for RISC-V firmware and Linux integration. |
-| [`e907_sram.ld`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/common/arch_riscv/e907_sram.ld) | Production linker script linked at `ORIGIN = 0x3FFC0000, LENGTH = 256K`. |
+| [`e906_sram.ld`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/common/arch_riscv/e906_sram.ld) | Production linker script linked at `ORIGIN = 0x3FFC0000, LENGTH = 256K`. |
 | [`memory_map.h`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/common/include/memory_map.h) | C/C++ hardware memory definitions (`SRAM_A3_BASE = 0x3FFC0000`). |
-| [`e907_mem.py`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/tools/e907_mem.py) | Python CLI tool for DA $\leftrightarrow$ PA address translation and devmem commands. |
+| [`e906_mem.py`](file:///home/tcmichals/projects/cubie/cubie-a5e/riscv-firmware/tools/e906_mem.py) | Python CLI tool for DA $\leftrightarrow$ PA address translation and devmem commands. |
 | [`CUBIE_A5E_PLATFORM_GUIDE.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A5E_PLATFORM_GUIDE.md) | Platform overview for Radxa Cubie A5E board. |
 | [`ALLWINNER_T527_CHIP_SPEC_REFERENCE.md`](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/ALLWINNER_T527_CHIP_SPEC_REFERENCE.md) | Chip hardware specification reference. |

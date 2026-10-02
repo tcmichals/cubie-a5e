@@ -19,7 +19,7 @@ A modern intelligent drone requires both microsecond-level control loops and com
 ```
 
 1. **Host OS Domain (ARM Cortex-A55):** Runs a mainline Linux kernel with `PREEMPT_RT` real-time patches. Pinned CPU cores run camera capture, networking, and TinyML workloads.
-2. **Real-Time Domain (XuanTie E906/E907 RISC-V):** Runs bare-metal firmware or Melis RTOS. It executes the critical flight attitude estimation and control loop thread, completely decoupled from the Linux host.
+2. **Real-Time Domain (XuanTie E906/E906 RISC-V):** Runs bare-metal firmware or Melis RTOS. It executes the critical flight attitude estimation and control loop thread, completely decoupled from the Linux host.
 3. **Deterministic Hardware Domain (FPGA):** Directly interfaces with hardware sensors (IMU, Baro, GPS) and motors (DSHOT/PWM). It applies microsecond-level hardware timestamps to sensor data before transferring it to the RISC-V core.
 
 ---

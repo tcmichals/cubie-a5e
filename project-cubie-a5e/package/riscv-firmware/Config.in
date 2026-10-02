@@ -1,5 +1,5 @@
 config BR2_PACKAGE_RISCV_FIRMWARE
-	bool "riscv-firmware (Allwinner XuanTie E907 RISC-V)"
+	bool "riscv-firmware (Allwinner XuanTie E906 RISC-V)"
 	help
 	  XuanTie RISC-V co-processor bare-metal ingestion firmware.
 	  Compiles the firmware from the local source directory and

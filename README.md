@@ -37,7 +37,7 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 | **Gigabit Ethernet (GMAC)** | **Working** | **Working** | Mainline `dwmac-sun55i` / `dwmac-sun8i` |
 | **PMIC & Power Regulators** | **Working** | **Working** | AXP717 + AXP323 (A5E) / AXP8191 via RSB (A7A) |
 | **Message Box (Mailbox IPC)**| **Working** | **Working** | 4-port hardware crossbar (`sun55i-msgbox.c`), v3 upstream ready |
-| **RISC-V E907 / E902 Core** | **Working** | **Working** | Linux `remoteproc` standard (`sunxi_rproc.c`), v3 upstream ready |
+| **RISC-V E906 / E902 Core** | **Working** | **Working** | Linux `remoteproc` standard (`sunxi_rproc.c`), v3 upstream ready |
 | **HiFi4 Audio DSP Core** | **Working** | **Planned** | Remoteproc + SRAM mapping + dedicated ELF test suite |
 | **Wi-Fi 6 (AIC8800)** | **Working (SDIO)** | **In Progress (USB)** | Clean FOSS mainline driver (`aic8800-upstream`), 25 MHz SDIO stabilized |
 | **NPU AI Accelerator** | **Working** | **Working** | 2.0/3.0 TOPS via open-source Etnaviv DRM driver (`/dev/dri/card0`) + Teflon |
@@ -56,7 +56,7 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 | **SoC** | Allwinner A527 / T527 | Allwinner A527 / T527 | Allwinner A733 | Allwinner A733 |
 | **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Ultra-Compact Zero (65×30 mm) |
 | **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Cortex-A76 + 6× Cortex-A55 | 2× Cortex-A76 + 6× Cortex-A55 |
-| **Co-Processors** | XuanTie E907 RISC-V + HiFi4 DSP | XuanTie E907 RISC-V + HiFi4 DSP | XuanTie E902 RISC-V | XuanTie E902 RISC-V |
+| **Co-Processors** | XuanTie E906 RISC-V + HiFi4 DSP | XuanTie E906 RISC-V + HiFi4 DSP | XuanTie E902 RISC-V | XuanTie E902 RISC-V |
 | **System RAM** | 2 GiB / 4 GiB LPDDR4X | 2 GiB / 4 GiB LPDDR4X | 4 GiB / 6 GiB LPDDR5 | 2 GiB / 4 GiB LPDDR5 |
 | **Wi-Fi / BT** | AIC8800D80 (SDIO) | AIC8800D80 (SDIO) | AIC8800D80 (USB) | AIC8800D80 (SDIO) |
 | **Device Tree File** | `allwinner/sun55i-a527-cubie-a5e.dtb` | `allwinner/sun55i-t527-avaota-a1.dtb` | `allwinner/sun60i-a733-cubie-a7a.dtb` | `allwinner/sun60i-a733-cubie-a7z.dtb` |
@@ -118,7 +118,7 @@ cubie-a5e/
 ├── project-cubie-a5e/           # Buildroot external tree (BR2_EXTERNAL)
 │   ├── board/radxa/cubie_a5e/   # Linux kernel configs, genimage configs, rootfs overlays
 │   └── package/                 # Custom Buildroot packages (AIC8800 driver, etc.)
-├── riscv-firmware/              # XuanTie E907 bare-metal firmware & test applications
+├── riscv-firmware/              # XuanTie E906 bare-metal firmware & test applications
 ├── dsp-hifi4/                   # Tensilica HiFi4 Audio DSP bare-metal firmware
 ├── docs/                        # Architecture documentation, register maps, hardware specs
 │   ├── platforms/               # Platform bring-up guides (Cubie A7A, Avaota A1)

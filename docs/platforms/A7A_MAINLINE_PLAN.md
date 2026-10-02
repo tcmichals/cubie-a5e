@@ -83,5 +83,5 @@ python3 project-cubie-a5e/board/radxa/cubie_a7a/tools/verify_sdcard_image.py bld
 - [x] Realign PRCM R-CCU `r-ahb` to offset `0x000`.
 - [x] Sync RemoteProc with safe fallback lookups for `main_ccu` and `sram`.
 - [x] Realign Wi-Fi 6 (AIC8800 USB) power sequencing with `wifi_chip_en` regulator on `PM1`.
-- [x] Support dual VMA/physical addressing for RISC-V E907 ITCM and DTCM in `sunxi_rproc.c`.
+- [x] Support dual VMA/physical addressing for RISC-V E906 ITCM and DTCM in `sunxi_rproc.c`.
 - [x] Validate bootloader, eGON checksum, kernel DTB, and partitions with `verify_sdcard_image.py`.

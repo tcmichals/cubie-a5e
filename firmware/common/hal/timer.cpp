@@ -3,7 +3,7 @@
 namespace hal {
 
 void Timer::init() noexcept {
-    // E907 Machine-mode hardware counters (mcycle/minstret) run automatically.
+    // E906 Machine-mode hardware counters (mcycle/minstret) run automatically.
     // Avoid writing optional CSRs (0x320 mcountinhibit, 0x306 mcounteren)
     // which trigger Illegal Instruction exceptions on XuanTie cores.
 }

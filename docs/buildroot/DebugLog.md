@@ -177,10 +177,10 @@ The Radxa Cubie A5E (Allwinner A527/T527) operates over **SDIO**, whereas the Ra
 
 ## Case Study 6: Standardizing on Linux `remoteproc` and Retiring Fragile Userspace Loaders
 **Date:** August 19, 2026  
-**Component:** XuanTie E907 Co-Processor Lifecycle Management & `sunxi_rproc.c`
+**Component:** XuanTie E906 Co-Processor Lifecycle Management & `sunxi_rproc.c`
 
 ### 🚨 The Problem & Circling Around `riscv-loader`
-During early bring-up of the XuanTie E907 co-processor, early attempts to use a userspace MMIO tool (`riscv-load` / `load-riscv.sh`) to poke CCU clock registers directly and copy flat binary payloads repeatedly stalled progress:
+During early bring-up of the XuanTie E906 co-processor, early attempts to use a userspace MMIO tool (`riscv-load` / `load-riscv.sh`) to poke CCU clock registers directly and copy flat binary payloads repeatedly stalled progress:
 1. **Strict Physical Memory Protections**: Modern Linux 7.1 enforces `CONFIG_STRICT_DEVMEM` and `CONFIG_IO_STRICT_DEVMEM`. Direct userspace mapping of physical memory is blocked by the kernel and hardware bus protections.
 2. **Missing Section Mapping**: Dumping a raw `.bin` payload failed to handle multi-region memory layouts where `.vectors`, `.text`, `.data`, and `.bss` belong in PubSRAM C (`0x00020000`) and high-performance buffers belong in Dedicated MCU SRAM (`0x3FFC0000`).
 3. **Clock Tree Desynchronization**: Userspace register writes to CCU registers fought against the kernel Common Clock Framework (CCF), runtime PM, and suspend hooks, causing cores to silently drop into `HALTED` / `In reset` states without error messages.

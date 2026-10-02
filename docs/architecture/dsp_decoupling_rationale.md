@@ -10,10 +10,10 @@
 ## 1. Executive Summary
 
 The Allwinner sun55i SoC series integrates two distinct auxiliary co-processors alongside the primary octa-core ARM Cortex-A55 cluster:
-1. **Alibaba T-Head / XuanTie E907 RISC-V Co-Processor** (RV32IMAFDC @ 200 MHz): General-purpose real-time control, sensor fusion, low-latency GPIO/peripherals, and VirtIO RPMsg zero-copy IPC.
+1. **Alibaba T-Head / XuanTie E906 RISC-V Co-Processor** (RV32IMAFDC @ 200 MHz): General-purpose real-time control, sensor fusion, low-latency GPIO/peripherals, and VirtIO RPMsg zero-copy IPC.
 2. **Cadence Tensilica HiFi4 Audio DSP** (Xtensa ISA @ 600 MHz): Specialized audio accelerator for voice preprocessing, acoustic echo cancellation (AEC), beamforming, and audio codecs.
 
-This document records the architectural decision to **decouple the Cadence HiFi4 DSP from `sunxi_rproc.c`**, standardizing `sunxi_rproc.c` strictly on the **XuanTie E906/E907 RISC-V core**.
+This document records the architectural decision to **decouple the Cadence HiFi4 DSP from `sunxi_rproc.c`**, standardizing `sunxi_rproc.c` strictly on the **XuanTie E906/E906 RISC-V core**.
 
 ---
 
@@ -40,7 +40,7 @@ Mainline Linux maintainers (Bjorn Andersson, Mathieu Poirier, Krzysztof Kozlowsk
 
 Upstream review requires that firmware and drivers can be independently compiled, verified, and reproduced by kernel maintainers without proprietary barriers:
 
-* **XuanTie E907 RISC-V**:
+* **XuanTie E906 RISC-V**:
   - Compiles with standard upstream **`riscv-none-elf-gcc`** (e.g., GCC 15, xPack, or distribution toolchains).
   - Open ISA, standard RV32 ABI, zero proprietary dependencies.
 * **Cadence Tensilica HiFi4 DSP**:
@@ -52,7 +52,7 @@ Upstream review requires that firmware and drivers can be independently compiled
 
 ## 4. Hardware Domain & Resource Isolation
 
-| Feature | XuanTie E907 RISC-V | Cadence HiFi4 DSP |
+| Feature | XuanTie E906 RISC-V | Cadence HiFi4 DSP |
 | :--- | :--- | :--- |
 | **Core Architecture** | RISC-V (RV32IMAFDC) | Cadence Tensilica Xtensa (HiFi4) |
 | **Execution Window** | SRAM Space 0 (`0x3FFC0000`, 256 KB) / Space 1 (`0x40000000`) | PubSRAM C (`0x00020000`, 128 KB) / DSP IRAM (`0x00400000`) |

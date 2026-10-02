@@ -1,5 +1,5 @@
 #!/bin/sh
-# probe_riscv_debug.sh - Discover XuanTie E907 debug module address on T527/A523
+# probe_riscv_debug.sh - Discover XuanTie E906 debug module address on T527/A523
 #
 # This script:
 #   1. Enables the RISCV CFG bus clock via MCU CCU (confirmed offset 0x124)
@@ -25,7 +25,7 @@ MCU_CCU_BASE=0x07102000
 RISCV_CLK_REG=$((MCU_CCU_BASE + 0x120))    # RISCV core clock gate
 RISCV_CFG_REG=$((MCU_CCU_BASE + 0x124))    # CFG clock + all 3 RISCV resets
 
-echo "=== T527 XuanTie E907 Debug Module Probe ==="
+echo "=== T527 XuanTie E906 Debug Module Probe ==="
 echo ""
 echo "MCU CCU base:     $(printf '0x%08X' $MCU_CCU_BASE)"
 echo "RISCV CLK reg:    $(printf '0x%08X' $RISCV_CLK_REG)"
@@ -52,7 +52,7 @@ sleep 0.1
 
 # Step 3: Scan MCU bus range for the RISC-V DTM IDCODE
 # JTAG IDCODE has bits [3:0] = 0b0001 (per IEEE 1149.1)
-# XuanTie E907 IDCODE: 0x?????001 (version/manuf vary, lsbit must be 1)
+# XuanTie E906 IDCODE: 0x?????001 (version/manuf vary, lsbit must be 1)
 # Known range: between MCU CCU (0x07102200) and I2S0 (0x07112000)
 echo ""
 echo "--- Step 3: Probing XuanTie Debug Module (0x07090000) and MCU bus ---"
@@ -62,7 +62,7 @@ FOUND=""
 val=$(devmem 0x07090000 32 2>/dev/null || echo "0xDEADBEEF")
 echo "  Primary XuanTie DBG Base (0x07090000): $val"
 if [ "$val" != "0x00000000" ] && [ "$val" != "0xFFFFFFFF" ] && [ "$val" != "0xDEADBEEF" ]; then
-    echo "  SUCCESS at 0x07090000: dmstatus = $val  <-- XuanTie E907 DBG MODULE ACTIVE"
+    echo "  SUCCESS at 0x07090000: dmstatus = $val  <-- XuanTie E906 DBG MODULE ACTIVE"
     FOUND="0x07090000"
 fi
 

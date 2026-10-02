@@ -9,11 +9,11 @@ RISCV_FIRMWARE_SITE = $(BR2_EXTERNAL_CUBIE_A5E_PATH)/../firmware
 RISCV_FIRMWARE_SITE_METHOD = local
 
 define RISCV_FIRMWARE_BUILD_CMDS
-	if [ -f $(@D)/e907-riscv/apps/Makefile ]; then \
-		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/e907-riscv/apps clean && \
-		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/e907-riscv/apps all HOST_CXX="$(TARGET_CXX)"; \
+	if [ -f $(@D)/riscv-firmware/apps/Makefile ]; then \
+		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/riscv-firmware/apps clean && \
+		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/riscv-firmware/apps all HOST_CXX="$(TARGET_CXX)"; \
 	fi
-	$(TARGET_CC) $(TARGET_CFLAGS) $(@D)/e907-riscv/tools/riscv-load.c -o $(@D)/e907-riscv/tools/riscv-load
+	$(TARGET_CC) $(TARGET_CFLAGS) $(@D)/riscv-firmware/tools/riscv-load.c -o $(@D)/riscv-firmware/tools/riscv-load
 endef
 
 define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
@@ -22,43 +22,43 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	mkdir -p $(TARGET_DIR)/usr/share/riscv-firmware
 
 	# Install all compiled RISC-V firmware ELFs and binaries
-	if [ -d $(@D)/e907-riscv/bin ]; then \
-		for elf in $(@D)/e907-riscv/bin/*.elf; do \
+	if [ -d $(@D)/riscv-firmware/bin ]; then \
+		for elf in $(@D)/riscv-firmware/bin/*.elf; do \
 			[ -f "$$elf" ] && $(INSTALL) -D -m 0644 "$$elf" $(TARGET_DIR)/lib/firmware/$$(basename "$$elf"); \
 		done; \
-		for bin in $(@D)/e907-riscv/bin/*.bin; do \
+		for bin in $(@D)/riscv-firmware/bin/*.bin; do \
 			[ -f "$$bin" ] && $(INSTALL) -D -m 0644 "$$bin" $(TARGET_DIR)/lib/firmware/$$(basename "$$bin"); \
 		done; \
 	fi
 
 	# Default active firmware loaded at boot by /etc/init.d/S60riscv
 	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/exampleRiscv.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/exampleRiscv.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/exampleRiscv.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/exampleRiscv.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testPingRpmsg.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/testPingRpmsg.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTMSGBOX)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testMsgbox.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testMsgbox.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testMsgbox.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/testMsgbox.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	else \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/lib/firmware/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/testStringBinaryTrace0.elf $(TARGET_DIR)/usr/share/riscv-firmware/firmware.elf; \
 	fi
 
 	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_HOST_TOOLS)" = "y" ]; then \
 		for tool in ping_shm ping_uio ping_rpmsg ping_dram; do \
-			if [ -f $(@D)/e907-riscv/bin/$$tool ]; then \
-				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$tool $(TARGET_DIR)/usr/bin/$$tool; \
+			if [ -f $(@D)/riscv-firmware/bin/$$tool ]; then \
+				$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/$$tool $(TARGET_DIR)/usr/bin/$$tool; \
 			fi; \
 		done; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/riscv-load $(TARGET_DIR)/usr/bin/riscv-load; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_riscv.py $(TARGET_DIR)/usr/bin/test_riscv.py; \
-		$(INSTALL) -D -m 0755 $(@D)/e907-riscv/tools/test_dual_msgbox.py $(TARGET_DIR)/usr/bin/test_dual_msgbox.py; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/tools/riscv-load $(TARGET_DIR)/usr/bin/riscv-load; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/tools/load-riscv.sh $(TARGET_DIR)/usr/bin/load-riscv.sh; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/tools/test_riscv.py $(TARGET_DIR)/usr/bin/test_riscv.py; \
+		$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/tools/test_dual_msgbox.py $(TARGET_DIR)/usr/bin/test_dual_msgbox.py; \
 		for py_tool in monitor_trace.py fast_sram_telemetry.py; do \
-			if [ -f $(@D)/e907-riscv/bin/$$py_tool ]; then \
-				$(INSTALL) -D -m 0755 $(@D)/e907-riscv/bin/$$py_tool $(TARGET_DIR)/usr/bin/$$py_tool; \
+			if [ -f $(@D)/riscv-firmware/bin/$$py_tool ]; then \
+				$(INSTALL) -D -m 0755 $(@D)/riscv-firmware/bin/$$py_tool $(TARGET_DIR)/usr/bin/$$py_tool; \
 			fi; \
 		done; \
 	fi
@@ -67,19 +67,19 @@ endef
 RISCV_FIRMWARE_INSTALL_IMAGES = YES
 
 define RISCV_FIRMWARE_INSTALL_IMAGES_CMDS
-	if [ -d $(@D)/e907-riscv/bin ]; then \
-		for elf in $(@D)/e907-riscv/bin/*.elf; do \
+	if [ -d $(@D)/riscv-firmware/bin ]; then \
+		for elf in $(@D)/riscv-firmware/bin/*.elf; do \
 			[ -f "$$elf" ] && $(INSTALL) -D -m 0644 "$$elf" $(BINARIES_DIR)/$$(basename "$$elf"); \
 		done; \
 	fi
 	if [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_EXAMPLERISCV)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/exampleRiscv.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/exampleRiscv.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTPINGRPMSG)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testPingRpmsg.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testPingRpmsg.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	elif [ "$(BR2_PACKAGE_RISCV_FIRMWARE_APP_TESTMSGBOX)" = "y" ]; then \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testMsgbox.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testMsgbox.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	else \
-		$(INSTALL) -D -m 0644 $(@D)/e907-riscv/bin/testStringBinaryTrace0.elf $(BINARIES_DIR)/riscv-firmware.elf; \
+		$(INSTALL) -D -m 0644 $(@D)/riscv-firmware/bin/testStringBinaryTrace0.elf $(BINARIES_DIR)/riscv-firmware.elf; \
 	fi
 endef
 

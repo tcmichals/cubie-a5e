@@ -17,7 +17,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |  |  | (Main Linux Kernel / OS)      |  |   |  | Clock: 600 MHz (PLL_AUDIO/PLL_DSP)|  |  |
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
-|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E907 RISC-V Core          |  |  |
+|  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906 RISC-V Core          |  |  |
 |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
 |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  +-------------------------------------+   |  +-----------------------------------+  |  |
@@ -27,7 +27,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |                                                                                         |
 |  +-----------------------------------------------------------------------------------+  |
 |  |                           Memory Hierarchy & Interconnect                         |  |
-|  |  - 512 KB Dual-Bank On-Chip SRAM (0x3FFC0000 & 0x40000000) [Exclusive E907 Firmware]  |  |
+|  |  - 512 KB Dual-Bank On-Chip SRAM (0x3FFC0000 & 0x40000000) [Exclusive E906 Firmware]  |  |
 |  |  - 128 KB HiFi4 DSP Local RAM (0x00020000) [DSP Instruction/Data RAM Only]        |  |
 |  |  - 160 KB Secure SRAM A2 (0x00044000) [OP-TEE / TF-A BL31 Firewalled Memory]      |  |
 |  |  - 4 KB RISC-V CFG Control Block (0x07130000) [STA_ADD_REG @ 0x204, WORK_MODE]   |  |
@@ -41,7 +41,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 (`sun55iw3`) | 8× ARM Cortex-A55 Cores (Octa-core) |
 | **RAM** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | Dynamic probing via U-Boot `dram_init` |
-| **Co-Processors** | **XuanTie E907 RISC-V** (up to 200 MHz, RV32IMAFDC) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | RISC-V wrapped in legacy `e906-cfg` (`0x07130000`); Pure SRAM architecture (no ITCM/DTCM) |
+| **Co-Processors** | **XuanTie E906 RISC-V** (up to 200 MHz, RV32IMAFDC) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | RISC-V wrapped in legacy `e906-cfg` (`0x07130000`); Pure SRAM architecture (no ITCM/DTCM) |
 | **NPU** | **2.0 TOPS VeriSilicon VIP9000** | VIPLite / Galcore kernel driver (`0x07122000`) |
 | **Camera Subsystem** | **Allwinner Gen-4 Video In (VIN)** | 4× MIPI CSI-2 receivers + ISP + Multi-scalers |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Base MMIO at `0x03400000` / `0x03460000` |
@@ -141,9 +141,9 @@ Allwinner Gen-4 Video In pipeline (`vind0` @ `0x05800800`):
 
 ---
 
-## 5. Heterogeneous Co-Processor (RISC-V E907) IPC Frameworks
+## 5. Heterogeneous Co-Processor (RISC-V E906) IPC Frameworks
 
-The Cubie A5E platform supports four distinct inter-processor communication options between the 8x Cortex-A55 Linux host and the XuanTie E907 co-processor:
+The Cubie A5E platform supports four distinct inter-processor communication options between the 8x Cortex-A55 Linux host and the XuanTie E906 co-processor:
 
 | IPC Category | **[STANDARDS-BASED]**<br>Official `libopenamp` + `libmetal` | **[STANDARDS-BASED]**<br>Lite-libmetal / `hal::Rpmsg` (`testPingRpmsg`) | **[CUSTOM LOW-LATENCY]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Pure Shared SRAM (`testPing` / `hal::SpscQueue`) |
 | :--- | :--- | :--- | :--- | :--- |

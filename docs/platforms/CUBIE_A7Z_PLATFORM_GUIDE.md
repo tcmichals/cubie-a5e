@@ -17,7 +17,7 @@ This document details the hardware architecture, pinout, schematic analysis, and
 | **Wireless Interface** | **AIC8800 Wi-Fi 6 + Bluetooth 5.2** | Connected via High-Speed SDIO on MMC2 (`0x04022000`) |
 | **Display Output** | **Micro-HDMI 2.0 (4K@60fps) + MIPI DSI** | Controller at `0x05520000` |
 | **Power Management** | **X-Powers AXP318 PMIC** | Connected via `r_i2c0` at `0x07083000` (PL0/PL1) |
-| **Co-Processor** | **XuanTie E907 RISC-V (RV32IMAC)** | Low-latency flight control loop & telemetry engine |
+| **Co-Processor** | **XuanTie E906 RISC-V (RV32IMAC)** | Low-latency flight control loop & telemetry engine |
 | **Reference Schematic**| [`vendor-a733-reference/schematics/radxa_cubie_a7z_schematic_v1.11.pdf`](/vendor-a733-reference/schematics/radxa_cubie_a7z_schematic_v1.11.pdf) | 14-page official hardware schematic |
 
 ---
@@ -33,7 +33,7 @@ This document details the hardware architecture, pinout, schematic analysis, and
 │   │   • 2x Cortex-A76 (2.0 GHz) + 6x Cortex-A55 (1.8 GHz) DynamIQ        │  │
 │   │   • 3.0 TOPs VeriSilicon VIP9000 NPU (0x03600000)                    │  │
 │   │   • 4K@30fps H.265/H.264 Video Engine VPU (0x01C0E000)               │  │
-│   │   • XuanTie E907 Real-Time Co-Processor (0x07110000/0x07130000)      │  │
+│   │   • XuanTie E906 Real-Time Co-Processor (0x07110000/0x07130000)      │  │
 │   │   • PowerVR BXM-4-64 MC1 GPU                                         │  │
 │   └───────────────────┬───────────────────────────┬──────────────────────┘  │
 │                       │                           │                         │

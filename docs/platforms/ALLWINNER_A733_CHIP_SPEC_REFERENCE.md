@@ -184,42 +184,43 @@ The interrupt controller is a fully compliant ARM GIC-600 supporting GICv3 archi
 The Allwinner A733 BootROM (BROM) executes on **ARM Cortex-A55 Core 0** upon power-on-reset.
 
 ```
-+-----------------------------------------------------------------------------------------+
-|                                  A733 BOOT PIPELINE                                     |
-|                                                                                         |
-|  [Power On] -> [BootROM (BROM)]                                                         |
-|                     |                                                                   |
-|                     v                                                                   |
-|            Read BOOT_MODE / FEL Pin                                                     |
-|                     |                                                                   |
-|         +-----------+-----------+                                                       |
-|         | (FEL pulled low)      | (Normal Media Boot)                                   |
-|         v                       v                                                       |
-|    [USB FEL Mode]     Scan Media Priority:                                              |
-|                       1. SMHC0 (SD Card @ Sector 0 / 16 Sectors)                        |
-|                       2. SMHC2 (eMMC User / Boot Partitions)                            |
-|                       3. SPI NOR Flash (Quad Mode -> Single Mode)                       |
-|                                 |                                                       |
-|                                 v (Load 16MB Bootloader Blob)                           |
-|                       [Stage 1: Boot0 / SPL] (Loads into SRAM_A2 @ 0x00040000)         |
-|                       - LPDDR4/5 DRAM Init & Training                                   |
-|                       - Power PMIC (AXP717 / AXP1530) Setup                             |
-|                                 |                                                       |
-|                                 v                                                       |
-|                       [Stage 2: ARM Trusted Firmware (BL31)]                            |
-|                       - Runs at EL3 (PSCI v1.1, SMC Dispatcher)                         |
-|                       - Hardcoded Exception Entry @ 0x40200000                          |
-|                                 |                                                       |
-|                                 v                                                       |
-|                       [Stage 3: U-Boot 2018.07 / 2024.x]                                |
-|                       - Boots XuanTie E906 RISC-V co-processor (SCP)                    |
-|                       - Loads boot.scr + Image + DTB from FAT @ 16MB Offset             |
-|                                 |                                                       |
-|                                 v                                                       |
-|                       [Stage 4: Linux Kernel (7.1 PREEMPT_RT)]                          |
-|                       - Entry Address: 0x40200000                                       |
-|                       - GICv3 Init -> CCU/PRCM Probe -> Rootfs Mount                    |
-+-----------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------+
+|                            A733 BOOT PIPELINE                            |
+|                                                                          |
+|  [Power On] -> [BootROM (BROM)]                                          |
+|                     |                                                    |
+|                     v                                                    |
+|            Read BOOT_MODE / FEL Pin                                      |
+|                     |                                                    |
+|         +-----------+-----------+                                        |
+|         | (FEL pulled low)      | (Normal Media Boot)                    |
+|         v                       v                                        |
+|    [USB FEL Mode]     Scan Media Priority:                               |
+|                       1. SMHC0 (SD Card @ Sector 0 / 16 Sectors)         |
+|                       2. SMHC2 (eMMC User / Boot Partitions)             |
+|                       3. SPI NOR Flash (Quad Mode -> Single Mode)        |
+|                                 |                                        |
+|                                 v (Load 16MB Bootloader Blob)            |
+|                       [Stage 1: Boot0 / SPL]                             |
+|                       - Loads into SRAM_A2 @ 0x00040000                  |
+|                       - LPDDR4/5 DRAM Init & Training                    |
+|                       - Power PMIC (AXP717 / AXP1530) Setup              |
+|                                 |                                        |
+|                                 v                                        |
+|                       [Stage 2: ARM Trusted Firmware (BL31)]             |
+|                       - Runs at EL3 (PSCI v1.1, SMC Dispatcher)          |
+|                       - Hardcoded Exception Entry @ 0x40200000           |
+|                                 |                                        |
+|                                 v                                        |
+|                       [Stage 3: U-Boot 2018.07 / 2024.x]                 |
+|                       - Boots XuanTie E906 co-processor (SCP)            |
+|                       - Loads boot.scr + Image + DTB from FAT @ 16MB     |
+|                                 |                                        |
+|                                 v                                        |
+|                       [Stage 4: Linux Kernel (7.1 PREEMPT_RT)]           |
+|                       - Entry Address: 0x40200000                        |
+|                       - GICv3 Init -> CCU/PRCM Probe -> Rootfs Mount     |
++--------------------------------------------------------------------------+
 ```
 
 ### Storage Partitioning Rules (Radxa Cubie A7A)

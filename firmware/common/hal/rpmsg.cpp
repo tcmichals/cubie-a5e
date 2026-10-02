@@ -61,19 +61,19 @@ namespace {
     VirtQueueLayout s_rx_vq; // vring[1]: Host -> Remote (RX)
 
     inline uintptr_t translate_da(uint32_t da) {
-        // SRAM Space 1 on Allwinner A527 (Host 0x072c0000 -> E907 0x40000000)
+        // SRAM Space 1 on Allwinner A527 (Host 0x072c0000 -> E906 0x40000000)
         if (da >= 0x072c0000 && da < 0x07300000) {
             return static_cast<uintptr_t>(da - 0x072c0000 + 0x40000000);
         }
-        // SRAM Space 0 on Allwinner A527 (Host 0x07280000 -> E907 0x3ffc0000)
+        // SRAM Space 0 on Allwinner A527 (Host 0x07280000 -> E906 0x3ffc0000)
         if (da >= 0x07280000 && da < 0x072c0000) {
             return static_cast<uintptr_t>(da - 0x07280000 + 0x3ffc0000);
         }
-        // SRAM Space 0 on Allwinner T527 (Host 0x07200000 -> E907 0x3ffc0000)
+        // SRAM Space 0 on Allwinner T527 (Host 0x07200000 -> E906 0x3ffc0000)
         if (da >= 0x07200000 && da < 0x07240000) {
             return static_cast<uintptr_t>(da - 0x07200000 + 0x3ffc0000);
         }
-        // DDR DRAM and direct E907 local addresses
+        // DDR DRAM and direct E906 local addresses
         return static_cast<uintptr_t>(da);
     }
 

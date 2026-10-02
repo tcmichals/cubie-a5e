@@ -2,7 +2,7 @@
 
 - **Timestamp**: 2026-09-25 14:06:37
 - **Target**: 192.168.1.33 (Linux 7.1 PREEMPT_RT)
-- **Co-Processor**: XuanTie E907 RISC-V
+- **Co-Processor**: XuanTie E906 RISC-V
 
 ## In-Kernel KUnit Driver Test Verification (67 Tests)
 

@@ -22,11 +22,11 @@ This document provides the complete hardware, security, and boot architecture fo
 
 ## 2. Silicon Topology & Domain Architecture
 
-Unlike the Allwinner T527 / A523 which features a high-performance XuanTie E906/E907 core with dedicated hardware FPU and ITCM/DTCM inside an open MCU domain (`0x07100000+`), the **A733 integrates a XuanTie E902 core inside the CPUS / Always-On (`R_`) power management subsystem**:
+Unlike the Allwinner T527 / A523 which features a high-performance XuanTie E906/E906 core with dedicated hardware FPU and ITCM/DTCM inside an open MCU domain (`0x07100000+`), the **A733 integrates a XuanTie E902 core inside the CPUS / Always-On (`R_`) power management subsystem**:
 
 | Silicon Feature | Allwinner T527 / A523 (Cubie A5E) | Allwinner A733 (Cubie A7A & Banana Pi A733) |
 | :--- | :--- | :--- |
-| **RISC-V Core IP** | XuanTie E906 / E907 (RV32IMAFDC + FPU) | **XuanTie E902 (RV32EMC, 16 GPRs, Integer only)** |
+| **RISC-V Core IP** | XuanTie E906 / E906 (RV32IMAFDC + FPU) | **XuanTie E902 (RV32EMC, 16 GPRs, Integer only)** |
 | **Subsystem Domain** | MCU / DSP Domain (`0x07100000+`) | **CPUS / Always-On (`R_`) Domain (`0x07000000+`)** |
 | **Max Clock Rate** | 200 MHz | 200 MHz |
 | **Registers** | 32 General Purpose Registers (`x0`–`x31`) | **16 General Purpose Registers (`x0`–`x15`)** |

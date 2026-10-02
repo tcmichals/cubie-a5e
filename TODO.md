@@ -13,7 +13,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 | Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Active Milestones |
 | :--- | :--- | :--- | :--- | :--- |
-| **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E907<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
+| **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E906<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
 | **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **Active Silicon Bring-Up**<br>• Hub & Wi-Fi Power Configured<br>• U-Boot Ethernet Verified | 1. USB Hub & Wi-Fi Enumeration<br>2. GMAC210 TX DMA Watchdog Fix<br>3. E902 Dual-Mode RemoteProc |
 
 ---
@@ -22,7 +22,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## 1. Verified Silicon Milestones (Completed)
 
-- [x] **XuanTie E907 Core Bootstrap & Dynamic Switching**: Clean `start` -> `stop` -> `start` cycles via Linux RemoteProc sysfs; zero `/dev/mem` register hacks.
+- [x] **XuanTie E906 Core Bootstrap & Dynamic Switching**: Clean `start` -> `stop` -> `start` cycles via Linux RemoteProc sysfs; zero `/dev/mem` register hacks.
 - [x] **Native Kernel Clocks & Resets**: Converted to standard CCU `devm_clk_get()` (`bus`, `core`, `sram`) and `devm_reset_control_get()`.
 - [x] **Debugfs Telemetry**: Live ASCII, binary struct, and hex dump logging via `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
 - [x] **Hardware Exception Trapping (`testCrash.elf`)**: Machine-mode trap handler captures register autopsy to SRAM (`0xDEADF00D`) without crashing ARM Linux host.
@@ -109,7 +109,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 4. XuanTie E907 Advanced RemoteProc & IPC Tasks
+## 4. XuanTie E906 Advanced RemoteProc & IPC Tasks
 
 - [x] **Task 1: Pure On-Chip SRAM VirtIO RPMsg Benchmark (`testPingRpmsgSram`)**:
   - [x] Declared dynamic `FW_RSC_ADDR_ANY` vrings in `resource_table.c` / `resource_table.h` with `translate_da()` in `hal::Rpmsg` to map host physical addresses to core local DA.
@@ -142,10 +142,10 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [ ] **Task 3: System Power Management (Suspend / Resume & Low-Power Sleep)**:
   - [ ] **Driver PM Callbacks**: Implement `dev_pm_ops` (`sunxi_rproc_suspend` and `sunxi_rproc_resume`) in `sunxi_rproc.c`.
   - [ ] **Mode A (Clean Core Stop on Suspend)**:
-    - On `echo mem > /sys/power/state`, gracefully stop E907, save state, and restart post-wake.
+    - On `echo mem > /sys/power/state`, gracefully stop E906, save state, and restart post-wake.
   - [ ] **Mode B (Always-On Sensor Hub in SRAM)**:
     - Test if on-chip SRAM Space 0/1 retains state during SoC deep sleep.
-    - Keep E907 running in `wfi` in SRAM while Cortex-A55 cores sleep; evaluate waking the host via mailbox interrupt.
+    - Keep E906 running in `wfi` in SRAM while Cortex-A55 cores sleep; evaluate waking the host via mailbox interrupt.
   - [ ] **Target Validation**: Verify system suspend/resume cycles (`echo mem > /sys/power/state`) while running RPMsg ping traffic; verify no bus lockups, clock stalls, or memory corruption.
 
 - [ ] **Task 4: Multi-Channel Concurrency & High-Load Stress Testing**:
@@ -157,7 +157,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Map HiFi4 DSP memory window (`0x00020000`, 320 KB), `DSP_ALT_RESET_VEC_REG`, and `DSP_CTRL_REG0` clock/reset controls in `sunxi_rproc.c`.
   - [x] Add DT binding for DSP remoteproc instance in `sun55i-a523.dtsi` (`rproc_dsp: remoteproc@7100000`).
   - [x] Create and compile dedicated DSP applications: `dsp-testBasic.elf`, `dsp-testMsgbox.elf`, `dsp-testCrash.elf`, `dsp-testStringBinaryTrace0.elf`, `dsp-testVectorMath.elf`.
-  - [ ] Validate dual remoteproc (`remoteproc0` E907 and `remoteproc1` HiFi4 DSP) live on physical hardware.
+  - [ ] Validate dual remoteproc (`remoteproc0` E906 and `remoteproc1` HiFi4 DSP) live on physical hardware.
 
 - [ ] **Task 6: AIC8800D80 SDIO Wi-Fi & Bluetooth Firmware Upload / SDIO Timeout Fix**:
   - **Symptom**: On mainline Linux 7.1 kernel boot, `aicbsp` fails during SDIO firmware upload with `sunxi-mmc` data error and timeout (-110):
@@ -457,7 +457,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 **[HIGH]** Incorrect bounds check intercepts Space 1 memory accesses
 
-> Sashiko: *"`0x40000000` is `E907_SRAM_SPACE1_DA` (Space 1), but the Space 0 `r_sram` block checks `da >= 0x40000000`, intercepting valid Space 1 accesses."*
+> Sashiko: *"`0x40000000` is `E906_SRAM_SPACE1_DA` (Space 1), but the Space 0 `r_sram` block checks `da >= 0x40000000`, intercepting valid Space 1 accesses."*
 
 - [x] **S1.2**: Removed `0x40000000` DA alias from `r_sram` (Space 0) block. Space 0 core-DA views are `0x3ff80000`, `0x3ffc0000`, and `0x00020000`. The `0x40000000` and `0x40040000` checks belong exclusively in `r_sram1` (Space 1).
 
@@ -642,9 +642,9 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 #### 1. Mainline Driver Architectural Comparison Matrix
 
-| Aspect / Function | `sunxi_rproc.c` (Allwinner E907) | `imx_rproc.c` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc.c` (TI K3 R5F) | `stm32_rproc.c` (ST STM32MP1 M4) | `rcar_rproc.c` (Renesas R-Car CR7) |
+| Aspect / Function | `sunxi_rproc.c` (Allwinner E906) | `imx_rproc.c` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc.c` (TI K3 R5F) | `stm32_rproc.c` (ST STM32MP1 M4) | `rcar_rproc.c` (Renesas R-Car CR7) |
 |---|---|---|---|---|---|
-| **Architecture** | XuanTie E907 RISC-V co-processor | Cortex-M4/M7 microcontroller | Cortex-R5F in lockstep/split mode | Cortex-M4 microcontroller | Cortex-R7 co-processor |
+| **Architecture** | XuanTie E906 RISC-V co-processor | Cortex-M4/M7 microcontroller | Cortex-R5F in lockstep/split mode | Cortex-M4 microcontroller | Cortex-R7 co-processor |
 | **Reset Hierarchy** | Two-stage: `rst_cfg`/`rst_sram` (bus) vs `rst_core` (CPU) | SMC call or SRC register bits | Two-stage: `module-reset` (bus/RAM) vs `local-reset` (CPU) | Syscon hold_boot / SCMI / SMC | Single reset controller (`rst`) |
 | **`.prepare()`** | Deasserts bus resets, enables clocks, enables SRAM remap, clears SRAM (`memset_io`) | Maps memory (`imx_rproc_addr_init`), enables clocks | Deasserts module-reset to allow loading internal RAM while CPU reset is held | Registers reserved memory carveouts, allocates vrings | Registers reserved memory carveouts |
 | **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address register | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot | Sets boot address via `rcar_rst`, deasserts reset |
@@ -664,7 +664,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
    - **`start()`**: Writes entry point to `STA_ADD_REG` and releases `rst_core`. The remote core begins execution strictly at the entry point.
 2. **Memory Mapping & `da_to_va` Rationale**:
    - **Why `da_to_va` returns `NULL` for dynamic carveouts**: The Linux remoteproc core maintains an internal list of carveouts (`rproc->carveouts`). When `rproc_da_to_va()` runs, if `ops->da_to_va()` returns `NULL`, the core automatically searches `rproc->carveouts`. In `sunxi_rproc_parse_memory_regions()`, all `reserved-memory` nodes (vdev0vring0, vdev0vring1, vdev0buffer) are registered with `rproc_add_carveout()`. Letting the core handle DDR carveouts avoids duplicate address translation code and ensures full compatibility with dynamic DMA allocations.
-   - **Why multiple DA aliases exist for SRAM**: The XuanTie E907 core has multiple address decode windows:
+   - **Why multiple DA aliases exist for SRAM**: The XuanTie E906 core has multiple address decode windows:
      - Space 0 local view: `0x3ff80000` (primary) and `0x3ffc0000` (secondary).
      - Legacy view: `0x00020000` (PubSRAM C alias used in older BSP firmware).
      - Space 1 switchable view: `0x40000000` and `0x40040000` (mapped via `remap` bit 1).
@@ -884,7 +884,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 * **Goal**: Support XuanTie E902 (RV32EMC @ 200 MHz, no FPU, 208 KB System SRAM A2) co-processor execution via Linux RemoteProc.
 
 - [x] **Silicon & Security Discovery**:
-  - [x] Identified co-processor as XuanTie E902 (distinct from A5E's E907).
+  - [x] Identified co-processor as XuanTie E902 (distinct from A5E's E906).
   - [x] Stock BL31 write-protects `0x07032204` for factory `scp.fex`.
 - [x] **Dual-Mode Operating Model**:
   - **Mode 1 (Suspend/Resume)**: Stock TOC1 with `scp.fex` for consumer S3 deep sleep.
@@ -932,7 +932,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 * **Scope**: Cross-reference bare-metal drivers, clock trees, DRAM initialization, and coprocessor loaders for both **Allwinner T527 (Radxa Cubie A5E / Avaota-A1)** and **Allwinner A733 (Radxa Cubie A7A)** to ensure no hardware quirks, errata workarounds, or register bits are missed in our upstream Linux and U-Boot port.
 
 ## 1. Allwinner T527 / A527 (Cubie A5E / Avaota-A1) Follow-Up Tasks
-- [ ] **HiFi4 DSP & XuanTie E907 Bare-Metal Loaders**:
+- [ ] **HiFi4 DSP & XuanTie E906 Bare-Metal Loaders**:
   - [ ] Inspect SyterKit's `load_hifi4` implementation to compare DSP reset release sequence, `HIFI4_CTRL_REG0` stall bits, and `HIFI4_ALT_RESET_VEC` vector setup against our `sunxi_rproc.c` and `cubie-a5e-dsp.dtso`.
   - [ ] Compare SyterKit's SRAM remap register settings (`0x07140364` / `0x07010364`) to confirm DSP private memory isolation vs host shared window.
 - [ ] **CCU / MCU CCU Clock Gating & Reset Assertions**:
@@ -955,7 +955,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 # Part IV: AbstractX & Firmware Quality Engineering: Sashiko-Grade Adversarial Review & CppUTest Integration
 
 * **Context & Motivation**:
-  - AI code assistants routinely fail on embedded C++20 bare-metal firmware (such as AbstractX, XuanTie E907/E902 coprocessor firmware, and dual-SPI flight stacks). They hallucinate requirements, miss subtle lifetime invariants, introduce hidden heap allocations, botch coroutine frame destruction, and introduce memory-ordering races in lock-free ring buffers.
+  - AI code assistants routinely fail on embedded C++20 bare-metal firmware (such as AbstractX, XuanTie E906/E902 coprocessor firmware, and dual-SPI flight stacks). They hallucinate requirements, miss subtle lifetime invariants, introduce hidden heap allocations, botch coroutine frame destruction, and introduce memory-ordering races in lock-free ring buffers.
   - Sashiko-bot succeeded on the Linux kernel RemoteProc/Mailbox drivers because it dismantled monolithic evaluation into a **5-stage decomposed adversarial protocol** with non-negotiable invariant checklists.
   - Applying these identical adversarial review protocols combined with **CppUTest** (embedded test-driven development, memory leak detection, and hardware mock contracts) establishes an ironclad, automated quality gate that prevents AI regressions.
 

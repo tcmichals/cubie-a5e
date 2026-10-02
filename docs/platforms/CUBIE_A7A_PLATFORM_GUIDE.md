@@ -87,7 +87,7 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | **PRCM R-PIO Bank 0 (PL)**| `GIC_SPI` | **198** (`0xc6`) | `<GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>` | Port L external GPIO interrupts |
 | **PRCM R-PIO Bank 1 (PM)**| `GIC_SPI` | **200** (`0xc8`) | `<GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>` | Port M external GPIO interrupts |
 | **PMIC I2C (R_I2C0)** | `GIC_SPI` | **203** (`0xcb`) | `<GIC_SPI 203 IRQ_TYPE_LEVEL_HIGH>` | I2C transfer completion & error |
-| **Hardware Mailbox** | `GIC_SPI` | **211** (`0xd3`) | `<GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>` | RISC-V E907 IPC mailbox interrupt |
+| **Hardware Mailbox** | `GIC_SPI` | **211** (`0xd3`) | `<GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>` | RISC-V E906 IPC mailbox interrupt |
 
 ---
 

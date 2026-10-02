@@ -6,7 +6,7 @@
  *                    RADXA CUBIE A5E — FLIGHT STACK OVERLAY
  * ============================================================================
  * Hardware Resource Partitioning:
- *  - RISC-V Co-Processor (XuanTie E907 Dedicated):
+ *  - RISC-V Co-Processor (XuanTie E906 Dedicated):
  *      * UART2 (Serial Console / CRSF / Telemetry) on Pins 11 & 13 (PB0/PB1)
  *      * SPI0 (Dual-SPI for FPGA @ CS0, Single-SPI for IMU @ CS1) on Pins 19, 21, 23, 24, 26 (Port C)
  *      * FPGA Frame Ready ISR (GPIO Input) on Pin 22

@@ -6,7 +6,7 @@ application cores with low-power, deterministic auxiliary microcontrollers—hav
 become the standard architecture for modern embedded systems, robotics, and 
 industrial automation. Silicon like the **Allwinner T527 / A527** (featured on 
 the **Radxa Cubie A5E**) integrates an octa-core ARM Cortex-A55 cluster 
-alongside an auxiliary **XuanTie E907 RISC-V core** (RV32IMAFCX @ 200 MHz).
+alongside an auxiliary **XuanTie E906 RISC-V core** (RV32IMAFCX @ 200 MHz).
 
 Getting this co-processor online requires establishing reliable hardware 
 lifecycle control, clock tree synchronization, and deterministic memory 
@@ -15,7 +15,7 @@ placement before loading production firmware.
 * **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
 
 This article is **Part 1 of a multi-part hands-on series** documenting the 
-practical bring-up and engineering realities of the XuanTie E907 RISC-V 
+practical bring-up and engineering realities of the XuanTie E906 RISC-V 
 co-processor under Linux:
 
 * **Part 1 (This Article)**: Bill of Materials, architectural rationale, TRM memory maps, SRAM architecture & RemoteProc boot mechanics, `startup.S` FPU initialization, and debugging realities on live silicon.
@@ -54,12 +54,12 @@ co-processor hardware memory nodes:
 ```bash
 # 1. Check for registered RemoteProc subsystem instances:
 ls -la /sys/class/remoteproc/
-# Expected output: remoteproc0 (XuanTie E907 RISC-V)
+# Expected output: remoteproc0 (XuanTie E906 RISC-V)
 
 # 2. Inspect kernel dmesg for remoteproc driver probing:
 dmesg | grep -i -E "remoteproc|rproc|sunxi"
 
-# 3. Check live Device Tree nodes for the XuanTie E907 block:
+# 3. Check live Device Tree nodes for the XuanTie E906 block:
 ls -d /sys/firmware/devicetree/base/soc/remoteproc@7130000
 ```
 
@@ -75,18 +75,18 @@ systems, multimedia pipelines, computer vision, and machine learning. However,
 running jitter-sensitive, hard real-time control tasks directly on an application 
 processor introduces fundamental engineering challenges.
 
-The auxiliary **XuanTie E907 RISC-V core** on the Allwinner T527 solves these 
+The auxiliary **XuanTie E906 RISC-V core** on the Allwinner T527 solves these 
 challenges through asymmetric multiprocessing (AMP):
 
 ### 3.1 Deterministic Timing & Real-Time Control Loops
 * **The DRAM Bottleneck**: The ARM Cortex-A55 cluster executes out of external LPDDR4/4X dynamic RAM (`0x40000000`). Even with the Linux `PREEMPT_RT` patchset, DRAM access is inherently non-deterministic. Periodic row refreshes (`tRFC`), memory controller arbitration among 8 CPU cores, GPU, NPU, ISP, and DMA engines, and cache-line refills introduce latency spikes from hundreds of nanoseconds to several milliseconds.
-* **Zero-Wait-State SRAM**: The XuanTie E907 executes out of dedicated on-chip SRAM (SRAM Space 0 at `0x3FFC0000`, SRAM Space 1 at `0x40000000`) with fixed single-cycle, zero-wait-state access across 512 KB continuous memory. Instruction execution times and memory latency are 100% deterministic.
-* **Hard Real-Time Loops**: Applications such as drone flight controllers, gimbal stabilization, and motor control (FOC) require strict periodic execution at 8–50 kHz with sub-microsecond jitter. The E907 features a dedicated RISC-V PLIC, hardware single-precision FPU (`F`), and 32 integer registers, enabling it to service high-rate sensor interrupts (SPI IMU `DRDY` signals) with instantaneous, deterministic response.
+* **Zero-Wait-State SRAM**: The XuanTie E906 executes out of dedicated on-chip SRAM (SRAM Space 0 at `0x3FFC0000`, SRAM Space 1 at `0x40000000`) with fixed single-cycle, zero-wait-state access across 512 KB continuous memory. Instruction execution times and memory latency are 100% deterministic.
+* **Hard Real-Time Loops**: Applications such as drone flight controllers, gimbal stabilization, and motor control (FOC) require strict periodic execution at 8–50 kHz with sub-microsecond jitter. The E906 features a dedicated RISC-V PLIC, hardware single-precision FPU (`F`), and 32 integer registers, enabling it to service high-rate sensor interrupts (SPI IMU `DRDY` signals) with instantaneous, deterministic response.
 
 ### 3.2 CPU Offload, Fault Isolation & Power
 * **Offload Linux Cores**: Servicing ultra-high-frequency interrupts on the ARM host burns CPU cycles in context switching, kernel transitions, and cache thrashing. Offloading to the co-processor frees the Cortex-A55 cluster for NPU inference, video streaming, ROS2 nodes, and flight log storage.
-* **Fault Containment**: The E907 resides in an independent power, clock, and reset domain. If Linux panics, OOMs, or undergoes an OTA update, the RISC-V core continues running—maintaining actuator currents, triggering emergency shutdowns, or signaling via GPIOs and CAN-FD.
-* **Low-Power Standby**: The eight ARM Cortex-A55 cores at 1.8 GHz consume several watts. The E907 can remain active at low power while Linux sleeps, waking the host via inter-core interrupt when a trigger condition is met.
+* **Fault Containment**: The E906 resides in an independent power, clock, and reset domain. If Linux panics, OOMs, or undergoes an OTA update, the RISC-V core continues running—maintaining actuator currents, triggering emergency shutdowns, or signaling via GPIOs and CAN-FD.
+* **Low-Power Standby**: The eight ARM Cortex-A55 cores at 1.8 GHz consume several watts. The E906 can remain active at low power while Linux sleeps, waking the host via inter-core interrupt when a trigger condition is met.
 
 ---
 
@@ -105,14 +105,14 @@ sun55i Generation (Same Die IP) +---> Allwinner A527 (Commercial SBC)
 
 * **Same Silicon Core**: The **T527** (industrial grade) and **A527** (commercial grade) share the exact same internal silicon die, bus topology, and MCU memory map as the **A523**.
 * **Kernel Codename (`sun55i`)**: In upstream Linux and U-Boot, this generation is codenamed **`sun55i`**. The board device tree (`sun55i-a527-cubie-a5e.dts`) includes the base `sun55i-a523.dtsi`, and the clock driver is `ccu-sun55i-a523-mcu.c`.
-* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E907 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)).
+* **Dedicated RISC-V RemoteProc Architecture**: While the physical T527 die includes an auxiliary audio DSP block, our Linux RemoteProc implementation (`sunxi_rproc.c`) strictly focuses on the **XuanTie E906 RISC-V** co-processor following upstream kernel subsystem separation guidelines (see [DSP Decoupling Rationale](../architecture/dsp_decoupling_rationale.md)).
 * **Sibling Generation (`sun60i` / A733)**: The **Allwinner A733** (powering the **Radxa Cubie A7A**) belongs to the newer `sun60i` big.LITTLE generation (2x Cortex-A76 + 6x Cortex-A55). While its main peripheral space is relocated, its auxiliary MCU subsystem reuses a **XuanTie RISC-V core** (E902) executing out of SRAM A2 and adheres to the identical `remoteproc` driver model.
 
 ### 4.1 Board Hardware Comparison
 
 #### Radxa Cubie A5E (Allwinner T527 / A527, `sun55i`)
 * **Application Processor**: 8× ARM Cortex-A55 @ 1.8 GHz
-* **Auxiliary Real-Time Core**: XuanTie E907 (RV32IMAFCX @ 200 MHz, 32 GPRs, Hardware Single FPU)
+* **Auxiliary Real-Time Core**: XuanTie E906 (RV32IMAFCX @ 200 MHz, 32 GPRs, Hardware Single FPU)
 * **Audio DSP**: Decoupled (Not managed by `sunxi_rproc.c`)
 * **Fast On-Chip Memory**: 512 KB Continuous SRAM (`0x3FFC0000`–`0x40040000`)
 * **Hardware Reset Vector**: `STA_ADD_REG` defaults to `0x3FFC0000`
@@ -149,8 +149,8 @@ verified on live silicon:
   * `0x0204` (`STA_ADD_REG`): **Start Vector / Boot Address Register**. Defines initial program counter address fetched upon reset deassertion. In silicon, **its factory default value is `0x3FFC0000`**.
   * `0x0248` (`WORK_MODE_REG`): Work Mode Register. Bit 3 (`BIT_LOCK_STA`) indicates hardware core lockup status (0 = Running normally, 1 = Core lockup).
 * **Chapter on MCU Clock Control Unit (`MCU_CCU` @ `0x07102000`)**:
-  * `0x07102120` (`MCU_CLK_REG`): XuanTie E907 core clock gating and divider selection.
-  * `0x07102124` (`MCU_RST_REG`): XuanTie E907 reset control (Bit 16: CFG reset, Bit 17: DBG reset, Bit 18: Core Run reset).
+  * `0x07102120` (`MCU_CLK_REG`): XuanTie E906 core clock gating and divider selection.
+  * `0x07102124` (`MCU_RST_REG`): XuanTie E906 reset control (Bit 16: CFG reset, Bit 17: DBG reset, Bit 18: Core Run reset).
 * **Chapter on Hardware Message Box (`CPUX_MSGBOX` @ `0x03003000` / `RISCV_MSGBOX` @ `0x07136000`)**:
   * 8-channel bi-directional hardware FIFO doorbells connecting ARM64 GIC SPI interrupts and RISC-V PLIC interrupts.
 
@@ -168,7 +168,7 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
 * **MCU CCU Clocks & Resets**: Host `0x07102000` -> Core `0x07102000` (4 KB)
   * *Role*: Clock gates (`0x07102120`), resets (`0x07102124`: bit 16 CFG, bit 17 DBG, bit 18 CORE).
 * **Hardware MSGBOX**: Host `0x03003000` -> Core `0x03003000` (4 KB)
-  * *Role*: 8-channel bi-directional doorbell FIFO. Port 2 (Ch 8/9) connects Host ARM & E907 RISC-V.
+  * *Role*: 8-channel bi-directional doorbell FIFO. Port 2 (Ch 8/9) connects Host ARM & E906 RISC-V.
 * **RemoteProc Trace Buffer (`trace0`)**: Host `0x07285A30`+ -> Core `0x3FFC5A30`+ (4 KB)
   * *Role*: RemoteProc debugfs trace buffer (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`). Mapped inside SRAM Space 0 (`.trace_buffer`).
 * **Main AP Peripheral Space**: Host `0x02000000`+ -> Core `0x02000000`+
@@ -179,7 +179,7 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
 ### 5.3 Address Translation Overview
 
 ```text
-  LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E907 RISC-V CORE VIEW
+  LINUX HOST (ARM64) PHYSICAL VIEW                  XUANTIE E906 RISC-V CORE VIEW
   ================================                  =============================
   0x07280000 - 0x072BFFFF [ 256 KB ] -------------> 0x3FFC0000 - 0x3FFFFFFF (SRAM Space 0)
     (Device Tree: "r_sram", Base Reset Entry)         (Primary Boot, .vectors, .text, stack)
@@ -191,7 +191,7 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
     (Device Tree: "cfg", STA_ADD_REG 0x204)           (Boot Vector: 0x3FFC0000)
 
   0x03003000 - 0x03003FFF [   4 KB ] -------------> 0x03003000 - 0x03003FFF (MSGBOX)
-    (Port 2 Ch 8/9: Host <-> E907)                    (Port 2: RISC-V Local Mailbox)
+    (Port 2 Ch 8/9: Host <-> E906)                    (Port 2: RISC-V Local Mailbox)
 
   0x48000000 - 0x480FFFFF [   1 MB ] -------------> 0x48000000 - 0x480FFFFF (DDR DMA Pool)
     (Reserved VirtIO RPMsg Pool)                      (vrings & Streaming Payloads)
@@ -201,13 +201,13 @@ The authoritative memory mapping registered in the Linux RemoteProc driver
 
 ## 6. Memory Architecture & Boot Mechanics: SRAM & Startup Sequence
 
-On the Allwinner T527, Linux RemoteProc and the XuanTie E907 co-processor communicate 
+On the Allwinner T527, Linux RemoteProc and the XuanTie E906 co-processor communicate 
 and boot through dedicated on-chip SRAM:
 
 ### 6.1 The Boot Reality: RemoteProc Boots Directly from SRAM Space 0 (`0x3FFC0000`)
 
 > **Caution (The `0x40000000` vs `0x3FFC0000` Boot Gotcha):**  
-> Early vendor BSPs and community bring-up attempts frequently locked up because code attempted to boot the E907 at address `0x40000000`. On the T527, `0x40000000` is the base of DRAM (and secondary SRAM Space 1). However, the silicon reset vector and default `STA_ADD_REG` (`0x07130204`) strictly point to **SRAM Space 0 at `0x3FFC0000`**. Firmware must be linked to ORIGIN `0x3FFC0000`.
+> Early vendor BSPs and community bring-up attempts frequently locked up because code attempted to boot the E906 at address `0x40000000`. On the T527, `0x40000000` is the base of DRAM (and secondary SRAM Space 1). However, the silicon reset vector and default `STA_ADD_REG` (`0x07130204`) strictly point to **SRAM Space 0 at `0x3FFC0000`**. Firmware must be linked to ORIGIN `0x3FFC0000`.
 
 1. **Device Tree Bindings (`sun55i-a523.dtsi`)**:
    During driver probe, `sunxi_rproc.c` binds to the registered hardware blocks:
@@ -237,7 +237,7 @@ and boot through dedicated on-chip SRAM:
    ```
 
 2. **Loading Firmware into SRAM Space 0**:
-   The primary co-processor firmware (`e907_sram.ld`) is linked to execute out of **SRAM Space 0 (`0x3FFC0000`)**:
+   The primary co-processor firmware (`e906_sram.ld`) is linked to execute out of **SRAM Space 0 (`0x3FFC0000`)**:
    ```ld
    MEMORY {
        SRAM (rwx) : ORIGIN = 0x3FFC0000, LENGTH = 256K
@@ -250,7 +250,7 @@ and boot through dedicated on-chip SRAM:
    * `sunxi_rproc_start()` retrieves the ELF entry point (`rproc->bootaddr`), which is **`0x3FFC0000`** (`_vectors`).
    * The driver programs this address into the hardware boot vector register `STA_ADD_REG` (`0x07130204`).
    * The driver deasserts the core run reset (`rst_core`, bit 18 in `MCU_RST_REG 0x07102124`).
-   * The XuanTie E907 begins execution immediately from `0x3FFC0000` in SRAM Space 0.
+   * The XuanTie E906 begins execution immediately from `0x3FFC0000` in SRAM Space 0.
 
 ---
 
@@ -343,17 +343,17 @@ Development Workstation
   e.g. TI AM62x: mapped into host physical address space
 ```
 
-On the **Allwinner T527**, the XuanTie E907 Debug Module is **not routed** to the non-secure ARM bus interconnect. The address `0x07090000` often speculated about in community discussions is the **RTC register block** per the T527 User Manual—not a DMI window.
+On the **Allwinner T527**, the XuanTie E906 Debug Module is **not routed** to the non-secure ARM bus interconnect. The address `0x07090000` often speculated about in community discussions is the **RTC register block** per the T527 User Manual—not a DMI window.
 
 ### 7.2 What Works Today: Four Practical Debug Strategies
 
-For XuanTie E907 firmware development on current T527 hardware, these four strategies provide reliable, production-grade diagnostics:
+For XuanTie E906 firmware development on current T527 hardware, these four strategies provide reliable, production-grade diagnostics:
 
 1. **Linux RemoteProc Trace Buffers (`trace0`)** *(Primary)*: The `.resource_table` in firmware declares a `RSC_TRACE` entry backed by a circular ring buffer in SRAM Space 0 (`0x3FFC0000`). Linux maps it and exposes a live streaming interface:
    ```bash
    cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
    ```
-   Zero-overhead, no extra hardware required. Used by all `firmware/e907-riscv/apps` test applications.
+   Zero-overhead, no extra hardware required. Used by all `firmware/riscv-firmware/apps` test applications.
 
 2. **Dedicated Hardware UART (`S_UART0` @ `0x07080000`)**: A RISC-V-owned independent serial port in the CPUS Always-On domain at 115200 baud. Provides immediate low-level boot diagnostics completely separate from the Linux console UART (`UART0` @ `0x02500000`).
 
@@ -375,7 +375,7 @@ In this introductory article, we established:
 In **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**, we move from architecture to software implementation:
 * Authoring the **Linux 7.1 `sunxi_rproc.c` RemoteProc kernel driver**.
 * Configuring multi-segment ELF placement (SRAM Space 0, SRAM Space 1, and DDR carveouts) and built-in debugfs trace logging.
-* Proving hardware state transitions using the all-new `firmware/e907-riscv/apps` verification suite (`testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPing`, `testPingRpmsg`, `testDRAMMsg`).
+* Proving hardware state transitions using the all-new `firmware/riscv-firmware/apps` verification suite (`testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPing`, `testPingRpmsg`, `testDRAMMsg`).
 
 ---
 

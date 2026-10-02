@@ -1,7 +1,7 @@
 # Linux RemoteProc & Mailbox Driver Architectural Guide
 
 **Author**: Tim Michals <tcmichals@gmail.com> / Embedded Real-Time Team  
-**Scope**: Allwinner A523/A527/T527 (XuanTie E907), Allwinner A733 (XuanTie E902), and Mainline Linux Subsystems  
+**Scope**: Allwinner A523/A527/T527 (XuanTie E906), Allwinner A733 (XuanTie E902), and Mainline Linux Subsystems  
 **Target Drivers**: `drivers/remoteproc/sunxi_rproc.c`, `drivers/mailbox/sun55i-msgbox.c`
 
 ---
@@ -23,9 +23,9 @@ When developing production-grade, upstream-quality drivers for modern SoCs like 
 
 How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in the upstream Linux kernel:
 
-| Aspect | `sunxi_rproc` (Allwinner E907) | `imx_rproc` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc` (TI K3 R5F) | `stm32_rproc` (ST STM32MP1 M4) |
+| Aspect | `sunxi_rproc` (Allwinner E906) | `imx_rproc` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc` (TI K3 R5F) | `stm32_rproc` (ST STM32MP1 M4) |
 |---|---|---|---|---|
-| **SoC Domain** | XuanTie E907 (RV32IMAFDC) | Cortex-M4/M7 microcontroller | Cortex-R5F in split/lockstep | Cortex-M4 microcontroller |
+| **SoC Domain** | XuanTie E906 (RV32IMAFDC) | Cortex-M4/M7 microcontroller | Cortex-R5F in split/lockstep | Cortex-M4 microcontroller |
 | **Reset Hierarchy** | Two-stage: `rst_cfg`/`rst_sram` (bus) vs `rst_core` (CPU) | SMC call or SRC registers | Two-stage: `module-reset` (bus/RAM) vs `local-reset` (CPU) | Syscon hold_boot / SCMI / SMC |
 | **`.prepare()`** | Deasserts bus resets, enables clocks, enables SRAM remap, clears SRAM (`memset_io`) | Maps memory (`imx_rproc_addr_init`), enables clocks | Deasserts module-reset to allow loading internal RAM while CPU reset is held | Registers reserved memory carveouts |
 | **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot |
@@ -109,11 +109,11 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 
 ---
 
-## 4. Platform Differences: A523/T527 (E907) vs. A733 (E902)
+## 4. Platform Differences: A523/T527 (E906) vs. A733 (E902)
 
 | Feature | Allwinner A523 / T527 (Cubie A5E) | Allwinner A733 (Cubie A7A) |
 |---|---|---|
-| **Co-Processor** | XuanTie E907 (RV32IMAFDC + FPU) | XuanTie E902 (RV32EMC, Integer only) |
+| **Co-Processor** | XuanTie E906 (RV32IMAFDC + FPU) | XuanTie E902 (RV32EMC, Integer only) |
 | **Domain** | Dedicated Open MCU Domain (`0x07100000`) | CPUS / Always-On Domain (`0x07000000`) |
 | **TrustZone Firewall** | Open Non-Secure access to CFG block | BL31 Secure World filtered by default |
 | **Start Address Register** | `0x07130204` (`STA_ADD_REG`) | `0x07032204` (`E902_STA_ADD_REG`) |

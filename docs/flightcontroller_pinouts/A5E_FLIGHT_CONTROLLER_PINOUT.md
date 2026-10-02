@@ -6,7 +6,7 @@ This document provides the authoritative, hardware-level schematic and PCB layou
 
 ## 1. Architectural Interface Partitioning
 
-To ensure hard real-time determinism with zero Linux kernel scheduling jitter, peripheral hardware is split between the **XuanTie E907 RISC-V Coprocessor (Hard Real-Time I/O)** and the **8× Cortex-A55 Linux Host (High-Level Navigation & Vision)**:
+To ensure hard real-time determinism with zero Linux kernel scheduling jitter, peripheral hardware is split between the **XuanTie E906 RISC-V Coprocessor (Hard Real-Time I/O)** and the **8× Cortex-A55 Linux Host (High-Level Navigation & Vision)**:
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -16,7 +16,7 @@ To ensure hard real-time determinism with zero Linux kernel scheduling jitter, p
              ┌───────────────────────────────┴───────────────────────────────┐
              ▼                                                               ▼
  ┌───────────────────────────────────────┐                       ┌───────────────────────┐
- │   XuanTie E907 RISC-V Coprocessor     │                       │ 8x Cortex-A55 Linux   │
+ │   XuanTie E906 RISC-V Coprocessor     │                       │ 8x Cortex-A55 Linux   │
  │   (Hard Real-Time Sensor / Actuator)  │                       │ (iNAV, Vision, Comms) │
  ├───────────────────────────────────────┤                       ├───────────────────────┤
  │ • SPI0: Dual-SPI Link to FPGA (CS0)   │                       │ • UART0: Debug Shell  │
@@ -41,37 +41,37 @@ The standard 40-pin 2.54mm expansion header (`J11`) is mapped as follows for the
 | **4** | `5V_SYS` | — | 5.0V System Power Input/Output | Power | 5.0V | Tie with Pin 2 |
 | **5** | `I2C1_SCL` | `PB7` | Primary I2C Clock (or Linux) | Linux / Shared | 3.3V | 4.7 kΩ pull-up to 3.3V, ESD diode |
 | **6** | `GND` | — | Ground | Ground | 0V | Ground Plane Return |
-| **7** | `SPI2_CLK` | `PB2` | Secondary SPI Clock (Optional) | E907 / Linux | 3.3V | 33 Ω series damping resistor |
+| **7** | `SPI2_CLK` | `PB2` | Secondary SPI Clock (Optional) | E906 / Linux | 3.3V | 33 Ω series damping resistor |
 | **8** | `UART0_TX` | `PB9` | **Linux Debug Shell TX (115200 8N1)**| **Linux Host** | 3.3V | Route to Debug Header / USB-UART |
 | **9** | `GND` | — | Ground | Ground | 0V | Ground Plane Return |
 | **10**| `UART0_RX` | `PB10`| **Linux Debug Shell RX (115200 8N1)**| **Linux Host** | 3.3V | Route to Debug Header / USB-UART |
-| **11**| `UART2_TX` | `PB0` | **Real-Time GPS / Telemetry TX** | **E907 RISC-V**| 3.3V | Route to GPS / CRSF Receiver TX |
+| **11**| `UART2_TX` | `PB0` | **Real-Time GPS / Telemetry TX** | **E906 RISC-V**| 3.3V | Route to GPS / CRSF Receiver TX |
 | **12**| `NC / RESERVED` | `PH4` | *Do not connect (Port H / PCIe)* | *Unused* | — | Leave Floating (Prevents PCIe conflicts) |
-| **13**| `UART2_RX` | `PB1` | **Real-Time GPS / Telemetry RX** | **E907 RISC-V**| 3.3V | Route to GPS / CRSF Receiver RX |
+| **13**| `UART2_RX` | `PB1` | **Real-Time GPS / Telemetry RX** | **E906 RISC-V**| 3.3V | Route to GPS / CRSF Receiver RX |
 | **14**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
-| **15**| `SPI2_CS0` | `PB3` | Secondary SPI Chip Select 0 | E907 / Linux | 3.3V | 10 kΩ pull-up to 3.3V |
-| **16**| `SPI2_MOSI`| `PB0` | Secondary SPI MOSI | E907 / Linux | 3.3V | 33 Ω series damping resistor |
+| **15**| `SPI2_CS0` | `PB3` | Secondary SPI Chip Select 0 | E906 / Linux | 3.3V | 10 kΩ pull-up to 3.3V |
+| **16**| `SPI2_MOSI`| `PB0` | Secondary SPI MOSI | E906 / Linux | 3.3V | 33 Ω series damping resistor |
 | **17**| `3V3_SYS` | — | 3.3V System Power Output | Power | 3.3V | 100nF decoupling |
-| **18**| `SPI2_MISO`| `PB1` | Secondary SPI MISO | E907 / Linux | 3.3V | 33 Ω series damping resistor |
-| **19**| `SPI0_MOSI`| `PC2` | **Dual-SPI IO0 / Single MOSI** | **E907 RISC-V**| 3.3V | 33 Ω damping, route to FPGA / IMU |
+| **18**| `SPI2_MISO`| `PB1` | Secondary SPI MISO | E906 / Linux | 3.3V | 33 Ω series damping resistor |
+| **19**| `SPI0_MOSI`| `PC2` | **Dual-SPI IO0 / Single MOSI** | **E906 RISC-V**| 3.3V | 33 Ω damping, route to FPGA / IMU |
 | **20**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
-| **21**| `SPI0_MISO`| `PC4` | **Dual-SPI IO1 / Single MISO** | **E907 RISC-V**| 3.3V | 33 Ω damping, route to FPGA / IMU |
-| **22**| `IRQ_FPGA_RDY`| `PC15`| **FPGA Frame Ready External IRQ** | **E907 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
-| **23**| `SPI0_CLK` | `PC12`| **Dual/Single SPI Clock (up to 100MHz)**| **E907 RISC-V**| 3.3V | 33 Ω damping, length match to IO0/IO1 |
-| **24**| `SPI0_CS0` | `PC3` | **FPGA Dual-SPI Chip Select 0** | **E907 RISC-V**| 3.3V | 10 kΩ pull-up to 3.3V, Active LOW |
+| **21**| `SPI0_MISO`| `PC4` | **Dual-SPI IO1 / Single MISO** | **E906 RISC-V**| 3.3V | 33 Ω damping, route to FPGA / IMU |
+| **22**| `IRQ_FPGA_RDY`| `PC15`| **FPGA Frame Ready External IRQ** | **E906 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
+| **23**| `SPI0_CLK` | `PC12`| **Dual/Single SPI Clock (up to 100MHz)**| **E906 RISC-V**| 3.3V | 33 Ω damping, length match to IO0/IO1 |
+| **24**| `SPI0_CS0` | `PC3` | **FPGA Dual-SPI Chip Select 0** | **E906 RISC-V**| 3.3V | 10 kΩ pull-up to 3.3V, Active LOW |
 | **25**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
-| **26**| `SPI0_CS1` | `PC7` | **IMU Single-SPI Chip Select 1** | **E907 RISC-V**| 3.3V | 10 kΩ pull-up to 3.3V, Active LOW |
-| **27**| `I2C3_SDA` | `PB4` | **Avionics Sensor I2C Data** | **E907 RISC-V**| 3.3V | 2.2 kΩ pull-up to 3.3V, ESD diode |
-| **28**| `I2C3_SCL` | `PB5` | **Avionics Sensor I2C Clock** | **E907 RISC-V**| 3.3V | 2.2 kΩ pull-up to 3.3V, ESD diode |
-| **29**| `IRQ_IMU_DRDY`| `PJ24`| **IMU Data Ready (DRDY) IRQ** | **E907 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
+| **26**| `SPI0_CS1` | `PC7` | **IMU Single-SPI Chip Select 1** | **E906 RISC-V**| 3.3V | 10 kΩ pull-up to 3.3V, Active LOW |
+| **27**| `I2C3_SDA` | `PB4` | **Avionics Sensor I2C Data** | **E906 RISC-V**| 3.3V | 2.2 kΩ pull-up to 3.3V, ESD diode |
+| **28**| `I2C3_SCL` | `PB5` | **Avionics Sensor I2C Clock** | **E906 RISC-V**| 3.3V | 2.2 kΩ pull-up to 3.3V, ESD diode |
+| **29**| `IRQ_IMU_DRDY`| `PJ24`| **IMU Data Ready (DRDY) IRQ** | **E906 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
 | **30**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
-| **31**| `IRQ_GEN1` | `PJ25`| **General Purpose PIO IRQ 1** | **E907 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
-| **32**| `IRQ_GEN2` | `PD20`| **General Purpose PIO IRQ 2** | **E907 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
-| **33**| `GPIO_USER1`| `PD21`| User Configurable GPIO / PWM | E907 / Linux | 3.3V | ESD diode |
+| **31**| `IRQ_GEN1` | `PJ25`| **General Purpose PIO IRQ 1** | **E906 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
+| **32**| `IRQ_GEN2` | `PD20`| **General Purpose PIO IRQ 2** | **E906 RISC-V**| 3.3V | 10 kΩ pull-down, ESD clamp |
+| **33**| `GPIO_USER1`| `PD21`| User Configurable GPIO / PWM | E906 / Linux | 3.3V | ESD diode |
 | **34**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
 | **35**| `NC / RESERVED` | `PH6` | *Do not connect (Port H / PCIe)* | *Unused* | — | Leave Floating (Prevents PCIe conflicts) |
-| **36**| `GPIO_USER2`| `PD22`| User Configurable GPIO / PWM | E907 / Linux | 3.3V | ESD diode |
-| **37**| `GPIO_USER3`| `PD23`| User Configurable GPIO / PWM | E907 / Linux | 3.3V | ESD diode |
+| **36**| `GPIO_USER2`| `PD22`| User Configurable GPIO / PWM | E906 / Linux | 3.3V | ESD diode |
+| **37**| `GPIO_USER3`| `PD23`| User Configurable GPIO / PWM | E906 / Linux | 3.3V | ESD diode |
 | **38**| `NC / RESERVED` | `PH5` | *Do not connect (Port H / PCIe)* | *Unused* | — | Leave Floating (Prevents PCIe conflicts) |
 | **39**| `GND` | — | Ground | Ground | 0V | Ground Plane Return |
 | **40**| `NC / RESERVED` | `PH7` | *Do not connect (Port H / PCIe)* | *Unused* | — | Leave Floating (Prevents PCIe conflicts) |
@@ -112,4 +112,4 @@ The standard 40-pin 2.54mm expansion header (`J11`) is mapped as follows for the
 > If designing a carrier board for the Allwinner T527 Compute Module with an **M.2 PCIe NVMe slot**:
 > 1. Port H pins (`PH11` PERST#, `PH12` WAKE#, `PH19` CLKREQ#) are dedicated to the M.2 PCIe slot.
 > 2. Do **not** connect 40-pin header Pins 12, 35, 38, or 40 (`PH4`, `PH6`, `PH5`, `PH7`).
-> 3. Following this specification guarantees 100% simultaneous operation of **M.2 PCIe NVMe SSDs** on Linux and **Hard Real-Time SPI0/UART2/I2C3/EINT** on the XuanTie E907.
+> 3. Following this specification guarantees 100% simultaneous operation of **M.2 PCIe NVMe SSDs** on Linux and **Hard Real-Time SPI0/UART2/I2C3/EINT** on the XuanTie E906.

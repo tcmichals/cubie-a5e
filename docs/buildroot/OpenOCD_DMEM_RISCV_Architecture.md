@@ -48,7 +48,7 @@ In SoCs with native `dmem` support (e.g. TI AM62x / AM64x / K3, STMicroelectroni
 ## 2. Allwinner T527 Silicon Reality
 
 On current **Allwinner T527 silicon (Radxa Cubie A5E)**:
-- The XuanTie E907 co-processor is fully functional for real-time applications with dedicated clocks (`mcu_ccu`), 128KB PubSRAM C, 256KB Dedicated MCU SRAM, and open non-secure MMIO reset control at `0x07102124`.
+- The XuanTie E906 co-processor is fully functional for real-time applications with dedicated clocks (`mcu_ccu`), 128KB PubSRAM C, 256KB Dedicated MCU SRAM, and open non-secure MMIO reset control at `0x07102124`.
 - However, **Allwinner does not route a memory-mapped `dmem` interface** for the XuanTie RISC-V Debug Module (DM) into the non-secure ARM bus interconnect.
 - Because the debug module is not memory-mapped to the ARM interconnect, target-side OpenOCD cannot attach directly over the bus without external hardware debug probes.
 
@@ -97,7 +97,7 @@ The T527 provides clean, non-secure MMIO register control for the RISC-V MCU sub
    - Bit 18: `RST_BUS_MCU_RISCV_CORE` (Core execution reset release)
 
 2. **Boot Entry Vector (`STA_ADD_REG` @ `0x07130204`)**:
-   - The XuanTie E907 boots from the address programmed into `STA_ADD_REG` (e.g. `0x00020000` PubSRAM C).
+   - The XuanTie E906 boots from the address programmed into `STA_ADD_REG` (e.g. `0x00020000` PubSRAM C).
    - The mainline `sunxi_rproc` driver handles loading the ELF into SRAM, un-gating clocks, setting `STA_ADD_REG`, and releasing reset cleanly.
 
 ---

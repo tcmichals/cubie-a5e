@@ -16,7 +16,7 @@ cat << 'EOF' > .antigravity/profiles.json
   "project_name": "t527-mainline-flightstack",
   "architecture_bounds": {
     "host_domain": "ARM Cortex-A55 (Mainline Linux framework, standard POSIX, V4L2 M2M)",
-    "realtime_domain": "XuanTie E906/E907 RISC-V Core (Bare-metal / Melis RTOS via local ITCM/DTCM)"
+    "realtime_domain": "XuanTie E906 RISC-V Core (Bare-metal / Melis RTOS via local ITCM/DTCM)"
   },
   "engineering_mandate": {
     "workflow": "Strictly mainline Linux syntax. Leverage Bootlin/Paul Kocialkowski upstream baselines.",
@@ -115,7 +115,7 @@ cat << 'EOF' > workspace_prompts/prompt3_riscv_ingestion.md
 * **ALLOCATION FREE:** Absolutely no runtime heap allocations; use rigid, fixed structures.
 
 ## 2. Context & Origins
-* **Where this comes from:** Low-level peripheral initialization configurations, power configurations, and clock gating routines are reverse-engineered directly from Allwinner’s official `sunxi-melis` SDK examples written for the XuanTie E906/E907 real-time processor complex.
+* **Where this comes from:** Low-level peripheral initialization configurations, power configurations, and clock gating routines are reverse-engineered directly from Allwinner’s official `sunxi-melis` SDK examples written for the XuanTie E906 real-time processor complex.
 
 ## 3. Engineering Goals
 * Establish microsecond-level deterministic ingestion firmware executing inside the auxiliary real-time core.
@@ -180,7 +180,7 @@ cat << 'EOF' > workspace_prompts/prompt5_riscv_debug_bridge.md
 
 ## 3. Engineering Goals
 * Provide a production-ready out-of-tree Buildroot script that compiles OpenOCD with native memory-mapped (`sunxi_mmap`) I/O capability.
-* Enable local GDB debugging connectivity into the XuanTie E906/E907 real-time core directly from the ARM terminal under Linux.
+* Enable local GDB debugging connectivity into the XuanTie E906 real-time core directly from the ARM terminal under Linux.
 
 ## 4. Implementation Phases
 * Legacy bootargs configuration notes.

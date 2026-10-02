@@ -1,4 +1,4 @@
-# XuanTie E906/E907 Tightly-Coupled Memory (TCM) Map
+# XuanTie E906/E906 Tightly-Coupled Memory (TCM) Map
 
 This document charts the memory layout and physical address boundaries allocated to the XuanTie RISC-V co-processor on the Allwinner T527 / Radxa Cubie A5E flight controller.
 

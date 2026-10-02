@@ -1,5 +1,5 @@
 #!/bin/sh
-# probe_riscv_debug.sh - Discover XuanTie E907 debug module address on T527/A733
+# probe_riscv_debug.sh - Discover XuanTie E906 debug module address on T527/A733
 #
 # This script:
 #   1. Enables the RISCV CFG bus clock via MCU CCU
@@ -12,7 +12,7 @@ MCU_CCU_BASE=0x07102000
 RISCV_CLK_REG=$((MCU_CCU_BASE + 0x120))
 RISCV_CFG_REG=$((MCU_CCU_BASE + 0x124))
 
-echo "=== XuanTie E907 Debug Module Probe ==="
+echo "=== XuanTie E906 Debug Module Probe ==="
 echo ""
 echo "MCU CCU base:     $(printf '0x%08X' $MCU_CCU_BASE)"
 echo "RISCV CLK reg:    $(printf '0x%08X' $RISCV_CLK_REG)"
@@ -40,7 +40,7 @@ FOUND=""
 val=$(devmem 0x07090000 32 2>/dev/null || echo "0xDEADBEEF")
 echo "  Primary XuanTie DBG Base (0x07090000): $val"
 if [ "$val" != "0x00000000" ] && [ "$val" != "0xFFFFFFFF" ] && [ "$val" != "0xDEADBEEF" ]; then
-    echo "  SUCCESS at 0x07090000: dmstatus = $val  <-- XuanTie E907 DBG MODULE ACTIVE"
+    echo "  SUCCESS at 0x07090000: dmstatus = $val  <-- XuanTie E906 DBG MODULE ACTIVE"
     FOUND="0x07090000"
 fi
 

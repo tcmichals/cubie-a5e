@@ -1,19 +1,19 @@
-# Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 4): Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907
+# Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Part 4): Deploying the AbstractX C++20 Coroutine Framework on XuanTie E906
 
 In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**, **[Part 2](part2_building_remoteproc_and_hardware_proof.md)**, and **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we built the Linux `remoteproc` foundation, verified on-chip debugging, explored memory determinism (TCM vs. DRAM), and introduced the concept of C++20 coroutines.
 
-In this final article (**Part 4**), we take the **[AbstractX](https://github.com/tcmichals/AbstractX)** open-source framework and deploy it directly onto the **Allwinner T527 / XuanTie E907** co-processor:
+In this final article (**Part 4**), we take the **[AbstractX](https://github.com/tcmichals/AbstractX)** open-source framework and deploy it directly onto the **Allwinner T527 / XuanTie E906** co-processor:
 1. **What is AbstractX**: A modern C++20 framework designed for zero-allocation, deterministic asynchronous execution on embedded microcontrollers.
 2. **The HALO Speedup**: How AbstractX triggers Heap Allocation eLision Optimization to achieve zero-cost coroutines.
 3. **Hardware Interfacing**: Non-blocking timers, Mailbox doorbell events, and shared SRAM ring buffers in AbstractX.
-4. **Hard Benchmarks**: AbstractX vs. FreeRTOS on the XuanTie E907 @ 200 MHz.
+4. **Hard Benchmarks**: AbstractX vs. FreeRTOS on the XuanTie E906 @ 200 MHz.
 5. **Deployment**: Building and booting the AbstractX payload via Linux `remoteproc`.
 
 ---
 
 ## 1. Why AbstractX on Heterogeneous RISC-V?
 
-When writing firmware for an auxiliary real-time core (like the XuanTie E907 executing out of 512 KB continuous zero-wait SRAM), developers usually choose between:
+When writing firmware for an auxiliary real-time core (like the XuanTie E906 executing out of 512 KB continuous zero-wait SRAM), developers usually choose between:
 1. **Super-loops with manual switch-case state machines**: Fast, but difficult to maintain as asynchronous complexity grows.
 2. **Traditional RTOSes (FreeRTOS, Zephyr)**: Structured, but each thread requires a 1 KB–4 KB stack, burning up substantial SRAM just on idle stack memory!
 
@@ -194,9 +194,9 @@ AsyncTask telemetry_loop(CooperativeScheduler& scheduler) {
 
 ---
 
-## 5. Benchmarks: AbstractX vs. FreeRTOS on XuanTie E907 @ 200 MHz
+## 5. Benchmarks: AbstractX vs. FreeRTOS on XuanTie E906 @ 200 MHz
 
-We ran side-by-side performance benchmarks on the XuanTie E907:
+We ran side-by-side performance benchmarks on the XuanTie E906:
 
 ```text
 Benchmark: 10,000 Consecutive Task Resumptions / Switches
@@ -273,7 +273,7 @@ Across this 4-part series, we walked through the complete stack for heterogeneou
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
 * **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
-* **Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907** *(You are here)*
+* **Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E906** *(You are here)*
 
 ---
 

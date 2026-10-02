@@ -1,9 +1,9 @@
-# XuanTie E907 RISC-V Co-Processor Implementation & Tracking Plan
+# XuanTie E906 RISC-V Co-Processor Implementation & Tracking Plan
 
 **Current Milestone:** Phase 2 — Firmware Execution & Telemetry  
 **Primary Platform:** Radxa Cubie A5E (Allwinner T527 / A527)  
 **Secondary Platform:** Radxa Cubie A7A (Allwinner A733) — See [**`A7A Mainline Bring-Up Plan`**](../platforms/A7A_MAINLINE_PLAN.md)  
-**Co-Processor:** XuanTie E907 RISC-V (RV32IMAC @ 600 MHz)  
+**Co-Processor:** XuanTie E906 RISC-V (RV32IMAC @ 600 MHz)  
 **Build System:** Buildroot Out-of-Tree (`BR2_EXTERNAL=project-cubie-a5e`)
 
 ---
@@ -53,7 +53,7 @@ flowchart TD
 - [ ] Test `host_coprocessor_example.c` Linux userspace client reading live data packets.
 
 ### Phase 4: High-Rate IMU & Sensor Fusion Offloading
-- [ ] Bring up low-latency SPI0 IMU acquisition driver directly on XuanTie E907 at 1kHz - 4kHz.
+- [ ] Bring up low-latency SPI0 IMU acquisition driver directly on XuanTie E906 at 1kHz - 4kHz.
 - [ ] Stream pre-filtered orientation / IMU packets to isolated Linux Core 7.
 
 ---

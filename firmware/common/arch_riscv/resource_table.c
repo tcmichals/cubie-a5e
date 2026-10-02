@@ -1,1 +1,0 @@
-../resource_table.c

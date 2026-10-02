@@ -37,7 +37,7 @@ docs/
 │
 ├── buildroot/                                 <-- Buildroot Build System & Historical Case Studies
 │   ├── BuildRootHowTo.md                      <-- Buildroot Package Management & Build Flow
-│   ├── HowToRISCV.md                          <-- Comprehensive XuanTie E907 Co-Processor & RemoteProc Guide
+│   ├── HowToRISCV.md                          <-- Comprehensive XuanTie E906 Co-Processor & RemoteProc Guide
 │   ├── HowToDebugRISCV.md                     <-- RemoteProc Diagnostic & Debugging Workflows
 │   ├── DeviceTreeHowTo.md                     <-- Device Tree & Overlay (DTBO) Guide
 │   ├── DebugLog.md                            <-- Chronological Engineering Case Studies & Bug History (Cases 1–7)
@@ -66,7 +66,7 @@ docs/
 | **CPU Cluster** | 8× Cortex-A55 (Octa-core) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) | [Real-Time OS Isolation](common/REALTIME_FLIGHT_ARCHITECTURE.md) |
 | **RAM Subsystem** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | 6 GiB LPDDR5 (Dynamic multi-PState training) | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
 | **Interrupt Controller** | ARM GICv2 (`0x03021000`) | ARM GICv3 (`0x03400000`/`0x03460000`) | [A7A Bring-Up Issues](buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md) |
-| **Co-Processor** | XuanTie E906/E907 (RV32IMAFCP) | XuanTie E907 (RV32IMAFCP) | [Co-Processor & RemoteProc Guide](buildroot/HowToRISCV.md) |
+| **Co-Processor** | XuanTie E906/E906 (RV32IMAFCP) | XuanTie E906 (RV32IMAFCP) | [Co-Processor & RemoteProc Guide](buildroot/HowToRISCV.md) |
 | **Boot Chain** | Mainline TF-A + Mainline U-Boot 2026.01 | Hybrid Boot (Vendor `boot0` + BL31 + Vendor U-Boot 2018.07) | [A5E Guide](platforms/CUBIE_A5E_PLATFORM_GUIDE.md) / [A7A Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
 | **Mainline Kernel** | **100% In Mainline Linux** (`sun55i-a523.dtsi`) | **Mainline Linux 7.1 + CCU/Pinctrl Patch Series** | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
 | **Wi-Fi / BT Bus** | **SDIO 3.0** (`aic8800_bsp.ko` + `_fdrv.ko`) | **USB 2.0 High-Speed** (`aic8800_fdrv.ko` standalone) | [Wi-Fi AIC8800 Guide](common/WIFI_AIC8800_GUIDE.md) |

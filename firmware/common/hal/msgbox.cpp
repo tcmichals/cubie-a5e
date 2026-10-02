@@ -5,14 +5,15 @@ namespace hal {
 
 /*
  * Allwinner T527 4-Port Hardware Message Box
- * RISC-V Local Port Base: 0x07136000 (Port 2, Channels 8..11)
- * DSP Local Port Base:    0x07094000 (Port 0, Channels 4..7)
+ * RISC-V Local Port Base: 0x07136000 (Port 3, Channels 8..11)
+ * DSP Local Port Base:    0x07120000 (Port 1, Channels 4..7)
+ * CPUS Local Port Base:   0x07094000 (Port 2)
  * ARM Host Port Base:     0x03003000 (Port 0..3)
  * Port Index for RV <-> ARM communication: n = 2 (Offset: 0x200)
  * Port Index for DSP <-> ARM communication: n = 1 (Offset: 0x100)
  */
 #define RV_MSGBOX_LOCAL_BASE        0x07136000U
-#define DSP_MSGBOX_LOCAL_BASE       0x07094000U
+#define DSP_MSGBOX_LOCAL_BASE       0x07120000U
 #define ARM_MSGBOX_REMOTE_BASE      0x03003000U
 #define MSGBOX_PORT_OFFSET          0x00000200U
 #define ARM_DSP_MSGBOX_REMOTE_BASE  (ARM_MSGBOX_REMOTE_BASE + 0x100)

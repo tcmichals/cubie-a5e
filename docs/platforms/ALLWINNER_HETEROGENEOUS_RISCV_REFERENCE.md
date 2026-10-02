@@ -13,7 +13,7 @@
 - The **Allwinner A733** integrates the **XuanTie E902** (no DSP, executes directly from SRAM A2).
 
 ### Why Confusion Exists in the Manuals & Register Tables
-If you parse through the registers inside the Allwinner T527 and A733 User Manuals, parts of the debug, messaging (remoteproc), and JTAG registers are often labeled or referenced identically to older platforms that carried the E907 (such as the T536 or V853). Allwinner did this because they copy-pasted register tables and peripheral block configurations between document iterations when the underlying hardware address mappings did not change.
+If you parse through the registers inside the Allwinner T527 and A733 User Manuals, parts of the debug, messaging (remoteproc), and JTAG registers are often labeled or referenced identically to older platforms that carried the E906 (such as the T536 or V853). Allwinner did this because they copy-pasted register tables and peripheral block configurations between document iterations when the underlying hardware address mappings did not change.
 
 However, the hardware initialization sections, core description chapters, and community verification (Linux-Sunxi) confirm the true physical cores:
 - **Allwinner T527 (`sun55i`)**: **XuanTie E906** (with Cadence Tensilica HiFi4 Audio DSP @ 600 MHz).
@@ -144,7 +144,7 @@ Both the XuanTie E906 (T527) and XuanTie E902 (A733) operate at the **exact same
 
 ## 4. Linux 7.1 Remote Processor (`remoteproc`) Integration (T527 / A523)
 
-The kernel driver `drivers/remoteproc/sunxi_rproc.c` targets the **Allwinner T527, A527, and A523** platforms where the XuanTie E906/E907 is a dedicated real-time coprocessor:
+The kernel driver `drivers/remoteproc/sunxi_rproc.c` targets the **Allwinner T527, A527, and A523** platforms where the XuanTie E906/E906 is a dedicated real-time coprocessor:
 * **No Synthetic Code / No Trampolines**: The driver is a pure lifecycle manager. It does not modify memory or inject trampolines.
 * **Firmware Contract**: The firmware ELF links its reset vector table to Dedicated SRAM / TCM at `0x00000000` or local SRAM at `0x07280000`.
 * **A733 Status**: On the Allwinner A733, the E902 is dedicated to CPUS / Always-On power management running U-Boot `scp.fex` and is not managed by Linux `remoteproc`.
@@ -157,7 +157,7 @@ cp firmware.elf /lib/firmware/riscv-firmware.elf
 # 2. Assign firmware to remoteproc instance
 echo riscv-firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
 
-# 3. Boot XuanTie E906/E907 RISC-V core
+# 3. Boot XuanTie E906/E906 RISC-V core
 echo start > /sys/class/remoteproc/remoteproc0/state
 
 # 4. View real-time printk / trace buffer from RISC-V

@@ -1,5 +1,5 @@
 /*
- * resource_table.c - Global RemoteProc Resource Table for XuanTie E907 (T527)
+ * resource_table.c - Global RemoteProc Resource Table for XuanTie E906 (T527)
  *
  * Configurable via macros defined in include/resource_table.h or Makefile -D flags.
  */

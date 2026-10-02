@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > **Co-Processor Architecture Note**:
-> - **Allwinner T527 (Radxa Cubie A5E)**: Features an independent XuanTie E906/E907 RISC-V co-processor dedicated to user/flight-stack real-time tasks, supported natively by Linux `remoteproc`.
+> - **Allwinner T527 (Radxa Cubie A5E)**: Features an independent XuanTie E906/E906 RISC-V co-processor dedicated to user/flight-stack real-time tasks, supported natively by Linux `remoteproc`.
 > - **Allwinner A733 (Radxa Cubie A7A / A7Z)**: Features an embedded XuanTie E902 core dedicated strictly to CPUS / Always-On power management (`scp.fex`) loaded at boot time by U-Boot / `boot0`. Linux remoteproc is not used on A733.
 
 ---
@@ -48,7 +48,7 @@ For co-processor firmware development on the T527, developers have several clean
                                │
                                ▼
  ┌─────────────────────────────────────────────────────────────┐
- │           XuanTie E907 Real-Time Co-Processor (200 MHz)     │
+ │           XuanTie E906 Real-Time Co-Processor (200 MHz)     │
  │                                                             │
  │  • Dedicated S_UART0 Serial Console (0x07080000, 115.2k)    │
  │  • 512 KB Dual-Bank SRAM_A3 (0x40000000 & 0x40040000)       │
@@ -164,6 +164,6 @@ If interactive source-level debugging, hardware breakpoints, or single-stepping 
 
 ## Related Documentation
 
-- [HowToRISCV.md](HowToRISCV.md) — Comprehensive XuanTie E907 Co-Processor & RemoteProc Guide
+- [HowToRISCV.md](HowToRISCV.md) — Comprehensive XuanTie E906 Co-Processor & RemoteProc Guide
 - [docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md](/docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md)
 - [OpenOCD_DMEM_RISCV_Architecture.md](OpenOCD_DMEM_RISCV_Architecture.md)

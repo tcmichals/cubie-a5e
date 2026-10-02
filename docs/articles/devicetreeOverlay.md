@@ -8,7 +8,7 @@
 
 ## 1. The Combinatorial Hardware Nightmare
 
-Embedded hardware rarely stays static. On modern heterogeneous SoCs—like the Allwinner T527 / A527 and A733 pairing octa-core ARM Cortex-A55 cores with dedicated XuanTie E907/E902 RISC-V real-time coprocessors—the exact pin routing, peripheral assignments, and memory maps shift depending on what the board is doing:
+Embedded hardware rarely stays static. On modern heterogeneous SoCs—like the Allwinner T527 / A527 and A733 pairing octa-core ARM Cortex-A55 cores with dedicated XuanTie E906/E902 RISC-V real-time coprocessors—the exact pin routing, peripheral assignments, and memory maps shift depending on what the board is doing:
 
 * **Flight Stack / Avionics**: Hardware UART0 is dedicated to the Linux debug console, UART2 and SPI0 are isolated and handed directly to the RISC-V core for sub-millisecond sensor acquisition, and onboard I2C sensors (IMU, barometer) are enabled on the Linux bus.
 * **Userspace I/O (UIO) / High-Rate IPC**: The hardware inter-processor mailbox (`msgbox`) and dedicated MCU SRAM blocks are detached from the standard kernel mailbox subsystem and bound to `generic-uio`, allowing userspace ring buffers to poll at microsecond latencies.
@@ -65,7 +65,7 @@ The Linux kernel technically supports dynamic overlays at runtime through `CONFI
 #### 1. The Boot-Time "Chicken-and-Egg" Problem
 Runtime kernel overlays are applied late in the boot sequence from userspace init scripts. Real-world overlays, however, configure hardware that the kernel needs on the very first instruction:
 * **Early Serial Console & Pinmux**: If an overlay assigns UART0 to Linux and isolates UART2 for the RISC-V coprocessor, waiting for userspace to apply this creates pin conflicts on power-up and blinds you to early kernel panics (`earlycon`).
-* **Reserved Memory Carveouts (`reserved-memory`)**: The XuanTie E907 firmware requires dedicated, non-cacheable DMA memory (`rproc_vdev` @ `0x48000000`). The Linux memory subsystem (Buddy allocator, page tables, CMA zones) establishes physical memory boundaries during early architecture initialization (`setup_arch()`). **You cannot dynamically insert `reserved-memory` carveouts into a running kernel memory map from userspace.**
+* **Reserved Memory Carveouts (`reserved-memory`)**: The XuanTie E906 firmware requires dedicated, non-cacheable DMA memory (`rproc_vdev` @ `0x48000000`). The Linux memory subsystem (Buddy allocator, page tables, CMA zones) establishes physical memory boundaries during early architecture initialization (`setup_arch()`). **You cannot dynamically insert `reserved-memory` carveouts into a running kernel memory map from userspace.**
 * **Core Clocks and Power Domains**: Mutating clock trees or PMIC regulators after platform drivers have already probed causes clock desynchronization or peripheral brownouts.
 
 #### 2. Kernel Driver Unbind Fragility
@@ -449,23 +449,25 @@ U-Boot's `env import -t` expects newline (`\n`) delimiters. If the last line of 
 Buildroot coordinates the compilation, staging, and packaging of every boot component automatically within [`project-cubie-a5e`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e).
 
 ```text
-+---------------------------------------------------------------------------------------------------+
-|                                  BUILDROOT PACKAGING PIPELINE                                     |
-+---------------------------------------------------------------------------------------------------+
-| 1. Out-of-Tree Overlays: project-cubie-a5e/dts-overlay/allwinner/*.dtso                            |
-|    Buildroot Linux package compiles with dtc -@ ---> ${BINARIES_DIR}/*.dtbo                       |
-+---------------------------------------------------------------------------------------------------+
-| 2. RootFS Pre-Assembly: rootfs-overlay/etc/fstab & post-build.sh                                  |
-|    Copies fstab (/dev/mmcblk0p1 -> /boot) and creates /boot directory in ${TARGET_DIR}           |
-+---------------------------------------------------------------------------------------------------+
-| 3. Post-Image Processing: post-image.sh                                                           |
-|    - mkimage compiles boot.cmd ---> ${BINARIES_DIR}/boot.scr                                      |
-|    - mkenvimage compiles uboot-env.txt ---> ${BINARIES_DIR}/uboot.env                             |
-|    - Staging: copies config.txt and uEnv.txt into ${BINARIES_DIR}/                                |
-+---------------------------------------------------------------------------------------------------+
-| 4. Final Disk Assembly: genimage.cfg                                                              |
-|    Stitches SPL, boot.vfat (with config.txt, dtbos, Image), and rootfs.ext4 into sdcard.img       |
-+---------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------+
+|                       BUILDROOT PACKAGING PIPELINE                       |
++--------------------------------------------------------------------------+
+| 1. Out-of-Tree Overlays: project-cubie-a5e/dts-overlay/allwinner/*.dtso  |
+|    Buildroot Linux package compiles with dtc -@ --->                     |
+|    ${BINARIES_DIR}/*.dtbo                                                |
++--------------------------------------------------------------------------+
+| 2. RootFS Pre-Assembly: rootfs-overlay/etc/fstab & post-build.sh         |
+|    Copies fstab (/dev/mmcblk0p1 -> /boot) & creates /boot in ${TARGET_DIR}|
++--------------------------------------------------------------------------+
+| 3. Post-Image Processing: post-image.sh                                  |
+|    - mkimage compiles boot.cmd ---> ${BINARIES_DIR}/boot.scr             |
+|    - mkenvimage compiles uboot-env.txt ---> ${BINARIES_DIR}/uboot.env    |
+|    - Staging: copies config.txt & uEnv.txt into ${BINARIES_DIR}/         |
++--------------------------------------------------------------------------+
+| 4. Final Disk Assembly: genimage.cfg                                     |
+|    Stitches SPL, boot.vfat (with config.txt, dtbos, Image), and          |
+|    rootfs.ext4 into sdcard.img                                           |
++--------------------------------------------------------------------------+
 ```
 
 ### Post-Image Script (`post-image.sh`)

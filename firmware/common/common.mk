@@ -1,5 +1,5 @@
 # ==============================================================================
-# Common Makefile Fragment for XuanTie E907 (Allwinner T527) RISC-V Applications
+# Common Makefile Fragment for XuanTie E906 (Allwinner T527) RISC-V Applications
 # ==============================================================================
 
 COMMON_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -19,7 +19,7 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 GDB     = $(CROSS_COMPILE)gdb
 
-# 2. Target Architecture Flags (Allwinner T527 XuanTie E907)
+# 2. Target Architecture Flags (Allwinner T527 XuanTie E906: RV32IMAFCX)
 ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany
 OPT_FLAGS  ?= -Og -g
 
@@ -35,8 +35,8 @@ CXXFLAGS += $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-t
 
 # 5. Linker Script & Memory Layout Selection
 # Supported configurations (via MEM= or TARGET_MEM=):
-#   MEM=sram   (default) -> On-chip SRAM (0x00020000): e907_sram.ld
-#   MEM=ddr              -> Multi-bank SRAM & DDR Carveout: e907_ddr.ld
+#   MEM=sram   (default) -> On-chip SRAM (0x40000000 / 0x3FFC0000): e906_sram.ld
+#   MEM=ddr              -> Multi-bank SRAM & DDR Carveout: e906_ddr.ld
 #   MEM=qemu             -> QEMU virt machine (0x80000000): qemu.ld
 # Shortcut: 'make QEMU=1' sets MEM=qemu
 
@@ -47,21 +47,21 @@ endif
 MEM ?= sram
 
 ifeq ($(MEM),sram)
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_sram.ld
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
 else ifeq ($(MEM),ddr)
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_ddr.ld
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_ddr.ld
 else ifeq ($(MEM),qemu)
   LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/qemu.ld
 else
   # Custom path specified in LDSCRIPT
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e907_sram.ld
+  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
 endif
 
 LDFLAGS  ?= $(ARCH_FLAGS) -T $(LDSCRIPT) -Wl,-Map=firmware.map -Wl,--gc-sections -nostartfiles -lm
 
 # 6. Default HAL Sources
 COMMON_SRCS_S   ?= $(COMMON_DIR)/arch_riscv/startup.S
-COMMON_SRCS_C   ?= $(COMMON_DIR)/arch_riscv/resource_table.c
+COMMON_SRCS_C   ?= $(COMMON_DIR)/resource_table.c
 COMMON_SRCS_CPP ?= $(COMMON_DIR)/hal/trace.cpp \
                    $(COMMON_DIR)/hal/timer.cpp \
                    $(COMMON_DIR)/hal/crash.cpp \
@@ -108,7 +108,7 @@ $(ELF): $(OBJS) $(LDSCRIPT)
 	$(CC) $(OBJS) $(LDFLAGS) -Wl,-Map=$(MAP) -o $@
 	@echo "--- Memory Footprint ($@) ---"
 	$(SIZE) $@
-	@GEN_DEVMEM=$$(ls $(COMMON_DIR)/../e907-riscv/tools/generate_devmem_map.py $(COMMON_DIR)/../tools/generate_devmem_map.py 2>/dev/null | head -n 1); \
+	@GEN_DEVMEM=$$(ls $(COMMON_DIR)/../riscv-firmware/tools/generate_devmem_map.py $(COMMON_DIR)/../tools/generate_devmem_map.py 2>/dev/null | head -n 1); \
 	if [ -n "$$GEN_DEVMEM" ] && [ -f "$$GEN_DEVMEM" ]; then \
 		python3 "$$GEN_DEVMEM" $(ELF) $(MAP) $(TARGET) $(CROSS_COMPILE) 2>/dev/null || true; \
 	fi

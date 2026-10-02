@@ -1,5 +1,5 @@
 /*
- * startup.S - XuanTie E907 (RV32IMAFDC) Unified Startup & Exception Vector Table
+ * startup.S - XuanTie E906 (RV32IMAFCX) Unified Startup & Exception Vector Table
  */
 
     .section .vectors, "ax", @progbits

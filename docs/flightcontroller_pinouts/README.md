@@ -8,7 +8,7 @@ This directory contains the hardware-level electrical, schematic, and PCB layout
 
 | Document | Target SoC | Coprocessor | Real-Time High-Speed Bus | PCIe Interface | Primary Use Case |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **[`A5E_FLIGHT_CONTROLLER_PINOUT.md`](./A5E_FLIGHT_CONTROLLER_PINOUT.md)** | **Allwinner A527 / T527** (`sun55i`) | **XuanTie E907** (RV32IMAFDC + Double FPU + DSP @ 200MHz) | **`SPI0` (Port C)**: Dual-SPI FPGA + Single-SPI IMU | M.2 Slot (Carrier Only; isolates Port H) | **Hard Real-Time Autopilot + Sensor Fusion + Vision** |
+| **[`A5E_FLIGHT_CONTROLLER_PINOUT.md`](./A5E_FLIGHT_CONTROLLER_PINOUT.md)** | **Allwinner A527 / T527** (`sun55i`) | **XuanTie E906** (RV32IMAFDC + Double FPU + DSP @ 200MHz) | **`SPI0` (Port C)**: Dual-SPI FPGA + Single-SPI IMU | M.2 Slot (Carrier Only; isolates Port H) | **Hard Real-Time Autopilot + Sensor Fusion + Vision** |
 | **[`A7A_FLIGHT_CONTROLLER_PINOUT.md`](./A7A_FLIGHT_CONTROLLER_PINOUT.md)** | **Allwinner A733** (`sun60iw2`) | **XuanTie E902** (RV32EMC @ 200MHz) | **`SPI1` (Port B)**: Dual/Single SPI FPGA + IMU | **16-pin FPC `J3`** (PCIe 3.0 Gen3 x1) | **High-Compute AI + Vision + Real-Time I/O Front-End** |
 
 ---

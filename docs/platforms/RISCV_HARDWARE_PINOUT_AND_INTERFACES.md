@@ -1,6 +1,6 @@
 # RISC-V Dedicated Hardware Pinout, SPI Bus & Interface Architecture
 
-This document defines the hardware resource partitioning, 40-pin GPIO header assignments, voltage domain configurations, and bare-metal register programming model for the **XuanTie E907 RISC-V co-processor** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**.
+This document defines the hardware resource partitioning, 40-pin GPIO header assignments, voltage domain configurations, and bare-metal register programming model for the **XuanTie E906 RISC-V co-processor** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**.
 
 ---
 
@@ -69,7 +69,7 @@ To guarantee hard real-time determinism with zero kernel contention, all hardwar
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────┐
- │                    XuanTie E907 SPI0 Controller                        │
+ │                    XuanTie E906 SPI0 Controller                        │
  └───────┬───────────────────────┬───────────────────────┬────────┬───────┘
          │ PC12 (CLK)            │ PC2 (IO0 / MOSI)      │        │
          │                       │ PC4 (IO1 / MISO)      │        │

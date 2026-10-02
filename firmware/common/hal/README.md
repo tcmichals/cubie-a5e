@@ -1,6 +1,6 @@
 # High-Speed Hardware Abstraction Layer (HAL) & DMA Architecture
 
-This document details the hard real-time, non-blocking, and zero-copy hardware driver architecture for the **XuanTie E907 RISC-V Co-Processor** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**.
+This document details the hard real-time, non-blocking, and zero-copy hardware driver architecture for the **XuanTie E906 RISC-V Co-Processor** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**.
 
 ---
 
@@ -21,7 +21,7 @@ When a transfer is initiated, the driver arms the hardware and **immediately sus
                                        │ 3. Coroutine SUSPENDS (~18 ns)
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. XuanTie E907 Core executes other tasks or enters low-power 'wfi' sleep.   │
+│ 2. XuanTie E906 Core executes other tasks or enters low-power 'wfi' sleep.   │
 │    (0% CPU wasted during bus shifting)                                      │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │ Hardware shifts bits at 25-50 MHz...
@@ -93,7 +93,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
              │           │
              ▼           ▼
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│                           XUANTIE E907 RTO ISR (~25 ns)                           │
+│                           XUANTIE E906 RTO ISR (~25 ns)                           │
 │  1. Reads DMA Remaining Byte Counter: Packet Size = (Buffer_Size - Remaining_Bytes)│
 │  2. Resumes coroutine with pointer directly to data (ZERO CPU COPYING!)           │
 └───────────────────────────────────────────────────────────────────────────────────┘
@@ -118,7 +118,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 
 * **Mailbox Controller (`0x03003000` / `0x40030000`):**
   * **Channel 0 (RISC-V -> Linux):** Written by RISC-V after pushing 128-byte packets to shared SRAM C. Asserts GIC IRQ 147 on ARM Cortex-A55.
-  * **Channel 1 (Linux -> RISC-V):** Written by Linux after dispatching PCIe TLPs. Asserts PLIC IRQ 25 on XuanTie E907.
+  * **Channel 1 (Linux -> RISC-V):** Written by Linux after dispatching PCIe TLPs. Asserts PLIC IRQ 25 on XuanTie E906.
 * **Memory Fences:**
   * Every queue update executes an explicit RISC-V memory barrier:
     ```cpp
@@ -128,7 +128,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 
 ---
 
-## 5. PLIC Interrupt Vector Mapping (XuanTie E907)
+## 5. PLIC Interrupt Vector Mapping (XuanTie E906)
 
 | PLIC IRQ | Peripheral | Trigger Condition | HAL Action |
 | :--- | :--- | :--- | :--- |

@@ -1,6 +1,6 @@
 # RISC-V Co-Processor Programming & Bring-up Guide
 
-This guide explains the architecture of the **XuanTie E907 RISC-V co-processor** on the Radxa Cubie A5E (Allwinner T527 / A527 / `sun55i`), detailing its memory interfaces, firmware compilation flow, boot-up sequence, modern C++ HAL modules, inter-processor communication (IPC), and real-time benchmarking tools.
+This guide explains the architecture of the **XuanTie E906 RISC-V co-processor** on the Radxa Cubie A5E (Allwinner T527 / A527 / `sun55i`), detailing its memory interfaces, firmware compilation flow, boot-up sequence, modern C++ HAL modules, inter-processor communication (IPC), and real-time benchmarking tools.
 
 > 📖 **Historical Hardware Archaeology & Driver Origin**:  
 > For the complete historical record of how this hardware mapping was discovered—including vendor BSP device tree excerpts (`sun55iw3p1.dtsi`), driver lifecycle analysis (`sunxi_rproc.c`), live silicon register readbacks (`STA_ADD_REG`, `WORK_MODE_REG`), and the exact root-cause of earlier `0x40000000` lockups—refer to [**`RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md`**](../platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md).
@@ -9,7 +9,7 @@ This guide explains the architecture of the **XuanTie E907 RISC-V co-processor**
 
 ## 1. Co-Processor Architecture Overview
 
-The Allwinner T527 SoC integrates a **T-Head XuanTie E907** as its real-time auxiliary co-processor. It is a high-determinism, low-power 32-bit RISC-V processor designed to handle time-critical attitude estimation, sensor filtering, and low-jitter motor control loops, completely isolated from the Linux OS domain running on the 8× ARM Cortex-A55 cores.
+The Allwinner T527 SoC integrates a **T-Head XuanTie E906** as its real-time auxiliary co-processor. It is a high-determinism, low-power 32-bit RISC-V processor designed to handle time-critical attitude estimation, sensor filtering, and low-jitter motor control loops, completely isolated from the Linux OS domain running on the 8× ARM Cortex-A55 cores.
 
 ```mermaid
 flowchart TB
@@ -21,7 +21,7 @@ flowchart TB
         end
 
         subgraph RprocDomain["Real-Time Co-Processor Domain"]
-            R1["XuanTie E907 RV32IMAFCX @ 200 MHz"]
+            R1["XuanTie E906 RV32IMAFCX @ 200 MHz"]
             R2["Cadence Tensilica HiFi4 Audio DSP @ 600 MHz"]
         end
 
@@ -41,7 +41,7 @@ flowchart TB
 
 ### Hardware Specifications
 * **Clock Speed:** Operates at **up to 200 MHz** (managed by `mcu_ccu` @ `0x07102000`). *(Note: The companion Cadence Tensilica HiFi4 Audio DSP operates at 600 MHz).*
-* **Core Nomenclature:** **Alibaba T-Head XuanTie E907** RV32IMAFCX core. Instantiated in Allwinner silicon under the legacy IP block name `e906-cfg` (Hardware Version 1.0 @ `0x07130000` = `0x00010000`).
+* **Core Nomenclature:** **Alibaba T-Head XuanTie E906** RV32IMAFCX core. Instantiated in Allwinner silicon under the legacy IP block name `e906-cfg` (Hardware Version 1.0 @ `0x07130000` = `0x00010000`).
 * **Verified Silicon ISA Profile (`MISA = 0x40901125`):**
   - **I**: 32 standard 32-bit General Purpose Registers (`x0`–`x31`).
   - **M**: Hardware Integer Multiplication and Division.
@@ -61,13 +61,13 @@ flowchart TB
 
 ---
 
-## 2. Verified Memory Map of XuanTie E907 on Allwinner T527 / A523
+## 2. Verified Memory Map of XuanTie E906 on Allwinner T527 / A523
 
-### 2.1 E907 Memory Map (SRAM Pools & DDR Carveouts)
+### 2.1 E906 Memory Map (SRAM Pools & DDR Carveouts)
 
-The E907 executes out of on-chip SRAM pools and dedicated DDR carveouts:
+The E906 executes out of on-chip SRAM pools and dedicated DDR carveouts:
 
-| Memory Region | Linux Host (ARM64) Physical Address | E907 RISC-V Core Address (DA) | Size | Latency & Usage |
+| Memory Region | Linux Host (ARM64) Physical Address | E906 RISC-V Core Address (DA) | Size | Latency & Usage |
 | :--- | :--- | :--- | :--- | :--- |
 | **SRAM Space 0 (`r_sram`)** | **`0x07280000`** | **`0x3FFC0000`** | **256 KB** | **Primary Boot & Execution Pool** (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`). Hardcoded hardware reset entry vector. Zero wait states. |
 | **SRAM Space 1 (`r_sram1`)** | **`0x072C0000`** | **`0x40000000`** | **256 KB** | **Secondary High-Speed SRAM Bank**. Shared IPC/buffers, stack extension. Zero wait states. |
@@ -76,8 +76,8 @@ The E907 executes out of on-chip SRAM pools and dedicated DDR carveouts:
 
 > [!IMPORTANT]
 > ### TRACE BUFFER SILICON LOCATION: STRICTLY ON-CHIP SRAM, NEVER DDR
-> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x3FFC0000` in `e907_sram.ld` or `0x40040000` in `e907_ddr.ld`):
-> 1. **Early Boot & Determinism**: The E907 logs boot vectors, clock status, and peripheral bring-up immediately upon reset—long before DDR is initialized, or even when DDR is powered down in low-power sleep.
+> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x3FFC0000` in `e906_sram.ld` or `0x40040000` in `e906_ddr.ld`):
+> 1. **Early Boot & Determinism**: The E906 logs boot vectors, clock status, and peripheral bring-up immediately upon reset—long before DDR is initialized, or even when DDR is powered down in low-power sleep.
 > 2. **Zero Wait States**: On-chip SRAM guarantees single-cycle logging latency without DRAM bus contention, page misses, or memory refresh stalls.
 > 3. **Crash Survivability**: When a fatal exception or illegal instruction trap occurs (`testCrash`), crash register dumps (`mepc`, `mcause`, `sp`) are safely preserved into SRAM even if the DDR controller has locked up or crashed.
 > 4. **Host Read Access**: Linux `sunxi_rproc.c` maps `r_sram` via `devm_ioremap_wc` (normal non-cacheable memory on ARM64), allowing debugfs `rproc_trace_read()` to perform byte-level reads directly without external aborts.
@@ -86,15 +86,15 @@ The E907 executes out of on-chip SRAM pools and dedicated DDR carveouts:
 
 > [!IMPORTANT]
 > ### HARDWARE TRUTH: CLEARING UP THE "PUBSRAM" CONFUSION ON T527
-> Any older documentation, recycled vendor BSP templates, or earlier assumptions labeling `0x00020000` as the E907's "Primary Boot & Execution window" are **dangerously incorrect** for the T527/A527 silicon:
-> 1. **`0x00020000` (128 KB) is HiFi4 DSP Memory**: This physical silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. If the E907 attempts to boot or execute from here, it will collide with the DSP and corrupt DSP audio algorithms. It is NOT used for OP-TEE.
+> Any older documentation, recycled vendor BSP templates, or earlier assumptions labeling `0x00020000` as the E906's "Primary Boot & Execution window" are **dangerously incorrect** for the T527/A527 silicon:
+> 1. **`0x00020000` (128 KB) is HiFi4 DSP Memory**: This physical silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. If the E906 attempts to boot or execute from here, it will collide with the DSP and corrupt DSP audio algorithms. It is NOT used for OP-TEE.
 > 2. **`0x00044000` (160 KB) is OP-TEE / TrustZone Memory (`SRAM A2`)**: This memory is locked by the hardware firewall for secure booting, TF-A BL31, and OP-TEE. It is completely separate from the `0x00020000` block.
 > 3. **Why the confusing "Shared PubSRAM" label in BSP code?** Allwinner frequently recycles documentation across SoC families (D1, V853, T527). In older chips, that lower address space was shared MCU SRAM. On the T527, it is physically the DSP's local RAM. It is only "shared" in the sense that Bit 0 of `REMAP_CTRL_REG` allows the ARM host to peek into it to send IPC messages to the DSP.
-> 4. **The Final Verdict for E907 Firmware**: Erase `0x00020000` from the E907 mental model and linker scripts entirely. E907 `.vectors`, `.text`, `.data`, and `.stack` must live **exclusively** in the on-chip SRAM pools (`0x3FFC0000` Space 0 and `0x40000000` Space 1, forming 512 KB continuous SRAM).
+> 4. **The Final Verdict for E906 Firmware**: Erase `0x00020000` from the E906 mental model and linker scripts entirely. E906 `.vectors`, `.text`, `.data`, and `.stack` must live **exclusively** in the on-chip SRAM pools (`0x3FFC0000` Space 0 and `0x40000000` Space 1, forming 512 KB continuous SRAM).
 
 > [!IMPORTANT]
-> ### NO ITCM OR DTCM ON E907 (PURE SRAM & DDR ARCHITECTURE)
-> 1. **Zero TCM in Silicon**: Unlike older Allwinner chips (e.g. Allwinner D1 / V853) that implemented private tightly-coupled memories at `0x00000000` (ITCM) and `0x00080000` (DTCM), the XuanTie E907 on the T527 / A527 **implements NO ITCM and NO DTCM**. Addresses `0x07110000` and `0x07120000` do not exist in silicon.
+> ### NO ITCM OR DTCM ON E906 (PURE SRAM & DDR ARCHITECTURE)
+> 1. **Zero TCM in Silicon**: Unlike older Allwinner chips (e.g. Allwinner D1 / V853) that implemented private tightly-coupled memories at `0x00000000` (ITCM) and `0x00080000` (DTCM), the XuanTie E906 on the T527 / A527 **implements NO ITCM and NO DTCM**. Addresses `0x07110000` and `0x07120000` do not exist in silicon.
 > 2. **Hardware Lockup Discovery**: Setting `STA_ADD_REG` to `0x000000BA` causes an immediate bus error on instruction fetch, triggering a double-fault on `mtvec` (also `0x0`) and placing the core into **Hardware Lockup** (`WORK_MODE_REG 0x07130248 = 0x0000000B`, Bit 3 `BIT_LOCK_STA = 1`).
 > 3. **Verified Live Boot Addresses**: The hardware silicon reset vector for `STA_ADD_REG` (`0x07130204`) defaults to **`0x3FFC0000`** (SRAM Space 0 base). Setting `STA_ADD_REG` to **`0x3FFC0000`** runs cleanly without lockup (`WORK_MODE_REG = 0x00000003`, Bit 3 `BIT_LOCK_STA = 0`).
 
@@ -104,27 +104,27 @@ There are four strictly off-limits memory zones that RISC-V firmware and Linux R
 
 | Forbidden Zone | Address Range | Hardware Owner | Consequence of Access | Protection in Linux Driver (`sunxi_rproc.c`) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Zone 1: Low Addresses / Fake TCM** | `< 0x00020000` (`0x00000000`–`0x0001FFFF`) | Silicon Mask ROM (BROM) | Hardware lockup (`WORK_MODE_REG` Bit 3 `BIT_LOCK_STA = 1`). No ITCM exists on E907. | Outright rejected with `-EINVAL` in `da_to_va()` |
+| **Zone 1: Low Addresses / Fake TCM** | `< 0x00020000` (`0x00000000`–`0x0001FFFF`) | Silicon Mask ROM (BROM) | Hardware lockup (`WORK_MODE_REG` Bit 3 `BIT_LOCK_STA = 1`). No ITCM exists on E906. | Outright rejected with `-EINVAL` in `da_to_va()` |
 | **Zone 2: HiFi4 DSP Local RAM** | `0x00020000`–`0x0003FFFF` (128 KB) | Cadence HiFi4 Audio DSP | Bus collision with DSP; corrupts DSP execution. Only accessible to host when `REMAP[0]=1`. | Outright rejected with `-EINVAL` in `da_to_va()` |
 | **Zone 3: Secure SRAM A2** | `0x00040000`–`0x00067FFF` (160 KB) | TF-A BL31 / OP-TEE / PSCI | TrustZone / S-BUS security exception; kernel crash or bus lockup | Outright rejected with `-EINVAL` in `da_to_va()` |
 | **Zone 4: DSP Local Secondary RAM** | `0x00400000`–`0x0044FFFF` (128 KB) | Cadence HiFi4 Audio DSP | Corrupts DSP audio algorithms; bus collision once DSP takes ownership (`REMAP[0] = 0`) | Outright rejected with `-EINVAL` in `da_to_va()` |
 
 ### 2.4 Allwinner On-Chip SRAM Partitioning & Hardware Allocation
 
-| SRAM Bank | Physical Base (Host) | Core Address (E907) | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E907? |
+| SRAM Bank | Physical Base (Host) | Core Address (E906) | Size | Hardware Owner | Primary Purpose & Usage | Allowed for RISC-V E906? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`BROM`** | `0x00000000` | Unmapped | 128 KB | SoC Hardware | Silicon Mask ROM; executes first instruction on power-on reset | ❌ **No** (BootROM) |
 | **`DSP RAM` (`PubSRAM C`)** | `0x00020000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **DSP Instruction/Data RAM**. Host IPC peek only via `REMAP_CTRL_REG[0]`. | ❌ **STRICTLY PROHIBITED** (DSP Collision) |
 | **`SRAM A2`** | `0x00044000` | Unmapped | 160 KB | **Secure EL3 (TF-A) / OP-TEE** | **Secure World (TF-A BL31, OP-TEE, PSCI 1.1 power management, CPU suspend/hotplug)** | ❌ **STRICTLY PROHIBITED** (TrustZone Firewall) |
-| **`SRAM Space 0` (`r_sram`)** | `0x07280000` | `0x3FFC0000` | 256 KB | **XuanTie E907** | **Primary zero-wait-state execution window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)**. Factory reset entry vector. | ✅ **YES (Primary E907 Pool)** |
-| **`SRAM Space 1` (`r_sram1`)** | `0x072C0000` | `0x40000000` | 256 KB | **XuanTie E907 / Shared** | **Secondary zero-wait-state SRAM bank**. Combined 512 KB continuous SRAM. | ✅ **YES (Secondary E907 Pool)** |
+| **`SRAM Space 0` (`r_sram`)** | `0x07280000` | `0x3FFC0000` | 256 KB | **XuanTie E906** | **Primary zero-wait-state execution window (`.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer`)**. Factory reset entry vector. | ✅ **YES (Primary E906 Pool)** |
+| **`SRAM Space 1` (`r_sram1`)** | `0x072C0000` | `0x40000000` | 256 KB | **XuanTie E906 / Shared** | **Secondary zero-wait-state SRAM bank**. Combined 512 KB continuous SRAM. | ✅ **YES (Secondary E906 Pool)** |
 | **`DSP IRAM/DRAM`**| `0x00400000` | Unmapped | 128 KB | **Cadence HiFi4 DSP** | **Private DSP Execution & Audio Buffers** | ❌ **STRICTLY PROHIBITED** (DSP Local RAM) |
-| **`CFG Regs`** | `0x07130000` | `0x07130000` | 4 KB | **Host & E907 Control** | Hardware version (`0x00` = 0x00010000), Boot entry vector (`0x204` = 0x3FFC0000), Work Mode / Lockup (`0x248`) | ✅ **YES (Registers Only, Not SRAM)** |
+| **`CFG Regs`** | `0x07130000` | `0x07130000` | 4 KB | **Host & E906 Control** | Hardware version (`0x00` = 0x00010000), Boot entry vector (`0x204` = 0x3FFC0000), Work Mode / Lockup (`0x248`) | ✅ **YES (Registers Only, Not SRAM)** |
 | **`dram_dma`**| `0x40040000`+| `0x40040000`+| 1:1 Mapped | Linux RemoteProc | Transparent 1:1 DDR memory for VirtIO rings (`0x4AE40000`), buffers (`0x4AE00000`), and streaming DMA | ✅ **YES (1:1 DDR Carveout)** |
 
 ### 2.5 Control, Peripheral & Inter-Core Registers
 
-| Peripheral Block | Linux Host Physical Address | E907 RISC-V Address | Description & Hardware Usage |
+| Peripheral Block | Linux Host Physical Address | E906 RISC-V Address | Description & Hardware Usage |
 | :--- | :--- | :--- | :--- |
 | **Hardware REMAP Register**| **`0x07010364` (A527) / `0x07140364` (T527)**| — | Offset `0x364`: Bit 0 = `MCU_RAM_REMAP` (DSP), Bit 1 = `SRAMA3_2_RAM_REMAP` |
 | **MCU CCU Clocks & Resets** | **`0x07102000` / `0x07140000`** | **`0x07102000` / `0x07140000`** | Core clock gate (`CLK_BUS_RV`), bus clock gate (`CLK_BUS_RV_CFG`), resets (`RST_BUS_RV`, `RST_BUS_RV_CFG`, `RST_BUS_RV_DBG`) |
@@ -133,8 +133,8 @@ There are four strictly off-limits memory zones that RISC-V firmware and Linux R
 | **Main PIO (GPIO B–K)** | **`0x02000000`** | **`0x02000000`** | 1:1 mapped GPIO pin control registers |
 | **UART0 (Debug Console)** | **`0x02500000`** | **`0x02500000`** | Shared serial console |
 | **UART2 (Co-processor Port)** | **`0x02500800`** | **`0x02500800`** | High-speed serial / RC receiver interface |
-| **TWI2 (I2C Controller 2)** | **`0x02502800`** | **`0x02502800`** | Dedicated to E907 (`rproc-name = "7130000.e906_rproc"`) for camera sensor 0 |
-| **TWI3 (I2C Controller 3)** | **`0x02502C00`** | **`0x02502C00`** | Dedicated to E907 (`rproc-name = "7130000.e906_rproc"`) for camera sensor 1 |
+| **TWI2 (I2C Controller 2)** | **`0x02502800`** | **`0x02502800`** | Dedicated to E906 (`rproc-name = "7130000.e906_rproc"`) for camera sensor 0 |
+| **TWI3 (I2C Controller 3)** | **`0x02502C00`** | **`0x02502C00`** | Dedicated to E906 (`rproc-name = "7130000.e906_rproc"`) for camera sensor 1 |
 
 ### 2.6 Visual Address Translation Architecture
 
@@ -155,12 +155,12 @@ flowchart LR
         VirtIO RPMsg Buffers & VRings"]
     end
 
-    subgraph E907["XuanTie E907 RISC-V Core View"]
+    subgraph E906["XuanTie E906 RISC-V Core View"]
         E1["0x3FFC0000 - 0x3FFFFFFF (SRAM Space 0)
         Primary Boot, .vectors, .text, .data, stack, .trace_buffer"]
         E2["0x40000000 - 0x4003FFFF (SRAM Space 1)
         Secondary SRAM Bank, continuous 512 KB"]
-        E3["CADENCE HIFI4 DSP ONLY - FORBIDDEN TO E907
+        E3["CADENCE HIFI4 DSP ONLY - FORBIDDEN TO E906
         Host IPC peek only via REMAP_CTRL_REG[0]=1"]
         E4["OP-TEE / TRUSTZONE SRAM A2 - FORBIDDEN
         TF-A BL31 & OP-TEE execution only"]
@@ -208,17 +208,17 @@ On the Allwinner T527 and A523/A527, `REMAP_CTRL_REG` controls memory bridge rou
 
 | Bit Field | Name | Reset | Hardware Meaning & Routing |
 | :--- | :--- | :--- | :--- |
-| **Bit 0** | `MCU_RAM_REMAP` | `0` | **`0`**: DSP local memory (`0x00020000` and `0x00400000`–`0x0044FFFF`) is private and exclusive to the Cadence HiFi4 DSP.<br>**`1`**: DSP memory window is visible to CPUX to exchange IPC messages with the DSP.<br>*(E907 driver leaves Bit 0 as `0` to prevent any DSP collisions).* |
+| **Bit 0** | `MCU_RAM_REMAP` | `0` | **`0`**: DSP local memory (`0x00020000` and `0x00400000`–`0x0044FFFF`) is private and exclusive to the Cadence HiFi4 DSP.<br>**`1`**: DSP memory window is visible to CPUX to exchange IPC messages with the DSP.<br>*(E906 driver leaves Bit 0 as `0` to prevent any DSP collisions).* |
 | **Bit 1** | `SRAMA3_2_RAM_REMAP` | `0` | **`0`**: `SRAMA3_2` is not bridged for `MCU_SYS`.<br>**`1`**: `SRAMA3_2` (`0x07280000` / `0x072c0000`) is bridged into `MCU_SYS`, appearing at core DA **`0x40040000`**. |
 
 #### 2. Device Tree Node Definition (`sun55i-a523.dtsi`)
-The clean Device Tree node connects the remoteproc driver exclusively to E907 resources (no DSP memory or PUBSRAM clocks/resets):
+The clean Device Tree node connects the remoteproc driver exclusively to E906 resources (no DSP memory or PUBSRAM clocks/resets):
 
 ```dts
 rproc: remoteproc@7130000 {
 	compatible = "allwinner,sun55i-a523-rproc",
 	             "allwinner,sun55i-a527-rproc";
-	reg = <0x07130000 0x1000>,      /* "cfg": E907 CFG & boot-address registers */
+	reg = <0x07130000 0x1000>,      /* "cfg": E906 CFG & boot-address registers */
 	      <0x07280000 0x40000>,     /* "r_sram": SRAM_A3 Space 0 (256 KB on A523, 512 KB on T527) */
 	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM_A3 Space 1 (256 KB on A523, 512 KB on T527) */
 	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG (0x07010364 on A523, 0x07140364 on T527) */
@@ -257,7 +257,7 @@ rproc: remoteproc@7130000 {
 
 Three specialized linker scripts cover all deployment and simulation targets:
 
-1. **`e907_sram.ld` (Default - Pure SRAM)**:
+1. **`e906_sram.ld` (Default - Pure SRAM)**:
    Places all execution code, data, stack, trace buffer, and shared structures into verified **SRAM Space 0 (`0x3FFC0000`, 256 KB)**:
 
 ```ld
@@ -381,7 +381,7 @@ SECTIONS
 }
 ```
 
-2. **`e907_ddr.ld` (Multi-Bank SRAM + DDR)**:
+2. **`e906_ddr.ld` (Multi-Bank SRAM + DDR)**:
    Places fast code (`.fastcode`) and critical stack in zero-wait-state `SRAM_FAST` (`0x3FFC0000`), resource tables and IPC structures in `SRAM_A3_2` (`0x40000000`), and large payload pools in dedicated DDR (`0x48000000`).
 
 3. **`qemu.ld` (QEMU virt Emulation)**:
@@ -445,9 +445,9 @@ The firmware architecture uses a modular, zero-allocation C++ HAL suite located 
   - Interoperates cleanly with Linux kernel `virtio_rpmsg_bus` and `rpmsg_char`.
 * **`hal::SpscQueue` (`hal/spsc_queue.hpp`)**:
   - Lock-free, zero-allocation Single-Producer Single-Consumer circular ring buffer.
-  - Utilizes C++11 atomic acquire-release memory fences for synchronization between ARM64 Linux and RISC-V E907 in shared SRAM without locking.
+  - Utilizes C++11 atomic acquire-release memory fences for synchronization between ARM64 Linux and RISC-V E906 in shared SRAM without locking.
 * **`hal::Pmp` (`hal/pmp.hpp`, `hal/pmp.cpp`)**:
-  - Configures XuanTie E907 Physical Memory Protection (PMP) CSRs (`pmpaddr*`, `pmpcfg*`).
+  - Configures XuanTie E906 Physical Memory Protection (PMP) CSRs (`pmpaddr*`, `pmpcfg*`).
   - Marks external DDR DMA payload buffers (`0x48100000`) as non-cacheable to eliminate cache invalidation/flush overhead.
 * **`hal::Trace` (`hal/trace.hpp`)**:
   - Zero-allocation ASCII string and packed binary ring-buffer logger.
@@ -576,7 +576,7 @@ ping_rpmsg -n 5000
 
 ### 7.3 RemoteProc Debugfs: Architecture, Mounting & Log Streaming
 
-The Linux RemoteProc framework uses the kernel's `debugfs` virtual filesystem to expose low-level diagnostics, crash logs, and recovery controls for the XuanTie E907 co-processor.
+The Linux RemoteProc framework uses the kernel's `debugfs` virtual filesystem to expose low-level diagnostics, crash logs, and recovery controls for the XuanTie E906 co-processor.
 
 #### 1. Mounting Debugfs in Linux
 On Buildroot or standard Linux distributions, `debugfs` can be mounted dynamically or configured to mount automatically at boot:
@@ -665,7 +665,7 @@ python3 /usr/local/bin/monitor_trace.py /sys/kernel/debug/remoteproc/remoteproc0
 The firmware Hardware Abstraction Layer (`hal`) contains a robust, fail-safe exception handler (`common/hal/crash.cpp` and `common/arch_riscv/startup.S`) designed to prevent silicon lockups and capture post-mortem forensic state.
 
 #### 1. Hardware Exception Pipeline
-When an illegal instruction, misaligned access, or memory bus fault occurs on the E907 core:
+When an illegal instruction, misaligned access, or memory bus fault occurs on the E906 core:
 
 ```mermaid
 flowchart TD
@@ -771,7 +771,7 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 **Expected Autopsy Output:**
 ```text
 ################################################################
-  FATAL HARDWARE EXCEPTION DETECTED ON XUANTIE E907 RISC-V CORE 
+  FATAL HARDWARE EXCEPTION DETECTED ON XUANTIE E906 RISC-V CORE 
 ################################################################
   Cause Name : Illegal instruction
   mcause     : 0x00000002
@@ -845,7 +845,7 @@ grep -C 5 "4000080e:" /tmp/testCrash.asm
 4000080e:	00000000          	.word	0x00000000   <-- FAULT: Invalid instruction opcode
 40000812:	00001517          	auipc	a0,0x1
 ```
-The disassembly confirms that the instruction at `0x4000080e` is `.word 0x00000000`, which the XuanTie E907 decoded as an illegal instruction, triggering exception `0x2`.
+The disassembly confirms that the instruction at `0x4000080e` is `.word 0x00000000`, which the XuanTie E906 decoded as an illegal instruction, triggering exception `0x2`.
 
 #### Step 7: Reference Table of RISC-V Exception Causes (`mcause`)
 Use this table to interpret any `mcause` code reported in the crash dump:

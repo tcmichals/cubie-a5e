@@ -4,7 +4,7 @@ In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)** and **[Part 2](
 
 In this article (**Part 3**), we go deep on the most critical engineering question for any heterogeneous system:
 
-**How do the XuanTie E907 RISC-V co-processor and the ARM64 Linux host talk to each other?**
+**How do the XuanTie E906 RISC-V co-processor and the ARM64 Linux host talk to each other?**
 
 This article covers the three distinct IPC paradigms implemented in this repository, grounded in real production source code:
 
@@ -24,7 +24,7 @@ Before examining each paradigm, we need to understand the hardware interrupt pri
 ┌──────────────────────────────────────────────────────────────────┐
 │            Allwinner T527 Hardware Message Box (0x03003000)      │
 │                                                                  │
-│  ARM64 Linux (Cortex-A55)          XuanTie E907 (RISC-V)         │
+│  ARM64 Linux (Cortex-A55)          XuanTie E906 (RISC-V)         │
 │  ─────────────────────────         ─────────────────────────     │
 │  TX to RISC-V → ch0 FIFO           RX from ARM → ch1 FIFO       │
 │  RX from RISC-V ← ch0 FIFO        TX to ARM   → ch0 FIFO       │
@@ -328,7 +328,7 @@ struct DramSpscControlBlock {
 
 ### 4.3 Cache Coherency via PMP
 
-Because the E907 and the ARM64 do not share a hardware cache coherency domain, the RISC-V firmware uses its **Physical Memory Protection (PMP) unit** to mark the DDR window as strongly-ordered / non-cacheable:
+Because the E906 and the ARM64 do not share a hardware cache coherency domain, the RISC-V firmware uses its **Physical Memory Protection (PMP) unit** to mark the DDR window as strongly-ordered / non-cacheable:
 
 ```cpp
 hal::Pmp::configure_region(0,
@@ -380,7 +380,7 @@ All three paradigms share the same underlying hardware: the **Allwinner Hardware
 * **[Part 1: Architecture and Memory-Mapped Debugging](part1_heterogeneous_riscv_intro_architecture.md)**
 * **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
 * **Part 3: Inter-Processor Communication (IPC) Deep Dive** *(You are here)*
-* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E907](part4_deep_dive_baremetal_cpp_coroutines.md)**
+* **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E906](part4_deep_dive_baremetal_cpp_coroutines.md)**
 
 ---
 

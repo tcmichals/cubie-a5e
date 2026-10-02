@@ -41,7 +41,7 @@ The Linux Remote Processor (`remoteproc`) framework is the standard kernel subsy
 ```
 
 ### 1.1 Multi-Segment Memory Routing (`da_to_va`) via Address Translation Tables (ATT)
-The XuanTie E907 RISC-V core on Allwinner A523/A527/T527 SoCs manages complex memory topologies requiring explicit address translation between the co-processor's Device Addresses (DA) and the ARM Host's Physical Addresses (PA). 
+The XuanTie E906 RISC-V core on Allwinner A523/A527/T527 SoCs manages complex memory topologies requiring explicit address translation between the co-processor's Device Addresses (DA) and the ARM Host's Physical Addresses (PA). 
 
 Earlier vendor drivers suffered from interconnect shift bugs when translating `0x40000000`, leading to illegal instruction fetches (`0x00000000`) and silicon lockups. To permanently eliminate this class of bug, the driver implements an Address Translation Table (ATT) structure (`sun55i_rproc_att`):
 
@@ -49,14 +49,14 @@ Earlier vendor drivers suffered from interconnect shift bugs when translating `0
 static const struct sunxi_rproc_att sun55i_rproc_att[] = {
 	/* dev addr (remote)    , sys addr (host PA)    , size                   , flags */
 	/* Space 0 Core Aliases -> Space 0 Host PA */
-	{ E907_SRAM_SPACE0_DA,     SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
-	{ E907_SRAM_SPACE0_DA_ALT, SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
-	{ E907_SRAM_C_DA,          SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ E906_SRAM_SPACE0_DA,     SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ E906_SRAM_SPACE0_DA_ALT, SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
+	{ E906_SRAM_C_DA,          SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
 	{ SUN55I_SRAM_SPACE0_SYS,  SUN55I_SRAM_SPACE0_SYS, SUN55I_SRAM_SPACE0_SIZE, ATT_IOMEM },
 
 	/* Space 1 Core Aliases -> Space 1 Host PA */
-	{ E907_SRAM_SPACE1_DA,     SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
-	{ E907_SRAM_SPACE1_DA_ALT, SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
+	{ E906_SRAM_SPACE1_DA,     SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
+	{ E906_SRAM_SPACE1_DA_ALT, SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
 	{ SUN55I_SRAM_SPACE1_SYS,  SUN55I_SRAM_SPACE1_SYS, SUN55I_SRAM_SPACE1_SIZE, ATT_IOMEM },
 };
 ```
@@ -278,7 +278,7 @@ Reading `/sys/kernel/debug/remoteproc/remoteproc0/trace0` confirms execution on 
 ---
 
 ### 3.2 Step 2: Hardware Single FPU & Packed Binary Telemetry (`testStringBinaryTrace0`)
-The XuanTie E907 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` computes trigonometric sine values on the FPU and serializes a 32-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
+The XuanTie E906 features a hardware single-precision (`F`) floating-point unit (`MISA = 0x40901125`). `testStringBinaryTrace0` computes trigonometric sine values on the FPU and serializes a 32-byte packed binary `TelemetryPacket` alongside formatted ASCII logs:
 
 ```text
 /* apps/testStringBinaryTrace0/main.cpp */
@@ -340,7 +340,7 @@ The host companion tool (`ping_uio`) maps the mailbox through `/dev/uio0` and bl
 ---
 
 ### 3.5 Step 5: Standard Linux VirtIO RPMsg (`testPingRpmsg`)
-When standard Linux networking or terminal abstractions are required, `testPingRpmsg` connects the XuanTie E907 to the mainline `virtio_rpmsg_bus` subsystem:
+When standard Linux networking or terminal abstractions are required, `testPingRpmsg` connects the XuanTie E906 to the mainline `virtio_rpmsg_bus` subsystem:
 1. The core advertises `"rpmsg-ping-channel"` over VirtIO vrings.
 2. The Linux kernel initializes the channel and exposes `/dev/rpmsg0`.
 3. Companion tools (`ping_rpmsg` and `ping_rpmsg.py`) exchange frames using standard file descriptor operations (`open`, `read`, `write`).

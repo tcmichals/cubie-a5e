@@ -22,7 +22,10 @@ ping_rpmsg
 ping_dram
 ping_uio
 riscv-firmware/bin/
+firmware/riscv-firmware/bin/*.elf
+firmware/riscv-firmware/bin/*.bin
 dsp-hifi4/bin/
+analysis_reports/
 
 # Whitelist board vendor firmware tools
 !project-cubie-a5e/board/**/tools/*.bin

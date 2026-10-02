@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Hardware Mailbox Driver for Allwinner T527 / A527 Co-Processors
- * Shared across XuanTie E907 (RISC-V) and Cadence Tensilica HiFi4 (DSP).
+ * Shared across XuanTie E906 (RISC-V) and Cadence Tensilica HiFi4 (DSP).
  */
 
 #ifndef SUNXI_MSGBOX_H
@@ -16,7 +16,8 @@ extern "C" {
 
 /* Allwinner T527 Message Box Base Addresses */
 #define SUNXI_MSGBOX_ARM_BASE       0x03003000U
-#define SUNXI_MSGBOX_DSP_BASE       0x07094000U
+#define SUNXI_MSGBOX_DSP_BASE       0x07120000U
+#define SUNXI_MSGBOX_CPUS_BASE      0x07094000U
 #define SUNXI_MSGBOX_RV_BASE        0x07136000U
 
 /* Automatic core port selection based on compiler target */
@@ -24,7 +25,7 @@ extern "C" {
   #define SUNXI_MSGBOX_LOCAL_BASE       SUNXI_MSGBOX_DSP_BASE
   #define SUNXI_MSGBOX_PORT_OFFSET      0x00000000U /* DSP Local Port 0 */
   #define SUNXI_MSGBOX_ARM_PORT_OFFSET  0x00000100U /* ARM Host Port 1 (Channels 4..7) */
-#elif defined(__riscv) || defined(CONFIG_CORE_E907)
+#elif defined(__riscv) || defined(CONFIG_CORE_E906)
   #define SUNXI_MSGBOX_LOCAL_BASE       SUNXI_MSGBOX_RV_BASE
   #define SUNXI_MSGBOX_PORT_OFFSET      0x00000200U /* RV Local Port 2 */
   #define SUNXI_MSGBOX_ARM_PORT_OFFSET  0x00000200U /* ARM Host Port 2 (Channels 8..11) */

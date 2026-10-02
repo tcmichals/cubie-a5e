@@ -4,7 +4,7 @@ dmi_test.py - Automated RISC-V Debug Module (v0.13.2) Verification via OpenOCD
 
 Connects to OpenOCD's Telnet interface (default TCP 4444) and issues raw
 DMI (Debug Module Interface) read/write commands to verify hardware debug
-accessibility on XuanTie E906/E907 RISC-V co-processors.
+accessibility on XuanTie E906/E906 RISC-V co-processors.
 """
 
 import argparse

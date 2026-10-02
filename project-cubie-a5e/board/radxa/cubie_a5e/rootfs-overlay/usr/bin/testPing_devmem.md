@@ -2,7 +2,7 @@
 
 Generated automatically during build from `testPing.elf`.
 
-This document maps XuanTie E907 RISC-V Core Device Addresses (`DA`) to **Linux Host (ARM64) Physical Addresses** for direct memory inspection in Linux process space via `devmem2` or `/dev/mem`.
+This document maps XuanTie E906 RISC-V Core Device Addresses (`DA`) to **Linux Host (ARM64) Physical Addresses** for direct memory inspection in Linux process space via `devmem2` or `/dev/mem`.
 
 > [!CAUTION]
 > **NEVER USE `0x07200000` (CAUSES HARDWARE BUS ERROR)**
@@ -10,7 +10,7 @@ This document maps XuanTie E907 RISC-V Core Device Addresses (`DA`) to **Linux H
 
 ## 1. Symbol Address Translation Table
 
-| Symbol Name | E907 Core DA | Host Physical Address | Memory Region | Linux `devmem2` Command |
+| Symbol Name | E906 Core DA | Host Physical Address | Memory Region | Linux `devmem2` Command |
 | :--- | :--- | :--- | :--- | :--- |
 | **`STA_ADD_REG   (CFG)`** | `0x07130204` | `0x07130204` | CFG Block (+0x204) | `devmem2 0x07130204 w` |
 | **`WORK_MODE_REG (CFG)`** | `0x07130248` | `0x07130248` | CFG Block (+0x248) | `devmem2 0x07130248 w` |

@@ -4,7 +4,7 @@ run_full_sweep.py - Autonomous Single-Pass 3-Profile Silicon Sweep
 Target: Radxa Cubie A5E (Allwinner A527 / T527)
 
 Executes an end-to-end multi-profile test loop across live Radxa Cubie A5E hardware
-for the XuanTie E907 RISC-V real-time co-processor without manual intervention:
+for the XuanTie E906 RISC-V real-time co-processor without manual intervention:
   1. Profile 1 (DDR VirtIO): run_tests.py, C++ ping_rpmsg, Python ping_rpmsg.py,
      C++ ping_dram, Python monitor_trace.py
   2. Profile 2 (On-Chip SRAM Space 1 VirtIO): config.txt switch, reboot, run_tests.py,
@@ -358,7 +358,7 @@ def validate_kunit_tests():
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
-    parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E (E907 RISC-V)")
+    parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E (E906 RISC-V)")
     parser.add_argument("--ip", default=os.environ.get("TARGET_IP", TARGET_IP), help=f"Target board IP address (default: {TARGET_IP})")
     parser.add_argument("--user", default=os.environ.get("TARGET_USER", TARGET_USER), help=f"Target SSH user (default: {TARGET_USER})")
     parser.add_argument("--password", "-p", default=os.environ.get("TARGET_PASSWORD", None), help="SSH password for target board authentication")
@@ -388,7 +388,7 @@ def main():
 
     print("========================================================================")
     print("  Autonomous 3-Profile Silicon Sweep (Radxa Cubie A5E)")
-    print("  Co-Processor: XuanTie E907 RISC-V (RV32IMAFDC + Double FPU)")
+    print("  Co-Processor: XuanTie E906 RISC-V (RV32IMAFDC + Double FPU)")
     print(f"  Target: {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} (Linux 7.1 PREEMPT_RT)")
     if args.serial:
         print(f"  Serial Console: {args.serial} @ {args.serial_baud} baud -> {args.serial_log}")
@@ -570,7 +570,7 @@ def main():
             f.write("# Autonomous 3-Profile Silicon Sweep Results\n\n")
             f.write(f"- **Timestamp**: {report_bundle['timestamp']}\n")
             f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n")
-            f.write(f"- **Co-Processor**: XuanTie E907 RISC-V\n\n")
+            f.write(f"- **Co-Processor**: XuanTie E906 RISC-V\n\n")
 
             if kunit_summary and "suites" in kunit_summary:
                 f.write("## In-Kernel KUnit Driver Test Verification (67 Tests)\n\n")

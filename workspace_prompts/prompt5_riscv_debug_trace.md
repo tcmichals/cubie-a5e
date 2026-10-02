@@ -1,5 +1,5 @@
 # Blueprint 5 — RISC-V Debug Bridge Research Trace
-# XuanTie E907 ARM MMIO Debug Bridge for Allwinner T527 (sun55i-a523)
+# XuanTie E906 ARM MMIO Debug Bridge for Allwinner T527 (sun55i-a523)
 
 > **For the next AI session:** This document contains everything found during
 > research so you can continue without repeating the investigation.
@@ -8,11 +8,11 @@
 
 ## Summary
 
-Blueprint 5 goal: Debug the XuanTie E907 RISC-V co-processor from the ARM
+Blueprint 5 goal: Debug the XuanTie E906 RISC-V co-processor from the ARM
 Linux host **without any external JTAG hardware**.
 
 The correct approach is the **ARM MMIO bridge**:
-- The ARM Cortex-A55 is a master on the same AHB bus the E907 debug module sits on
+- The ARM Cortex-A55 is a master on the same AHB bus the E906 debug module sits on
 - Direct MMIO access to the RISC-V Debug Module registers
 - A userspace daemon (`rbb_server`) translates OpenOCD's TCP `remote_bitbang` protocol
   to direct AHB register writes — no JTAG wires, no GPIO pins, no external probe
@@ -26,7 +26,7 @@ The correct approach is the **ARM MMIO bridge**:
 
 ### MCU CCU — `0x07102000`
 ```
-Offset 0x120:  CLK_MCU_RISCV            (E907 core clock gate)
+Offset 0x120:  CLK_MCU_RISCV            (E906 core clock gate)
 Offset 0x124:  CLK_BUS_MCU_RISCV_CFG    bit 0  = bus clock enable for debug block
                RST_BUS_MCU_RISCV_CFG    bit 16 = deassert CFG peripheral reset
                RST_BUS_MCU_RISCV_DEBUG  bit 17 = deassert DEBUG module reset  ← KEY
@@ -86,7 +86,7 @@ chmod +x /usr/bin/probe_riscv_debug.sh
 ```
 
 **The RISC-V DTM IDCODE will be a non-zero value with bit [0] = 1.**
-Typical XuanTie E907 IDCODE pattern: `0x0XXXXX01`
+Typical XuanTie E906 IDCODE pattern: `0x0XXXXX01`
 
 ---
 
@@ -127,7 +127,7 @@ Typical XuanTie E907 IDCODE pattern: `0x0XXXXX01`
 └──────────────────────┬──────────────────────────┘
                        │ internal debug bus
 ┌──────────────────────▼──────────────────────────┐
-│  XuanTie E907 RISC-V core (halted/stepped)     │
+│  XuanTie E906 RISC-V core (halted/stepped)     │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -175,7 +175,7 @@ uint32_t pc = readl(DEBUG_BASE + 0x10);          // data0 = PC value
 | `bld/.../sunxi_t527_rproc.c` | Mainline remoteproc kernel driver |
 | `board/.../rootfs-overlay/usr/bin/probe_riscv_debug.sh` | AHB bus scanner to find debug module |
 | `board/.../rootfs-overlay/etc/openocd/openocd_t527_local.cfg` | OpenOCD remote_bitbang config |
-| `docs/buildroot/HowToDebugE907.md` | Complete GDB debugging guide |
+| `docs/buildroot/HowToDebugRISCV.md` | Complete GDB debugging guide |
 
 ---
 
@@ -211,12 +211,12 @@ cd /home/tcmichals/projects/cubie/cubie-a5e
 git add -A
 git commit -m "feat: Blueprint 3/4/5 - RISC-V remoteproc, RPMsg, mailbox IPC, debug bridge
 
-- Add sunxi_t527_rproc.c mainline remoteproc driver for XuanTie E907
+- Add sunxi_t527_rproc.c mainline remoteproc driver for XuanTie E906
 - Add resource_table.c with RSC_TRACE + RSC_VDEV for remoteproc ELF
 - Add rpmsg_host_example.c Linux userspace RPMsg communication example
-- Add probe_riscv_debug.sh to discover E907 debug module address on AHB bus
+- Add probe_riscv_debug.sh to discover E906 debug module address on AHB bus
 - Add openocd_t527_local.cfg with remote_bitbang transport config
-- Add HowToDebugE907.md complete GDB debugging guide
+- Add HowToDebugRISCV.md complete GDB debugging guide
 - Add prompt5_riscv_debug_trace.md research findings for next session
 - Enable BR2_PACKAGE_OPENOCD, BR2_PACKAGE_GDB_SERVER in defconfig
 - Enable CONFIG_REMOTEPROC, CONFIG_RPMSG_VIRTIO, CONFIG_SUNXI_T527_RPROC
@@ -229,9 +229,9 @@ git push origin main
 
 ## Community & Sources
 
-- **No public documentation** of T527 E907 debug module address — Allwinner NDA
+- **No public documentation** of T527 E906 debug module address — Allwinner NDA
 - **Mainline kernel** `ccu-sun55i-a523-mcu.c` confirms `RST_BUS_MCU_RISCV_DEBUG` at MCU CCU +0x124 bit17
 - **RISC-V Debug Spec v0.13**: https://github.com/riscv/riscv-debug-spec
 - **T-Head OpenOCD fork**: https://github.com/T-head-Semi (has XuanTie-specific patches)
 - **CKLink probe** (official T-Head hardware): ~$15 USD on Taobao — we avoid this
-- **Nobody in public community** has done ARM MMIO bridge to T527 E907 — this is novel work
+- **Nobody in public community** has done ARM MMIO bridge to T527 E906 — this is novel work

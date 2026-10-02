@@ -12,9 +12,9 @@
 ## 2. Boot Hierarchy & Memory Map
 
 ```
-+-------------------------------------------------------------------------------+
-| Radxa Cubie A7A Multi-Stage Boot Sequence                                     |
-+-------------------------------------------------------------------------------+
++-------------------------------------------------------------------------+
+| Radxa Cubie A7A Multi-Stage Boot Sequence                               |
++-------------------------------------------------------------------------+
   [BootROM (SRAM @ 0x0)]
        │
        ▼ (Loads sector 256 @ 128 KB)
@@ -309,7 +309,7 @@ During kernel initialization on hardware, the system experienced intermittent st
   * **Symptom**: AIC8800 Wi-Fi 6 device failed to enumerate on USB 2.0 (`0xA69C:0x8800`).
   * **Root Cause**: Board DTS supplied power enable `PM0` (USB_WIFI_PWR) but omitted `wifi_chip_en` on `PM1` (WIFI_REG_ON). The AIC8800 was held in constant hardware reset.
   * **Resolution**: Added `reg_wifi_chip_en` regulator with `gpio = <&r_pio 1 1 GPIO_ACTIVE_HIGH>;` (`PM1`), `regulator-always-on`, `regulator-boot-on` in `sun60i-a733-cubie-a7a.dts`.
-- **RISC-V (XuanTie E907) Remoteproc Dual VMA / Memory Map Realignment**:
+- **RISC-V (XuanTie E906) Remoteproc Dual VMA / Memory Map Realignment**:
   * **Defect**:
     1. DTS node mapped only `0x07102000` and lacked the PRCM CFG register (`0x07010000`), ITCM (`0x07110000`), DTCM (`0x07120000`), SRAM C (`0x07130000`), and CCU clocks/resets.
     2. Driver `da_to_va()` failed to translate native core VMAs `0x00000000` (ITCM) and `0x00080000` (DTCM) when loading ELF segments into memory.
@@ -339,7 +339,7 @@ The table below documents the full line-by-line cross-reference comparing the ve
 | **UART0 Console**      | `0x02500000`, GIC SPI 2 | `0x02500000`, GIC SPI 2 | **100% MATCH** | `reg-shift = <2>`, `reg-io-width = <4>`. |
 | **PMIC I2C (R_I2C0)**  | `0x07083000`, GIC SPI 203, `s_twi0` | `0x07083000`, GIC SPI 203, `CLK_R_TWI0` | **100% MATCH** | Clock 18, Reset 8. |
 | **Mailbox 0**          | `0x03004000`, GIC SPI 211 | `0x03004000`, GIC SPI 211 | **100% MATCH** | CCU Gate `0x0744 BIT(0)`, Reset `BIT(16)`. |
-| **RISC-V Coprocessor** | PRCM `0x07010000`, ITCM `0x07110000` | `remoteproc@7010000` | **100% MATCH** | E907 core with TCM/SRAM and mailbox IPC. |
+| **RISC-V Coprocessor** | PRCM `0x07010000`, ITCM `0x07110000` | `remoteproc@7010000` | **100% MATCH** | E906 core with TCM/SRAM and mailbox IPC. |
 | **USB AHB Interconnect**| `0x05C0` (`AHB_GATE_SW_CFG`) bit 9   | `sun60i_a733_ccu_probe()` un-gate | **100% MATCH** | Key `0x10000FF` enables USB/PHY MMIO bus decoder. |
 | **USB PHY Resets**     | `0x1300 BIT(30)` / `0x1308 BIT(30)`   | `RST_USB_PHY0` / `RST_USB_PHY1` | **100% MATCH** | Independent from EHCI/OHCI bus resets (`0x1304`/`0x130c`). |
 
@@ -371,17 +371,17 @@ The table below documents the full line-by-line cross-reference comparing the ve
   * Reading `trace0` causes an ARM64 synchronous external abort in `rproc_trace_read()` while `__pi_strnlen()` dereferences the trace buffer. Do not read this debugfs file on target until the mapping is verified; the abort taints the running kernel.
   * `exampleRiscv` declares `trace0` at core device address `0x0000e000` with length `0x1000`. Its linker script places this in the top 8 KiB of the firmware's `0x00000000` RISC-V SRAM address space.
   * The current board DTS exposes only `cfg` and an `itcm` region at host address `0x07110000`. `sunxi_rproc_da_to_va()` therefore translates trace DA `0x0000e000` through that `itcm` mapping. The external abort proves that this resulting host access is not safe on the A733; it does **not** prove that a DTCM mapping is missing, because this firmware trace is not in DTCM.
-  * Required next step: verify the E907 Linux-visible physical alias for the firmware's `0x00000000` SRAM against the vendor memory map/hardware, then align the DTS resource name/base/length and firmware linker script. Keep the generic debugfs NULL handling intact; it cannot protect against a non-NULL mapping whose physical access aborts.
+  * Required next step: verify the E906 Linux-visible physical alias for the firmware's `0x00000000` SRAM against the vendor memory map/hardware, then align the DTS resource name/base/length and firmware linker script. Keep the generic debugfs NULL handling intact; it cannot protect against a non-NULL mapping whose physical access aborts.
 
 ### Design Checkpoint: Shared A5E/A7A Remoteproc Driver (Sep 1, 2026)
 - **Goal**: One Linux-submission-quality `sunxi_rproc` driver serves both A5E and A7A. Differences belong in compatible-specific Devicetree data, not board-name checks or raw hardware writes in the driver.
-- **Memory policy**: Clearing E907-owned memory before each ELF load is valid only after its Linux-accessible, non-secure physical aperture is proven. Never blanket-clear a Linux/shared ownership region. Firmware clears its own BSS; Linux must not clear A733 ITCM or DTCM while their host mapping remains unverified.
+- **Memory policy**: Clearing E906-owned memory before each ELF load is valid only after its Linux-accessible, non-secure physical aperture is proven. Never blanket-clear a Linux/shared ownership region. Firmware clears its own BSS; Linux must not clear A733 ITCM or DTCM while their host mapping remains unverified.
 - **Trace policy**: The attempted A733 DTCM mapping was rejected by target hardware: Linux writes to `0x07120000` SError. Use a common trace DA only after each SoC's CPU-accessible physical mapping is explicitly described and tested. A reserved-memory/carveout region is the safe fallback when direct TCM access is unavailable.
 - **History policy**: Preserve and review Git history for remoteproc patch `0002` and DTS patches `0001` (A7A) / `0005` (A5E) before replacing any prior layout. The project-root `TODO.md` is the current restart checklist.
 
 ### Remoteproc TCM Host-Access Results and Image Audit (Sep 1, 2026)
 - **ITCM read failure**: Firmware trace at ITCM device address `0x0000e000` caused an ARM64 external abort in `rproc_trace_read()` / `__pi_strnlen()`.
-- **DTCM loader failure**: Declaring DTCM as host physical `0x07120000` and linking loadable firmware data there caused an asynchronous SError in `rproc_elf_load_segments()` / `__pi_memcpy_generic`, before the E907 started.
+- **DTCM loader failure**: Declaring DTCM as host physical `0x07120000` and linking loadable firmware data there caused an asynchronous SError in `rproc_elf_load_segments()` / `__pi_memcpy_generic`, before the E906 started.
 - **Root cause**: `sunxi_rproc` mapped TCM as `__iomem` but returned `is_iomem = false`; remoteproc therefore issued generic `memcpy()`/`memset()` to an I/O mapping. This was a driver mapping-semantics defect, not proof that the DTCM physical window is inaccessible.
 - **Correction**: ITCM/DTCM use `devm_ioremap_wc()` and `sunxi_rproc_da_to_va()` reports `is_iomem = true` for either window. Remoteproc now invokes `memcpy_toio()`/`memset_io()`, matching the in-tree ZynqMP R5 driver’s TCM mapping model. A7A DTS declares distinct 64 KiB ITCM (`0x07110000`) and DTCM (`0x07120000`) windows again.
 - **Trace boundary**: Generic remoteproc debugfs trace uses `strnlen()` and cannot consume an I/O-mapped TCM address. The firmware resource table has no `RSC_TRACE` entry for this test image. Live trace remains disabled until a normal Linux-readable reserved-memory carveout is defined.
@@ -397,7 +397,7 @@ The table below documents the full line-by-line cross-reference comparing the ve
 
 ### Legacy A733 Remoteproc Mapping Audit (Sep 1, 2026)
 - **Vendor implementation evidence**: `A7A_kernel/linux-a733/bsp/drivers/remoteproc/sunxi_rproc.c` translates firmware device addresses through DTS `memory-mappings` triples (DA, length, PA), maps each declared physical carveout with `ioremap_wc()`, and loads only through those mappings. It does not use a universal hard-coded TCM physical address.
-- **A733 limitation**: The legacy A733 DTS contains no E907 remoteproc node or `memory-mappings` table. It provides no evidence that `0x07120000` is a Linux-accessible DTCM alias.
+- **A733 limitation**: The legacy A733 DTS contains no E906 remoteproc node or `memory-mappings` table. It provides no evidence that `0x07120000` is a Linux-accessible DTCM alias.
 - **Implementation consequence**: The submission-quality driver must use explicitly described, non-secure memory resources. Until an A733 CPU-visible TCM aperture is verified, Linux must neither clear TCM nor load ELF segments into it.
 
 ### Ethernet Carrier Established; Check for Link Flap (Sep 1, 2026)
@@ -413,13 +413,13 @@ The table below documents the full line-by-line cross-reference comparing the ve
 - **Console cleanup**: MAE0621 probe, version, self-check, and remove banners were changed from unconditional `printk()` calls to `phydev_dbg()`. This removes reset-cycle noise without hiding standard `Link is Up`/`Link is Down`, `NETDEV WATCHDOG`, or `Reset adapter` messages; those remain required diagnostics for the active TX DMA failure.
 
 ### Ethernet/Remoteproc Target Retest (Sep 1, 2026)
-- **Remoteproc success**: The E907 remoteproc starts successfully with separate ITCM/DTCM ELF segments after `sunxi_rproc` switched TCM mappings to `ioremap_wc()` and reports them as I/O memory. The earlier SError from generic `memcpy()` during ELF load is resolved.
+- **Remoteproc success**: The E906 remoteproc starts successfully with separate ITCM/DTCM ELF segments after `sunxi_rproc` switched TCM mappings to `ioremap_wc()` and reports them as I/O memory. The earlier SError from generic `memcpy()` during ELF load is resolved.
 - **Ethernet persistence**: The GMAC core-clock parent and `rgmii-id` corrections are active: the MAC now reports `IEEE 1588-2008 Advanced Timestamp supported` and `registered PTP clock`, then maintains 1 Gbps full-duplex link. Nevertheless, TX queue 0 still times out every 5–6 seconds and resets the adapter. The repeated link messages are reset/re-probe output, not PHY polling.
 - **Next Ethernet focus**: Audit GMAC DMA reset, AXI/MBUS path, and descriptor configuration against the vendor GMAC driver. Do not hide watchdog output or alter PHY configuration.
 
 ### Remoteproc Test-Artifact Mismatch (Sep 1, 2026)
 - **New target evidence**: The target still contains `/sys/kernel/debug/remoteproc/remoteproc0/trace0` and aborts in `rproc_trace_read()`. The current TCM I/O-mapping test firmware deliberately has a resource table with `num = 0`, which must not create `trace0`.
-- **Conclusion**: This target boot used an older firmware artifact containing `RSC_TRACE`; it cannot validate the current remoteproc driver test. Verify the flashed rootfs `riscv-firmware.elf` hash/section table against `bld.a7a/target/lib/firmware/riscv-firmware.elf` before retesting. The current test criterion is E907 start without SError; live trace remains disabled.
+- **Conclusion**: This target boot used an older firmware artifact containing `RSC_TRACE`; it cannot validate the current remoteproc driver test. Verify the flashed rootfs `riscv-firmware.elf` hash/section table against `bld.a7a/target/lib/firmware/riscv-firmware.elf` before retesting. The current test criterion is E906 start without SError; live trace remains disabled.
 
 ### U-Boot MDIO Address Scan (Sep 1, 2026)
 - **Test**: In the running U-Boot, `mdio read ethernet@4500000 0-1f 2-3` read PHY-ID registers 2 and 3 at all 32 Clause 22 addresses.

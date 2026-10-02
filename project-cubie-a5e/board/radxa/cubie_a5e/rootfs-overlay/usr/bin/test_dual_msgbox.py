@@ -2,11 +2,11 @@
 """
 test_dual_msgbox.py — Concurrent Multi-Core Hardware Mailbox Test Suite
 Tests simultaneous communication between ARM Cortex-A55, Cadence HiFi4 DSP,
-and XuanTie E907 RISC-V on the Radxa Cubie A5E (Allwinner T527).
+and XuanTie E906 RISC-V on the Radxa Cubie A5E (Allwinner T527).
 
 Validates:
 1. Cadence HiFi4 DSP Mailbox (Channels 4 & 5 -> /sys/kernel/debug/mailbox-test-dsp/message)
-2. XuanTie E907 RISC-V Mailbox (Channels 8 & 9 -> /sys/kernel/debug/mailbox-test-e907/message)
+2. XuanTie E906 RISC-V Mailbox (Channels 8 & 9 -> /sys/kernel/debug/mailbox-test-e906/message)
 3. Concurrent, multi-threaded bidirectional traffic with zero crosstalk.
 """
 
@@ -26,7 +26,7 @@ C_CYAN = "\033[36m"
 C_MAGENTA = "\033[35m"
 
 DSP_MBOX_PATH = "/sys/kernel/debug/mailbox-test-dsp/message"
-E907_MBOX_PATH = "/sys/kernel/debug/mailbox-test-e907/message"
+E907_MBOX_PATH = "/sys/kernel/debug/mailbox-test-e906/message"
 
 PING_MAGIC = b"PING"  # 0x50494E47
 PONG_MAGIC = b"PONG"  # 0x504F4E47
@@ -94,7 +94,7 @@ def test_channel(name: str, path: str, num_pings: int, results: dict) -> None:
 def main():
     print(f"\n{C_BOLD}{C_CYAN}================================================================{C_RESET}")
     print(f"{C_BOLD}{C_CYAN}  Allwinner T527 Dual Co-Processor Concurrent Mailbox Test      {C_RESET}")
-    print(f"{C_BOLD}{C_CYAN}  Host (ARM A55) <-> HiFi4 DSP (Ch 4/5) & XuanTie E907 (Ch 8/9){C_RESET}")
+    print(f"{C_BOLD}{C_CYAN}  Host (ARM A55) <-> HiFi4 DSP (Ch 4/5) & XuanTie E906 (Ch 8/9){C_RESET}")
     print(f"{C_BOLD}{C_CYAN}================================================================{C_RESET}\n")
 
     num_iterations = 100
@@ -106,7 +106,7 @@ def main():
 
     print(f"  Iterations per core: {C_BOLD}{num_iterations}{C_RESET}")
     print(f"  DSP Mailbox Node   : {DSP_MBOX_PATH}")
-    print(f"  E907 Mailbox Node  : {E907_MBOX_PATH}\n")
+    print(f"  E906 Mailbox Node  : {E907_MBOX_PATH}\n")
 
     # Ensure mailbox_test module is loaded and debugfs is mounted
     import subprocess
@@ -114,7 +114,7 @@ def main():
     if not os.path.exists("/sys/kernel/debug/remoteproc"):
         subprocess.run(["mount", "-t", "debugfs", "none", "/sys/kernel/debug"], stderr=subprocess.DEVNULL)
 
-    # Start E907 RISC-V with testMsgbox.elf
+    # Start E906 RISC-V with testMsgbox.elf
     if os.path.exists("/sys/class/remoteproc/remoteproc0/state"):
         try:
             with open("/sys/class/remoteproc/remoteproc0/state", "w") as f:
@@ -149,7 +149,7 @@ def main():
 
     print(f"  Checking Hardware Endpoints:")
     print(f"    HiFi4 DSP Node   : {C_GREEN if dsp_avail else C_RED}{'DETECTED' if dsp_avail else 'MISSING'}{C_RESET}")
-    print(f"    XuanTie E907 Node: {C_GREEN if e907_avail else C_RED}{'DETECTED' if e907_avail else 'MISSING'}{C_RESET}\n")
+    print(f"    XuanTie E906 Node: {C_GREEN if e907_avail else C_RED}{'DETECTED' if e907_avail else 'MISSING'}{C_RESET}\n")
 
     if not dsp_avail and not e907_avail:
         print(f"{C_YELLOW}[HINT] Apply 'cubie-a5e-dual-mailbox-test' overlay in /boot/config.txt and reboot:{C_RESET}")
@@ -167,7 +167,7 @@ def main():
         t_dsp.start()
 
     if e907_avail:
-        t_e907 = threading.Thread(target=test_channel, args=("E907-RISCV", E907_MBOX_PATH, num_iterations, results))
+        t_e907 = threading.Thread(target=test_channel, args=("E906-RISCV", E907_MBOX_PATH, num_iterations, results))
         threads.append(t_e907)
         t_e907.start()
 

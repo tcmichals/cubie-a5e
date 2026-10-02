@@ -1,1 +1,0 @@
-firmware/tests.md

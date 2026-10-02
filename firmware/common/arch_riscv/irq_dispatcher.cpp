@@ -45,10 +45,10 @@ extern "C" {
 // Hardware IRQ IDs & PLIC Registers
 // -----------------------------------------------------------------------------
 namespace irq_id {
-    constexpr uint32_t MSGBOX_E907 = 48; // Hardware Doorbell
+    constexpr uint32_t MSGBOX_E906 = 48; // Hardware Doorbell
     constexpr uint32_t SPI1        = 54; // Primary Sensor SPI
     constexpr uint32_t UART0       = 34; // Debug Console
-    constexpr uint32_t DMA_E907    = 64; // Dedicated DMA Engine
+    constexpr uint32_t DMA_E906    = 64; // Dedicated DMA Engine
     constexpr uint32_t GPIO_DRDY   = 82; // IMU Data-Ready Pin
 }
 
@@ -68,10 +68,10 @@ static inline void dispatch_external_plic() noexcept {
 
     while (irq != 0) {
         switch (irq) {
-            case irq_id::MSGBOX_E907: fc_msgbox_doorbell_isr(); break;
+            case irq_id::MSGBOX_E906: fc_msgbox_doorbell_isr(); break;
             case irq_id::SPI1:        fc_spi1_isr();            break;
             case irq_id::UART0:       fc_uart0_isr();           break;
-            case irq_id::DMA_E907:    fc_dma_isr();             break;
+            case irq_id::DMA_E906:    fc_dma_isr();             break;
             case irq_id::GPIO_DRDY:   fc_gpio_drdy_isr();       break;
 
             default:

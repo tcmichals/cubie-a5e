@@ -14,7 +14,7 @@ In this project ecosystem (AbstractX, cubie-a5e, inav-abstractx):
 
 ## 2. Universal Application Flow
 The top-level flight/telemetry application (e.g. `FlightApp` / `inav-abstractx`) runs the exact same code across:
-1. **Linux ARM64 Host (Cubie A5E PREEMPT_RT)**: Interconnects via `remoteproc` / Shared SRAM A3/C with the XuanTie E907 co-processor.
+1. **Linux ARM64 Host (Cubie A5E PREEMPT_RT)**: Interconnects via `remoteproc` / Shared SRAM A3/C with the XuanTie E906 co-processor.
 2. **Raspberry Pi Pico 2 W (RP2350)**: Core 1 runs the flight coroutines; Core 0 runs the I/O engine via SIO FIFO rings.
 3. **Espressif ESP32-P4**: Core 1 runs the flight coroutines; Core 0 runs the I/O engine via IPC Mailbox rings.
 4. **Desktop SITL Simulation**: Runs on simulated in-memory SPSC rings for unit tests.

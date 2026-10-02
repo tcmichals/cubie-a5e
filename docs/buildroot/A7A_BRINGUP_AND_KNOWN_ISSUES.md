@@ -9,7 +9,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 | Subsystem | Specification | Notes |
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) DynamIQ Cluster |
-| **Co-Processor** | XuanTie E907 RISC-V (32-bit RV32IMAFCP) | Deterministic real-time I/O & flight control coprocessor |
+| **Co-Processor** | XuanTie E906 RISC-V (32-bit RV32IMAFCP) | Deterministic real-time I/O & flight control coprocessor |
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 2400 MHz) | Multi-PState dynamic hardware calibration via `boot0` |
 | **Interrupts** | ARM GICv3 (GIC-600) | Distributor: `0x03400000`, Redistributors: `0x03460000` |
 | **Boot Chain** | `BROM` $\rightarrow$ `boot0` (SRAM) $\rightarrow$ `BL31` $\rightarrow$ `U-Boot 2018.07` | Packaged as 16 MB binary blob `radxa_a733_bootloader.bin` |
@@ -96,7 +96,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ---
 
-### Issue 5: XuanTie E907 RISC-V Co-Processor Lifecycle Management
+### Issue 5: XuanTie E906 RISC-V Co-Processor Lifecycle Management
 - **Symptom**: Legacy userspace register and memory pokers (`riscv-load`) caused memory corruption and failed under strict physical memory protections (`CONFIG_STRICT_DEVMEM`).
 - **Fix**: Ported a clean kernel-level `sunxi_rproc.c` remoteproc driver ([`project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`](/project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)) supporting:
   - Automatic ELF parsing into PubSRAM C (`0x00020000`) and Dedicated MCU SRAM (`0x3FFC0000`).

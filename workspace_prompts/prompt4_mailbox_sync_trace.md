@@ -28,7 +28,7 @@ We utilize Allwinner's Message Box (msgbox) hardware block to trigger doorbells:
 * **Register Base (RISC-V View):** `0x03003000`
 
 ### Channel Assignment:
-* **Channel 0 (ARM -> RISC-V):** Host writes the command queue address pointer to `MSG_DATA_REG(0)`. This automatically assets the RX interrupt on the RISC-V PLIC, waking the E906/E907 core.
+* **Channel 0 (ARM -> RISC-V):** Host writes the command queue address pointer to `MSG_DATA_REG(0)`. This automatically assets the RX interrupt on the RISC-V PLIC, waking the E906/E906 core.
 * **Channel 1 (RISC-V -> ARM):** RISC-V writes the echo acknowledgement payload to `MSG_DATA_REG(1)`. This asserts the local RX interrupt on the ARM host GIC (IRQ 147), triggering the Linux driver.
 
 ---

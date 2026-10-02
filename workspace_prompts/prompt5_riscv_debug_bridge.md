@@ -10,7 +10,7 @@
 
 ## 3. Engineering Goals
 * Provide a production-ready out-of-tree Buildroot script that compiles OpenOCD with native memory-mapped (`sunxi_mmap`) I/O capability.
-* Enable local GDB debugging connectivity into the XuanTie E906/E907 real-time core directly from the ARM terminal under Linux.
+* Enable local GDB debugging connectivity into the XuanTie E906/E906 real-time core directly from the ARM terminal under Linux.
 
 ## 4. Implementation Phases
 * Legacy bootargs configuration notes.

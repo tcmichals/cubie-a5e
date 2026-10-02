@@ -1,7 +1,7 @@
 # Allwinner T527 Co-Processor Firmware Test Suite & Performance Guide
-### XuanTie E907 RISC-V & Cadence Tensilica HiFi4 Audio DSP
+### XuanTie E906 RISC-V & Cadence Tensilica HiFi4 Audio DSP
 
-This document details the bare-metal test suite (`apps/`) for both the **XuanTie E907 RISC-V Co-Processor (up to 200 MHz)** and the **Cadence Tensilica HiFi4 Audio DSP (up to 600 MHz)** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**, outlining memory layouts, execution flows, and host Linux benchmarking procedures.
+This document details the bare-metal test suite (`apps/`) for both the **XuanTie E906 RISC-V Co-Processor (up to 200 MHz)** and the **Cadence Tensilica HiFi4 Audio DSP (up to 600 MHz)** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**, outlining memory layouts, execution flows, and host Linux benchmarking procedures.
 
 ---
 
@@ -11,7 +11,7 @@ The firmware test suite follows a progressive **"Walk -> Run"** methodology acro
 
 ```text
 firmware/
-├── e907-riscv/apps/
+├── riscv-firmware/apps/
 │   ├── [PHASE 1: WALK - BOOT, TRACE & DIAGNOSTICS]
 │   │   ├── testBasic/               # Minimal boot in on-chip SRAM (0x3FFC0000) & live counter increment
 │   │   ├── testStringBinaryTrace0/  # SRAM trace0 buffer, mixed ASCII text + packed binary telemetry + hardware FPU
@@ -64,7 +64,7 @@ The Radxa Cubie A5E bootloader (`U-Boot 2024`) merges overlays declared in `/boo
 | **Profile 1: Standard DDR VirtIO RPMsg (Default)** | `dtoverlay=cubie-a5e-flight-stack` | `vdev@48000000`<br>(1 MB DDR DRAM carveout) | `testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf` |
 | **Profile 2: Pure On-Chip SRAM VirtIO** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` | `sram1@72c0000`<br>(256 KB on-chip SRAM Space 1) | `testPingRpmsgSram.elf` (VirtIO vrings & message buffers locked to on-chip SRAM) |
 | **Profile 3: Userspace UIO Direct SPSC Queue** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` | None (Mailbox owned by `generic-uio`) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
-| **Profile 4: Dual Co-Processor Concurrent Mailbox** | `dtoverlay=cubie-a5e-dual-mailbox-test` | `mailbox_test_dsp` (Ch 4/5)<br>`mailbox_test_e907` (Ch 8/9) | Concurrent multi-core stress testing (`test_dual_msgbox.py`, `testMsgbox.elf`, `dsp-testMsgbox.elf`) |
+| **Profile 4: Dual Co-Processor Concurrent Mailbox** | `dtoverlay=cubie-a5e-dual-mailbox-test` | `mailbox_test_dsp` (Ch 4/5)<br>`mailbox_test_e906` (Ch 8/9) | Concurrent multi-core stress testing (`test_dual_msgbox.py`, `testMsgbox.elf`, `dsp-testMsgbox.elf`) |
 | **Profile 5: HiFi4 DSP Mailbox Isolation** | `dtoverlay=cubie-a5e-dsp-mailbox-test` | `mailbox_test_dsp` (Ch 4/5) | Cadence HiFi4 DSP standalone mailbox testing (`dsp-testMsgbox.elf`) |
 
 ---
@@ -140,7 +140,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
 * **Directory**: `riscv-firmware/apps/testBasic/`
 * **Purpose**: Validates toolchain output, linker script layout, core reset de-assertion, and memory bus access.
 * **Firmware Behavior**:
-  - Boots cleanly at `0x3FFC0000` using `e907_sram.ld`.
+  - Boots cleanly at `0x3FFC0000` using `e906_sram.ld`.
   - Initializes the HAL trace subsystem (`hal::Trace::init()`).
   - Sets up two 32-bit heartbeat counters in `.sram_c_loc1` and `.sram_c_loc2` within SRAM.
   - Enters an infinite loop incrementing the heartbeat counters and logging counter values every second.
@@ -243,7 +243,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
 * **Architecture**:
   - Lock-free Single-Producer Single-Consumer (SPSC) circular ring buffers in on-chip SRAM (`0x3FFC0000`).
   - Two operational modes:
-    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Converts the hardware Message Box (`0x03003000`) into a generic UIO device (`/dev/uio0`). Host blocks asynchronously on `select.epoll()` with **0% idle CPU utilization**; E907 pulses GIC SPI 147 interrupt to wake host.
+    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Converts the hardware Message Box (`0x03003000`) into a generic UIO device (`/dev/uio0`). Host blocks asynchronously on `select.epoll()` with **0% idle CPU utilization**; E906 pulses GIC SPI 147 interrupt to wake host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via physical mmap, achieving theoretical maximum bus transfer rate.
 * **Host Benchmark Tools**:
   - **`ping_uio.py`**: Python client using `select.epoll()` on `/dev/uio0`.
@@ -277,7 +277,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
   - **Execution & DDR Ping-Pong Flow**:
     1. Linux user space tool `ping_rpmsg` writes a message into `/dev/rpmsg0`.
     2. Linux kernel copies payload into a pre-allocated DDR DRAM buffer (`0xf2f84000 + idx*512`), updates Vring 1 descriptors in DDR, and triggers the hardware Message Box (Channel 8) doorbell.
-    3. XuanTie E907 receives the mailbox interrupt, reads the vring descriptor and message payload across the system AXI bus directly from DDR DRAM, formats a pong response into a TX buffer in DDR DRAM, updates Vring 0 in DDR, and kicks the mailbox channel 8 back to Linux.
+    3. XuanTie E906 receives the mailbox interrupt, reads the vring descriptor and message payload across the system AXI bus directly from DDR DRAM, formats a pong response into a TX buffer in DDR DRAM, updates Vring 0 in DDR, and kicks the mailbox channel 8 back to Linux.
     4. Linux kernel receives the mailbox IRQ (deferred safely via `schedule_work()` on PREEMPT_RT kernels), fetches the response from DDR DRAM, and delivers it to `/dev/rpmsg0`.
 * **Host Benchmark Tool (`ping_rpmsg`)**:
   - Communicates directly with `/dev/rpmsg0` (or dynamically creates endpoint via `/dev/rpmsg_ctrl0`).
@@ -462,7 +462,7 @@ sleep 5
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 # Expected output contains:
 #   ================================================================
-#     XUANTIE E907 MACHINE-MODE EXCEPTION AUTOPSY REPORT
+#     XUANTIE E906 MACHINE-MODE EXCEPTION AUTOPSY REPORT
 #   ================================================================
 #   [FAULT] mcause : 0x00000002 (Illegal instruction)
 #   [FAULT] mepc   : 0x3ffc080e
@@ -600,16 +600,16 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 
 ---
 
-### 6.9 XuanTie E907 Hardware Mailbox Loopback (`testMsgbox.elf`)
+### 6.9 XuanTie E906 Hardware Mailbox Loopback (`testMsgbox.elf`)
 
-Validates direct Allwinner hardware Message Box communication between ARM Linux Host and XuanTie E907 via Port 2 (Host Tx Ch 8, Rx Ch 9).
+Validates direct Allwinner hardware Message Box communication between ARM Linux Host and XuanTie E906 via Port 2 (Host Tx Ch 8, Rx Ch 9).
 
 ```bash
 # Step 1: Ensure dual-mailbox overlay is active
 sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
 reboot
 
-# Step 2: Deploy and boot testMsgbox.elf on XuanTie E907
+# Step 2: Deploy and boot testMsgbox.elf on XuanTie E906
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -618,8 +618,8 @@ echo start > /sys/class/remoteproc/remoteproc0/state
 cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 # Step 4: Transmit PING and verify PONG reply on Channel 8/9
-echo -ne "PING" > /sys/kernel/debug/mailbox-test-e907/message
-hexdump -C /sys/kernel/debug/mailbox-test-e907/message
+echo -ne "PING" > /sys/kernel/debug/mailbox-test-e906/message
+hexdump -C /sys/kernel/debug/mailbox-test-e906/message
 # Expected output:
 # 00000000  50 4f 4e 47                                       |PONG|
 ```
@@ -632,7 +632,7 @@ Validates direct Allwinner hardware Message Box communication between ARM Linux 
 
 ```bash
 # Step 1: Ensure DSP mailbox test overlay is active
-# (or cubie-a5e-dual-mailbox-test which activates both DSP and E907)
+# (or cubie-a5e-dual-mailbox-test which activates both DSP and E906)
 sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dsp-mailbox-test/' /boot/config.txt
 reboot
 
@@ -660,7 +660,7 @@ Validates simultaneous multi-core hardware mailbox throughput with zero crosstal
 sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
 reboot
 
-# Step 2: Start XuanTie E907 with testMsgbox.elf
+# Step 2: Start XuanTie E906 with testMsgbox.elf
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -694,19 +694,19 @@ python3 /usr/bin/run_tests.py --test msgbox
 python3 /usr/bin/run_tests.py --test dual-msgbox
 ```
 
-## 7. Silicon Core Identification (E906 vs E907 Verification)
+## 7. Silicon Core Identification (E906 vs E906 Verification)
 
 ### Background: Why Both Names Appear
-* **Board & Marketing Layer**: Radxa Cubie A5E promotional specs, product briefs, and technical writeups refer to the co-processor as the **T-Head XuanTie E907**.
+* **Board & Marketing Layer**: Radxa Cubie A5E promotional specs, product briefs, and technical writeups refer to the co-processor as the **T-Head XuanTie E906**.
 * **Silicon RTL & Vendor BSP Layer**: Allwinner's internal hardware register maps (`0x07130000`), device trees (`sun55iw3p1.dtsi`), and Linux 5.15 BSP drivers refer to it as the **XuanTie E906** (`E906_VER_REG`, `E906_STA_ADD_REG`, `CONFIG_AW_REMOTEPROC_E906_BOOT`).
 * **Binary Compatibility**: Both cores share the same 32-bit RV32IMAFDC 5-stage pipeline architecture. Binaries compiled with `-march=rv32imafdc -mabi=ilp32d` execute identically on both.
 
 To verify the exact silicon core implemented on physical hardware, run the following tests:
 
 ### Method 1: Query the `misa` CSR (Bit 15 — 'P' Extension)
-The primary architectural difference between an E906 and an E907 is the presence of T-Head's packed-SIMD / DSP extension (**`P`**):
+The primary architectural difference between an E906 and an E906 is the presence of T-Head's packed-SIMD / DSP extension (**`P`**):
 * **E906**: Implements `RV32IMAFDC` (Standard Integer, Multiply, Atomic, Float, Double, Compressed; bit 15 is 0).
-* **E907**: Implements `RV32IMAFDCP` (Adds T-Head Packed-SIMD / DSP math; bit 15 is 1).
+* **E906**: Implements `RV32IMAFDCP` (Adds T-Head Packed-SIMD / DSP math; bit 15 is 1).
 
 In bare-metal C/C++ firmware:
 ```cpp
@@ -714,7 +714,7 @@ uint32_t misa;
 asm volatile("csrr %0, misa" : "=r"(misa));
 
 if (misa & (1 << 15)) {
-    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E907 (DSP / 'P' extension enabled)\n", misa);
+    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E906 (DSP / 'P' extension enabled)\n", misa);
 } else {
     hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E906 (RV32IMAFDC standard without 'P')\n", misa);
 }
@@ -747,7 +747,7 @@ The following report documents the automated validation of the `sunxi_rproc` Lin
 
 ### 8.1 Test Environment & Configuration
 * **Hardware Platform**: Radxa Cubie A5E (Allwinner A527 / T527 Octa-Core ARM Cortex-A55)
-* **Co-Processor Core**: Alibaba T-Head XuanTie E907 (RV32IMAFCX @ 200 MHz)
+* **Co-Processor Core**: Alibaba T-Head XuanTie E906 (RV32IMAFCX @ 200 MHz)
 * **Operating System**: Linux `cubie-a5e-flight 7.1.0 #6 SMP PREEMPT_RT` (ARM64)
 * **Driver Under Test**: `drivers/remoteproc/sunxi_rproc.c` (`allwinner,sun55i-rproc`)
 * **Clock & Reset Domains**: Handled natively by kernel `clk` and `reset` frameworks (`bus`, `core`, `sram`, `msgbox`)
@@ -759,7 +759,7 @@ The following report documents the automated validation of the `sunxi_rproc` Lin
 
 ```text
 ========================================================================
-  Allwinner T527 / A527 XuanTie E907 Automated Test Suite              
+  Allwinner T527 / A527 XuanTie E906 Automated Test Suite              
   Subsystem: Linux RemoteProc Framework                                 
 ========================================================================
 
@@ -780,7 +780,7 @@ The following report documents the automated validation of the `sunxi_rproc` Lin
   [INFO] Polling trace0 for heartbeat logs (sampling up to 4s)...
   [PASS] Heartbeat messages verified in trace buffer
   [PASS] Hardware MISA register verified: 0x40901125
-  [PASS] MISA matches Allwinner XuanTie E907 architecture: RV32IMAFCX
+  [PASS] MISA matches Allwinner XuanTie E906 architecture: RV32IMAFCX
   [INFO] Testing clean core stop...
   [PASS] Core cleanly stopped (state: offline)
 
@@ -976,7 +976,7 @@ During the hardware validation process on the Radxa Cubie A5E silicon, four crit
 * **Hardware Location**:
   - On the running target, `debugfs` inspection confirmed that Vring 0 is placed at `0xf2f80000`, Vring 1 at `0xf2f82000`, and message payload buffers at `0xf2f84000`.
   - Checking `/proc/iomem` reveals that `0xf2f80000` is located directly in **physical DDR DRAM** (within the kernel's 128 MB CMA contiguous memory pool `f2e00000-fadfffff`).
-  - **Conclusion**: RPMsg message buffers are **100% in DDR DRAM**. The XuanTie E907 accesses DDR DRAM across the SoC's internal AXI interconnect without memory corruption, while the debugfs trace buffer remains strictly in zero-wait-state on-chip SRAM (`0x3FFC0000`).
+  - **Conclusion**: RPMsg message buffers are **100% in DDR DRAM**. The XuanTie E906 accesses DDR DRAM across the SoC's internal AXI interconnect without memory corruption, while the debugfs trace buffer remains strictly in zero-wait-state on-chip SRAM (`0x3FFC0000`).
 
 ### 9.2 ARM64 Strict MMIO Alignment & SIGBUS (Code 135)
 * **Problem**: When user-space companion utilities (`ping_shm`, `ping_dram`) accessed on-chip SRAM via `/dev/mem`, the application crashed immediately with `Bus error` (Exit Code 135).
@@ -986,13 +986,13 @@ During the hardware validation process on the Radxa Cubie A5E silicon, four crit
   - Replaced vector `memcpy()` with volatile 32-bit/64-bit integer access loops for all MMIO device reads and writes.
 
 ### 9.3 PREEMPT_RT "Scheduling While Atomic" Elimination
-* **Problem**: In Linux 7.1 PREEMPT_RT, when the XuanTie E907 fires a mailbox interrupt announcing a new RPMsg channel, the kernel logged a backtrace: `BUG: scheduling while atomic: ... in rproc_vq_interrupt`.
+* **Problem**: In Linux 7.1 PREEMPT_RT, when the XuanTie E906 fires a mailbox interrupt announcing a new RPMsg channel, the kernel logged a backtrace: `BUG: scheduling while atomic: ... in rproc_vq_interrupt`.
 * **Root Cause**: The Name Service handler (`virtio_rpmsg_create_channel`) calls `device_register()` and `blocking_notifier_call_chain()`, which acquire sleeping mutexes. Calling this directly within the hard-IRQ bottom half of the Mailbox driver violates PREEMPT_RT real-time constraints.
 * **Resolution**: Added a `struct work_struct vq_work` to `sunxi_rproc.c`. The mailbox callback now executes `schedule_work(&priv->vq_work)`, deferring the VirtIO vring interrupt handler to process context. This completely eliminated the kernel warning.
 
-### 9.4 XuanTie E907 Instruction Compatibility (Fence vs Cache Opcodes)
+### 9.4 XuanTie E906 Instruction Compatibility (Fence vs Cache Opcodes)
 * **Problem**: Calling custom XuanTie cache invalidation opcodes (`.insn r 0x0b, 0, 0, x0, %0, x0`) on DDR memory triggered an illegal instruction exception (`mcause=0x00000002` at `0x3ffc099e`).
-* **Root Cause**: The synthesized E907 silicon revision on Allwinner T527 implements hardware cache-coherent AXI interfaces or does not expose vendor cache maintenance opcodes in Machine mode for the DRAM region.
+* **Root Cause**: The synthesized E906 silicon revision on Allwinner T527 implements hardware cache-coherent AXI interfaces or does not expose vendor cache maintenance opcodes in Machine mode for the DRAM region.
 * **Resolution**: Replaced the custom opcodes with standard RISC-V memory barriers (`fence rw, rw` and `fence.i`), achieving rock-solid memory synchronization across 1,000+ packet streaming runs.
 
 ### 9.5 Python UIO Device Memory Alignment (SIGBUS 135) & RPMsg Drain
@@ -1025,7 +1025,7 @@ The following results were recorded across all 3 hardware profiles on live silic
 
 ## 11. Cadence Tensilica HiFi4 Audio DSP Standalone Mailbox Testing
 
-The Cadence Tensilica HiFi4 Audio DSP on the Allwinner T527 shares the central hardware Message Box IP controller (`sun55i-msgbox`) with the ARM Cortex-A55 cluster and the XuanTie E907 RISC-V core.
+The Cadence Tensilica HiFi4 Audio DSP on the Allwinner T527 shares the central hardware Message Box IP controller (`sun55i-msgbox`) with the ARM Cortex-A55 cluster and the XuanTie E906 RISC-V core.
 
 ### 11.1 Hardware Routing Architecture for HiFi4 DSP
 
@@ -1132,16 +1132,16 @@ hexdump -C /sys/kernel/debug/mailbox-test-dsp/message
 
 ---
 
-## 12. Dual Co-Processor Concurrent Mailbox Testing (HiFi4 DSP + XuanTie E907)
+## 12. Dual Co-Processor Concurrent Mailbox Testing (HiFi4 DSP + XuanTie E906)
 
-The Allwinner T527 hardware Message Box features **independent hardware ports and FIFOs** for each processing core. The ARM Cortex-A55 cluster can communicate with both the Cadence HiFi4 DSP and the XuanTie E907 RISC-V co-processor simultaneously with **zero hardware collision and zero cross-talk**.
+The Allwinner T527 hardware Message Box features **independent hardware ports and FIFOs** for each processing core. The ARM Cortex-A55 cluster can communicate with both the Cadence HiFi4 DSP and the XuanTie E906 RISC-V co-processor simultaneously with **zero hardware collision and zero cross-talk**.
 
 ### 12.1 Concurrent Multi-Core Mailbox Mapping
 
 | Processing Core | Local Base | Local Rx Ch | Linux Tx Ch | Remote ARM Tx Base | Linux Rx Ch | Debugfs Test Node |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **Cadence HiFi4 DSP** | `0x07094000` (Port 0) | Ch 0 | **Ch 4** | `0x03003174` (ARM Port 1) | **Ch 5** | `/sys/kernel/debug/mailbox-test-dsp/message` |
-| **XuanTie E907 RISC-V** | `0x07136000` (Port 2) | Ch 0 | **Ch 8** | `0x03003274` (ARM Port 2) | **Ch 9** | `/sys/kernel/debug/mailbox-test-e907/message` |
+| **XuanTie E906 RISC-V** | `0x07136000` (Port 2) | Ch 0 | **Ch 8** | `0x03003274` (ARM Port 2) | **Ch 9** | `/sys/kernel/debug/mailbox-test-e906/message` |
 
 ```text
                         +---------------------------------------+
@@ -1152,7 +1152,7 @@ The Allwinner T527 hardware Message Box features **independent hardware ports an
                    (ARM Port 1)    |                 |   (ARM Port 2)
                                    v                 v
             +---------------------------+   +---------------------------+
-            |    Cadence HiFi4 DSP      |   |   XuanTie E907 RISC-V     |
+            |    Cadence HiFi4 DSP      |   |   XuanTie E906 RISC-V     |
             | Local Port 0 (0x07094000) |   | Local Port 2 (0x07136000) |
             | Runs: dsp-testMsgbox.elf  |   | Runs: testMsgbox.elf      |
             +---------------------------+   +---------------------------+
@@ -1174,7 +1174,7 @@ The dual-mailbox overlay instantiates two simultaneous `mailbox-test` clients in
         status = "okay";
     };
 
-    mailbox_test_e907: mailbox-test-e907 {
+    mailbox_test_e906: mailbox-test-e906 {
         compatible = "mailbox-test";
         mboxes = <&msgbox 8>, <&msgbox 9>;
         mbox-names = "tx", "rx";
@@ -1189,14 +1189,14 @@ The dual-mailbox overlay instantiates two simultaneous `mailbox-test` clients in
 
 ### 12.3 Automated Concurrent Multi-Core Benchmark (`test_dual_msgbox.py`)
 
-A multi-threaded benchmark tool is provided in `firmware/e907-riscv/tools/test_dual_msgbox.py` and packaged into `/usr/bin/test_dual_msgbox.py`. It launches concurrent threads transmitting independent message streams to both co-processors simultaneously:
+A multi-threaded benchmark tool is provided in `firmware/riscv-firmware/tools/test_dual_msgbox.py` and packaged into `/usr/bin/test_dual_msgbox.py`. It launches concurrent threads transmitting independent message streams to both co-processors simultaneously:
 
 ```bash
 # 1. Enable dual mailbox overlay
 sed -i 's/^dtoverlay=.*/dtoverlay=cubie-a5e-dual-mailbox-test/' /boot/config.txt
 reboot
 
-# 2. Deploy and boot testMsgbox.elf on XuanTie E907:
+# 2. Deploy and boot testMsgbox.elf on XuanTie E906:
 echo stop > /sys/class/remoteproc/remoteproc0/state
 echo "testMsgbox.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
@@ -1217,16 +1217,16 @@ python3 /usr/bin/run_tests.py --test dual-msgbox
 ```text
 ================================================================
   Allwinner T527 Dual Co-Processor Concurrent Mailbox Test      
-  Host (ARM A55) <-> HiFi4 DSP (Ch 4/5) & XuanTie E907 (Ch 8/9)
+  Host (ARM A55) <-> HiFi4 DSP (Ch 4/5) & XuanTie E906 (Ch 8/9)
 ================================================================
 
   Iterations per core: 1000
   DSP Mailbox Node   : /sys/kernel/debug/mailbox-test-dsp/message
-  E907 Mailbox Node  : /sys/kernel/debug/mailbox-test-e907/message
+  E906 Mailbox Node  : /sys/kernel/debug/mailbox-test-e906/message
 
   Checking Hardware Endpoints:
     HiFi4 DSP Node   : DETECTED
-    XuanTie E907 Node: DETECTED
+    XuanTie E906 Node: DETECTED
 
 Concurrent Test Run Complete!
   Total Wall-Clock Time: 0.184 s
@@ -1234,7 +1234,7 @@ Concurrent Test Run Complete!
 Test Results Breakdown:
 ----------------------------------------------------------------
   DSP-HiFi4   : 1000/1000 responses (100.0%) | Avg RTT: 18.24 us | OK
-  E907-RISCV  : 1000/1000 responses (100.0%) | Avg RTT: 14.85 us | OK
+  E906-RISCV  : 1000/1000 responses (100.0%) | Avg RTT: 14.85 us | OK
 ----------------------------------------------------------------
 ```
 
@@ -1245,7 +1245,7 @@ Test Results Breakdown:
 ### 13.1 Hardware Interrupt Configuration (`RD_IRQ_EN_REG`)
 In the Allwinner T527 hardware Message Box peripheral, each receiver port has a dedicated Read Interrupt Enable register:
 - **HiFi4 DSP**: `0x07094020`
-- **XuanTie E907**: `0x07136220` (Port 2 offset `0x200`)
+- **XuanTie E906**: `0x07136220` (Port 2 offset `0x200`)
 - **ARM Cortex-A55**: `0x03003020` (Port 0), `0x03003120` (Port 1), `0x03003220` (Port 2)
 
 #### Default Configuration: Polling with Interrupts Disabled (`enable_irq = false`)
@@ -1261,7 +1261,7 @@ void sunxi_msgbox_init_ex(bool enable_irq) {
 }
 ```
 When `enable_irq = false`, `RD_IRQ_EN_REG` is cleared to 0. This prevents the peripheral from asserting its external interrupt line:
-- Routed to **PLIC Line 48** for XuanTie E907 RISC-V.
+- Routed to **PLIC Line 48** for XuanTie E906 RISC-V.
 - Routed to **Xtensa Core Interrupt Line** for Cadence HiFi4 DSP.
 - Routed to **GIC SPI 174** for ARM Cortex-A55 Host.
 
@@ -1269,7 +1269,7 @@ By keeping interrupts disabled by default, firmware polling loops (`has_data()` 
 
 ### 13.2 Software Execution Paradigm: Why Firmware Polls
 
-| Layer | XuanTie E907 Processing Mode | Cadence HiFi4 DSP Processing Mode | Linux Host Processing Mode |
+| Layer | XuanTie E906 Processing Mode | Cadence HiFi4 DSP Processing Mode | Linux Host Processing Mode |
 | :--- | :--- | :--- | :--- |
 | **Driver / App** | `testPing`, `testPingRpmsg`, `testMsgbox` | `testBasic`, `testMsgbox` | `sun55i-msgbox.c` (`sunxi_msgbox_irq`) |
 | **Reception Mode** | **Polled Status** (`has_data()` / `is_rx_pending()`) | **Polled Status** (`dsp_msgbox_has_data()`) | **Interrupt-Driven** (GIC Hard-IRQ + Tasklet/Work) |
@@ -1285,7 +1285,7 @@ By keeping interrupts disabled by default, firmware polling loops (`has_data()` 
 
 ## 14. Cadence Tensilica HiFi4 Audio DSP Test Applications Suite
 
-The dedicated bare-metal test suite for the Cadence Tensilica HiFi4 Audio DSP core mirrors the XuanTie E907 validation suite while leveraging DSP-specific audio vector math instructions and register layouts:
+The dedicated bare-metal test suite for the Cadence Tensilica HiFi4 Audio DSP core mirrors the XuanTie E906 validation suite while leveraging DSP-specific audio vector math instructions and register layouts:
 
 ### 14.1 Application Matrix
 

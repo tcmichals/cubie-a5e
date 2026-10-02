@@ -2,14 +2,14 @@ config BR2_PACKAGE_RBB_SERVER
 	bool "rbb-server"
 	depends on BR2_aarch64
 	help
-	  On-Chip Direct MMIO Debug Access Daemon for XuanTie E907 RISC-V co-processor
+	  On-Chip Direct MMIO Debug Access Daemon for XuanTie E906 RISC-V co-processor
 	  debugging via ARM MMIO bridge.
 
 	  Maps the RISC-V hardware debug module (DM) registers directly via MMIO
 	  and connects OpenOCD to GDB over TCP.
 
 	  No external JTAG probe required — the ARM Cortex-A55 accesses the
-	  E907 debug module via the shared MCU AHB bus.
+	  E906 debug module via the shared MCU AHB bus.
 
 	  Run probe_riscv_debug.sh first to discover the debug module address,
 	  then: rbb_server <address> &

@@ -11,7 +11,7 @@ namespace hal {
  * @brief Allwinner T527 Hardware Message Box (MSGBOX) IPC Driver (C++20)
  *
  * Provides atomic FIFO flow control, lock-free status monitoring,
- * and wait/notify integration between the XuanTie E907 and Cortex-A55 host.
+ * and wait/notify integration between the XuanTie E906 and Cortex-A55 host.
  */
 class MsgBox {
 public:

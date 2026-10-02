@@ -9,7 +9,7 @@ This guide details how to configure, compile, flash, and operate the mainline Li
 The **Avaota A1** is an open-hardware single-board computer powered by the **Allwinner T527 (`sun55i`)** SoC:
 
 * **CPU**: 8× ARM Cortex-A55 @ 1.80 GHz (DynamIQ Cluster)
-* **Co-Processor**: XuanTie E906/E907 32-bit RISC-V (up to 200 MHz) with hardware FPU & DSP
+* **Co-Processor**: XuanTie E906/E906 32-bit RISC-V (up to 200 MHz) with hardware FPU & DSP
 * **RAM**: 1 GiB / 2 GiB / 4 GiB LPDDR4 / LPDDR4X
 * **Storage**: MicroSD Slot + eMMC 5.1 + SPI NOR Flash
 * **Networking**: Dual Gigabit Ethernet (DWMAC 5.20) + On-board Wi-Fi 6 / BT 5.4
@@ -75,9 +75,9 @@ Connect a 3.3V USB-to-UART adapter to the Avaota A1 debug pins:
 
 ---
 
-## 5. XuanTie E907 Real-Time Coprocessor Control
+## 5. XuanTie E906 Real-Time Coprocessor Control
 
-The on-chip XuanTie E907 core is managed dynamically by the `sunxi_rproc.c` driver:
+The on-chip XuanTie E906 core is managed dynamically by the `sunxi_rproc.c` driver:
 
 ### Start Coprocessor:
 ```bash

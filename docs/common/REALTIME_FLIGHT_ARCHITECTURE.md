@@ -53,7 +53,7 @@ By booting all cores cleanly and applying core isolation dynamically post-boot (
 Communication between the Linux ARM host and the XuanTie RISC-V co-processor uses zero-copy circular ring buffers backed by hardware mailbox interrupts:
 
 ```
-     ARM Linux (Host)                           XuanTie E907 (Co-processor)
+     ARM Linux (Host)                           XuanTie E906 (Co-processor)
 ┌─────────────────────────┐                     ┌─────────────────────────┐
 │ Real-Time SCHED_FIFO    │                     │ Bare-Metal Coroutine    │
 │ Daemon (Core 7)         │                     │ Flight Loop (ITCM)      │

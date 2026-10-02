@@ -1,6 +1,6 @@
 # Radxa Cubie A5E Hardware Overview & Specifications
 
-The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) powered by the Allwinner T527 / A527 SoC (`sun55i-a523`). Designed for space-, weight-, and power-constrained (SWaP) edge computing, the board packages an octa-core 64-bit ARM CPU, a dedicated real-time XuanTie E907 RISC-V co-processor, a Cadence HiFi4 audio DSP, and a 2.0 TOPS NPU into a low-power (<7.5W) form factor suitable for robotics, drone avionics, smart camera vision, and industrial automation.
+The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) powered by the Allwinner T527 / A527 SoC (`sun55i-a523`). Designed for space-, weight-, and power-constrained (SWaP) edge computing, the board packages an octa-core 64-bit ARM CPU, a dedicated real-time XuanTie E906 RISC-V co-processor, a Cadence HiFi4 audio DSP, and a 2.0 TOPS NPU into a low-power (<7.5W) form factor suitable for robotics, drone avionics, smart camera vision, and industrial automation.
 
 * **Source Repository**: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e)
 
@@ -11,7 +11,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 * **Form Factor**: Compact single-board computer (credit-card format, 85 mm × 56 mm).
 * **SoC**: Allwinner T527 (commercial) / A527 (industrial/automotive), 22nm FinFET.
 * **Primary CPU**: Octa-Core ARM Cortex-A55 @ up to 1.80 GHz (Armv8.2-A, 64-bit).
-* **Co-Processor**: T-Head XuanTie E907 RISC-V (RV32IMAFDC) @ 200 MHz (up to 600 MHz).
+* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFDC) @ 200 MHz (up to 600 MHz).
 * **DSP**: Cadence Tensilica HiFi4 Audio DSP @ 600 MHz.
 * **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8).
 * **GPU**: ARM Mali-G57 MC1 (Valhall architecture).
@@ -24,7 +24,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 
 ### Compute & Acceleration
 * **Application Processor**: Allwinner T527 / A527 (`sun55i-a523`), 8× ARM Cortex-A55 @ 1.80 GHz (32 KB I/D L1 per core, 512 KB unified DSU L3 cache)
-* **Co-Processor**: T-Head XuanTie E907 RISC-V (RV32IMAFDC) @ 200–600 MHz with double-precision FPU, DSP extensions, 64 KB ITCM, and 64 KB DTCM
+* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFDC) @ 200–600 MHz with double-precision FPU, DSP extensions, 64 KB ITCM, and 64 KB DTCM
 * **Audio DSP**: Cadence Tensilica HiFi4 @ 600 MHz
 * **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8), supported upstream via Linux `etnaviv`
 * **GPU**: ARM Mali-G57 MC1 (Vulkan 1.3, OpenGL ES 3.2, OpenCL 2.0)
@@ -56,7 +56,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 * **Firmware (TF-A)**: Mainline ARM Trusted Firmware BL31 (`PLAT=sun55i_a523`).
 * **Linux Kernel**: Upstream mainline Linux 7.1 (`sun55i-a523.dtsi` / `sun55i-a527-cubie-a5e.dts`).
 * **Real-Time Patch**: `PREEMPT_RT` patchset applied to kernel 7.1.
-* **RemoteProc**: `sunxi_rproc.c` handles lifecycle and ELF loading for the XuanTie E907 core.
+* **RemoteProc**: `sunxi_rproc.c` handles lifecycle and ELF loading for the XuanTie E906 core.
 * **IPC**:
   * VirtIO RPMsg via `virtio_rpmsg_bus` (`/dev/rpmsg0`).
   * Lite-libmetal UIO Doorbell via `uio_pdrv_genirq` (`/dev/uio0`).
@@ -135,7 +135,7 @@ The resulting `bld/images/sdcard.img` contains the multi-stage bootloader (U-Boo
 This high-level overview serves as the entry point for a dedicated series of engineering articles:
 
 1. **Introduction to Device Trees and U-Boot**: [Device Tree Overlays & U-Boot In-Memory Merging](devicetreeOverlay.md) — parsing `/boot/config.txt`, applying `.dtbo` fragments dynamically via U-Boot scripts, and binding UIO devices without kernel rebuilds.
-2. **Using the XuanTie E907 RISC-V Co-Processor (and Why)**: [Heterogeneous RISC-V Architecture Series](part1_heterogeneous_riscv_intro_architecture.md) — rationale for offloading deterministic hard real-time tasks (sub-microsecond control loops, PWM generation, high-rate sensor polling) from Linux SMP cores, zero-wait-state TCM execution, and low-latency IPC.
+2. **Using the XuanTie E906 RISC-V Co-Processor (and Why)**: [Heterogeneous RISC-V Architecture Series](part1_heterogeneous_riscv_intro_architecture.md) — rationale for offloading deterministic hard real-time tasks (sub-microsecond control loops, PWM generation, high-rate sensor polling) from Linux SMP cores, zero-wait-state TCM execution, and low-latency IPC.
 
 All associated Buildroot defconfigs, Device Tree overlays, U-Boot boot scripts, and RISC-V firmware applications are maintained in the project repository: [https://github.com/tcmichals/cubie-a5e](https://github.com/tcmichals/cubie-a5e).
 

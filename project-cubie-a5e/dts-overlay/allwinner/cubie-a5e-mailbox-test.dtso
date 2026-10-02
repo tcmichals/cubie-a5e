@@ -14,7 +14,7 @@
  *   - 4 MB Firmware execution segment (0x40100000 - 0x40500000)
  *
  * Mailbox Channels (sun55i-msgbox with #mbox-cells = <1>):
- *   - Channels 8 & 9: ARM Cortex-A55 <-> XuanTie E907 RISC-V
+ *   - Channels 8 & 9: ARM Cortex-A55 <-> XuanTie E906 RISC-V
  *
  * Load in /boot/config.txt:
  *   dtoverlay=cubie-a5e-mailbox-test

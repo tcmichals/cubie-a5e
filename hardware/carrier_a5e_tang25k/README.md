@@ -18,7 +18,7 @@ This directory contains the complete **KiCad hardware design files, schematics, 
  │       (40-Pin Receptacle Below)           │                 │ (Dual 60P BTB On Top)     │
  ├───────────────────────────────────────────┤                 ├───────────────────────────┤
  │ • 8x Cortex-A55 Linux (Vision, iNAV, ML)  │    Dual-SPI     │ • Gowin GW5A-LV25 FPGA    │
- │ • XuanTie E907 RISC-V (Hard Real-Time I/O)│◄───────────────►│ • 8x DShot300/600/1200    │
+ │ • XuanTie E906 RISC-V (Hard Real-Time I/O)│◄───────────────►│ • 8x DShot300/600/1200    │
  │ • UART0: Dedicated Linux Debug Console    │  (up to 100MHz) │ • High-Speed Serial / PWM │
  │ • UART2: Real-Time GPS / CRSF Stream      │  & Frame IRQ    │ • Optical Flow Ingestion  │
  │ • I2C3: Barometer / Magnetometer / Power  │                 │ • Low-Latency Failsafe    │

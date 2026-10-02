@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_tests.py - Automated End-to-End Validation Suite for XuanTie E907 RISC-V Firmware
+run_tests.py - Automated End-to-End Validation Suite for XuanTie E906 RISC-V Firmware
 SoC: Allwinner T527 / A527 (Radxa Cubie A5E)
 Framework: Linux RemoteProc Subsystem
 
@@ -284,17 +284,17 @@ def detect_active_dt_profile():
     Inspects /sys/firmware/devicetree/base to determine the active hardware profile.
     Returns: (profile_id, details_str)
     """
-    # Profile 5 check: Standalone DSP mailbox test overlay without E907 mailbox
+    # Profile 5 check: Standalone DSP mailbox test overlay without E906 mailbox
     if (os.path.exists(os.path.join(DT_BASE, "mailbox-test-dsp")) or os.path.exists("/sys/kernel/debug/mailbox-test-dsp")) and \
-       not (os.path.exists(os.path.join(DT_BASE, "mailbox-test-e907")) or os.path.exists("/sys/kernel/debug/mailbox-test-e907")):
+       not (os.path.exists(os.path.join(DT_BASE, "mailbox-test-e906")) or os.path.exists("/sys/kernel/debug/mailbox-test-e906")):
         return PROFILE_5, "mailbox-test-dsp endpoint (HiFi4 DSP Hardware Mailbox)"
 
     # Profile 4 check: Standalone or dual mailbox test overlays
     if os.path.exists(os.path.join(DT_BASE, "mailbox-test-dsp")) or \
-       os.path.exists(os.path.join(DT_BASE, "mailbox-test-e907")) or \
+       os.path.exists(os.path.join(DT_BASE, "mailbox-test-e906")) or \
        os.path.exists(os.path.join(DT_BASE, "mailbox-test")) or \
        os.path.exists("/sys/kernel/debug/mailbox-test-dsp") or \
-       os.path.exists("/sys/kernel/debug/mailbox-test-e907"):
+       os.path.exists("/sys/kernel/debug/mailbox-test-e906"):
         return PROFILE_4, "mailbox-test endpoints (sun55i-msgbox hardware channels)"
 
     msgbox_compat_path = os.path.join(DT_BASE, "soc/mailbox@3003000/compatible")
@@ -427,7 +427,7 @@ def test_basic():
         time.sleep(0.3)
 
     if found_heartbeat:
-        log_pass("Heartbeat telemetry received from XuanTie E907 via trace0")
+        log_pass("Heartbeat telemetry received from XuanTie E906 via trace0")
     else:
         log_fail("Heartbeat telemetry timeout on trace0")
         stop_rproc()
@@ -1055,22 +1055,22 @@ def find_mailbox_node(hint=""):
     return None
 
 def test_msgbox():
-    log_header("TEST: XuanTie E907 Hardware Mailbox Loopback (testMsgbox)")
+    log_header("TEST: XuanTie E906 Hardware Mailbox Loopback (testMsgbox)")
     if read_file(RPROC_STATE) != "running" or read_file(RPROC_FW) != "testMsgbox.elf":
-        log_info("Deploying and starting testMsgbox.elf on XuanTie E907...")
+        log_info("Deploying and starting testMsgbox.elf on XuanTie E906...")
         if not start_rproc("testMsgbox.elf"):
             log_warn("remoteproc0 failed to start testMsgbox.elf; proceeding to test mailbox node directly")
 
-    node = find_mailbox_node("e907")
+    node = find_mailbox_node("e906")
     if not node:
-        log_warn("No E907 mailbox debugfs node found")
-        return [{"name": "testMsgbox (E907 Mailbox Ch 8/9)", "status": "SKIP", "details": "debugfs node not found", "metrics": {}}]
+        log_warn("No E906 mailbox debugfs node found")
+        return [{"name": "testMsgbox (E906 Mailbox Ch 8/9)", "status": "SKIP", "details": "debugfs node not found", "metrics": {}}]
 
-    res = run_mailbox_channel_test("testMsgbox (E907 Mailbox Ch 8/9)", node, num_pings=100)
+    res = run_mailbox_channel_test("testMsgbox (E906 Mailbox Ch 8/9)", node, num_pings=100)
     if res["status"] == "PASS":
-        log_pass(f"E907 Mailbox RTT: {res['metrics']['avg_lat_us']:.2f} us avg ({res['metrics']['throughput_msgs_s']:.1f} msgs/s)")
+        log_pass(f"E906 Mailbox RTT: {res['metrics']['avg_lat_us']:.2f} us avg ({res['metrics']['throughput_msgs_s']:.1f} msgs/s)")
     else:
-        log_warn(f"E907 Mailbox test status: {res['status']} ({res['details']})")
+        log_warn(f"E906 Mailbox test status: {res['status']} ({res['details']})")
     return [res]
 
 def log_dsp_banner(title="CADENCE TENSILICA HIFI4 DSP TEST SUITE"):
@@ -1124,12 +1124,12 @@ def test_dsp_msgbox():
     return [res]
 
 def test_dual_msgbox():
-    log_dsp_banner("DUAL CO-PROCESSOR CONCURRENT MAILBOX BENCHMARK (DSP + E907)")
-    log_header("TEST: Dual Co-Processor Concurrent Mailbox Benchmark (DSP + E907)")
+    log_dsp_banner("DUAL CO-PROCESSOR CONCURRENT MAILBOX BENCHMARK (DSP + E906)")
+    log_header("TEST: Dual Co-Processor Concurrent Mailbox Benchmark (DSP + E906)")
 
-    # Start XuanTie E907
+    # Start XuanTie E906
     if read_file(RPROC_STATE) != "running" or read_file(RPROC_FW) != "testMsgbox.elf":
-        log_info("Deploying and starting testMsgbox.elf on XuanTie E907...")
+        log_info("Deploying and starting testMsgbox.elf on XuanTie E906...")
         start_rproc("testMsgbox.elf")
 
     # Start Cadence HiFi4 DSP
@@ -1150,7 +1150,7 @@ def test_dual_msgbox():
             log_warn(f"Failed to boot remoteproc1 DSP: {e}")
 
     dsp_node = find_mailbox_node("dsp")
-    e907_node = find_mailbox_node("e907")
+    e907_node = find_mailbox_node("e906")
     num_pings = 1000
 
     results = {}
@@ -1162,9 +1162,9 @@ def test_dual_msgbox():
     else:
         results["dsp"] = {"name": "Dual: DSP-HiFi4 (Ch 4/5)", "status": "SKIP", "details": "DSP mailbox node not active", "metrics": {}}
     if e907_node and os.path.isfile(e907_node):
-        threads.append(threading.Thread(target=lambda: results.update({"e907": run_mailbox_channel_test("Dual: E907-RISCV (Ch 8/9)", e907_node, num_pings)})))
+        threads.append(threading.Thread(target=lambda: results.update({"e906": run_mailbox_channel_test("Dual: E906-RISCV (Ch 8/9)", e907_node, num_pings)})))
     else:
-        results["e907"] = {"name": "Dual: E907-RISCV (Ch 8/9)", "status": "SKIP", "details": "E907 mailbox node not active", "metrics": {}}
+        results["e906"] = {"name": "Dual: E906-RISCV (Ch 8/9)", "status": "SKIP", "details": "E906 mailbox node not active", "metrics": {}}
 
     for t in threads:
         t.start()
@@ -1270,7 +1270,7 @@ def save_reports(results_list, active_profile, json_path, report_path):
             log_warn(f"Failed to write Markdown report to {report_path}: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Automated Device Tree-Aware XuanTie E907 Firmware Test Suite")
+    parser = argparse.ArgumentParser(description="Automated Device Tree-Aware XuanTie E906 Firmware Test Suite")
     parser.add_argument("--test",
                         default="all",
                         help="Select test to run (default: all compatible with active DT). "
@@ -1292,7 +1292,7 @@ def main():
 
     print(f"{C_BOLD}{C_GREEN}")
     print("==========================================================================")
-    print("  Allwinner T527 / A527 XuanTie E907 Device Tree Test Suite               ")
+    print("  Allwinner T527 / A527 XuanTie E906 Device Tree Test Suite               ")
     print("  Subsystem: Linux RemoteProc Framework                                   ")
     print("==========================================================================")
     print(f"{C_RESET}")

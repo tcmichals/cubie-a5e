@@ -6,7 +6,7 @@
 * **ALLOCATION FREE:** Absolutely no runtime heap allocations; use rigid, fixed structures.
 
 ## 2. Context & Origins
-* **Where this comes from:** Low-level peripheral initialization configurations, power configurations, and clock gating routines are reverse-engineered directly from Allwinner’s official `sunxi-melis` SDK examples written for the XuanTie E906/E907 real-time processor complex.
+* **Where this comes from:** Low-level peripheral initialization configurations, power configurations, and clock gating routines are reverse-engineered directly from Allwinner’s official `sunxi-melis` SDK examples written for the XuanTie E906/E906 real-time processor complex.
 
 ## 3. Engineering Goals
 * Establish microsecond-level deterministic ingestion firmware executing inside the auxiliary real-time core.

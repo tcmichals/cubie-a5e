@@ -22,7 +22,7 @@ The Allwinner T527 / A527 is an advanced, heterogeneous octa-core ARM applicatio
 |  +---------------------------------------+   +-------------------------------------------------+  |
 |  |           CPUX DOMAIN (ARM64)         |   |          MCU SUBSYSTEM (MCU_SYS DOMAIN)         |  |
 |  |  +---------------------------------+  |   |  +-------------------------------------------+  |  |
-|  |  | 4x ARM Cortex-A55 @ 1.8 GHz     |  |   |  | XuanTie E906/E907 32-bit RISC-V Core      |  |  |
+|  |  | 4x ARM Cortex-A55 @ 1.8 GHz     |  |   |  | XuanTie E906/E906 32-bit RISC-V Core      |  |  |
 |  |  | L1: 32KB I / 32KB D, L2: 128KB   |  |   |  | @ up to 200 MHz (RV32IMAFDC + DSP/RVP)    |  |  |
 |  |  +---------------------------------+  |   |  | (Avionics, low-jitter control, RT tasks)   |  |  |
 |  |  +---------------------------------+  |   |  +-------------------------------------------+  |  |
@@ -40,7 +40,7 @@ The Allwinner T527 / A527 is an advanced, heterogeneous octa-core ARM applicatio
 |  |  - 128 KB HiFi4 DSP Local RAM (PubSRAM C @ 0x00020000) [DSP Local Instruction/Data Memory]    |  |
 |  |  - 160 KB Secure SRAM A2 (0x00044000) [TF-A BL31 / OP-TEE / PSCI 1.1]                       |  |
 |  |  - 128 KB DSP Secondary Local Memory (0x00400000 IRAM, 0x00420000/0x00440000 DRAM)          |  |
-|  |  - 512–1024 KB Dual-Bank SRAM A3 (Exclusive E907 RISC-V Firmware Space):                   |  |
+|  |  - 512–1024 KB Dual-Bank SRAM A3 (Exclusive E906 RISC-V Firmware Space):                   |  |
 |  |    * SRAM Space 0: 256/512 KB @ 0x07280000/0x07200000 (Core DA 0x3FFC0000)                  |  |
 |  |    * SRAM Space 1: 256/512 KB @ 0x072c0000/0x07280000 (Core DA 0x40000000)                  |  |
 |  |      --> Switchable via REMAP_CTRL_REG (Offset 0x364, Bit 1) into MCU_SYS                   |  |
@@ -63,7 +63,7 @@ The Allwinner T527 / A527 is an advanced, heterogeneous octa-core ARM applicatio
 
 The Allwinner T527 features multiple discrete physical SRAM pools distributed across different clock and power domains:
 
-| SRAM Pool Name | Physical Address (ARM CPUX) | Size | Domain Owner | Hardware Access & Usage | Allowed for E907? |
+| SRAM Pool Name | Physical Address (ARM CPUX) | Size | Domain Owner | Hardware Access & Usage | Allowed for E906? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`BROM`** | `0x00000000`–`0x0001FFFF` | 128 KB | SoC HW | Silicon Mask ROM; executes first power-on boot instruction | ❌ **No** (BootROM) |
 | **`DSP Local RAM` (`PubSRAM C`)** | `0x00020000`–`0x0003FFFF` | 128 KB | Cadence HiFi4 DSP | Physically wired to HiFi4 DSP as local Instruction/Data RAM. Host peeks via `REMAP[0]=1`. | ❌ **FORBIDDEN (DSP Collision)** |
@@ -71,8 +71,8 @@ The Allwinner T527 features multiple discrete physical SRAM pools distributed ac
 | **`DSP Local IRAM`** | `0x00400000`–`0x0040FFFF` | 64 KB | DSP / System | HiFi4 Instruction RAM | ❌ **FORBIDDEN (DSP Local)** |
 | **`DSP Local DRAM0`**| `0x00420000`–`0x00427FFF` | 32 KB | DSP / System | HiFi4 Data RAM Bank 0 | ❌ **FORBIDDEN (DSP Local)** |
 | **`DSP Local DRAM1`**| `0x00440000`–`0x00447FFF` | 32 KB | DSP / System | HiFi4 Data RAM Bank 1 | ❌ **FORBIDDEN (DSP Local)** |
-| **`SRAM Space 0`** | `0x07280000` / `0x07200000` | 256/512 KB | `MCU_SYS` (E907) | Zero-wait-state MCU SRAM Space 0 (**E907 Core DA `0x3FFC0000`**). Primary firmware pool. | ✅ **YES (Primary E907 Pool)** |
-| **`SRAM Space 1`** | `0x072c0000` / `0x07280000` | 256/512 KB | Shared / System | Zero-wait-state MCU SRAM Space 1 (**E907 Core DA `0x40000000`**). Accessible when `REMAP[1] = 1`. | ✅ **YES (Secondary E907 Pool)** |
+| **`SRAM Space 0`** | `0x07280000` / `0x07200000` | 256/512 KB | `MCU_SYS` (E906) | Zero-wait-state MCU SRAM Space 0 (**E906 Core DA `0x3FFC0000`**). Primary firmware pool. | ✅ **YES (Primary E906 Pool)** |
+| **`SRAM Space 1`** | `0x072c0000` / `0x07280000` | 256/512 KB | Shared / System | Zero-wait-state MCU SRAM Space 1 (**E906 Core DA `0x40000000`**). Accessible when `REMAP[1] = 1`. | ✅ **YES (Secondary E906 Pool)** |
 
 > [!NOTE]
 > On the A527 variant (`sun55iw3p1`), `SRAM A3` is partitioned in the device tree as two 256 KB slices:
@@ -84,11 +84,11 @@ The Allwinner T527 features multiple discrete physical SRAM pools distributed ac
 > - `r_sram1` @ `0x07280000` (512 KB) $\rightarrow$ Core DA `0x40000000`
 
 > [!IMPORTANT]
-> ### HARDWARE TRUTH: NO TCM & NO 0x00020000 FOR E907
-> 1. **Zero TCM in Silicon**: Unlike older chips (D1/V853), XuanTie E907 on T527 implements **NO ITCM and NO DTCM**. Addresses `0x00000000` and `0x00080000` do not exist.
-> 2. **0x00020000 is HiFi4 DSP Memory**: Silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. E907 execution here causes fatal bus collisions with the DSP.
+> ### HARDWARE TRUTH: NO TCM & NO 0x00020000 FOR E906
+> 1. **Zero TCM in Silicon**: Unlike older chips (D1/V853), XuanTie E906 on T527 implements **NO ITCM and NO DTCM**. Addresses `0x00000000` and `0x00080000` do not exist.
+> 2. **0x00020000 is HiFi4 DSP Memory**: Silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. E906 execution here causes fatal bus collisions with the DSP.
 > 3. **0x00044000 is OP-TEE / TrustZone**: Firewalled for secure boot and OP-TEE.
-> 4. **E907 Belongs Exclusively in On-Chip SRAM**:
+> 4. **E906 Belongs Exclusively in On-Chip SRAM**:
 >    - Primary pool: `0x3FFC0000` (`r_sram`, 256–512 KB)
 >    - Secondary pool: `0x40000000` (`r_sram1`, 256–512 KB via `REMAP_CTRL_REG[1] = 1`)
 >    - DDR Carveouts: `0x48100000` for streaming VirtIO RPMsg payload buffers.
@@ -123,8 +123,8 @@ The interconnection and sharing of memory between the main system bus (ARM Corte
 | Bit | Field Name | Type | Reset | Description & Operational Behavior |
 | :---: | :--- | :---: | :---: | :--- |
 | **31:2**| *Reserved* | R | `0x0` | Reserved. Reads undefined, write as zero. |
-| **1** | **`SRAMA3_2_RAM_REMAP`** | R/W | `0x0` | **SRAM A3 Partition 2 Sharing Control**:<br>• **`0`**: `SRAMA3_2` does **not** bridge for `MCU_SYS`.<br>• **`1`**: `SRAMA3_2` **bridges for `MCU_SYS`**, exposing the secondary SRAM_A3 bank at Core DA **`0x40040000`** for high-speed E907 execution/IPC. |
-| **0** | **`MCU_RAM_REMAP`** | R/W | `0x1` | **DSP Local Memory Sharing Control**:<br>• **`0`**: DSP local memory (`0x00020000` / `0x00400000`) is **only for HiFi4 DSP**.<br>• **`1`**: DSP memory window is bridged into the host address map so ARM CPUX (Linux kernel) can peek in to send IPC messages to the DSP. *(E907 leaves this as 0).* |
+| **1** | **`SRAMA3_2_RAM_REMAP`** | R/W | `0x0` | **SRAM A3 Partition 2 Sharing Control**:<br>• **`0`**: `SRAMA3_2` does **not** bridge for `MCU_SYS`.<br>• **`1`**: `SRAMA3_2` **bridges for `MCU_SYS`**, exposing the secondary SRAM_A3 bank at Core DA **`0x40040000`** for high-speed E906 execution/IPC. |
+| **0** | **`MCU_RAM_REMAP`** | R/W | `0x1` | **DSP Local Memory Sharing Control**:<br>• **`0`**: DSP local memory (`0x00020000` / `0x00400000`) is **only for HiFi4 DSP**.<br>• **`1`**: DSP memory window is bridged into the host address map so ARM CPUX (Linux kernel) can peek in to send IPC messages to the DSP. *(E906 leaves this as 0).* |
 
 ---
 
@@ -141,14 +141,14 @@ Because the ARM Cortex-A55, XuanTie RISC-V, and Tensilica HiFi4 DSP connect to t
     (Physical Addresses)              (Device Addresses - DA)            (Device Addresses - DA)
     ====================              =======================            =======================
     
-    0x00020000 [ 128 KB ] ──────────> [ FORBIDDEN TO E907 ] ───────────> 0x00020000 (DSP Local RAM)
+    0x00020000 [ 128 KB ] ──────────> [ FORBIDDEN TO E906 ] ───────────> 0x00020000 (DSP Local RAM)
       (HiFi4 DSP RAM / PubSRAM C)       (Collision with DSP!)              (Internal Instruction/Data RAM)
 
-    0x00044000 [ 160 KB ] ──────────> [ FORBIDDEN TO E907 ] ───────────> [ FORBIDDEN TO DSP ]
+    0x00044000 [ 160 KB ] ──────────> [ FORBIDDEN TO E906 ] ───────────> [ FORBIDDEN TO DSP ]
       (Secure SRAM A2 / OP-TEE)         (TrustZone Firewall)               (TrustZone Firewall)
 
     0x07280000 [ 256/512 KB ] ──────> 0x3FFC0000 (SRAM Space 0) ───> 0x07280000 (Shared Window)
-      (SRAM Slice 0 / r_sram)           (Primary E907 Boot & Code)         (Secondary Window)
+      (SRAM Slice 0 / r_sram)           (Primary E906 Boot & Code)         (Secondary Window)
 
     0x072C0000 [ 256/512 KB ] ──────> 0x40000000 (SRAM Space 1) ───> 0x072C0000 (Shared Window)
       (SRAM Slice 1 / r_sram1)          (SRAM Space 1 via REMAP[1]=1)      (SRAM Space 1 Bank)
@@ -261,7 +261,7 @@ hifi4_rproc: hifi4_rproc@7140364 {
 rproc: remoteproc@7130000 {
 	compatible = "allwinner,sun55i-a523-rproc",
 	             "allwinner,sun55i-a527-rproc";
-	reg = <0x07130000 0x1000>,      /* "cfg": E907 CFG & boot-address registers */
+	reg = <0x07130000 0x1000>,      /* "cfg": E906 CFG & boot-address registers */
 	      <0x07280000 0x40000>,     /* "r_sram": SRAM_A3 Space 0 (256 KB on A523, 512 KB on T527) */
 	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM_A3 Space 1 (256 KB on A523, 512 KB on T527) */
 	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG (0x07010364 on A523, 0x07140364 on T527) */

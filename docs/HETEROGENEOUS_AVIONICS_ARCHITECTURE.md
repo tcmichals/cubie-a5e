@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Hardware Geometry
 
-This document outlines the heterogeneous flight control architecture combining high-throughput ARM64 cores running **Mainline Linux 7.1 PREEMPT_RT** with the **XuanTie E907/E902 RISC-V co-processor** for microsecond-deterministic sensor ingestion, Dual-SPI FPGA streaming, and flight dynamics.
+This document outlines the heterogeneous flight control architecture combining high-throughput ARM64 cores running **Mainline Linux 7.1 PREEMPT_RT** with the **XuanTie E906/E902 RISC-V co-processor** for microsecond-deterministic sensor ingestion, Dual-SPI FPGA streaming, and flight dynamics.
 
 ```mermaid
 flowchart TB
@@ -20,7 +20,7 @@ flowchart TB
         end
 
         subgraph "RISC-V Domain (Bare-Metal Microcontroller)"
-            E907["XuanTie E907 / E902 Core (RV32IMAC @ 600 MHz)<br/>• ITCM: 0x07110000 (64 KB)<br/>• DTCM: 0x07120000 (64 KB)<br/>• SRAM C: 0x07130000 (320 KB)<br/>• Hardware DMA Channels 8–15"]
+            E906["XuanTie E906 / E902 Core (RV32IMAC @ 600 MHz)<br/>• ITCM: 0x07110000 (64 KB)<br/>• DTCM: 0x07120000 (64 KB)<br/>• SRAM C: 0x07130000 (320 KB)<br/>• Hardware DMA Channels 8–15"]
         end
 
         subgraph "Inter-Processor Communications (IPC)"
@@ -37,13 +37,13 @@ flowchart TB
     end
 
     C7 <--> MSGBOX
-    MSGBOX <--> E907
-    E907 <--> SPI0
-    E907 <--> SPI1
-    E907 <--> UART0
-    E907 <--> UART2
+    MSGBOX <--> E906
+    E906 <--> SPI0
+    E906 <--> SPI1
+    E906 <--> UART0
+    E906 <--> UART2
     C7 <--> RPROC
-    RPROC <--> E907
+    RPROC <--> E906
 ```
 
 ---

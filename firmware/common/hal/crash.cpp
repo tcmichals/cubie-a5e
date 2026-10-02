@@ -38,7 +38,7 @@ void CrashHandler::handle(const CrashFrame &frame) noexcept {
     // 2. Output rich autopsy report to hal::Trace (trace0 buffer + S_UART0)
     Trace::puts("\n\n");
     Trace::puts("################################################################\n");
-    Trace::puts("  FATAL HARDWARE EXCEPTION DETECTED ON XUANTIE E907 RISC-V CORE \n");
+    Trace::puts("  FATAL HARDWARE EXCEPTION DETECTED ON XUANTIE E906 RISC-V CORE \n");
     Trace::puts("################################################################\n");
     
     Trace::printf("  Cause Name : %s\n", get_cause_name(frame.mcause));
