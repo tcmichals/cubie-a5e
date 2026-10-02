@@ -157,7 +157,26 @@ directly traceable by implementation source files via `// @impl [SPEC-E906-*]`.
 
 ---
 
-## 7. Traceability Matrix
+## 7. Binary Telemetry & Observability (`SPEC-E906-TRACE`)
+
+### `[SPEC-E906-TRACE-01]` barectf Common Trace Format (CTF 1.8) Carrier
+* **Requirement**: High-speed telemetry, coroutine lifecycle events, and
+  IMU/GPS streams MUST be emitted as binary Common Trace Format (CTF 1.8)
+  packets conforming to `trace/barectf_config.yaml` (`magic = 0xC1FC1FC1`).
+* **SRAM Trace Buffer**:
+  * Located in dedicated on-chip SRAM Space 0 (`.trace_buffer` at `0x3FFC8100`,
+    32 KB).
+  * Exposed directly via `.resource_table` trace entry to Linux debugfs:
+    `/sys/kernel/debug/remoteproc/remoteproc0/trace0`.
+  * Zero DDR overhead: Trace buffer resides in zero-wait SRAM and is NEVER
+    placed in DDR, preventing bus turnaround latency.
+* **Transport Options**:
+  * Emitted to SRAM trace buffer for zero-overhead debugfs monitoring.
+  * Transmitted over `IRpmsg` (`RpmsgLiteMetal` in SRAM or `Rpmsg` in DDR)
+    for real-time streaming to the AbstractX Observability Studio.
+* **Target**: `targets/allwinner_e906/src/trace.cpp`
+
+## 8. Traceability Matrix
 
 | Design Requirement | Description | Primary Implementation File |
 | :--- | :--- | :--- |
