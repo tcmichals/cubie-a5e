@@ -282,7 +282,7 @@ FAST CONTROL PLANE — Dedicated MCU SRAM (0x07130000, 4 KB)
 
 BULK DATA PLANE — DDR DRAM Carveout (0x48100000, 1 MB)
     16 slots × 4 KB = 64 KB max in-flight per direction
-    Non-cacheable: PMP configured by RISC-V / no-map in ARM64 DT
+    Uncached: D-Cache disabled (mhcr.DE = 0) / no-map in ARM64 DT
 ```
 
 ### 4.2 Protocol Definition
@@ -326,18 +326,68 @@ struct DramSpscControlBlock {
 };
 ```
 
-### 4.3 Cache Coherency via PMP
+### 4.3 Cache Coherency: The PMP Fallacy, Uncached RemoteProc, and AbstractX
 
-Because the E906 and the ARM64 do not share a hardware cache coherency domain, the RISC-V firmware uses its **Physical Memory Protection (PMP) unit** to mark the DDR window as strongly-ordered / non-cacheable:
+When designing shared-memory IPC between Linux and an auxiliary RISC-V core,
+memory coherency is the single biggest engineering pitfall.
+
+#### 1. The PMP Fallacy (A Common Trap)
+It is tempting to assume that the RISC-V **Physical Memory Protection (PMP)**
+unit behaves like an ARM MPU or MMU, allowing software to mark an address range
+as "non-cacheable" or "strongly-ordered":
 
 ```cpp
-hal::Pmp::configure_region(0,
-    DRAM_SPSC_DRAM_ADDR,
-    DRAM_SPSC_DRAM_SIZE,
-    hal::Pmp::Attr::NonCacheable | hal::Pmp::Attr::ReadWrite);
+// ⚠️ THE TRAP: PMP CANNOT configure cacheability!
+// Standard RISC-V PMP registers (pmpcfgX) ONLY control R/W/X permissions.
+// On XuanTie E906, DRAM (0x40000000+) is hardwired as cacheable normal memory.
+hal::Pmp::set_napot_entry(1, DRAM_SPSC_DRAM_ADDR, DRAM_SPSC_DRAM_SIZE,
+                          hal::PmpFlags::Read | hal::PmpFlags::Write);
 ```
 
-On the ARM64 Linux side, the DDR region is declared as a `no-map` reserved memory carveout in the Device Tree, so the kernel DMA allocator treats it as uncached. Both cores agree on memory ordering — no explicit cache flush calls are needed.
+In standard RISC-V privileged architecture, PMP contains **zero** bits for
+cache attributes. On the XuanTie E906 microcontroller (which lacks an MMU and
+runtime PMA registers), all DRAM access is treated by the interconnect as
+cacheable normal memory whenever the core's Data Cache is enabled.
+
+#### 2. The XuanTie Instruction Trap (`CSR_MXSTATUS`)
+If you enable D-Cache (`mhcr.DE = 1`) and attempt to execute XuanTie custom
+cache maintenance opcodes (`dcache.cpa` or `dcache.iva`) to flush dirty lines
+to DRAM, the CPU immediately throws an **Illegal Instruction trap
+(`mcause = 2`)**!
+
+Why? Because on XuanTie cores, vendor extension instructions are disabled at
+reset. As proven in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`),
+they require setting **`CSR_MXSTATUS` (0x7C0) bit 22 (`THEADISAEE = 1`)**
+before any cache management instruction can be executed.
+
+#### 3. How `riscv-firmware` Fixes Coherency for RemoteProc Validation
+To make the reference RemoteProc testbed bulletproof, deterministic, and
+upstream-verifiable:
+* **D-Cache is intentionally kept disabled (`mhcr.DE = 0`)** in `startup.S`.
+* Because D-Cache is disabled, all CPU load and store instructions bypass
+  cache lines and go directly to the AXI bus and DDR/SRAM.
+* On the Linux host side, the DDR carveout is declared with `no-map` in the
+  Device Tree (`dma_alloc_coherent`), so ARM64 also accesses it uncached.
+* Standard RISC-V memory fences (`fence rw, rw`) ensure bus transaction
+  ordering.
+* PMP functions (`configure_dram_carveout`, `dcache_clean_range`,
+  `dcache_invalidate_range`) are kept in `pmp.cpp` as no-ops with fences for
+  API compatibility without crashing.
+
+This eliminates all cache maintenance bugs, stale descriptor races, and
+invalidation overhead during Linux RemoteProc bring-up.
+
+#### 4. The Path to AbstractX: High-Performance Flight Stack
+While disabling D-Cache is the ideal, rock-solid strategy for a Linux
+RemoteProc reference testbed, a hard real-time flight stack running complex
+control loops needs maximum memory bandwidth.
+
+In **[Part 4](part4_deep_dive_baremetal_cpp_coroutines.md)**, we introduce
+**AbstractX**, where the full high-performance cache architecture is unlocked:
+* Setting `CSR_MXSTATUS.THEADISAEE = 1` to enable vendor cache instructions.
+* Enabling Instruction and Data Caches (`mhcr.IE = 1`, `mhcr.DE = 1`).
+* Executing fine-grained line-by-line flushes and invalidations for
+  high-throughput streaming.
 
 ### 4.4 Linux Host Tool
 
@@ -351,16 +401,16 @@ ping_dram -n 1000 -s 4096
 
 ## 5. IPC Paradigm Comparison
 
-| Dimension | Paradigm 1: SRAM + Mailbox | Paradigm 2: VirtIO RPMsg | Paradigm 3: Hybrid DRAM |
+| Dimension | SRAM IPC | RPMsg | Hybrid DRAM |
 | :--- | :---: | :---: | :---: |
-| **Round-Trip Latency** | **1.5–2.5 µs** | 50–200 µs | 10–30 µs |
-| **Throughput** | Small frames, high rate | Moderate (< 512 B/msg) | **> 100 MB/s bulk** |
-| **Max Payload** | 4 KB (SRAM-bounded) | 512 B | **4 KB × 16 slots** |
-| **Linux CPU Impact** | **Near-zero** (epoll/UIO) | Standard kernel scheduling | DMA-accelerated |
-| **Protocol Complexity** | Low (custom structs) | Standard VirtIO/RPMsg | Medium (descriptor ring) |
-| **Cache Coherency** | Not needed (SRAM) | Not needed (SRAM) | PMP + `no-map` DT carveout |
-| **Best For** | Sensor ISR, control loops | Standard Linux apps | Frames, logs, bulk data |
-| **Test App** | `testPing` | `testPingRpmsg` | `testDRAMMsg` |
+| **Latency** | **1.5–2.5 µs** | 50–200 µs | 10–30 µs |
+| **Throughput** | Small frames | < 512 B/msg | **> 100 MB/s** |
+| **Max Payload** | 4 KB (SRAM) | 512 B | **4 KB × 16** |
+| **Host CPU** | **Near-zero** | Sched context | DMA-offloaded |
+| **Complexity** | Low | Standard | Medium ring |
+| **Coherency** | N/A (SRAM) | N/A (SRAM) | Uncached (`DE=0`)|
+| **Best For** | Control loops| Linux apps | Bulk data |
+| **Test App** | `testPing` | `testPingRpmsg`| `testDRAMMsg` |
 
 ---
 
@@ -370,7 +420,7 @@ In this article we covered the three IPC paradigms deployed on the Allwinner T52
 
 1. **Lock-Free Shared SRAM + Hardware Mailbox** (`testPing`): Sub-microsecond latency using `ShmPingChannel` at `0x07131000`, `hal::MsgBox` doorbells, and event-driven UIO epoll on the Linux host. The `hal::SpscQueue<T,N>` template enables sustained high-rate telemetry streams.
 2. **VirtIO RPMsg** (`testPingRpmsg`): Standard Linux `/dev/rpmsg0` integration via `hal::Rpmsg`, enabling conventional file descriptor semantics and existing `remoteproc` ecosystem tooling.
-3. **Hybrid SRAM/DDR** (`testDRAMMsg`): High-bandwidth bulk payload streaming with `DramSpscControlBlock` descriptors in fast SRAM pointing into a 1 MB DDR carveout — coherency managed by RISC-V PMP and ARM64 `no-map` reserved memory.
+3. **Hybrid SRAM/DDR** (`testDRAMMsg`): High-bandwidth bulk payload streaming with `DramSpscControlBlock` descriptors in fast SRAM pointing into a 1 MB DDR carveout — coherency guaranteed via uncached bus access (`mhcr.DE = 0` on RISC-V, `no-map` reserved memory on ARM64).
 
 All three paradigms share the same underlying hardware: the **Allwinner Hardware Message Box (MSGBOX)** at `0x03003000` for doorbell interrupts, and the HAL drivers in [`riscv-firmware/common/hal/`](../../riscv-firmware/common/hal/).
 

@@ -351,7 +351,7 @@ When standard Linux networking or terminal abstractions are required, `testPingR
 For high-throughput payloads (camera frames, point clouds, logging), `testDRAMMsg` demonstrates a **hybrid architecture**:
 * Control queues and descriptor rings reside in **zero-wait-state SRAM Space 0**.
 * Bulk payload buffers reside in a **1 MB DDR DRAM carveout (`0x48000000`)**.
-* The co-processor configures its Physical Memory Protection (PMP) unit for non-cacheable DDR access, maintaining coherency with Linux DMA.
+* The co-processor sets PMP permissions for the DDR carveout, maintaining coherency with Linux DMA (we address the D-cache vs. PMP engineering reality in Part 3).
 * The `ping_dram` companion tool sustains **4.39 MB/s bidirectional throughput**.
 
 ---
@@ -479,7 +479,7 @@ With `sunxi_rproc.c`, `sun55i-msgbox.c`, and our multi-profile test infrastructu
 In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive into the co-processor firmware implementation:
 * **The Shared Memory SPSC Queue** (`testPing`): Zero-copy ring buffers and UIO signaling.
 * **VirtIO RPMsg Implementation** (`testPingRpmsg`): Structuring `.resource_table` for automatic Linux character device bindings.
-* **Hybrid SRAM/DDR Streaming** (`testDRAMMsg`): Managing descriptor rings and cache coherency for high-bandwidth payloads.
+* **Hybrid SRAM/DDR Streaming** (`testDRAMMsg`): Managing descriptor rings and cache coherency (and demystifying the D-cache vs. PMP reality).
 
 ---
 

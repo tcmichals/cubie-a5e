@@ -202,20 +202,72 @@ We ran side-by-side performance benchmarks on the XuanTie E906:
 Benchmark: 10,000 Consecutive Task Resumptions / Switches
 ```
 
-| Metric | FreeRTOS 10.5 | Switch-Case State Machine | AbstractX (C++20 Coroutines) |
+| Metric | FreeRTOS 10.5 | State Machine | AbstractX (C++20) |
 | :--- | :---: | :---: | :---: |
-| **Context Switch Time** | **210 cycles (350 ns)** | **6 cycles (10 ns)** | **11 cycles (18 ns)** |
-| **RAM per Task (8 Tasks)** | **16,384 Bytes (16 KB)** | **128 Bytes** | **384 Bytes** |
-| **Register Saves per Switch** | 32 GPRs + CSRs (Full Stack) | None | Zero (Only Active Locals) |
-| **HALO Elision Capable** | No | N/A | **Yes (0 cycles / 0 bytes)** |
-| **Code Readability** | High (Sequential) | Low (Fragmented) | High (Sequential) |
+| **Switch Time** | **210 cyc (350 ns)** | **6 cyc (10 ns)** | **11 cyc (18 ns)** |
+| **RAM (8 Tasks)** | **16,384 B (16 KB)** | **128 B** | **384 B** |
+| **Saved Regs** | 32 GPRs (Full Stack) | None | Zero (Active Locals) |
+| **HALO Elision** | No | N/A | **Yes (0 cyc / 0 B)** |
+| **Readability** | High (Sequential) | Low (Fragmented) | High (Sequential) |
 
 * **Context Switching**: AbstractX switches tasks **19x faster than FreeRTOS**.
 * **RAM Footprint**: 8 concurrent AbstractX tasks consume **less than 400 bytes** of SRAM, freeing over 95% of memory for actual application data.
 
 ---
 
-## 6. Deploying AbstractX via Linux RemoteProc
+## 6. High-Performance Hardware Caching in AbstractX
+
+In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we
+addressed the architectural reality of RISC-V PMP and why the reference
+`riscv-firmware` operates with D-Cache disabled (`mhcr.DE = 0`): to provide a
+rock-solid, zero-overhead baseline for Linux RemoteProc bring-up.
+
+However, **AbstractX** is designed as a flight-grade real-time system. Running
+sensor fusion filters and control loops without a Data Cache wastes massive
+compute headroom. AbstractX unlocks the full hardware cache pipeline:
+
+### 1. Unlocking Vendor Extensions (`CSR_MXSTATUS`)
+At boot, AbstractX unlocks XuanTie vendor instructions by setting bit 22
+(`THEADISAEE`) in the Machine Extended Status Register:
+
+```cpp
+// Enable T-Head ISA Extension instructions (THEADISAEE = bit 22)
+uint32_t mxstatus;
+asm volatile ("csrr %0, 0x7C0" : "=r"(mxstatus));
+mxstatus |= (1UL << 22);
+asm volatile ("csrw 0x7C0, %0" :: "r"(mxstatus));
+```
+
+### 2. Enabling I-Cache and D-Cache (`CSR_MHCR`)
+Next, AbstractX activates both Instruction and Data Caches in the Machine
+Hardware Configuration Register:
+
+```cpp
+// Enable I-Cache (IE, bit 0) and D-Cache (DE, bit 1)
+uint32_t mhcr;
+asm volatile ("csrr %0, 0x7C1" : "=r"(mhcr));
+mhcr |= (1UL << 0) | (1UL << 1);
+asm volatile ("csrw 0x7C1, %0" :: "r"(mhcr));
+```
+
+### 3. Explicit Line-by-Line DMA Cache Maintenance
+When exchanging descriptors and buffers with Linux DMA, AbstractX uses
+fine-grained XuanTie cache operations:
+
+```cpp
+// Invalidate cache line by physical address (dcache.iva)
+asm volatile (".insn r 0x0b, 0, 0, x0, %0, x0" :: "r"(buf_addr));
+
+// Clean cache line by physical address (dcache.cpa)
+asm volatile (".insn r 0x0b, 0, 1, x0, %0, x0" :: "r"(buf_addr));
+```
+
+By pairing hardware cache acceleration with C++20 coroutines, AbstractX
+achieves microsecond-deterministic latency while maximizing compute throughput.
+
+---
+
+## 7. Deploying AbstractX via Linux RemoteProc
 
 Deploying the compiled AbstractX firmware to the Allwinner T527 board is simple:
 
@@ -236,7 +288,7 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ---
 
-## 7. The AbstractX Repository & Testing
+## 8. The AbstractX Repository & Testing
 
 All source code, coroutine schedulers, benchmark suites, and hardware interop layers are open-source and actively tested in the **[`AbstractX`](https://github.com/tcmichals/AbstractX)** repository.
 
@@ -247,7 +299,7 @@ Inside the repository, you will find:
 
 ---
 
-## 8. Series Summary & Complete Architecture
+## 9. Series Summary & Complete Architecture
 
 Across this 4-part series, we walked through the complete stack for heterogeneous RISC-V on modern SoCs:
 
