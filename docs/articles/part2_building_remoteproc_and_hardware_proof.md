@@ -7,6 +7,22 @@ In this article (**Part 2**), we move directly into the code and system bring-up
 2. **Exposing live debugfs trace logs** (`/sys/kernel/debug/remoteproc/remoteproc0/trace0`) via `.resource_table` without dedicated UART cables.
 3. **Deploying the all-new `riscv-firmware/apps` verification suite** across three distinct hardware profiles to systematically prove co-processor boot, memory subsystems, hardware FPU, exception handling, and high-performance IPC paradigms.
 
+> [!NOTE]
+> ### 📝 Article Update: PMP, Memory Attributes, and Data Cache
+> This article has been updated to reflect the architectural realities of
+> the XuanTie E906 core. Standard RISC-V Physical Memory Protection (PMP)
+> only configures Read/Write/Execute permissions; it contains no bits for
+> cache attributes and cannot configure memory regions as non-cacheable
+> (`no pmp.sysmap`).
+>
+> In the accompanying reference testbed (`riscv-firmware`), Data Cache is
+> intentionally kept disabled (`mhcr.DE = 0`) to guarantee deterministic,
+> uncached coherency with Linux DMA without cache maintenance complexity.
+> For the complete architectural analysis of D-Cache and PMP, see
+> [Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md) (Section 4.3).
+> For the high-performance cache architecture in AbstractX, see
+> [Part 4](part4_deep_dive_baremetal_cpp_coroutines.md) (Section 6).
+
 ---
 
 ## 1. Building the Linux `remoteproc` Driver (`sunxi_rproc.c`)
