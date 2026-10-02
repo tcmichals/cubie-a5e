@@ -369,20 +369,21 @@ hal::Pmp::set_napot_entry(1, DRAM_SPSC_DRAM_ADDR, DRAM_SPSC_DRAM_SIZE,
                           hal::PmpFlags::Read | hal::PmpFlags::Write);
 ```
 
-#### 2. T-Head SYSMAP: Hardwired Physical Memory Attributes (PMAs)
+#### 2. T-Head SYSMAP: Fixed Physical Memory Attributes (PMAs)
 Cache properties (Cacheable, Bufferable, Strongly Ordered) are governed by the
 T-Head **SYSMAP** (System Memory Map) unit, NOT by PMP:
-* In application-class XuanTie cores with an MMU and the MAEE (Memory Attribute
-  Enhanced Extension), page table entries can configure cache attributes at
-  runtime.
-* **On Microcontroller Cores (No MMU / No MAEE)**: On the XuanTie E906 core in
-  Allwinner T527/A523 silicon, MAEE is omitted. Consequently, the 8 SYSMAP
-  region descriptors are **completely hardwired at ASIC synthesis time** and
-  cannot be modified by software at runtime.
+* **No MMU / No Dynamic MAEE**: The E906 has no Memory Management Unit (no
+  `satp` CSR, no virtual memory, no page tables). Unlike MMU-equipped XuanTie
+  cores (such as the C906) where instructions configure memory attributes in
+  page table entries, the E906 operates strictly in physical address space.
+* **Hardwired in Silicon**: On this specific processor (Allwinner T527/A523
+  E906), the SYSMAP configuration is **completely fixed and hardwired into
+  silicon logic at synthesis time** (from the RTL `sysmap.h`). There are no
+  programmable SYSMAP registers or instructions to alter memory attributes.
 * **Hardware-Enforced Routing**: Peripheral MMIO registers are hardwired as
   Strongly Ordered (Non-cacheable), while external DDR DRAM and internal SRAM
   are hardwired as **Normal Cacheable Memory**. Runtime non-cacheable RAM
-  carveouts are physically impossible in silicon.
+  carveouts cannot be created via software.
 
 #### 3. Core Cache Control: mhcr.DE = 0 vs. mhcr.DE = 1
 Because SYSMAP forces all DDR RAM transactions to be cacheable, L1 Data Cache

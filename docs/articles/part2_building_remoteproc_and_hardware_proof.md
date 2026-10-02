@@ -12,9 +12,11 @@ In this article (**Part 2**), we move directly into the code and system bring-up
 > This article reflects the hardware architecture of the XuanTie E906 core:
 > 1. **PMP Access Control Only**: Standard RISC-V PMP registers (`pmpcfgX`)
 >    strictly manage R/W/X permissions; they contain zero cache attribute bits.
-> 2. **Hardwired T-Head SYSMAP**: Due to the absence of an MMU and MAEE on this
->    microcontroller core, the 8 SYSMAP region descriptors are hardwired at
->    ASIC synthesis time. Runtime non-cacheable RAM carveouts are impossible.
+> 2. **Fixed T-Head SYSMAP (No MMU)**: The E906 has no MMU (no page tables),
+>    and its T-Head SYSMAP is fixed and hardwired in silicon at synthesis time.
+>    Unlike MMU-equipped XuanTie cores where instructions configure attributes
+>    in page tables, on this processor memory attributes cannot be updated via
+>    instructions or CSRs. Runtime non-cacheable RAM carveouts are impossible.
 > 3. **Reference Testbed D-Cache Policy**: In `riscv-firmware`, Data Cache is
 >    kept disabled (`mhcr.DE = 0`) to guarantee deterministic, uncached DMA
 >    coherency with Linux without cache maintenance overhead.
