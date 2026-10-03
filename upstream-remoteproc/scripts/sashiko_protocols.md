@@ -100,7 +100,10 @@ The official prompt templates live in `sashiko-dev/sashiko` under `third_party/p
 ### Stage 3: Subsystem Framework Contracts (`dt-bindings.md`, Framework Pacing)
 * **Source**: `third_party/prompts/kernel/subsystem/dt-bindings.md`
 * **Invariants**:
-  1. **Mailbox Pacing**: `last_tx_done(chan)` returns `true` ONLY when the previously transmitted message is completely consumed by the remote peer (`count == 0`), NOT when FIFO merely has space (`count < MAX`).
+  1. **Mailbox Pacing & RemoteProc Kick Contracts**:
+     * For FIFO-buffered mailbox controllers, `last_tx_done(chan)` returns `true` when the hardware FIFO has capacity (`count < FIFO_MAX` or `!(status & FULL)`), enabling hardware FIFO pipelining (Broadcom BCM2835 pattern).
+     * For RemoteProc clients using mailboxes as virtqueue kick doorbells, `cl.knows_txdone = true` must be declared.
+     * **Mandatory Pass-Case Handling**: On `mbox_send_message()` success (`ret >= 0`), `mbox_client_txdone(chan, 0)` MUST be called immediately to clear `chan->active_req`. Omitting this leaks the channel request state and causes `Try increasing MBOX_TX_QUEUE_LEN` software queue overflows.
   2. **Device Tree Binding Schemas**:
      * NEVER use `enum` in `reg-names`, `clock-names`, or `reset-names`. Hardware registers have fixed addresses; always use positional `items:` lists with `- const:`.
      * Never use freeform narrative text in `description:` for interrupts. Use positional `items:` with `minItems: 1`.

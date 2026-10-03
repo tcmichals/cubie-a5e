@@ -188,11 +188,21 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ---
 
-### Lesson 3.2: Never Declare `cl.knows_txdone = true` If Mailbox Controller Polls
+### Lesson 3.2: RemoteProc Doorbell Protocol: `cl.knows_txdone = true` with Mandatory Pass-Case `mbox_client_txdone()`
 * **What Went Wrong**:
-  The RemoteProc driver declared `priv->cl.knows_txdone = true`.
+  In early revisions, RemoteProc kicks either relied on software `hrtimer` polling (`knows_txdone = false`), adding 1 ms latency per kick, OR set `knows_txdone = true` without calling `mbox_client_txdone()` on successful sends.
 * **The Upstream Rule**:
-  `knows_txdone` is strictly for protocols where the client driver receives an in-band application acknowledgment (e.g. over another channel) and manually calls `mbox_client_txdone()`. If the underlying controller specifies `txdone_poll = true` (checking `last_tx_done`), claiming `knows_txdone = true` disables controller polling, breaking the framework's TX queue pacing.
+  In the Linux Mailbox framework (`drivers/mailbox/mailbox.c`), RemoteProc virtqueue kicks are fire-and-forget doorbells.
+  1. Setting `cl.knows_txdone = true` bypasses software timer polling and eliminates 1 ms latency.
+  2. **Mandatory Pass-Case Handling**: When `cl.knows_txdone = true`, `mbox_send_message()` marks `chan->active_req`. The client MUST handle the pass case (`ret >= 0`) by calling `mbox_client_txdone(chan, 0)` immediately:
+     ```c
+     ret = mbox_send_message(priv->tx_chan, &msg);
+     if (ret < 0)
+         dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
+     else
+         mbox_client_txdone(priv->tx_chan, 0);
+     ```
+  3. Omitting `mbox_client_txdone()` in the pass case leaks `chan->active_req`, queuing subsequent kicks into the 20-message software FIFO until it overflows with `-ENOBUFS` and floods dmesg with `Try increasing MBOX_TX_QUEUE_LEN`.
 
 ---
 
@@ -223,6 +233,26 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ---
 
+### Lesson 3.5: Schema-to-C-Code 1:1 Parity (No Dead Resource Queries)
+* **What Went Wrong**:
+  When Devicetree binding maintainers required moving `dram` and `trace` from `reg` into `memory-region`, `sunxi_rproc_parse_memory_regions()` was implemented, but old `platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram")` and `"trace"` calls in `sunxi_rproc_register_mem()` were left behind. Because `platform_get_resource_byname()` quietly returns `NULL`, the dead code remained invisible.
+* **The Upstream Rule**:
+  Every resource queried by `platform_get_resource_byname(..., IORESOURCE_MEM, "name")` in `register_mem()` MUST have a corresponding entry in `reg-names` in the YAML binding schema. Unmatched queries indicate dead code or schema divergence.
+* **The Correct Pattern**:
+  `register_mem()` queries *only* `cfg`, `r_sram`, `r_sram1`, `remap`. `parse_memory_regions()` handles all `memory-region` carveouts.
+
+---
+
+### Lesson 3.6: State Machine Completion vs Syntactic Error Checks
+* **What Went Wrong**:
+  Review linters and bots verified `if (ret < 0) dev_err(...)` on `mbox_send_message()` and considered the code complete. They completely missed that in `cl.knows_txdone = true` mode, the **pass branch (`ret >= 0`)** requires `mbox_client_txdone()` to clear `chan->active_req`.
+* **The Upstream Rule**:
+  Review checks must evaluate Linux subsystem state transitions on both error AND success paths, not just look for negative return checks.
+* **The Correct Pattern**:
+  Always verify the entire subsystem transaction lifecycle: transmit $\rightarrow$ pass path ACK $\rightarrow$ error path unwind.
+
+---
+
 ## 4. In-Tree KUnit Testing Rules
 
 ### Lesson 4.1: Mock MMIO Must Be Endian-Safe
@@ -249,7 +279,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 * 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
   1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
   2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
-  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing, RemoteProc ATT bounds.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing (`count < FIFO_MAX`), RemoteProc ATT bounds, and `mbox_client_txdone()` pass-case completion.
   4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
   5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
 * 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.
@@ -262,7 +292,8 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every `interrupts` and `interrupt-names` uses positional `items:` with `minItems`.
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
-- [ ] Mailbox `last_tx_done()` checks `count == 0`.
+- [ ] Mailbox `last_tx_done()` checks `count < SUN55I_FIFO_MAX` (Broadcom BCM2835 FIFO capacity pacing).
+- [ ] RemoteProc kick sets `cl.knows_txdone = true` AND calls `mbox_client_txdone()` on `ret >= 0` pass case.
 - [ ] Mailbox hardirq is protected by `spin_lock_irqsave`.
 - [ ] Teardown sequence strictly follows LIFO order (`rproc_del()` called last).
 - [ ] `git send-email` dispatched as an independent top-level thread (NO `--in-reply-to` linking to previous versions).

@@ -37,8 +37,7 @@ struct rpmsg_endpoint_info {
 #define RPMSG_CREATE_EPT_IOCTL  _IOW(0xb5, 0x1, struct rpmsg_endpoint_info)
 #define RPMSG_DESTROY_EPT_IOCTL _IO(0xb5, 0x2)
 #endif
-
-#include "resource_table.h"
+constexpr uint32_t RPMSG_PING_EPT_ADDR = 1024;
 
 struct RpmsgPingPayload {
     char     tag[4];         // "PING" from host, "PONG" from firmware
@@ -206,7 +205,7 @@ int main(int argc, char *argv[]) {
         // Send RPMsg Ping (with retry on temporary buffer exhaustion)
         ssize_t bytes_written = -1;
         int write_retries = 0;
-        while (write_retries < 200) {
+        while (write_retries < 2000) {
             bytes_written = write(fd, tx_buf.data(), payload_size);
             if (bytes_written >= 0) {
                 break;
@@ -223,47 +222,64 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        // Wait for Pong Response using poll()
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLIN;
+        // Wait for Pong Response using poll() with stale packet discarding
+        bool got_reply = false;
+        while (!got_reply) {
+            struct pollfd pfd;
+            pfd.fd = fd;
+            pfd.events = POLLIN;
 
-        int ret = poll(&pfd, 1, timeout_ms);
-        if (ret > 0 && (pfd.revents & POLLIN)) {
-            ssize_t bytes_read = read(fd, rx_buf.data(), rx_buf.size());
-            uint64_t rx_ns = get_time_ns();
+            int ret = poll(&pfd, 1, timeout_ms);
+            if (ret > 0 && (pfd.revents & POLLIN)) {
+                ssize_t bytes_read = read(fd, rx_buf.data(), rx_buf.size());
+                uint64_t rx_ns = get_time_ns();
 
-            if (bytes_read >= 16) {
-                uint32_t rx_seq = 0;
-                memcpy(&rx_seq, rx_buf.data() + 4, sizeof(rx_seq));
+                if (bytes_read >= 16) {
+                    uint32_t rx_seq = 0;
+                    memcpy(&rx_seq, rx_buf.data() + 4, sizeof(rx_seq));
 
-                // Middle ground verification: 4-byte "PONG" tag + sequence number match
-                if (memcmp(rx_buf.data(), "PONG", 4) == 0 && rx_seq == seq) {
-                    double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
-                    latencies_us.push_back(rtt_us);
-                } else {
-                    corruptions++;
-                    if (corruptions <= 5) {
-                        char tag[5] = {0};
-                        memcpy(tag, rx_buf.data(), 4);
-                        std::cerr << "[WARN] Ping seq=" << seq << " integrity error: tag='"
-                                  << tag << "' (expected 'PONG'), rx_seq=" << rx_seq
-                                  << " (expected " << seq << ")\n";
+                    // Middle ground verification: 4-byte "PONG" tag + sequence number match
+                    if (memcmp(rx_buf.data(), "PONG", 4) == 0) {
+                        if (rx_seq == seq) {
+                            double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
+                            latencies_us.push_back(rtt_us);
+                            got_reply = true;
+                        } else if (rx_seq < seq) {
+                            // Stale packet from earlier timed-out ping — discard and continue waiting for current seq
+                            continue;
+                        } else {
+                            corruptions++;
+                            if (corruptions <= 5) {
+                                char tag[5] = {0};
+                                memcpy(tag, rx_buf.data(), 4);
+                                std::cerr << "[WARN] Ping seq=" << seq << " integrity error: tag='"
+                                          << tag << "' (expected 'PONG'), rx_seq=" << rx_seq
+                                          << " (expected " << seq << ")\n";
+                            }
+                            got_reply = true;
+                        }
+                    } else {
+                        corruptions++;
+                        got_reply = true;
                     }
+                } else if (bytes_read > 0) {
+                    corruptions++;
+                    std::cerr << "[WARN] Ping seq=" << seq << " short reply: " << bytes_read << " bytes\n";
+                    got_reply = true;
+                } else {
+                    timeouts++;
+                    std::cerr << "[WARN] Ping seq=" << seq << " read() error: " << strerror(errno) << "\n";
+                    got_reply = true;
                 }
-            } else if (bytes_read > 0) {
-                corruptions++;
-                std::cerr << "[WARN] Ping seq=" << seq << " short reply: " << bytes_read << " bytes\n";
-            } else {
+            } else if (ret == 0) {
                 timeouts++;
-                std::cerr << "[WARN] Ping seq=" << seq << " read() error: " << strerror(errno) << "\n";
+                std::cerr << "[WARN] Ping seq=" << seq << " TIMEOUT (" << timeout_ms << " ms)\n";
+                got_reply = true;
+            } else {
+                std::cerr << "[ERROR] poll() error on seq=" << seq << ": " << strerror(errno) << "\n";
+                got_reply = true;
+                break;
             }
-        } else if (ret == 0) {
-            timeouts++;
-            std::cerr << "[WARN] Ping seq=" << seq << " TIMEOUT (" << timeout_ms << " ms)\n";
-        } else {
-            std::cerr << "[ERROR] poll() error on seq=" << seq << ": " << strerror(errno) << "\n";
-            break;
         }
 
         if (delay_us > 0) {

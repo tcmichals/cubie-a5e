@@ -1,0 +1,224 @@
+[
+  {
+    "run_id": 1,
+    "timestamp": "2026-10-02 23:38:50",
+    "git_kernel": "b861276e3e76",
+    "git_cubie": "c347362",
+    "overall_status": "PASS",
+    "metrics": {
+      "kunit_passed": 67,
+      "kunit_total": 67,
+      "kunit_failed": 0,
+      "p1_rpmsg_rtt_us": 200.16,
+      "p1_rpmsg_jitter_us": 16.074,
+      "p1_rpmsg_rate_msgs_s": 2912.5,
+      "p1_dram_rtt_us": 202.299,
+      "p2_rpmsg_rtt_us": 142.671,
+      "p3_shm_rtt_us": 13.854,
+      "p3_shm_rate_msgs_s": 65244.3,
+      "p3_shm_bandwidth_mb_s": 63.72,
+      "p3_uio_py_rtt_us": 178.441,
+      "p3_uio_py_rate_msgs_s": 4562.3
+    },
+    "deltas": {
+      "kunit_passed": "N/A",
+      "p1_rpmsg_rtt_us": "N/A",
+      "p1_rpmsg_jitter_us": "N/A",
+      "p1_rpmsg_rate_msgs_s": "N/A",
+      "p2_rpmsg_rtt_us": "N/A",
+      "p3_shm_rtt_us": "N/A",
+      "p3_shm_rate_msgs_s": "N/A",
+      "p3_shm_bandwidth_mb_s": "N/A",
+      "p3_uio_py_rtt_us": "N/A"
+    }
+  },
+  {
+    "run_id": 2,
+    "timestamp": "2026-10-02 23:46:04",
+    "git_kernel": "b861276e3e76",
+    "git_cubie": "c347362",
+    "overall_status": "PASS",
+    "engineering_invariants": [
+      {
+        "invariant": "RemoteProc VirtIO Doorbell Contract",
+        "rule": "priv->cl.knows_txdone = true (Bypasses 1ms hrtimer polling)",
+        "file": "drivers/remoteproc/sunxi_rproc.c",
+        "status": "PASS",
+        "details": "Channel bound to MBOX_TXDONE_BY_ACK (0 \u00b5s timer overhead)"
+      },
+      {
+        "invariant": "Mailbox Hardware FIFO Pacing",
+        "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (Broadcom BCM2835 pattern)",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardware FIFO pipelining enabled (up to 8 kicks in flight)"
+      },
+      {
+        "invariant": "Zero-Sleep Benchmark Protocol",
+        "rule": "ping_rpmsg uses synchronous poll()/select() with zero arbitrary sleep delays",
+        "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
+        "status": "FAIL",
+        "details": "Found arbitrary sleep() calls masking sync issues!"
+      },
+      {
+        "invariant": "PREEMPT_RT Hardirq Execution Bound",
+        "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardirq latency strictly capped against runaway co-processor lockup"
+      }
+    ],
+    "metrics": {
+      "kunit_passed": 67,
+      "kunit_total": 67,
+      "kunit_failed": 0,
+      "p1_rpmsg_rtt_us": 1242.434,
+      "p1_rpmsg_jitter_us": 616.777,
+      "p1_rpmsg_rate_msgs_s": 719.0,
+      "p1_dram_rtt_us": 194.12,
+      "p2_rpmsg_rtt_us": 143.091,
+      "p3_shm_rtt_us": 13.748,
+      "p3_shm_rate_msgs_s": 66138.1,
+      "p3_shm_bandwidth_mb_s": 64.59,
+      "p3_uio_py_rtt_us": 178.379,
+      "p3_uio_py_rate_msgs_s": 4567.0
+    },
+    "deltas": {
+      "kunit_passed": "+0 tests",
+      "p1_rpmsg_rtt_us": "+1042.27 \u00b5s (+520.7%)",
+      "p1_rpmsg_jitter_us": "+600.70 \u00b5s (+3737.1%)",
+      "p1_rpmsg_rate_msgs_s": "-2193.50 msgs/s (-75.3%)",
+      "p2_rpmsg_rtt_us": "+0.42 \u00b5s (+0.3%)",
+      "p3_shm_rtt_us": "-0.11 \u00b5s (-0.8%)",
+      "p3_shm_rate_msgs_s": "+893.80 msgs/s (+1.4%)",
+      "p3_shm_bandwidth_mb_s": "+0.87 MB/s (+1.4%)",
+      "p3_uio_py_rtt_us": "-0.06 \u00b5s (-0.0%)"
+    }
+  },
+  {
+    "run_id": 3,
+    "timestamp": "2026-10-02 23:51:54",
+    "git_kernel": "b861276e3e76",
+    "git_cubie": "c347362",
+    "overall_status": "PASS",
+    "engineering_invariants": [
+      {
+        "invariant": "RemoteProc VirtIO Doorbell Contract",
+        "rule": "priv->cl.knows_txdone = true (Bypasses 1ms hrtimer polling)",
+        "file": "drivers/remoteproc/sunxi_rproc.c",
+        "status": "PASS",
+        "details": "Channel bound to MBOX_TXDONE_BY_ACK (0 \u00b5s timer overhead)"
+      },
+      {
+        "invariant": "Mailbox Hardware FIFO Pacing",
+        "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (Broadcom BCM2835 pattern)",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardware FIFO pipelining enabled (up to 8 kicks in flight)"
+      },
+      {
+        "invariant": "Zero-Sleep Benchmark Protocol",
+        "rule": "ping_rpmsg uses synchronous poll()/select() with zero arbitrary sleep delays",
+        "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
+        "status": "FAIL",
+        "details": "Found arbitrary sleep() calls masking sync issues!"
+      },
+      {
+        "invariant": "PREEMPT_RT Hardirq Execution Bound",
+        "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardirq latency strictly capped against runaway co-processor lockup"
+      }
+    ],
+    "metrics": {
+      "kunit_passed": 67,
+      "kunit_total": 67,
+      "kunit_failed": 0,
+      "p1_rpmsg_rtt_us": 189.876,
+      "p1_rpmsg_jitter_us": 4.45,
+      "p1_rpmsg_rate_msgs_s": 2996.3,
+      "p1_dram_rtt_us": 191.218,
+      "p2_rpmsg_rtt_us": 140.138,
+      "p3_shm_rtt_us": 13.696,
+      "p3_shm_rate_msgs_s": 66304.9,
+      "p3_shm_bandwidth_mb_s": 64.75,
+      "p3_uio_py_rtt_us": 178.89,
+      "p3_uio_py_rate_msgs_s": 4558.2
+    },
+    "deltas": {
+      "kunit_passed": "+0 tests",
+      "p1_rpmsg_rtt_us": "-1052.56 \u00b5s (-84.7%)",
+      "p1_rpmsg_jitter_us": "-612.33 \u00b5s (-99.3%)",
+      "p1_rpmsg_rate_msgs_s": "+2277.30 msgs/s (+316.7%)",
+      "p2_rpmsg_rtt_us": "-2.95 \u00b5s (-2.1%)",
+      "p3_shm_rtt_us": "-0.05 \u00b5s (-0.4%)",
+      "p3_shm_rate_msgs_s": "+166.80 msgs/s (+0.3%)",
+      "p3_shm_bandwidth_mb_s": "+0.16 MB/s (+0.2%)",
+      "p3_uio_py_rtt_us": "+0.51 \u00b5s (+0.3%)"
+    }
+  },
+  {
+    "run_id": 4,
+    "timestamp": "2026-10-03 00:04:23",
+    "git_kernel": "b861276e3e76",
+    "git_cubie": "c347362",
+    "overall_status": "PASS",
+    "engineering_invariants": [
+      {
+        "invariant": "RemoteProc VirtIO Doorbell Contract",
+        "rule": "priv->cl.knows_txdone = true (Bypasses 1ms hrtimer polling)",
+        "file": "drivers/remoteproc/sunxi_rproc.c",
+        "status": "PASS",
+        "details": "Channel bound to MBOX_TXDONE_BY_ACK (0 \u00b5s timer overhead)"
+      },
+      {
+        "invariant": "Mailbox Hardware FIFO Pacing",
+        "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (Broadcom BCM2835 pattern)",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardware FIFO pipelining enabled (up to 8 kicks in flight)"
+      },
+      {
+        "invariant": "Zero-Sleep Benchmark Protocol",
+        "rule": "ping_rpmsg uses synchronous poll()/select() with zero arbitrary sleep delays",
+        "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
+        "status": "FAIL",
+        "details": "Found arbitrary sleep() calls masking sync issues!"
+      },
+      {
+        "invariant": "PREEMPT_RT Hardirq Execution Bound",
+        "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardirq latency strictly capped against runaway co-processor lockup"
+      }
+    ],
+    "metrics": {
+      "kunit_passed": 67,
+      "kunit_total": 67,
+      "kunit_failed": 0,
+      "p1_rpmsg_rtt_us": 517.754,
+      "p1_rpmsg_jitter_us": 596.991,
+      "p1_rpmsg_rate_msgs_s": 1507.3,
+      "p1_dram_rtt_us": 191.8,
+      "p2_rpmsg_rtt_us": 136.431,
+      "p3_shm_rtt_us": 13.739,
+      "p3_shm_rate_msgs_s": 66008.8,
+      "p3_shm_bandwidth_mb_s": 64.46,
+      "p3_uio_py_rtt_us": 178.492,
+      "p3_uio_py_rate_msgs_s": 4559.1
+    },
+    "deltas": {
+      "kunit_passed": "+0 tests",
+      "p1_rpmsg_rtt_us": "+327.88 \u00b5s (+172.7%)",
+      "p1_rpmsg_jitter_us": "+592.54 \u00b5s (+13315.5%)",
+      "p1_rpmsg_rate_msgs_s": "-1489.00 msgs/s (-49.7%)",
+      "p2_rpmsg_rtt_us": "-3.71 \u00b5s (-2.6%)",
+      "p3_shm_rtt_us": "+0.04 \u00b5s (+0.3%)",
+      "p3_shm_rate_msgs_s": "-296.10 msgs/s (-0.4%)",
+      "p3_shm_bandwidth_mb_s": "-0.29 MB/s (-0.4%)",
+      "p3_uio_py_rtt_us": "-0.40 \u00b5s (-0.2%)"
+    }
+  }
+]

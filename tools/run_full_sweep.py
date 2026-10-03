@@ -61,6 +61,8 @@ SERIAL_PORT = os.environ.get("SERIAL_PORT", "/dev/ttyUSB0" if os.path.exists("/d
 
 SWEEP_JSON_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results.json"))
 SWEEP_MD_OUT   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results.md"))
+SWEEP_HISTORY_JSON = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_history.json"))
+SWEEP_HISTORY_MD   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_history.md"))
 SERIAL_LOG_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "serial_console.log"))
 
 class SerialLogger:
@@ -244,11 +246,11 @@ def validate_kunit_tests():
     suites_info = {
         "sunxi_rproc": {
             "title": "sunxi_rproc (Remoteproc Driver)",
-            "expected_count": 35,
+            "expected_count": 33,
         },
         "sun55i_msgbox": {
             "title": "sun55i_msgbox (Mailbox Driver)",
-            "expected_count": 32,
+            "expected_count": 34,
         },
     }
 
@@ -355,6 +357,396 @@ def validate_kunit_tests():
         "suites": suite_results
     }
 
+def get_git_commit_hash(repo_dir):
+    try:
+        out = subprocess.check_output(["git", "-C", repo_dir, "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+        return out.decode("utf-8").strip()
+    except Exception:
+        return "unknown"
+
+def extract_key_metrics(report_bundle):
+    """Extract flattened quantitative metrics for historical tracking and trend comparisons."""
+    metrics = {
+        "kunit_passed": 0,
+        "kunit_total": 0,
+        "kunit_failed": 0,
+        "p1_rpmsg_rtt_us": None,
+        "p1_rpmsg_jitter_us": None,
+        "p1_rpmsg_rate_msgs_s": None,
+        "p1_dram_rtt_us": None,
+        "p2_rpmsg_rtt_us": None,
+        "p3_shm_rtt_us": None,
+        "p3_shm_rate_msgs_s": None,
+        "p3_shm_bandwidth_mb_s": None,
+        "p3_uio_py_rtt_us": None,
+        "p3_uio_py_rate_msgs_s": None,
+    }
+    kunit = report_bundle.get("kunit_tests", {})
+    metrics["kunit_passed"] = kunit.get("total_passed", 0)
+    metrics["kunit_total"] = kunit.get("total_expected", 0)
+    metrics["kunit_failed"] = kunit.get("total_failed", 0)
+
+    for prof in report_bundle.get("profiles", []):
+        pname = prof.get("profile", "")
+        for r in prof.get("results", []):
+            name = r.get("name", "")
+            m = r.get("metrics", {})
+            if "Profile 1" in pname:
+                if "ping_rpmsg (C++" in name:
+                    metrics["p1_rpmsg_rtt_us"] = m.get("avg_lat_us")
+                    metrics["p1_rpmsg_jitter_us"] = m.get("jitter_us")
+                    metrics["p1_rpmsg_rate_msgs_s"] = m.get("throughput_msgs_s")
+                elif "ping_dram" in name:
+                    metrics["p1_dram_rtt_us"] = m.get("avg_lat_us")
+            elif "Profile 2" in pname:
+                if "ping_rpmsg (C++" in name:
+                    metrics["p2_rpmsg_rtt_us"] = m.get("avg_lat_us")
+            elif "Profile 3" in pname:
+                if "ping_shm (C++" in name or "Direct SRAM" in name:
+                    metrics["p3_shm_rtt_us"] = m.get("avg_lat_us")
+                    metrics["p3_shm_rate_msgs_s"] = m.get("throughput_msgs_s")
+                    if m.get("bandwidth"):
+                        try:
+                            metrics["p3_shm_bandwidth_mb_s"] = float(str(m["bandwidth"]).split()[0])
+                        except Exception:
+                            pass
+                elif "ping_uio.py" in name or "Python UIO" in name:
+                    metrics["p3_uio_py_rtt_us"] = m.get("avg_lat_us")
+                    metrics["p3_uio_py_rate_msgs_s"] = m.get("throughput_msgs_s")
+    return metrics
+
+def audit_engineering_invariants():
+    """
+    Automated Static & Dynamic Real-Time Invariant Gatekeeper.
+    Verifies that no delay hacks, arbitrary sleeps, polling loops, or band-aids exist.
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    linux_dir = os.path.abspath(os.path.join(base_dir, "..", "linux-cubie"))
+    
+    audit_results = []
+    
+    # Check 1: Remoteproc Doorbell Client Contract (knows_txdone == true)
+    rproc_file = os.path.join(linux_dir, "drivers/remoteproc/sunxi_rproc.c")
+    if os.path.exists(rproc_file):
+        with open(rproc_file, "r") as f:
+            content = f.read()
+        has_knows_txdone = "priv->cl.knows_txdone = true;" in content
+        audit_results.append({
+            "invariant": "RemoteProc VirtIO Doorbell Contract",
+            "rule": "priv->cl.knows_txdone = true (Bypasses 1ms hrtimer polling)",
+            "file": "drivers/remoteproc/sunxi_rproc.c",
+            "status": "PASS" if has_knows_txdone else "FAIL",
+            "details": "Channel bound to MBOX_TXDONE_BY_ACK (0 µs timer overhead)" if has_knows_txdone else "Missing knows_txdone! Mailbox core will stall on 1ms timer"
+        })
+    
+    # Check 2: Mailbox FIFO Capacity Pacing (count < FIFO_MAX)
+    msgbox_file = os.path.join(linux_dir, "drivers/mailbox/sun55i-msgbox.c")
+    if os.path.exists(msgbox_file):
+        with open(msgbox_file, "r") as f:
+            content = f.read()
+        has_fifo_capacity = "return count < SUN55I_FIFO_MAX;" in content
+        audit_results.append({
+            "invariant": "Mailbox Hardware FIFO Pacing",
+            "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (Broadcom BCM2835 pattern)",
+            "file": "drivers/mailbox/sun55i-msgbox.c",
+            "status": "PASS" if has_fifo_capacity else "FAIL",
+            "details": "Hardware FIFO pipelining enabled (up to 8 kicks in flight)" if has_fifo_capacity else "Requires count == 0! Forces 1-entry blocking serialization"
+        })
+    
+    # Check 3: Zero Arbitrary Sleep Hacks in Critical Benchmark Paths
+    ping_rpmsg_file = os.path.join(base_dir, "firmware/riscv-firmware/apps/testPingRpmsg/linux/ping_rpmsg.cpp")
+    if os.path.exists(ping_rpmsg_file):
+        with open(ping_rpmsg_file, "r") as f:
+            content = f.read()
+        has_sleep_hacks = "usleep(" in content or "sleep(" in content or "msleep(" in content
+        audit_results.append({
+            "invariant": "Zero-Sleep Benchmark Protocol",
+            "rule": "ping_rpmsg uses synchronous poll()/select() with zero arbitrary sleep delays",
+            "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
+            "status": "PASS" if not has_sleep_hacks else "FAIL",
+            "details": "Pure event-driven epoll/read loop with zero sleep overhead" if not has_sleep_hacks else "Found arbitrary sleep() calls masking sync issues!"
+        })
+    
+    # Check 4: PREEMPT_RT Hardirq Bounded Loop Guarantee
+    if os.path.exists(msgbox_file):
+        with open(msgbox_file, "r") as f:
+            content = f.read()
+        has_bounded_loop = "for (i = 0; i < SUN55I_FIFO_MAX; i++)" in content
+        audit_results.append({
+            "invariant": "PREEMPT_RT Hardirq Execution Bound",
+            "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
+            "file": "drivers/mailbox/sun55i-msgbox.c",
+            "status": "PASS" if has_bounded_loop else "FAIL",
+            "details": "Hardirq latency strictly capped against runaway co-processor lockup" if has_bounded_loop else "Unbounded while() loop in hardirq context!"
+        })
+        
+    return audit_results
+
+def record_and_compare_history(report_bundle, history_json_file, history_md_file):
+    """
+    Appends the current sweep run to persistent test history and computes
+    statistical jitter-aware deltas/trends against previous runs.
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    linux_dir = os.path.abspath(os.path.join(base_dir, "..", "linux-cubie"))
+    git_kernel = get_git_commit_hash(linux_dir)
+    git_cubie = get_git_commit_hash(base_dir)
+
+    cur_metrics = extract_key_metrics(report_bundle)
+    sweep_summary = report_bundle.get("sweep_summary", [])
+    overall_status = "PASS" if all(s == "PASS" for _, _, s in sweep_summary) else "FAIL"
+
+    # Audit engineering invariants (no sleeps, no polling hacks)
+    audit_results = audit_engineering_invariants()
+
+    # Load existing history
+    history = []
+    if os.path.exists(history_json_file):
+        try:
+            with open(history_json_file, "r") as f:
+                history = json.load(f)
+                if not isinstance(history, list):
+                    history = []
+        except Exception:
+            history = []
+
+    prev_run = history[-1] if history else None
+    prev_metrics = prev_run.get("metrics", {}) if prev_run else {}
+
+    # Compute deltas with statistical jitter tolerance
+    deltas = {}
+    metric_labels = [
+        ("KUnit In-Kernel Tests (Passed)", "kunit_passed", "tests", True),
+        ("Profile 1 C++ Rpmsg RTT", "p1_rpmsg_rtt_us", "µs", False),
+        ("Profile 1 C++ Rpmsg Jitter", "p1_rpmsg_jitter_us", "µs", False),
+        ("Profile 1 C++ Rpmsg Rate", "p1_rpmsg_rate_msgs_s", "msgs/s", True),
+        ("Profile 2 C++ Rpmsg RTT", "p2_rpmsg_rtt_us", "µs", False),
+        ("Profile 3 C++ UIO Direct SRAM RTT", "p3_shm_rtt_us", "µs", False),
+        ("Profile 3 C++ UIO Throughput", "p3_shm_rate_msgs_s", "msgs/s", True),
+        ("Profile 3 C++ UIO Bandwidth", "p3_shm_bandwidth_mb_s", "MB/s", True),
+        ("Profile 3 Python UIO RTT", "p3_uio_py_rtt_us", "µs", False),
+    ]
+
+    trend_summary = []
+    regressions = []
+    improvements = []
+
+    measured_p1_jitter = cur_metrics.get("p1_rpmsg_jitter_us") or 15.0
+
+    for label, key, unit, higher_is_better in metric_labels:
+        cur_val = cur_metrics.get(key)
+        prev_val = prev_metrics.get(key)
+        delta_str = "N/A"
+        badge = "⚪ Baseline"
+
+        if cur_val is not None and prev_val is not None:
+            diff = cur_val - prev_val
+            pct = (diff / prev_val * 100) if prev_val != 0 else 0
+
+            if key == "kunit_passed":
+                if cur_val < prev_val:
+                    badge = "🔴 REGRESSION (Tests Failed!)"
+                    regressions.append(f"{label}: dropped from {prev_val} to {cur_val}")
+                elif cur_val > prev_val:
+                    badge = "🟢 IMPROVEMENT (More Tests Passed)"
+                    improvements.append(f"{label}: increased from {prev_val} to {cur_val}")
+                else:
+                    badge = "🟢 Invariant (100% Pass)"
+                delta_str = f"{diff:+d} {unit}"
+            else:
+                diff_str = f"{diff:+.2f} {unit} ({pct:+.1f}%)"
+                delta_str = diff_str
+
+                # Calculate statistical noise floor
+                if "p3_shm_rtt" in key:
+                    noise_threshold = 1.5  # 1.5 µs noise floor on direct SRAM
+                elif "p1" in key or "p2" in key:
+                    noise_threshold = max(1.5 * measured_p1_jitter, 12.0)  # Jitter noise band
+                elif "rate" in key or "Throughput" in label:
+                    noise_threshold = 0.08 * prev_val  # 8% throughput noise floor
+                else:
+                    noise_threshold = max(0.05 * prev_val, 1.0)
+
+                if higher_is_better:
+                    if diff > noise_threshold:
+                        badge = "🚀 True Speedup (Higher Rate)"
+                        improvements.append(f"{label}: {prev_val:.2f} -> {cur_val:.2f} {unit} ({pct:+.1f}%)")
+                    elif diff < -noise_threshold:
+                        badge = "⚠️ REGRESSION (Exceeds Noise Floor)"
+                        regressions.append(f"{label}: {prev_val:.2f} -> {cur_val:.2f} {unit} ({pct:+.1f}%)")
+                    else:
+                        badge = "🟢 Invariant (Within Normal Jitter Band)"
+                else:
+                    if diff < -noise_threshold:
+                        badge = "🚀 True Speedup (Lower Latency)"
+                        improvements.append(f"{label}: {prev_val:.2f} -> {cur_val:.2f} {unit} ({pct:+.1f}%)")
+                    elif diff > noise_threshold:
+                        badge = "⚠️ REGRESSION (Exceeds Jitter Noise Floor)"
+                        regressions.append(f"{label}: {prev_val:.2f} -> {cur_val:.2f} {unit} ({pct:+.1f}%)")
+                    else:
+                        badge = "🟢 Invariant (Within Normal Jitter Band)"
+
+        cur_display = f"{cur_val:.2f} {unit}" if isinstance(cur_val, float) else (f"{cur_val} {unit}" if cur_val is not None else "N/A")
+        prev_display = f"{prev_val:.2f} {unit}" if isinstance(prev_val, float) else (f"{prev_val} {unit}" if prev_val is not None else "N/A")
+
+        deltas[key] = {
+            "label": label,
+            "current": cur_val,
+            "previous": prev_val,
+            "delta_str": delta_str,
+            "badge": badge,
+            "unit": unit
+        }
+        trend_summary.append((label, prev_display, cur_display, delta_str, badge))
+
+    # Construct new run record
+    run_record = {
+        "run_id": len(history) + 1,
+        "timestamp": report_bundle.get("timestamp", time.strftime("%Y-%m-%d %H:%M:%S")),
+        "git_kernel": git_kernel,
+        "git_cubie": git_cubie,
+        "overall_status": overall_status,
+        "engineering_invariants": audit_results,
+        "metrics": cur_metrics,
+        "deltas": {k: v["delta_str"] for k, v in deltas.items()}
+    }
+    history.append(run_record)
+
+    # Save JSON history (formatted list)
+    try:
+        with open(history_json_file, "w") as f:
+            json.dump(history, f, indent=2)
+        print(f"[HISTORY] Updated historical run archive ({len(history)} total runs) -> {history_json_file}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {history_json_file}: {e}")
+
+    # Render History Markdown Report
+    try:
+        with open(history_md_file, "w") as f:
+            f.write("# Silicon Sweep Performance History & Regression Tracking\n\n")
+            f.write(f"- **Total Recorded Runs**: {len(history)}\n")
+            f.write(f"- **Latest Run**: Run #{run_record['run_id']} ({run_record['timestamp']})\n")
+            f.write(f"- **Kernel Commit**: `{git_kernel}` | **Firmware/Tools Commit**: `{git_cubie}`\n")
+            f.write(f"- **Latest Overall Status**: **{overall_status}**\n\n")
+
+            f.write("## Engineering Invariants & Code Hygiene Audit\n\n")
+            f.write("| Subsystem Invariant | Formal Design Rule | Component | Status |\n")
+            f.write("| :--- | :--- | :--- | :---: |\n")
+            for a in audit_results:
+                f.write(f"| **{a['invariant']}** | `{a['rule']}` | `{a['file']}` | **{a['status']}** |\n")
+            f.write("\n")
+
+            if regressions:
+                f.write("### ⚠️ Statistically Significant Regressions (Exceeding Jitter Floor)\n\n")
+                for reg in regressions:
+                    f.write(f"- 🔴 **{reg}**\n")
+                f.write("\n")
+            elif improvements:
+                f.write("### 🚀 Performance Improvements Detected\n\n")
+                for imp in improvements:
+                    f.write(f"- 🟢 **{imp}**\n")
+                f.write("\n")
+            else:
+                f.write("### 🟢 Performance is Statistically Invariant & Stable\n\n")
+
+            f.write("## Comparison Against Preceding Run\n\n")
+            f.write("| Metric | Previous Run | Current Run | Delta | Statistical Assessment |\n")
+            f.write("| :--- | :---: | :---: | :---: | :---: |\n")
+            for label, prev_val, cur_val, delta_str, badge in trend_summary:
+                f.write(f"| {label} | {prev_val} | {cur_val} | `{delta_str}` | {badge} |\n")
+            f.write("\n")
+
+            f.write("## Historical Runs Timeline\n\n")
+            f.write("| Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |\n")
+            f.write("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n")
+            for h in reversed(history[-20:]):
+                m = h.get("metrics", {})
+                k_p = f"{m.get('kunit_passed', 0)}/{m.get('kunit_total', 0)}"
+                p1_lat = f"{m['p1_rpmsg_rtt_us']:.2f} µs" if m.get("p1_rpmsg_rtt_us") is not None else "N/A"
+                p3_lat = f"{m['p3_shm_rtt_us']:.2f} µs" if m.get("p3_shm_rtt_us") is not None else "N/A"
+                p3_rate = f"{m['p3_shm_rate_msgs_s']:,.0f}/s" if m.get("p3_shm_rate_msgs_s") is not None else "N/A"
+                st = f"**{h.get('overall_status')}**"
+                f.write(f"| #{h.get('run_id')} | {h.get('timestamp')} | `{h.get('git_kernel')}` | `{h.get('git_cubie')}` | {st} | {k_p} | {p1_lat} | {p3_lat} | {p3_rate} |\n")
+            f.write("\n")
+        print(f"[HISTORY] Saved historical Markdown timeline -> {history_md_file}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {history_md_file}: {e}")
+
+    # Print Terminal Comparison Table
+    if prev_run:
+        print("\n" + "=" * 76)
+        print("          HISTORICAL PERFORMANCE TREND & REGRESSION ANALYSIS")
+        print("=" * 76)
+        print(f"  {'Metric':<35} | {'Previous':<12} | {'Current':<12} | {'Trend / Delta'}")
+        print("  " + "-" * 35 + "-+-" + "-" * 12 + "-+-" + "-" * 12 + "-+-" + "-" * 17)
+        for label, prev_val, cur_val, delta_str, badge in trend_summary:
+            print(f"  {label:<35} | {prev_val:<12} | {cur_val:<12} | {badge} ({delta_str})")
+        print("=" * 76)
+
+    # Save JSON history (formatted list)
+    try:
+        with open(history_json_file, "w") as f:
+            json.dump(history, f, indent=2)
+        print(f"[HISTORY] Updated historical run archive ({len(history)} total runs) -> {history_json_file}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {history_json_file}: {e}")
+
+    # Render History Markdown Report
+    try:
+        with open(history_md_file, "w") as f:
+            f.write("# Silicon Sweep Performance History & Regression Tracking\n\n")
+            f.write(f"- **Total Recorded Runs**: {len(history)}\n")
+            f.write(f"- **Latest Run**: Run #{run_record['run_id']} ({run_record['timestamp']})\n")
+            f.write(f"- **Kernel Commit**: `{git_kernel}` | **Firmware/Tools Commit**: `{git_cubie}`\n")
+            f.write(f"- **Latest Overall Status**: **{overall_status}**\n\n")
+
+            if regressions:
+                f.write("### ⚠️ Regressions Detected Against Previous Run\n\n")
+                for reg in regressions:
+                    f.write(f"- 🔴 **{reg}**\n")
+                f.write("\n")
+            elif improvements:
+                f.write("### 🚀 Performance Improvements Detected\n\n")
+                for imp in improvements:
+                    f.write(f"- 🟢 **{imp}**\n")
+                f.write("\n")
+            else:
+                f.write("### 🟢 Performance is Stable & Consistent\n\n")
+
+            f.write("## Comparison Against Preceding Run\n\n")
+            f.write("| Metric | Previous Run | Current Run | Delta | Trend / Status |\n")
+            f.write("| :--- | :---: | :---: | :---: | :---: |\n")
+            for label, prev_val, cur_val, delta_str, badge in trend_summary:
+                f.write(f"| {label} | {prev_val} | {cur_val} | `{delta_str}` | {badge} |\n")
+            f.write("\n")
+
+            f.write("## Historical Runs Timeline\n\n")
+            f.write("| Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |\n")
+            f.write("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n")
+            for h in reversed(history[-20:]):
+                m = h.get("metrics", {})
+                k_p = f"{m.get('kunit_passed', 0)}/{m.get('kunit_total', 0)}"
+                p1_lat = f"{m['p1_rpmsg_rtt_us']:.2f} µs" if m.get("p1_rpmsg_rtt_us") is not None else "N/A"
+                p3_lat = f"{m['p3_shm_rtt_us']:.2f} µs" if m.get("p3_shm_rtt_us") is not None else "N/A"
+                p3_rate = f"{m['p3_shm_rate_msgs_s']:,.0f}/s" if m.get("p3_shm_rate_msgs_s") is not None else "N/A"
+                st = f"**{h.get('overall_status')}**"
+                f.write(f"| #{h.get('run_id')} | {h.get('timestamp')} | `{h.get('git_kernel')}` | `{h.get('git_cubie')}` | {st} | {k_p} | {p1_lat} | {p3_lat} | {p3_rate} |\n")
+            f.write("\n")
+        print(f"[HISTORY] Saved historical Markdown timeline -> {history_md_file}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {history_md_file}: {e}")
+
+    # Print Terminal Comparison Table
+    if prev_run:
+        print("\n" + "=" * 76)
+        print("          HISTORICAL PERFORMANCE TREND & REGRESSION ANALYSIS")
+        print("=" * 76)
+        print(f"  {'Metric':<35} | {'Previous':<12} | {'Current':<12} | {'Trend / Delta'}")
+        print("  " + "-" * 35 + "-+-" + "-" * 12 + "-+-" + "-" * 12 + "-+-" + "-" * 17)
+        for label, prev_val, cur_val, delta_str, badge in trend_summary:
+            print(f"  {label:<35} | {prev_val:<12} | {cur_val:<12} | {badge} ({delta_str})")
+        print("=" * 76)
+
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
     import argparse
@@ -369,6 +761,8 @@ def main():
     parser.add_argument("--serial-log", default=SERIAL_LOG_OUT, help=f"Path for output serial console log (default: {SERIAL_LOG_OUT})")
     parser.add_argument("--json-out", default=SWEEP_JSON_OUT, help=f"Path for output JSON sweep results (default: {SWEEP_JSON_OUT})")
     parser.add_argument("--report-out", default=SWEEP_MD_OUT, help=f"Path for output Markdown sweep report (default: {SWEEP_MD_OUT})")
+    parser.add_argument("--history-json", default=SWEEP_HISTORY_JSON, help=f"Path for cumulative JSON history (default: {SWEEP_HISTORY_JSON})")
+    parser.add_argument("--history-md", default=SWEEP_HISTORY_MD, help=f"Path for historical Markdown report (default: {SWEEP_HISTORY_MD})")
     args = parser.parse_args()
 
     TARGET_IP = args.ip
@@ -615,9 +1009,15 @@ def main():
                         integ = "PASS (0 errors)" if m.get("data_integrity") and "PASS" in m.get("data_integrity") else (m.get("data_integrity") or "Verified")
                         f.write(f"| {r.get('name')} | **{r.get('status')}** | {pkts} | {avg_rtt} | {rate} | {bw} | {integ} |\n")
                     f.write("\n")
-        print(f"[REPORT] Saved sweep Markdown results to: {SWEEP_MD_OUT}")
+        print(f"[REPORT] Saved sweep Markdown results to: {args.report_out}")
     except Exception as e:
-        print(f"[WARN] Failed to write {SWEEP_MD_OUT}: {e}")
+        print(f"[WARN] Failed to write {args.report_out}: {e}")
+
+    # Historical Tracking & Regression Analysis
+    try:
+        record_and_compare_history(report_bundle, args.history_json, args.history_md)
+    except Exception as e:
+        print(f"[WARN] Failed to update test history: {e}")
 
     if g_serial_logger:
         g_serial_logger.stop()

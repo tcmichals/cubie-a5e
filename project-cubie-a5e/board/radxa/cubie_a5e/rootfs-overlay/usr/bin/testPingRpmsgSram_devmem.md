@@ -1,6 +1,6 @@
-# Linux Physical Address & `devmem2` Map: `testPingRpmsg`
+# Linux Physical Address & `devmem2` Map: `testPingRpmsgSram`
 
-Generated automatically during build from `testPingRpmsg.elf`.
+Generated automatically during build from `testPingRpmsgSram.elf`.
 
 This document maps XuanTie E906 RISC-V Core Device Addresses (`DA`) to **Linux Host (ARM64) Physical Addresses** for direct memory inspection in Linux process space via `devmem2` or `/dev/mem`.
 
