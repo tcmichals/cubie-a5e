@@ -11,10 +11,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## Executive Board Status Matrix
 
-| Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Active Milestones |
-| :--- | :--- | :--- | :--- | :--- |
-| **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E906<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
-| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **USB & Wi-Fi 6 Fully Operational**<br>• High-Speed USB 2.0 Host & FE1.1S Hub Verified<br>• Unified Mainline AIC8800 Wi-Fi 6 Driver (SDIO + USB)<br>• 433 Mbps Live Throughput, WPA2 & DHCP Leased<br>• Dual-Bus Silicon Verified (USB on A7A, SDIO on A5E)<br>• Fast Hardware Watchdog Reboot Verified<br>• Git Tagged & Synced: `v1.0.3-unified-dual-bus-wifi6-silicon-verified`, `v7.1.0-cubie-dual-bus-wifi-working` | 1. GMAC210 TX DMA Watchdog Fix<br>2. AIC8800 Upstream Driver Cleanup (RFC v3)<br>3. E902 Dual-Mode RemoteProc |
+| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **USB & Wi-Fi 6 Silicon Verified; Watchdog & Audit Phase Active**<br>• High-Speed USB 2.0 Host & FE1.1S Hub Verified<br>• Unified Mainline AIC8800 Wi-Fi 6 Driver (SDIO + USB)<br>• 433 Mbps Live Throughput, WPA2 & DHCP Leased<br>• Dual-Bus Silicon Verified (USB on A7A, SDIO on A5E)<br>• ⚠️ **Hardware Watchdog / Reset Investigation Active** (Fails on A7A vs Working in Debian Release)<br>• Git Tagged & Synced: `v1.0.3-unified-dual-bus-wifi6-silicon-verified`, `v7.1.0-cubie-dual-bus-wifi-working` | 1. USB Modifications Audit (Needed vs Wild Goose Chase?)<br>2. A7A Hardware Watchdog / Reset Fix (Analyze Debian release vs mainline)<br>3. Unified AIC8800 Wi-Fi Driver Review & Upstream Cleanup (RFC v3)<br>4. GMAC210 TX DMA Watchdog Fix |
 
 ---
 
@@ -854,26 +851,64 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       - [x] **Live WPA2-PSK Association**: Successfully connected `wlan0` to `NETGEAR69-5G` (5 GHz, 80 MHz channel, VHT-MCS 9) via `wpa_supplicant`. Status reached `wpa_state=COMPLETED`.
       - [x] **Live DHCP Lease**: Obtained IP lease `192.168.1.14` from gateway `192.168.1.1` via `udhcpc -i wlan0`.
       - [x] **Bidirectional Ping & Throughput Proof**: 0% packet loss to gateway `192.168.1.1` (0.58ms RTT), 0% loss to public internet `8.8.8.8` (14.2ms RTT), and verified over 20 MB sustained bidirectional transfer at 433.3 Mbps PHY rate without drops or stalls.
-    - [ ] **Step 10: Unified AIC8800 Upstream Driver Cleanup & RFC v3 Preparation**:
-      - [ ] **Checkpatch Compliance**: Run `scripts/checkpatch.pl --strict` across `aic8800_fdrv` changes and resolve whitespace, formatting, and coding style warnings.
-      - [ ] **Prune Dead Vendor Cruft**: Clean up commented-out debug code, dead macros, and legacy structures.
-      - [ ] **RFC v3 Patch Formatting**: Structure clean, bisect-friendly commits ready for `linux-wireless@vger.kernel.org` (covering stack overflow fix, 7.x API compatibility, OOB GPIO IRQs, and USB FullMAC transport).
-      - [x] **Physical SDIO Retest on Cubie A5E (COMPLETED & VERIFIED)**:
-        - Booted physical Cubie A5E on Linux 7.1.0 PREEMPT_RT (`192.168.3.4`).
-        - Rebuilt and reloaded `aic8800_bsp.ko` and `aic8800_fdrv.ko` (SDIO mode, OOB GPIO IRQ 180).
-        - Associated with `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9) via `wpa_supplicant`; status `wpa_state=COMPLETED`.
-        - Obtained DHCP IP `192.168.1.15` from gateway `192.168.1.1`.
-        - Verified 0% packet loss ping to gateway (0.93 ms min / 1.25 ms avg RTT) and `8.8.8.8` (13.8 ms min / 15.8 ms avg RTT).
-        - Completed 50 MB sustained download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
-        - Cumulative traffic: 65,835,902 bytes RX (43,775 packets), 1,164,097 bytes TX (22,238 packets); -47 dBm RSSI, -89 dBm channel noise floor.
-        - Zero kernel errors, dropped frames, or SDIO CRC errors; dual-bus parity 100% verified.
-      - [x] **Git Checkpoints & Release Tags (COMPLETED & PUSHED)**:
-        - `cubie-a5e`: Tagged `v1.0.3-unified-dual-bus-wifi6-silicon-verified` on `main` and pushed to GitHub.
-        - `linux-cubie`: Tagged `v7.1.0-cubie-dual-bus-wifi-working` on `cubie-linux-7.1` and pushed to GitHub.
+    - [ ] **Step 10: USB Modifications Comprehensive Audit & Necessity Review ("Needed vs Wild Goose Chase?")**:
+      - **Objective**: Systematically review each and every USB-related change made across `linux-cubie` (`phy-sun60i-usb2.c`, `ccu-sun60i-a733.c`, `sun60i-a733-cubie-a7a.dts`, `sun60i-a733.dtsi`, `sun55i-pck600.c`) to determine whether each modification is strictly required by the silicon or was a speculative "wild goose chase" workaround.
+      - [ ] **Analog PHY Driver Audit (`drivers/phy/allwinner/phy-sun60i-usb2.c`)**:
+        - [ ] *SerDes Interconnect Registers (`0x06C00004` / `0x06C00008`)*: Audit writes to `SERDES_TOP_0x04` (`0x00070000`) and `SERDES_TOP_SUBSYS_BGR` (`0x00030010`). Determine if UTMI routing to DWC3 is already default in hardware or if CCU already gates this.
+        - [ ] *SYSCFG Resistor Calibration (`0x03000160` / `0x03000168`)*: Audit writes to `SYSCFG_RESCAL_CTRL` (`0x00C83532`). Determine if 200Ω resistor network calibration is preserved from BootROM/PMIC or strictly required in the PHY probe.
+        - [ ] *Analog Control & Tune Registers (`0x06B00010`, `0x06B00018`, `0x06B00024`)*: Audit `aw,phy_tune_param = <0x143338d6>`. Verify which bits (squelch, pre-emphasis, slew rate) are essential vs defaults.
+        - [ ] *Syscon Decoupling*: Remove direct MMIO mapping hacks; verify proper upstream-compliant `regmap` syscon references.
+      - [ ] **CCU Clock & Reset Tree Audit (`drivers/clk/sunxi-ng/ccu-sun60i-a733.c`)**:
+        - [ ] *`CCU_USB2_MF_CLK` (`0x02003354`)*: **CONFIRMED CRITICAL ROOT CAUSE** (mainline muxed to 2.4 GHz `pll_periph0` instead of 24 MHz `HOSC`, destroying DWC3 microframe timers).
+        - [ ] *`CCU_USB2_U2_REF` (`0x02003340`) & `CCU_USB2_SUSPEND` (`0x02003348`)*: Test if DWC3 genuinely requires all three clocks in USB 2.0 host mode or if `CLK_USB2_MF` alone suffices.
+      - [ ] **Device Tree Audit (`sun60i-a733-cubie-a7a.dts`)**:
+        - [ ] *DWC3 Quirks*: Audit `snps,dis_u2_susphy_quirk` and `maximum-speed = "high-speed"`. Ensure no legacy flags remain.
+        - [ ] *Power Regulators*: Audit `reg_usb_hub` (`PM5`) and `reg_wifi` (`PM0`) sequencing to prevent bus leakage back-feeding into FE1.1S port.
+      - [ ] **Pruning & Verification Gate**: Remove all dead/speculative code, recompile, and verify that High-Speed 480 Mbps enumeration and mass storage transfer remain 100% functional with the minimal essential patch.
+
+    - [ ] **Step 11: Unified AIC8800 Wi-Fi 6 Driver Comprehensive Code Review & Upstream Cleanliness**:
+      - **Objective**: Rigorously audit the unified `aic8800-upstream` driver (`aic8800_fdrv/` and `aic8800_bsp/`) for upstream mainline quality, coding style, modular transport abstraction, and zero regressions across SDIO and USB.
+      - [ ] **Dual-Bus Abstraction & Modularity Audit**:
+        - [ ] Inspect `#elif defined(AICWF_USB_SUPPORT)` in `rwnx_tx.c::rwnx_tx_push()` and `rwnx_main.c`. Evaluate replacing inline `#ifdef` branching with clean `struct aicwf_bus_ops` function pointers.
+        - [ ] Verify that USB and SDIO modules cleanly build independently and as a combo without namespace collisions or shared struct corruptions.
+      - [ ] **USB FullMAC Endpoint & Memory Safety Audit**:
+        - [ ] Audit Interface 2 bulk endpoints: `ep_01`/`ep_81` (data skbs) and `ep_02`/`ep_82` (firmware control messages).
+        - [ ] Verify that `aicwf_process_msg_rxframes()` and `msg_rx_work` cannot leak skbs or race with command completion timeouts.
+        - [ ] Check `need_cfm` buffer allocation sizing in `aicwf_usb.c::aicwf_usb_bus_txdata()` for boundary safety and alignment.
+        - [ ] Audit module unload lifecycle (`rmmod aic8800_fdrv`): ensure all URB anchors (`usb_kill_anchored_urbs`) and workqueues are cleanly flushed with zero kernel oops or NULL pointer jumps.
+      - [ ] **Code Hygiene & Upstream RFC v3 Formatting**:
+        - [ ] Run `scripts/checkpatch.pl --strict` on all modified files and resolve formatting, whitespace, and camelCase violations.
+        - [ ] Prune dead vendor debug macros (`AICWFDBG`), commented-out legacy code, and redundant structures.
+        - [ ] Format clean, bisect-friendly patch series ready for submission to `linux-wireless@vger.kernel.org`.
 
 ---
 
-## 3. Ethernet Subsystem (Active Blocker: TX DMA Timeout)
+## 3. A7A Hardware Watchdog & System Reset Investigation (Broken vs Debian Release)
+
+* **Problem Statement**: On mainline Linux 7.1 (`cubie-a7a`), issuing `reboot` fails to reset the board (hangs indefinitely at `Requesting system reboot` with watchdog timeout stalled), whereas on the vendor Debian release (`Linux radxa-cubie-a7a 5.15.147-7-a733`), the board reboots cleanly and reliably every time.
+* **Goal**: Identify the exact reset mechanism used in Debian, resolve why the mainline watchdog fails, and implement a 100% reliable hardware reboot handler.
+
+- [ ] **Task 1: Vendor Debian Reboot Mechanism Comparative Analysis**:
+  - [ ] Disassemble/inspect how Debian 5.15 triggers reboot:
+    - Does Debian use `sunxi-wdt` MMIO register writes (`0x02050000`)?
+    - Does Debian delegate restart to PSCI `SYSTEM_RESET` via ARM Trusted Firmware (TF-A BL31 SMC call)?
+    - Does Debian trigger reset through the AXP8191 PMIC over RSB/I2C (`s_twi0`)?
+  - [ ] Inspect Debian kernel config options: `CONFIG_WATCHDOG_SYSFS`, `CONFIG_SUNXI_WATCHDOG`, `CONFIG_ARM_PSCI_FW`, `CONFIG_POWER_RESET_SYSCON`.
+- [ ] **Task 2: A733 Watchdog Hardware Register Map & Gating Audit**:
+  - [ ] Verify MMIO address `0x02050000` register layout: Does A733 (`sun60iw2`) use `sun55i_wdt_reg` (`0x0c`, `0x10`, `0x14`) or does it have distinct register offsets?
+  - [ ] Check CCU clock and reset gates: Does the watchdog IP require an unmasked bus clock (e.g. `CLK_BUS_WDT`) or deasserted reset gate (`RST_BUS_WDT`) in `ccu-sun60i-a733.c`?
+  - [ ] Audit `WDT_CFG` register: Verify whether the watchdog output is configured to assert system reset to the SoC reset generator (`WDT_CFG` bits) or if it is merely raising an unhandled interrupt.
+- [ ] **Task 3: Mainline Restart Handler Architecture & Fallback**:
+  - [ ] In commit `242c869eff8e`, `sunxi_wdt_restart()` sets priority 255 and executes `mdelay(1000); while(1) cpu_relax();`. If the watchdog fails to trigger, this causes an unrecoverable hard lockup.
+  - [ ] Evaluate lower priority (128) allowing PSCI fallback (`psci_sys_reset()`).
+  - [ ] Implement and test the verified working reset mechanism.
+- [ ] **Task 4: Live Hardware Target Verification**:
+  - [ ] Execute `reboot` from userspace command line on live Cubie A7A.
+  - [ ] Verify immediate hardware reset into BootROM/U-Boot with 0% stall rate.
+
+---
+
+## 4. Ethernet Subsystem (Active Blocker: TX DMA Timeout)
 
 * **Goal**: Establish stable, bidirectional Gigabit Ethernet connectivity on `eth0` without TX queue watchdog timeouts.
 
@@ -893,7 +928,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 4. Co-Processor & Real-Time Control: A733 Dual-Mode Architecture
+## 5. Co-Processor & Real-Time Control: A733 Dual-Mode Architecture
 
 * **Goal**: Support XuanTie E902 (RV32EMC @ 200 MHz, no FPU, 208 KB System SRAM A2) co-processor execution via Linux RemoteProc.
 
@@ -915,7 +950,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 5. Camera & Video Input Subsystem (MIPI-CSI & CSIC DMA 1.40)
+## 6. Camera & Video Input Subsystem (MIPI-CSI & CSIC DMA 1.40)
 
 * **Silicon Architecture & Status**:
   - **Vendor Reference**: Verified in official Radxa Cubie A7A kernel tree (`A7A_kernel/linux-a733/device-a733/configs/cubie_a7a/linux-6.6/board.dts`).
@@ -926,7 +961,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ---
 
-## 6. Mandatory Patch Gate & Engineering Rules
+## 7. Mandatory Patch Gate & Engineering Rules
 
 - [x] **Buildroot Kernel Patch Gate Resolution (100% PASS with Zero Fuzz)**:
   - Resolved `apply-patches.sh` failure (`Hunk #1 FAILED at 389` on `drivers/remoteproc/Kconfig` and `Hunk #1 FAILED at 72` on `drivers/mailbox/Makefile`).
