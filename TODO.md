@@ -866,6 +866,14 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       - [x] **Verified Zero SDIO Regression**: Tested `bld.a5e` compile gate — clean build of `aic8800_bsp.ko` and `aic8800_fdrv.ko` with zero errors or warnings.
       - [x] **Live Silicon Wi-Fi Scan Test**: Executed `iw dev wlan0 scan` on Radxa Cubie A7A (`192.168.3.4`) — scanned and detected live 2.4 GHz and 5 GHz networks (`HeathRockStar`, `NETGEAR69`, `Verizon_RXR7H3`, `NETGEAR69-5G`) in 2.0s without error `-16` (`-EBUSY`).
       - [x] **Fixed Clean Module Teardown**: Fixed `rwnx_platform_off()` NULL function pointer jump (`pc: 0x0`) on USB unbind/rmmod.
+    - [x] **Step 9: AIC8800 Wi-Fi 6 Association, DHCP, & High-Speed Throughput (COMPLETED & VERIFIED)**:
+      - [x] **Identified Missing USB Data TX Path**: Located missing `#elif defined(AICWF_USB_SUPPORT)` branch in `rwnx_tx.c::rwnx_tx_push()`, where all network data and EAPOL authentication frames were being dropped before reaching the USB transport layer.
+      - [x] **Implemented USB Hostdesc & TX Dispatch**: Connected `aicwf_usb_host_txdesc_push()` to `rwnx_hw->usb_env` and dispatched outgoing skbs to `aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb)`.
+      - [x] **Hardened Buffer Allocations in `aicwf_usb.c`**: Sized `need_cfm` buffer allocation to include `skb->len + sizeof(usb_header) + sizeof(struct txdesc_api) + TX_ALIGNMENT` and cleaned up unused raw skb dereferences in `aicwf_usb_tx_process()`.
+      - [x] **Verified Zero SDIO Regression**: Passed dual-build gate on both `bld.a7a` (USB) and `bld.a5e` (SDIO) with 0 errors and 0 warnings.
+      - [x] **Live WPA2-PSK Association**: Successfully connected `wlan0` to `NETGEAR69-5G` (5 GHz, 80 MHz channel, VHT-MCS 9) via `wpa_supplicant`. Status reached `wpa_state=COMPLETED`.
+      - [x] **Live DHCP Lease**: Obtained IP lease `192.168.1.14` from gateway `192.168.1.1` via `udhcpc -i wlan0`.
+      - [x] **Bidirectional Ping & Throughput Proof**: 0% packet loss to gateway `192.168.1.1` (0.58ms RTT), 0% loss to public internet `8.8.8.8` (14.2ms RTT), and verified over 20 MB sustained bidirectional transfer at 433.3 Mbps PHY rate without drops or stalls.
 
 ---
 

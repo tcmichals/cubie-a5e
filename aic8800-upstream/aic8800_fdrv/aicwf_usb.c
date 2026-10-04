@@ -405,7 +405,6 @@ static void aicwf_usb_tx_process(struct aic_usb_dev *usb_dev)
 {
 	struct aicwf_usb_buf *usb_buf;
 	int ret = 0;
-	u8 *data = NULL;
 
 	while (!list_empty(&usb_dev->tx_post_list)) {
 		if (usb_dev->state != USB_UP_ST) {
@@ -419,7 +418,6 @@ static void aicwf_usb_tx_process(struct aic_usb_dev *usb_dev)
 			usb_err("can not get usb_buf from tx_post_list!\n");
 			return;
 		}
-		data = usb_buf->skb->data;
 
 		ret = usb_submit_urb(usb_buf->urb, GFP_ATOMIC);
 		if (ret) {
@@ -429,7 +427,10 @@ static void aicwf_usb_tx_process(struct aic_usb_dev *usb_dev)
 
 		continue;
 fail:
-		dev_kfree_skb(usb_buf->skb);
+		if (usb_buf->cfm == false)
+			dev_kfree_skb(usb_buf->skb);
+		else
+			kfree((u8 *)usb_buf->skb);
 		usb_buf->skb = NULL;
 		aicwf_usb_tx_queue(usb_dev, &usb_dev->tx_free_list, usb_buf,
 					&usb_dev->tx_free_count, &usb_dev->tx_free_lock);
@@ -703,7 +704,14 @@ static int aicwf_usb_bus_txdata(struct device *dev, struct sk_buff *skb)
 
 	if (txhdr->sw_hdr->need_cfm) {
 		need_cfm = true;
-		buf = kmalloc(skb->len, GFP_KERNEL);
+		buf = kmalloc(skb->len + sizeof(usb_header) + sizeof(struct txdesc_api) + TX_ALIGNMENT, GFP_KERNEL);
+		if (!buf) {
+			usb_err("failed to alloc need_cfm buf\n");
+			kmem_cache_free(rwnx_hw->sw_txhdr_cache, txhdr->sw_hdr);
+			dev_kfree_skb_any(skb);
+			ret = -ENOMEM;
+			goto flow_ctrl;
+		}
 		index += sizeof(usb_header);
 		memcpy(&buf[index], (u8 *)(long)&txhdr->sw_hdr->desc, sizeof(struct txdesc_api));
 		index += sizeof(struct txdesc_api);

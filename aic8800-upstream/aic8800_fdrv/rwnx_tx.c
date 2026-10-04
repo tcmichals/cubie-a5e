@@ -22,6 +22,9 @@
 #include "rwnx_mesh.h"
 #include "rwnx_msg_tx.h"
 #include "rwnx_tx.h"
+#ifdef AICWF_USB_SUPPORT
+#include "usb_host.h"
+#endif
 
 /******************************************************************************
  * Power Save functions
@@ -669,6 +672,29 @@ void rwnx_tx_push(struct rwnx_hw *rwnx_hw, struct rwnx_txhdr *txhdr, int flags)
 		rwnx_hw->stats.last_tx = jiffies;
 	}
 	aicwf_frame_tx((void *)(rwnx_hw->sdiodev), skb);
+#elif defined(AICWF_USB_SUPPORT)
+	if (((sw_txhdr->desc.host.flags & TXU_CNTRL_MGMT) &&
+	     (*(skb->data + sw_txhdr->headroom) == 0xd0 ||
+	      *(skb->data + sw_txhdr->headroom) == 0x10 ||
+	      *(skb->data + sw_txhdr->headroom) == 0x30)) ||
+	    sw_txhdr->desc.host.ethertype == cpu_to_be16(ETH_P_PAE) ||
+	    sw_txhdr->desc.host.ethertype == cpu_to_be16(0x88b4)) {
+		sw_txhdr->need_cfm = 1;
+		sw_txhdr->desc.host.hostid =
+			((1 << 31) | rwnx_hw->usb_env.txdesc_free_idx[0]);
+		aicwf_usb_host_txdesc_push(&rwnx_hw->usb_env, 0, (long)skb);
+		AICWFDBG(LOGINFO, "need cfm ethertype:%8x,user_idx=%d, skb=%p\n",
+			 sw_txhdr->desc.host.ethertype,
+			 rwnx_hw->usb_env.txdesc_free_idx[0], skb);
+	} else {
+		sw_txhdr->need_cfm = 0;
+		sw_txhdr->desc.host.hostid = 0;
+
+		sw_txhdr->rwnx_vif->net_stats.tx_packets++;
+		sw_txhdr->rwnx_vif->net_stats.tx_bytes += sw_txhdr->frame_len;
+		rwnx_hw->stats.last_tx = jiffies;
+	}
+	aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb);
 #endif
 	rwnx_hw->stats.cfm_balance[hw_queue]++;
 }
