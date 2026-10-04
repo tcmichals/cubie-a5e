@@ -29,20 +29,21 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 > Mainline Linux support for Allwinner A527/T527 and A733 is under active bring-up. Below is an honest, verified status matrix of what is working today on real silicon versus what is still under active development.
 
 | Subsystem | Cubie A5E (A527/T527) | Cubie A7A / A7Z (A733) | Driver / Implementation Status |
-| :--- | :---: | :---: | :--- |
+| :--- | :--- :| :---: | :--- |
 | **Bootloader & BROM** | **Working** | **Working** | U-Boot 2026.01 + TF-A BL31 + OP-TEE + auto-training LPDDR5/LPDDR4X |
 | **Mainline Kernel** | **Working** | **Working** | Linux 7.1.0 with `PREEMPT_RT` patchset, 8-core SMP boot |
 | **Serial Debug Console** | **Working** | **Working** | `ttyS0` @ 115200 baud (standard 8250/dw-uart) |
 | **eMMC / MicroSD (MMC)** | **Working** | **Working** | Mainline `sunxi-mmc` driver |
-| **Gigabit Ethernet (GMAC)** | **Working** | **Working** | Mainline `dwmac-sun55i` / `dwmac-sun8i` |
+| **Gigabit Ethernet (GMAC)** | **Working** | **Active Blocker** | Mainline `dwmac-sun55i` (A5E) / TX DMA multi-MSI tuning underway (A7A) |
 | **PMIC & Power Regulators** | **Working** | **Working** | AXP717 + AXP323 (A5E) / AXP8191 via RSB (A7A) |
+| **Hardware Watchdog & Reboot**| **Working** | **Working** | `sunxi_wdt` fast hardware restart handler verified on silicon |
 | **Message Box (Mailbox IPC)**| **Working** | **Working** | 4-port hardware crossbar (`sun55i-msgbox.c`), v3 upstream ready |
 | **RISC-V E906 / E902 Core** | **Working** | **Working** | Linux `remoteproc` standard (`sunxi_rproc.c`), v3 upstream ready |
 | **HiFi4 Audio DSP Core** | **Working** | **Planned** | Remoteproc + SRAM mapping + dedicated ELF test suite |
-| **Wi-Fi 6 (AIC8800)** | **Working (SDIO)** | **In Progress (USB)** | Clean FOSS mainline driver (`aic8800-upstream`), 25 MHz SDIO stabilized |
+| **Wi-Fi 6 (AIC8800)** | **Working (SDIO)** | **Working (USB)** | Unified dual-bus mainline driver (`aic8800-upstream`), 433 Mbps live throughput |
+| **USB 2.0 Host & Hub** | **Working** | **Working** | EHCI/OHCI (A5E) / DWC3 + PCK-600 + Sun60i USB2 PHY + FE1.1S 4-port hub @ 480 Mbps |
 | **NPU AI Accelerator** | **Working** | **Working** | 2.0/3.0 TOPS via open-source Etnaviv DRM driver (`/dev/dri/card0`) + Teflon |
 | **3D GPU Core** | **Working** | **Under Dev** | Panfrost Mali-G57 (A5E) / Imagination BXM-4-64 driver needed (A7A) |
-| **USB 2.0 / 3.0 Host** | **Working** | **In Progress** | EHCI/OHCI (A5E) / DWC3 + PCK-600 power sequencing bring-up (A7A) |
 | **MIPI CSI-2 Cameras** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: V4L2 ISP & media controller bindings not yet mainlined |
 | **MIPI DSI Display / HDMI** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: DRM display engine (DE33) driver requires mainline porting |
 | **Hardware Video Codec** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: Stateless Cedrus VPU support pending sun55i/sun60i tables |
@@ -133,12 +134,14 @@ cubie-a5e/
 
 1. **[Linux RemoteProc and Mailbox Driver Guide](docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md)**:
    Architectural invariants, lifecycle state machines, SMP concurrency, and MMIO memory mapping for heterogeneous cores.
-2. **[Radxa Cubie A7A Platform Specification & Bring-Up Guide](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
+2. **[AIC8800 Wi-Fi 6 Common Subsystem Guide](docs/common/WIFI_AIC8800_GUIDE.md)**:
+   Unified dual-transport driver architecture (SDIO on A5E, USB on A7A), firmware lifecycle, and 433 Mbps silicon verification.
+3. **[Radxa Cubie A7A Bring-Up & Known Issues](docs/buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md)**:
+   Comprehensive hardware issue registry, USB DWC3 + FE1.1S hub bring-up, and watchdog reboot resolutions.
+4. **[Radxa Cubie A7A Chronological Hardware Debug Log](docs/platforms/CUBIE_A7A_DEBUG_LOG.md)**:
+   Detailed lab debug notes tracing power rail sequencing, PMIC registers, analog PHY tuning, and peripheral bring-up.
+5. **[Radxa Cubie A7A Platform Specification](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
    Hardware specs, LPDDR5 training, GICv3 interrupt controller, and register maps.
-3. **[Radxa Cubie A7A Chronological Hardware Debug Log](docs/platforms/CUBIE_A7A_DEBUG_LOG.md)**:
-   Detailed lab debug notes tracing power rail sequencing, PMIC registers, and peripheral bring-up.
-4. **[AIC8800 Wi-Fi 6 SDIO/USB Architecture](docs/buildroot/AIC8800_Porting_Action_Plan.md)**:
-   Detailed transport separation, IOPAD delay tuning, and firmware upload stability notes.
 
 ---
 
