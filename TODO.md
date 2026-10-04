@@ -14,7 +14,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 | Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Active Milestones |
 | :--- | :--- | :--- | :--- | :--- |
 | **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E906<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
-| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **USB & Wi-Fi 6 Fully Operational**<br>• High-Speed USB 2.0 Host & FE1.1S Hub Verified<br>• Unified Mainline AIC8800 Wi-Fi 6 Driver (SDIO + USB)<br>• 433 Mbps Live Throughput, WPA2 & DHCP Leased<br>• Dual-Bus Silicon Verified (USB on A7A, SDIO on A5E)<br>• Fast Hardware Watchdog Reboot Verified | 1. GMAC210 TX DMA Watchdog Fix<br>2. AIC8800 Upstream Driver Cleanup (RFC v3)<br>3. E902 Dual-Mode RemoteProc |
+| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **USB & Wi-Fi 6 Fully Operational**<br>• High-Speed USB 2.0 Host & FE1.1S Hub Verified<br>• Unified Mainline AIC8800 Wi-Fi 6 Driver (SDIO + USB)<br>• 433 Mbps Live Throughput, WPA2 & DHCP Leased<br>• Dual-Bus Silicon Verified (USB on A7A, SDIO on A5E)<br>• Fast Hardware Watchdog Reboot Verified<br>• Git Tagged & Synced: `v1.0.3-unified-dual-bus-wifi6-silicon-verified`, `v7.1.0-cubie-dual-bus-wifi-working` | 1. GMAC210 TX DMA Watchdog Fix<br>2. AIC8800 Upstream Driver Cleanup (RFC v3)<br>3. E902 Dual-Mode RemoteProc |
 
 ---
 
@@ -166,8 +166,9 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - Channel scan completed cleanly via `iw dev wlan0 scan` detecting both 2.4 GHz and 5 GHz networks.
     - WPA2 association verified: `wpa_state=COMPLETED` to `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9).
     - DHCP IP lease obtained: `192.168.1.15` from gateway `192.168.1.1`.
-    - Bidirectional ping: 0% packet loss to gateway `192.168.1.1` (0.94 ms avg RTT) and `8.8.8.8` (14.1 ms avg RTT).
-    - High-speed sustained throughput: 10 MB download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz). Zero regressions.
+    - Bidirectional ping: 0% packet loss to gateway `192.168.1.1` (0.93 ms min / 1.25 ms avg RTT) and `8.8.8.8` (13.8 ms min / 15.8 ms avg RTT).
+    - High-speed sustained throughput: 50 MB download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
+    - Cumulative verified traffic: 65,835,902 bytes RX (43,775 packets), 1,164,097 bytes TX (22,238 packets); -47 dBm RSSI, -89 dBm noise floor, 0 kernel/driver errors. Zero regressions.
 
 ---
 
@@ -862,8 +863,13 @@ This is the **single centralized source of truth** for all tasks, hardware bring
         - Rebuilt and reloaded `aic8800_bsp.ko` and `aic8800_fdrv.ko` (SDIO mode, OOB GPIO IRQ 180).
         - Associated with `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9) via `wpa_supplicant`; status `wpa_state=COMPLETED`.
         - Obtained DHCP IP `192.168.1.15` from gateway `192.168.1.1`.
-        - Verified 0% packet loss ping to gateway (0.94 ms avg RTT) and `8.8.8.8` (14.1 ms avg RTT).
-        - Completed 10 MB download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz) with zero regressions or packet loss.
+        - Verified 0% packet loss ping to gateway (0.93 ms min / 1.25 ms avg RTT) and `8.8.8.8` (13.8 ms min / 15.8 ms avg RTT).
+        - Completed 50 MB sustained download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
+        - Cumulative traffic: 65,835,902 bytes RX (43,775 packets), 1,164,097 bytes TX (22,238 packets); -47 dBm RSSI, -89 dBm channel noise floor.
+        - Zero kernel errors, dropped frames, or SDIO CRC errors; dual-bus parity 100% verified.
+      - [x] **Git Checkpoints & Release Tags (COMPLETED & PUSHED)**:
+        - `cubie-a5e`: Tagged `v1.0.3-unified-dual-bus-wifi6-silicon-verified` on `main` and pushed to GitHub.
+        - `linux-cubie`: Tagged `v7.1.0-cubie-dual-bus-wifi-working` on `cubie-linux-7.1` and pushed to GitHub.
 
 ---
 
