@@ -5,7 +5,7 @@
 
 echo "=== Initializing Radxa Cubie A7A Dynamic Boot Sequence ==="
 
-setenv bootargs "console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 clk_ignore_unused fw_devlink=permissive usbcore.old_scheme_first=1"
+setenv bootargs "console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 clk_ignore_unused fw_devlink=permissive"
 
 # Standard Memory Map Addresses
 if test -z "${kernel_addr_r}";     then setenv kernel_addr_r     0x40200000; fi

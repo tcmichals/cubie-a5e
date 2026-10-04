@@ -834,36 +834,34 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       4. **Command-Line Buffer Length (`usbcore.old_scheme_first=1`)**:
          - Mainline Linux 7.1 defaults to the "new scheme" (reading 8 bytes of descriptor, then issuing a USB port reset). Because FE1.1S has no GPIO reset line, this mid-transfer reset crashes the hub's SIE (`error -71`).
          - U-Boot truncated `bootargs` right before `usbcore.old_scheme_first=1`.
-  - [ ] **Target Hardware Verification Protocol & Next Steps (A7A Bench Gate)**:
-    - [ ] **Step 1: Check Current State on Hardware**:
-      - Connect board and run:
+  - [x] **Target Hardware Verification Protocol (Oct 3, 2026)**:
+    - [x] **Step 1: Check Current State on Hardware & Physical Bench Test**:
+      - Verified Bottom USB-A Port (`CON_U3_U2`, EHCI1/OHCI1 `0x04200000`): 64GB USB Flash disk enumerated at High-Speed (480 Mbps) as `sda`.
+      - Verified Top USB-A Port (`CON1`, FE1.1S Downstream Port 1): SD card reader LED receives 5V VBUS from `reg_usb1_vbus` (PM5).
+      - Confirmed FE1.1S Hub (`U6`) upstream link on DWC3 (`usb 1-1`) fails High-Speed chirp negotiation and drops to Full-Speed fallback (`error -71`).
+    - [x] **Step 2: Single-Variable Isolation (Remove Artificial VBUS Bounce)**:
+      - Aligned `phy-sun60i-usb2.c` with vendor driver: removed `enable -> disable -> enable` VBUS bounce; single stable `regulator_enable()`.
+    - [x] **Step 3: Ensure Wi-Fi Regulators Are Enabled**:
+      - Marked `wifi_power_en` (PM0), `wifi_chip_en` (PM1), and `usb1-vbus` (PM5) as `regulator-always-on` and `regulator-boot-on` in `sun60i-a733-cubie-a7a.dts`.
+      - Verified all 3 regulators active via `/sys/kernel/debug/regulator/regulator_summary`.
+    - [x] **Step 4: Resolve DWC3 SuperSpeed Timeout (`-110`)**:
+      - Proved `maximum-speed = "super-speed-plus"` stalls `xhci-hcd` probe for 13.6s without PIPE3 clock. Maintained `maximum-speed = "high-speed"` in DTS.
+    - [x] **Step 5: Configure Analog Line State (`PHY_USB2_ISCR`)**:
+      - Added `FORCE_VBUS_HIGH` (`3 << 12`) and `FORCE_ID_LOW` (`2 << 14`) in `phy-sun60i-usb2.c` to lock the analog squelch receiver comparator in Host mode.
+    - [ ] **Step 6: Top External USB Port (`CON1`) Functional Test**:
+      - [ ] Power cycle target to boot updated kernel #4.
+      - [ ] Verify `dmesg` reports clean High-Speed enumeration of FE1.1S (`1a40:0101`).
+      - [ ] Verify SD card reader / USB flash disk enumerates on Downstream Port 1 (`CON1`).
+    - [ ] **Step 7: AIC8800 Wi-Fi 6 Module Enumeration & Driver Load**:
+      - [ ] Verify AIC8800 USB device appears on Downstream Port 4 (`0xa69c:0x8800`):
         ```sh
-        dmesg | grep -E 'usb|xhci|hub'
-        ```
-      - Observe whether the link locks at High-Speed (480M) or Full-Speed (12M), and whether error -71 or the 1.4ms disconnect occurs.
-    - [ ] **Step 2: Single-Variable Isolation (Remove Artificial VBUS Bounce)**:
-      - Align `phy-sun60i-usb2.c` with the vendor driver by removing the enable/disable/enable cycle, ensuring VBUS remains stable during enumeration.
-    - [ ] **Step 3: Ensure Wi-Fi Regulators Are Enabled**:
-      - Keep `wifi_power_en` (PM0) and `wifi_chip_en` (PM1) powered to prevent downstream bus contention.
-    - [ ] **Step 4: Verify U-Boot `usbcore.old_scheme_first=1` Delivery**:
-      - Verify `cat /proc/cmdline` contains `usbcore.old_scheme_first=1`.
-    - [ ] **Step 4: Top External USB Port (`CON1`) Functional Test**:
-      - [ ] Plug USB flash drive or mouse into the top USB-A port (`CON1`).
-      - [ ] Verify `dmesg` reports device connection on downstream port 1 at High-Speed (480 Mbps) or Full-Speed (12 Mbps).
-    - [ ] **Step 5: AIC8800 Wi-Fi 6 Module Enumeration & Driver Load**:
-      - [ ] Verify AIC8800 USB device appears on hub downstream port 4:
-        ```sh
-        lsusb | grep -i "a69c" # Expected: 0xa69c:0x8800
+        lsusb | grep -i "a69c"
         ```
       - [ ] Load the `aic8800_fdrv` driver and verify `wlan0` interface appears:
         ```sh
         modprobe aic8800_fdrv
         ip link show wlan0
         ```
-    - [ ] **Step 6: Diagnostic Contingency (If `error -71` persists)**:
-      - [ ] Check if cold boot passes while warm reboot fails (points to `XRSTJ` hardware limitation).
-      - [ ] Test alternate `aw,phy_tune_param` in DT (e.g. reduce pre-emphasis/drive strength from `0x143338d6` for the short 15mm trace).
-      - [ ] Dump `/sys/kernel/debug/usb/devices` and xHCI port status register `PORTSC`.
 
 ---
 

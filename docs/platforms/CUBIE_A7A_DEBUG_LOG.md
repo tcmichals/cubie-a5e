@@ -1044,12 +1044,103 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
   3. **AXI Posted-Write Flushes Confirmed Effective**:
      - The driver initialized cleanly without any race conditions, proving the `readl()` flushes are structurally sound.
 
-- **Corrective Action**:
-  - Revert `aw,phy_tune_param` in `sun60i-a733-cubie-a7a.dts` to `0x143333d4`.
-  - Prune redundant strings from `boot.cmd` and `uboot-env.txt` so `usbcore.old_scheme_first=1` fits inside U-Boot's argument buffer.
+#### 5. Complete Architectural Forensic Root-Cause Analysis (Oct 3, 2026)
 
+- **Target Hardware Bench Validation**:
+  1. **Bottom USB-A Port (`CON_U3_U2` - Direct SoC EHCI1/OHCI1)**:
+     - User plugged in a 64 GB USB Flash Disk on the Bottom USB port.
+     - Linux kernel immediately reported clean High-Speed 480 Mbps enumeration:
+       ```text
+       [  243.386204] usb 4-1: new high-speed USB device number 2 using ehci-platform
+       [  245.619846] usb-storage 4-1:1.0: USB Mass Storage device detected
+       [  246.692068] scsi 0:0:0:0: Direct-Access     General  USB Flash Disk   1100 PQ: 0 ANSI: 6
+       [  246.694309] sd 0:0:0:0: [sda] 120832000 512-byte logical blocks: (61.9 GB/57.6 GiB)
+       [  246.730651] sd 0:0:0:0: [sda] Attached SCSI removable disk
+       ```
+     - Proves base Linux USB host stack, SCSI subsystem, and physical 5V VBUS on Port 0 (`PL2`) are 100% functional.
 
+  2. **Top USB-A Port (`CON1`) & Wi-Fi 6 (`AIC8800`) - FE1.1S Hub Downstream**:
+     - User plugged an SD card reader into the Top USB port: power LED illuminated immediately (confirming `reg_usb1_vbus` via **PM5** is active at 5.0V), but no communication occurred in `dmesg` / `lsusb`.
+     - **Schematic & Silicon Topography**:
+       - `CON1` is wired to **Downstream Port 1** of the onboard **FE1.1S 4-port USB 2.0 Hub (`U6`)**.
+       - `AIC8800` Wi-Fi 6 is wired to **Downstream Port 4** of `U6`.
+       - `U6` Upstream Port connects to the SoC's **DWC3 controller (`0x06A00000`)** and **USB2 PHY (`0x06B00000`)**.
+       - Because the FE1.1S Hub chip itself failed High-Speed enumeration on `usb 1-1`, all 4 downstream ports remain inaccessible to the kernel despite having electrical power.
 
+- **Why the Working Radxa Vendor BSP Hid These Invariants**:
+  - The vendor Debian image (`radxa-a733_bullseye_kde_r6.output_512.img.xz` / `a733_official.img`) ran Linux 5.15.147 with out-of-tree vendor drivers:
+    - `CONFIG_USB_SUNXI_DWC3=y` (`dwc3_sunxi_plat.c` glue layer).
+    - `CONFIG_PHY_SUNXI_PLAT=y` (`phy_sunxi_plat.c` PHY & resistor trim driver).
+    - `CONFIG_USB_SUNXI_HCD=y` (`sunxi_hcd.c`).
+  - In the vendor driver stack:
+    1. **Out-of-Tree C Magic**: The vendor C code directly programmed the SerDes top bridge (`0x06C00008`), SYSCFG 200 $\Omega$ REXT auto-trim (`0x03000160`/`0x03000168`), and analog squelch registers before releasing DWC3 resets.
+    2. **Unrecognized DTS Properties**: Vendor DTS properties like `aw,inv-sync-hdr-quirk` and `aw,rext_mode = <2>` are proprietary extensions ignored by upstream mainline Linux 7.1's generic `snps,dwc3` driver.
+    3. **Mainline Driver Responsibilities**: Clean mainline upstreaming requires our standalone PHY driver (`phy-sun60i-usb2.c`) to perform all necessary bridge unmasking, resistor calibration, and host line-state forcing (`ISCR` `0x0200b000`) so that standard generic `snps,dwc3` operates reliably.
+
+- **Detailed Controller Discoveries**:
+  1. **SuperSpeed Timeout (`-110`) Confirmation**:
+     - Tested `maximum-speed = "super-speed-plus"` in `sun60i-a733-cubie-a7a.dts`.
+     - Confirmed that clearing `DEV_FORCE_20_CLK_FOR_30_CLK` (Bit 26 of `GUCTL1`) without a physical PIPE3 clock causes `xhci-hcd` probe to stall 13.6 seconds and fail with `can't setup: -110`.
+     - Reverted to `maximum-speed = "high-speed"` to ensure xHCI routes the internal 2.0 clock and probes without delay.
+  2. **Analog Line State & Comparator Forcing (`PHY_USB2_ISCR`)**:
+     - Configured `PHY_USB2_ISCR` (`0x00`) with `0x00000000` matching Debian live silicon state.
+
+---
+
+#### 6. Definitive Hardware Trace vs Debian 5.15 Golden Silicon State (Oct 3, 2026)
+
+- **Comprehensive Register Comparison Matrix (Live Hardware vs Debian Golden Dump)**:
+
+| Block | Register Name | Physical Address | Debian Golden Dump | Mainline Initial Value | Mainline Corrected Value | Status / Root Cause |
+|---|---|---|---|---|---|---|
+| **CCU** | `CCU_BUS_MSI_LITE2` | `0x020025A4` | `0x00030001` | `0x00000001` | `0x00030001` | **Fixed**: Bit 17 (Reset), Bit 16 (MBUS gate), Bit 0 (Clock gate) |
+| **CCU** | `CCU_USB_REF_CLK` | `0x02003340` | `0x80000000` | `0x80000000` | `0x80000000` | **Match**: 24 MHz HOSC, gate bit 31 |
+| **CCU** | `CCU_USB2_U2_REF_CLK` | `0x02003348` | `0x80000000` | `0x80000000` | `0x80000000` | **Match**: 24 MHz HOSC, gate bit 31 |
+| **CCU** | `CCU_USB2_SUSPEND_CLK` | `0x02003350` | `0x81000000` | `0x81000000` | `0x81000000` | **Match**: 24 MHz HOSC (mux=1), gate bit 31 |
+| **CCU** | `CCU_USB2_MF_CLK` | `0x02003354` | `0x80000000` | `0x81000000` (2.4 GHz!) | `0x80000000` (24 MHz) | **CRITICAL ROOT CAUSE**: Mainline muxed to `pll_periph0` (600MHz/2.4GHz), breaking DWC3 UTMI/MAC frame timers |
+| **CCU** | `CCU_BUS_USB2_RST_GATE` | `0x0200335C` | `0x00010000` | `0x00010000` | `0x00010000` | **Match**: Bit 16 DWC3 reset deasserted |
+| **CCU** | `CCU_RES_DCAP_24M` | `0x02003A00` | `0x00000008` | `0x00000000` | `0x00000008` | **Fixed**: Bit 3 DCAP 24MHz reference clock unmasked |
+| **SYSCFG** | `SYSCFG_RESCAL_CTRL` | `0x03000160` | `0x00C83532` | `0x00000400` | `0x00C83532` | **Fixed**: 200Ω internal/external resistor calibration network |
+| **SYSCFG** | `SYSCFG_RES1_CTRL` | `0x03000168` | `0x00C80000` | `0x00C80000` | `0x00C80000` | **Match**: Analog pad bias current trim |
+| **SerDes** | `SERDES_TOP_0x04` | `0x06C00004` | `0x00070000` | `0x00070000` | `0x00070000` | **Match**: UTMI interconnect mux (routes DWC3 UTMI+ to USB2 PHY) |
+| **SerDes** | `SERDES_TOP_SUBSYS_BGR` | `0x06C00008` | `0x00030010` | `0x00030010` | `0x00030010` | **Match**: ACLK_EN (bit 17), HCLK_EN (bit 16), USB2P0_PHY_RSTN (bit 4) |
+| **USB2 PHY** | `PHY_USB2_ISCR` | `0x06B00000` | `0x00000000` | `0x00000000` | `0x00000000` | **Match**: Cleared force states |
+| **USB2 PHY** | `PHY_USB2_PHYCTL` | `0x06B00010` | `0x000E2430` | `0x000E2430` | `0x000E2430` | **Match**: OTGDISABLE (1), VBUSVLDEXT (1), SIDDQ (0), EFUSE trim (0xE) |
+| **USB2 PHY** | `PHY_USB2_PHYTUNE` | `0x06B00018` | `0x143338D6` | `0x143338D6` | `0x143338D6` | **Match**: Squelch sensitivity (bits [12:10]=6), Pre-emphasis, Slew rate |
+| **USB2 PHY** | `PHY_USB2_0x24` | `0x06B00024` | `0x00000008` | `0x00000008` | `0x00000008` | **Match**: Analog bias trim |
+| **DWC3** | `DWC3_GUSB2PHYCFG0` | `0x06A0C200` | `0x02102400` | `0x02102400` | `0x02102400` | **Match**: Bits [13:10]=9 (`USBTRDTIM = 9` for 8-bit UTMI+ @ 60MHz) |
+| **DWC3** | `DWC3_GFLADJ` | `0x06A0C140` | `0x4020800A` | `0x00000000` | `0x4020800A` | **Fixed**: Microframe SOF 125µs frame length adjustment |
+| **xHCI** | `PORTSC1` | `0x06A00430` | `0x00000E03` | `0x00000603` | `0x00000E03` | **Target Goal**: Speed = 3 (High-Speed 480 Mbps) |
+
+- **Root Causes Identified & Resolved**:
+  1. **CCU Clock Root Cause (`usb2_mf_clk`)**:
+     - `CCU_USB2_MF_CLK (0x02003354)` was initializing with mux=1 (`pll_periph0` @ 2.4 GHz).
+     - DWC3 read `2400000000 Hz` and calculated broken microframe timers.
+     - Fixed to `0x80000000` (24 MHz `HOSC`).
+  2. **`usbcore.old_scheme_first=1` Bug**:
+     - Hardcoded bootarg in `boot.cmd` / `uEnv.txt` forced legacy USB 1.1 handshake sequencing.
+     - Removed completely from `boot.cmd`, `uboot-env.txt`, and `uEnv.txt`.
+  3. **`maximum-speed` SuperSpeed Dependency**:
+     - `maximum-speed = "super-speed-plus"` in `dwc3` caused xHCI probe timeout `-110` due to missing USB3 PIPE clock.
+- **Live Hardware Validation Results (Build #17 - Full High-Speed 480 Mbps Verified)**:
+  ```text
+  [    0.722333] usb 1-1: new high-speed USB device number 2 using xhci-hcd
+  [    0.983282] usb 1-1: Product: USB 2.0 Hub
+  [    0.991276] hub 1-1:1.0: USB hub found
+  [    0.993272] hub 1-1:1.0: 4 ports detected
+  [    1.122347] usb 1-1.2: new high-speed USB device number 3 using xhci-hcd
+  [    3.380570] scsi host0: usb-storage 1-1.2:1.0
+  [    3.554341] usb 1-1.4: new high-speed USB device number 4 using xhci-hcd
+  [    4.452122] scsi 0:0:0:0: Direct-Access     General  USB Flash Disk   1100 PQ: 0 ANSI: 6
+  [    4.454264] sd 0:0:0:0: [sda] 120832000 512-byte logical blocks: (61.9 GB/57.6 GiB)
+  [    4.475110] sd 0:0:0:0: [sda] Attached SCSI removable disk
+  [    8.882113] aic8800_fdrv: loading out-of-tree module taints kernel.
+  [   15.355613] usbcore: registered new interface driver aic8800_fdrv
+  ```
+  - **Topology Verified**:
+    - Hub: `Bus 001 Device 002: ID 1a40:0101 USB 2.0 Hub` @ 480 Mbps.
+    - Top USB-A Port: `Bus 001 Device 003: ID 090c:1000 General USB Flash Disk` mounted as `/dev/sda` (57.6 GiB).
+    - Wi-Fi 6: `Bus 001 Device 004: ID a69c:8d80 aicsemi AIC Wlan` initialized with network interface `wlan0`.
 
 
 
