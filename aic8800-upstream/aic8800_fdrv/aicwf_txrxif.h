@@ -162,6 +162,11 @@ struct aicwf_rx_priv {
 #else
 	struct frame_queue rxq;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct frame_queue msg_rxq;
+	spinlock_t msg_rxqlock;
+	atomic_t msg_rx_cnt;
+#endif
 
 #ifdef AICWF_RX_REORDER
 	/* lock for freeq */
@@ -219,6 +224,11 @@ struct rx_buff *rxbuff_dequeue(struct rx_frame_queue *pq);
 bool aicwf_rxbuff_enqueue(struct device *dev, struct rx_frame_queue *rxq,
 			  struct rx_buff *pkt);
 extern struct aicwf_rx_buff_list aic_rx_buff_list;
+#endif
+
+int aicwf_process_rxframes(struct aicwf_rx_priv *rx_priv);
+#ifdef AICWF_USB_SUPPORT
+int aicwf_process_msg_rxframes(struct aicwf_rx_priv *rx_priv);
 #endif
 
 #endif /* _AICWF_TXRXIF_H_ */

@@ -87,6 +87,31 @@ static void aicwf_usb_rx_buf_put(struct aic_usb_dev *usb_dev, struct aicwf_usb_b
 	spin_unlock_irqrestore(&usb_dev->rx_free_lock, flags);
 }
 
+static struct aicwf_usb_buf *aicwf_usb_msg_rx_buf_get(struct aic_usb_dev *usb_dev)
+{
+	unsigned long flags;
+	struct aicwf_usb_buf *usb_buf;
+
+	spin_lock_irqsave(&usb_dev->msg_rx_free_lock, flags);
+	if (list_empty(&usb_dev->msg_rx_free_list)) {
+		usb_buf = NULL;
+	} else {
+		usb_buf = list_first_entry(&usb_dev->msg_rx_free_list, struct aicwf_usb_buf, list);
+		list_del_init(&usb_buf->list);
+	}
+	spin_unlock_irqrestore(&usb_dev->msg_rx_free_lock, flags);
+	return usb_buf;
+}
+
+static void aicwf_usb_msg_rx_buf_put(struct aic_usb_dev *usb_dev, struct aicwf_usb_buf *usb_buf)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&usb_dev->msg_rx_free_lock, flags);
+	list_add_tail(&usb_buf->list, &usb_dev->msg_rx_free_list);
+	spin_unlock_irqrestore(&usb_dev->msg_rx_free_lock, flags);
+}
+
 static void aicwf_usb_tx_complete(struct urb *urb)
 {
 	unsigned long flags;
@@ -169,6 +194,57 @@ static void aicwf_usb_rx_complete(struct urb *urb)
 	}
 }
 
+static void aicwf_usb_msg_rx_complete(struct urb *urb)
+{
+	struct aicwf_usb_buf *usb_buf = (struct aicwf_usb_buf *)urb->context;
+	struct aic_usb_dev *usb_dev = usb_buf->usbdev;
+	struct aicwf_rx_priv *rx_priv = usb_dev->rx_priv;
+	struct sk_buff *skb = NULL;
+	unsigned long flags = 0;
+
+	skb = usb_buf->skb;
+	usb_buf->skb = NULL;
+
+	if (urb->actual_length > urb->transfer_buffer_length) {
+		aicwf_dev_skb_free(skb);
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		schedule_work(&usb_dev->msg_rx_urb_work);
+		return;
+	}
+
+	if (urb->status != 0 || !urb->actual_length) {
+		aicwf_dev_skb_free(skb);
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		if (urb->status < 0) {
+			AICWFDBG(LOGDEBUG, "%s urb->status:%d\n", __func__, urb->status);
+			return;
+		}
+		schedule_work(&usb_dev->msg_rx_urb_work);
+		return;
+	}
+
+	if (usb_dev->state == USB_UP_ST) {
+		skb_put(skb, urb->actual_length);
+
+		spin_lock_irqsave(&rx_priv->msg_rxqlock, flags);
+		if (!aicwf_rxframe_enqueue(usb_dev->dev, &rx_priv->msg_rxq, skb)) {
+			spin_unlock_irqrestore(&rx_priv->msg_rxqlock, flags);
+			usb_err("rx_priv->msg_rxq overflow!\n");
+			aicwf_dev_skb_free(skb);
+			aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+			return;
+		}
+		spin_unlock_irqrestore(&rx_priv->msg_rxqlock, flags);
+		atomic_inc(&rx_priv->msg_rx_cnt);
+		complete(&rx_priv->usbdev->bus_if->msg_busrx_trgg);
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		schedule_work(&usb_dev->msg_rx_urb_work);
+	} else {
+		aicwf_dev_skb_free(skb);
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+	}
+}
+
 static int aicwf_usb_submit_rx_urb(struct aic_usb_dev *usb_dev,
 				struct aicwf_usb_buf *usb_buf)
 {
@@ -234,6 +310,80 @@ static void aicwf_usb_rx_submit_all_urb(struct aic_usb_dev *usb_dev)
 static void aicwf_usb_rx_prepare(struct aic_usb_dev *usb_dev)
 {
 	aicwf_usb_rx_submit_all_urb(usb_dev);
+}
+
+static int aicwf_usb_submit_msg_rx_urb(struct aic_usb_dev *usb_dev,
+				       struct aicwf_usb_buf *usb_buf)
+{
+	struct sk_buff *skb;
+	int ret;
+
+	if (!usb_buf || !usb_dev)
+		return -1;
+
+	if (usb_dev->state != USB_UP_ST) {
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		return -1;
+	}
+
+	skb = __dev_alloc_skb(AICWF_USB_MSG_MAX_PKT_SIZE, GFP_ATOMIC);
+	if (!skb) {
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		return -1;
+	}
+
+	usb_buf->skb = skb;
+
+	usb_fill_bulk_urb(usb_buf->urb,
+			  usb_dev->udev,
+			  usb_dev->msg_in_pipe,
+			  skb->data, AICWF_USB_MSG_MAX_PKT_SIZE,
+			  aicwf_usb_msg_rx_complete, usb_buf);
+
+	usb_buf->usbdev = usb_dev;
+
+	usb_anchor_urb(usb_buf->urb, &usb_dev->msg_rx_submitted);
+	ret = usb_submit_urb(usb_buf->urb, GFP_ATOMIC);
+	if (ret) {
+		usb_err("usb submit msg rx urb fail:%d\n", ret);
+		usb_unanchor_urb(usb_buf->urb);
+		aicwf_dev_skb_free(usb_buf->skb);
+		usb_buf->skb = NULL;
+		aicwf_usb_msg_rx_buf_put(usb_dev, usb_buf);
+		msleep(100);
+	}
+	return ret;
+}
+
+static void aicwf_usb_msg_rx_submit_all_urb(struct aic_usb_dev *usb_dev)
+{
+	struct aicwf_usb_buf *usb_buf;
+
+	if (usb_dev->state != USB_UP_ST) {
+		usb_err("bus is not up=%d\n", usb_dev->state);
+		return;
+	}
+
+	while ((usb_buf = aicwf_usb_msg_rx_buf_get(usb_dev)) != NULL) {
+		if (aicwf_usb_submit_msg_rx_urb(usb_dev, usb_buf)) {
+			usb_err("usb msg rx refill fail\n");
+			if (usb_dev->state != USB_UP_ST)
+				return;
+		}
+	}
+}
+
+static void aicwf_usb_msg_rx_prepare(struct aic_usb_dev *usb_dev)
+{
+	aicwf_usb_msg_rx_submit_all_urb(usb_dev);
+}
+
+static void aicwf_usb_msg_rx_urb_work(struct work_struct *work)
+{
+	struct aic_usb_dev *usb_dev =
+		container_of(work, struct aic_usb_dev, msg_rx_urb_work);
+
+	aicwf_usb_msg_rx_submit_all_urb(usb_dev);
 }
 
 static void aicwf_usb_tx_prepare(struct aic_usb_dev *usb_dev)
@@ -327,6 +477,26 @@ int usb_busrx_thread(void *data)
 	return 0;
 }
 
+int usb_msg_busrx_thread(void *data)
+{
+	struct aicwf_rx_priv *rx_priv = (struct aicwf_rx_priv *)data;
+	struct aicwf_bus *bus_if = rx_priv->usbdev->bus_if;
+
+	while (1) {
+		if (kthread_should_stop()) {
+			usb_err("usb msg busrx thread stop\n");
+			break;
+		}
+		if (!wait_for_completion_interruptible(&bus_if->msg_busrx_trgg)) {
+			if (bus_if->state == BUS_DOWN_ST)
+				break;
+			aicwf_process_msg_rxframes(rx_priv);
+		}
+	}
+
+	return 0;
+}
+
 static void aicwf_usb_send_msg_complete(struct urb *urb)
 {
 	struct aic_usb_dev *usb_dev = (struct aic_usb_dev *) urb->context;
@@ -341,6 +511,7 @@ static int aicwf_usb_bus_txmsg(struct device *dev, u8 *buf, u32 len)
 	int ret = 0;
 	struct aicwf_bus *bus_if = dev_get_drvdata(dev);
 	struct aic_usb_dev *usb_dev = bus_if->bus_priv.usb;
+	uint target_pipe;
 
 	if (usb_dev->state != USB_UP_ST)
 		return -EIO;
@@ -355,9 +526,11 @@ static int aicwf_usb_bus_txmsg(struct device *dev, u8 *buf, u32 len)
 
 	usb_dev->msg_finished = false;
 
+	target_pipe = usb_dev->msg_out_pipe ? usb_dev->msg_out_pipe : usb_dev->bulk_out_pipe;
+
 	usb_fill_bulk_urb(usb_dev->msg_out_urb,
 		usb_dev->udev,
-		usb_dev->bulk_out_pipe,
+		target_pipe,
 		buf, len, (usb_complete_t) aicwf_usb_send_msg_complete, usb_dev);
 	usb_dev->msg_out_urb->transfer_flags |= URB_ZERO_PACKET;
 
@@ -450,6 +623,28 @@ static int aicwf_usb_alloc_tx_urb(struct aic_usb_dev *usb_dev)
 
 err:
 	aicwf_usb_free_urb(&usb_dev->tx_free_list, &usb_dev->tx_free_lock);
+	return -ENOMEM;
+}
+
+static int aicwf_usb_alloc_msg_rx_urb(struct aic_usb_dev *usb_dev)
+{
+	int i;
+
+	for (i = 0; i < AICWF_USB_MSG_RX_URBS; i++) {
+		struct aicwf_usb_buf *usb_buf = &usb_dev->usb_msg_rx_buf[i];
+
+		usb_buf->usbdev = usb_dev;
+		usb_buf->urb = usb_alloc_urb(0, GFP_KERNEL);
+		if (!usb_buf->urb) {
+			usb_err("could not allocate msg rx urb\n");
+			goto err;
+		}
+		list_add_tail(&usb_buf->list, &usb_dev->msg_rx_free_list);
+	}
+	return 0;
+
+err:
+	aicwf_usb_free_urb(&usb_dev->msg_rx_free_list, &usb_dev->msg_rx_free_lock);
 	return -ENOMEM;
 }
 
@@ -580,6 +775,8 @@ static int aicwf_usb_bus_start(struct device *dev)
 	aicwf_usb_state_change(usb_dev, USB_UP_ST);
 	aicwf_usb_rx_prepare(usb_dev);
 	aicwf_usb_tx_prepare(usb_dev);
+	if (usb_dev->msg_in_pipe)
+		aicwf_usb_msg_rx_prepare(usb_dev);
 	return 0;
 }
 
@@ -605,6 +802,8 @@ static void aicwf_usb_cancel_all_urbs(struct aic_usb_dev *usb_dev)
 	spin_unlock_irqrestore(&usb_dev->tx_post_lock, flags);
 
 	usb_kill_anchored_urbs(&usb_dev->rx_submitted);
+	if (usb_dev->msg_in_pipe)
+		usb_kill_anchored_urbs(&usb_dev->msg_rx_submitted);
 }
 
 static void aicwf_usb_bus_stop(struct device *dev)
@@ -628,6 +827,10 @@ static void aicwf_usb_deinit(struct aic_usb_dev *usbdev)
 	cancel_work_sync(&usbdev->rx_urb_work);
 	aicwf_usb_free_urb(&usbdev->rx_free_list, &usbdev->rx_free_lock);
 	aicwf_usb_free_urb(&usbdev->tx_free_list, &usbdev->tx_free_lock);
+	if (usbdev->msg_in_pipe) {
+		cancel_work_sync(&usbdev->msg_rx_urb_work);
+		aicwf_usb_free_urb(&usbdev->msg_rx_free_list, &usbdev->msg_rx_free_lock);
+	}
 	usb_free_urb(usbdev->msg_out_urb);
 }
 
@@ -647,15 +850,21 @@ static int aicwf_usb_init(struct aic_usb_dev *usb_dev)
 
 	init_waitqueue_head(&usb_dev->msg_wait);
 	init_usb_anchor(&usb_dev->rx_submitted);
+	if (usb_dev->msg_in_pipe)
+		init_usb_anchor(&usb_dev->msg_rx_submitted);
 
 	spin_lock_init(&usb_dev->tx_free_lock);
 	spin_lock_init(&usb_dev->tx_post_lock);
 	spin_lock_init(&usb_dev->rx_free_lock);
 	spin_lock_init(&usb_dev->tx_flow_lock);
+	if (usb_dev->msg_in_pipe)
+		spin_lock_init(&usb_dev->msg_rx_free_lock);
 
 	INIT_LIST_HEAD(&usb_dev->rx_free_list);
 	INIT_LIST_HEAD(&usb_dev->tx_free_list);
 	INIT_LIST_HEAD(&usb_dev->tx_post_list);
+	if (usb_dev->msg_in_pipe)
+		INIT_LIST_HEAD(&usb_dev->msg_rx_free_list);
 
 	usb_dev->tx_free_count = 0;
 	usb_dev->tx_post_count = 0;
@@ -668,7 +877,11 @@ static int aicwf_usb_init(struct aic_usb_dev *usb_dev)
 	if (ret) {
 		goto error;
 	}
-
+	if (usb_dev->msg_in_pipe) {
+		ret = aicwf_usb_alloc_msg_rx_urb(usb_dev);
+		if (ret)
+			goto error;
+	}
 
 	usb_dev->msg_out_urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!usb_dev->msg_out_urb) {
@@ -678,9 +891,11 @@ static int aicwf_usb_init(struct aic_usb_dev *usb_dev)
 	}
 
 	INIT_WORK(&usb_dev->rx_urb_work, aicwf_usb_rx_urb_work);
+	if (usb_dev->msg_in_pipe)
+		INIT_WORK(&usb_dev->msg_rx_urb_work, aicwf_usb_msg_rx_urb_work);
 
 	return ret;
-	error:
+error:
 	usb_err("failed!\n");
 	aicwf_usb_deinit(usb_dev);
 	return ret;
@@ -699,6 +914,8 @@ static int aicwf_parse_usb(struct aic_usb_dev *usb_dev, struct usb_interface *in
 
 	usb_dev->bulk_in_pipe = 0;
 	usb_dev->bulk_out_pipe = 0;
+	usb_dev->msg_in_pipe = 0;
+	usb_dev->msg_out_pipe = 0;
 
 	host_interface = &interface->altsetting[0];
 	interface_desc = &host_interface->desc;
@@ -749,6 +966,8 @@ static int aicwf_parse_usb(struct aic_usb_dev *usb_dev, struct usb_interface *in
 			usb_endpoint_xfer_bulk(endpoint)) {
 			if (!usb_dev->bulk_in_pipe) {
 				usb_dev->bulk_in_pipe = usb_rcvbulkpipe(usb, endpoint_num);
+			} else if (!usb_dev->msg_in_pipe) {
+				usb_dev->msg_in_pipe = usb_rcvbulkpipe(usb, endpoint_num);
 			}
 		}
 
@@ -756,9 +975,15 @@ static int aicwf_parse_usb(struct aic_usb_dev *usb_dev, struct usb_interface *in
 			usb_endpoint_xfer_bulk(endpoint)) {
 			if (!usb_dev->bulk_out_pipe) {
 				usb_dev->bulk_out_pipe = usb_sndbulkpipe(usb, endpoint_num);
+			} else if (!usb_dev->msg_out_pipe) {
+				usb_dev->msg_out_pipe = usb_sndbulkpipe(usb, endpoint_num);
 			}
 		}
 	}
+
+	AICWFDBG(LOGINFO, "USB pipes: bulk_in=0x%x, bulk_out=0x%x, msg_in=0x%x, msg_out=0x%x\n",
+		 usb_dev->bulk_in_pipe, usb_dev->bulk_out_pipe,
+		 usb_dev->msg_in_pipe, usb_dev->msg_out_pipe);
 
 	if (usb_dev->bulk_in_pipe == 0) {
 		usb_err("No RX (in) Bulk EP found\n");

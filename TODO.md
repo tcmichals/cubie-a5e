@@ -859,6 +859,13 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       - [x] Verified `phy0` registration and `wlan0` interface active (`00:25:92:31:8f:5a`, `UP`).
       - [x] Verified 100% backward compatibility with SDIO on Cubie A5E (`bld.a5e` builds `aic8800_bsp.ko` and `aic8800_fdrv.ko` with zero errors).
       - [x] Verified clean warm-reboot lifecycle without system lockup or kernel crash.
+    - [x] **Step 8: AIC8800 Wi-Fi 6 Scanning & Firmware Communication (COMPLETED & VERIFIED)**:
+      - [x] **Identified Hardware Endpoint Topology**: Mapped 4 USB Bulk endpoints on Interface 2 (`ep_01`/`ep_81` for network data skbs; `ep_02`/`ep_82` for firmware control/management messages).
+      - [x] **Resolved Firmware Response Timeout**: Fixed `aicwf_usb_bus_txmsg()` to send commands over `ep_02` (`msg_out_pipe`) and allocated `ep_82` (`msg_in_pipe`) URBs.
+      - [x] **Implemented USB Rx Frame Dispatch**: Implemented `aicwf_process_msg_rxframes()` and updated `aicwf_process_rxframes()` to route firmware command confirmations to `rwnx_rx_handle_msg()`, eliminating 6.3s command timeouts (`FW Version` responded in 17 ms vs 6300 ms).
+      - [x] **Verified Zero SDIO Regression**: Tested `bld.a5e` compile gate — clean build of `aic8800_bsp.ko` and `aic8800_fdrv.ko` with zero errors or warnings.
+      - [x] **Live Silicon Wi-Fi Scan Test**: Executed `iw dev wlan0 scan` on Radxa Cubie A7A (`192.168.3.4`) — scanned and detected live 2.4 GHz and 5 GHz networks (`HeathRockStar`, `NETGEAR69`, `Verizon_RXR7H3`, `NETGEAR69-5G`) in 2.0s without error `-16` (`-EBUSY`).
+      - [x] **Fixed Clean Module Teardown**: Fixed `rwnx_platform_off()` NULL function pointer jump (`pc: 0x0`) on USB unbind/rmmod.
 
 ---
 
