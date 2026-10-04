@@ -14,7 +14,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 | Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Active Milestones |
 | :--- | :--- | :--- | :--- | :--- |
 | **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E906<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
-| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **Active Silicon Bring-Up**<br>• High-Speed USB Host & FE1.1S Hub Verified<br>• AIC8800 Wi-Fi 6 wlan0 Interface Up<br>• U-Boot Ethernet Verified | 1. GMAC210 TX DMA Watchdog Fix<br>2. E902 Dual-Mode RemoteProc<br>3. Camera & VINC Subsystem |
+| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **USB & Wi-Fi 6 Fully Operational**<br>• High-Speed USB 2.0 Host & FE1.1S Hub Verified<br>• Unified Mainline AIC8800 Wi-Fi 6 Driver (SDIO + USB)<br>• 433 Mbps Live Throughput, WPA2 & DHCP Leased<br>• Fast Hardware Watchdog Reboot Verified | 1. GMAC210 TX DMA Watchdog Fix<br>2. AIC8800 Upstream Driver Cleanup (RFC v3)<br>3. E902 Dual-Mode RemoteProc<br>4. Retest SDIO on Physical Cubie A5E |
 
 ---
 
@@ -874,6 +874,11 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       - [x] **Live WPA2-PSK Association**: Successfully connected `wlan0` to `NETGEAR69-5G` (5 GHz, 80 MHz channel, VHT-MCS 9) via `wpa_supplicant`. Status reached `wpa_state=COMPLETED`.
       - [x] **Live DHCP Lease**: Obtained IP lease `192.168.1.14` from gateway `192.168.1.1` via `udhcpc -i wlan0`.
       - [x] **Bidirectional Ping & Throughput Proof**: 0% packet loss to gateway `192.168.1.1` (0.58ms RTT), 0% loss to public internet `8.8.8.8` (14.2ms RTT), and verified over 20 MB sustained bidirectional transfer at 433.3 Mbps PHY rate without drops or stalls.
+    - [ ] **Step 10: Unified AIC8800 Upstream Driver Cleanup & RFC v3 Preparation**:
+      - [ ] **Checkpatch Compliance**: Run `scripts/checkpatch.pl --strict` across `aic8800_fdrv` changes and resolve whitespace, formatting, and coding style warnings.
+      - [ ] **Prune Dead Vendor Cruft**: Clean up commented-out debug code, dead macros, and legacy structures.
+      - [ ] **RFC v3 Patch Formatting**: Structure clean, bisect-friendly commits ready for `linux-wireless@vger.kernel.org` (covering stack overflow fix, 7.x API compatibility, OOB GPIO IRQs, and USB FullMAC transport).
+      - [ ] **Physical SDIO Retest on Cubie A5E**: Flash generated `bld.a5e/images/sdcard.img` (580 MB) to physical A5E hardware to re-verify SDIO link metrics and ensure 100% zero regressions.
 
 ---
 
