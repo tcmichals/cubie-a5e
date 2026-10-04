@@ -26,6 +26,7 @@ firmware/riscv-firmware/bin/*.elf
 firmware/riscv-firmware/bin/*.bin
 dsp-hifi4/bin/
 analysis_reports/
+scratch/
 
 # Whitelist board vendor firmware tools
 !project-cubie-a5e/board/**/tools/*.bin
