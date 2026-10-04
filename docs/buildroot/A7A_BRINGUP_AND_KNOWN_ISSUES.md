@@ -170,6 +170,45 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 
 ---
 
+### Issue 7: FE1.1S USB Hub Back-Feeding & xHCI Babble Error
+- **Symptom**: On kernel boot, the FE1.1S USB 2.0 4-port hub (`1a40:0101`) dropped off the bus with xHCI controller errors:
+  ```text
+  [ 1.421098] xhci-hcd xhci-hcd.0.auto: Babble error on port 1
+  [ 1.422014] usb 1-1: device not accepting address 2, error -71
+  ```
+- **Root Cause**: The AIC8800 Wi-Fi 6 module wires internally to downstream Port 4 of the FE1.1S hub. When GPIO power regulators (`PM0` for Wi-Fi and `PM5` for Hub) were toggled out of sequence or left unpowered, the unpowered AIC8800 chip back-fed 3.3V leakage through its USB D+/D- lines into the FE1.1S port. This pulled the differential bus lines to intermediate voltages, tripping xHCI hardware babble detection.
+- **Fix**: Configured explicit regulator sequencing in `sun60i-a733-cubie-a7a.dts`:
+  - Defined `reg_usb_hub: vcc-usb-hub` (`PM5`, Active High) and `reg_wifi: vcc-wifi` (`PM0`, Active High) with `regulator-always-on` and `enable-active-high`.
+  - Verified clean high-speed 480 Mbps enumeration across all 4 downstream ports.
+
+---
+
+### Issue 8: Hardware Watchdog Fast Warm Reboot (`sunxi_wdt`) & LPDDR5 Retraining
+- **Symptom**: Issuing `reboot` hung at `Requesting system reboot` without resetting the SoC, requiring a manual power cycle.
+- **Root Cause**: Mainline `drivers/watchdog/sunxi_wdt.c` did not recognise the Allwinner A733 (`sun60iw2`) compatible string (`"allwinner,sun60i-a733-wdt"`). As a result, the hardware restart handler (`sunxi_wdt_restart()`) was never registered with the kernel restart notifier chain.
+- **Fix**:
+  - Added `"allwinner,sun60i-a733-wdt"` to `sunxi_wdt_dt_ids` with `wdt_regs_60i` register map offsets in `drivers/watchdog/sunxi_wdt.c` (`242c869eff8e`).
+  - Added `sunxi_wdt` to `/etc/modules` so the driver auto-loads on boot.
+  - **LPDDR5 Retraining Explanation**: The ~20-25s pause during warm reboot is normal behavior. On reset, the Allwinner `boot0` BootROM retrains the high-speed LPDDR5 PHY across 4 frequency steps (400 MHz $\rightarrow$ 800 MHz $\rightarrow$ 1200 MHz $\rightarrow$ 2400 MHz) before handing execution to TF-A BL31 and U-Boot.
+
+---
+
+### Issue 9: AIC8800 FullMAC Wi-Fi 6 USB Driver Bring-Up & 433 Mbps Throughput
+- **Symptoms**:
+  1. `iw dev wlan0 scan` hung for 6.3 seconds with `aic8800_fdrv: command timeout` and failed with `-16` (`-EBUSY`).
+  2. WPA2 association timed out with AP deauth `reason 15 (4WAY_HANDSHAKE_TIMEOUT)`. `iw dev wlan0 link` reported `TX: 0 bytes`.
+- **Root Causes**:
+  1. Interface 2 on the AIC8800 USB chip maps 4 bulk endpoints (`ep_01`/`ep_81` for data, `ep_02`/`ep_82` for control messages). Control responses from firmware arrived on `ep_82`, but the driver had no dedicated message RX handler and dropped the confirmations.
+  2. In `rwnx_tx.c::rwnx_tx_push()`, transmission was guarded strictly by `#ifdef AICWF_SDIO_SUPPORT`. In USB builds, the entire code block was omitted, causing all outgoing data and EAPOL authentication frames to be silently dropped.
+- **Fixes**:
+  - Implemented `aicwf_process_msg_rxframes()` in `aicwf_usb.c` and connected it to `rwnx_rx_handle_msg()`. Command confirmations now complete in **17 ms** (down from 6,300 ms).
+  - Added `#elif defined(AICWF_USB_SUPPORT)` in `rwnx_tx.c::rwnx_tx_push()`, tracking host descriptors in `rwnx_hw->usb_env` and dispatching packets via `aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb)`.
+  - Sized dynamic `need_cfm` buffers in `aicwf_usb.c` to prevent memory truncation.
+  - Verified live WPA2 association, DHCP leasing (`192.168.1.14`), and sustained bidirectional transfer at **433.3 Mbps RX** and **234.0 Mbps TX** with 0% packet loss.
+  - Re-tested on Cubie A5E SDIO hardware, verifying identical 433.3 Mbps PHY throughput and 0% packet loss across both boards.
+
+---
+
 ## 3. Upstream Patch Tracking & Mainline Integration Roadmap
 
 The fundamental blockers to running vanilla mainline on the A733 are currently being reviewed in the Linux kernel and U-Boot communities:

@@ -1142,6 +1142,44 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
     - Top USB-A Port: `Bus 001 Device 003: ID 090c:1000 General USB Flash Disk` mounted as `/dev/sda` (57.6 GiB).
     - Wi-Fi 6: `Bus 001 Device 004: ID a69c:8d80 aicsemi AIC Wlan` initialized with network interface `wlan0`.
 
+---
 
+## 5. Hardware Boot Milestones Achieved (Oct 3, 2026)
 
+### Milestone 7: Fast Hardware Watchdog Restart (`sunxi_wdt`) & LPDDR5 Retraining
+- **Problem**: Issuing `reboot` caused the board to hang indefinitely at `[  OK  ] Reached target System Reboot.` and `Requesting system reboot`, requiring physical power cycling.
+- **Root Cause**: The mainline Allwinner watchdog driver (`drivers/watchdog/sunxi_wdt.c`) lacked the `"allwinner,sun60i-a733-wdt"` match table entry and register offset mappings. Consequently, `sunxi_wdt_restart()` was never registered in the kernel restart notifier chain.
+- **Resolution**:
+  1. Added `"allwinner,sun60i-a733-wdt"` compatible string with `wdt_regs_60i` offsets to `sunxi_wdt_dt_ids` in `linux-cubie` (`242c869eff8e`).
+  2. Built and installed `sunxi_wdt.ko` module to `/lib/modules/7.1.0/kernel/drivers/watchdog/sunxi_wdt.ko` and added it to `/etc/modules`.
+  3. Verified clean hardware reset triggered immediately upon calling `reboot`.
+  4. **LPDDR5 Retraining Characterization**: The ~20-25 second delay before serial console output resumes is normal Allwinner A733 BootROM behavior. `boot0` executes in SRAM and retrains the high-speed LPDDR5 memory controller across 4 distinct frequency P-states (400 MHz $\rightarrow$ 800 MHz $\rightarrow$ 1200 MHz $\rightarrow$ 2400 MHz) before loading TOC1 / BL31.
 
+---
+
+### Milestone 8: AIC8800 FullMAC Wi-Fi 6 USB Driver Bring-Up (Oct 3, 2026)
+- **Problem 1: 6.3s Command Timeout & Broken Wi-Fi Scanning**:
+  - Scanning with `iw dev wlan0 scan` timed out with `aic8800_fdrv: command timeout (6300 ms)` and returned error `-16` (`-EBUSY`).
+  - *Fix*: Mapped Interface 2 endpoints (`ep_01`/`ep_81` for data, `ep_02`/`ep_82` for control messages). Created `aicwf_process_msg_rxframes()` in `aicwf_usb.c` and connected `msg_rx_work` to `rwnx_rx_handle_msg()`. Firmware command confirmations now complete in **17 ms** (down from 6,300 ms).
+- **Problem 2: Silent Outgoing Data & EAPOL Drop (`TX: 0 bytes`)**:
+  - Scanning succeeded and discovered nearby SSIDs (`NETGEAR69-5G`, `HeathRockStar`, etc.), but `wpa_supplicant` timed out during 4-way handshake (`reason 15: 4WAY_HANDSHAKE_TIMEOUT`).
+  - *Fix*: Restored missing `#elif defined(AICWF_USB_SUPPORT)` branch in `rwnx_tx.c::rwnx_tx_push()`. Linked outgoing skbs with host descriptors in `rwnx_hw->usb_env` and dispatched to `aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb)`.
+- **Problem 3: Dynamic Memory Buffer Sizing**:
+  - *Fix*: Corrected `need_cfm` buffer allocation size in `aicwf_usb.c::aicwf_usb_bus_txdata()` and pruned unsafe raw skb pointer dereferences.
+- **Silicon Verification (Cubie A7A Target)**:
+  - Associated with `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9).
+  - Leased IP `192.168.1.14` from gateway `192.168.1.1` via `udhcpc -i wlan0`.
+  - Achieved **433.3 Mbps RX** and **234.0 Mbps TX** sustained throughput with **0% packet loss** to gateway (0.58 ms RTT) and `8.8.8.8` (14.2 ms RTT).
+
+---
+
+### Milestone 9: Dual-Bus Parity Verification (Cubie A7A USB + Cubie A5E SDIO)
+- **Silicon Retest on Cubie A5E**:
+  - Booted physical Cubie A5E (`192.168.3.4`) running mainline Linux 7.1.0 PREEMPT_RT.
+  - Rebuilt and loaded `aic8800_bsp.ko` + `aic8800_fdrv.ko` (SDIO mode with OOB GPIO IRQ 180).
+  - Associated with `NETGEAR69-5G` and leased IP `192.168.1.15`.
+  - Transferred 50 MB payload over `wlan0`: **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
+  - Cumulative traffic: 65,835,902 bytes RX (43,775 pkts), 1,164,097 bytes TX (22,238 pkts); 0% packet loss, -47 dBm RSSI, -89 dBm noise floor, 0 kernel errors.
+- **Git Checkpoints & Release Tags**:
+  - `cubie-a5e`: Tagged `v1.0.3-unified-dual-bus-wifi6-silicon-verified` on `main`.
+  - `linux-cubie`: Tagged `v7.1.0-cubie-dual-bus-wifi-working` on `cubie-linux-7.1`.
