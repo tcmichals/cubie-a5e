@@ -1043,7 +1043,8 @@ static int rwnx_close(struct net_device *dev)
 #ifdef AICWF_SDIO_SUPPORT
 	if (rwnx_hw->sdiodev && rwnx_hw->sdiodev->bus_if)
 		bus_if = rwnx_hw->sdiodev->bus_if;
-#elif defined(AICWF_USB_SUPPORT)
+#endif
+#ifdef AICWF_USB_SUPPORT
 	if (rwnx_hw->usbdev && rwnx_hw->usbdev->bus_if)
 		bus_if = rwnx_hw->usbdev->bus_if;
 #endif
@@ -2317,7 +2318,16 @@ static int rwnx_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 #endif
 		ret = rwnx_send_sm_disconnect_req(rwnx_hw, rwnx_vif, reason_code);
 #ifdef AICWF_SDIO_SUPPORT
-		if (rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
+		if (rwnx_hw->sdiodev && rwnx_hw->sdiodev->bus_if &&
+		    rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
+			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
+					    RWNX_DRV_STATUS_DISCONNECTED);
+		}
+#endif
+#ifdef AICWF_USB_SUPPORT
+		if (rwnx_hw->usbdev && rwnx_hw->usbdev->bus_if &&
+		    rwnx_hw->usbdev->bus_if->state == BUS_DOWN_ST) {
 			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
 			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
 					    RWNX_DRV_STATUS_DISCONNECTED);
@@ -2628,10 +2638,13 @@ static int rwnx_cfg80211_del_station_compat(struct wiphy *wiphy,
 			}
 
 #ifdef AICWF_RX_REORDER
-#ifdef AICWF_SDIO_SUPPORT
-			rx_priv = rwnx_hw->sdiodev->rx_priv;
-#else
-			rx_priv = rwnx_hw->usbdev->rx_priv;
+#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
+			rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv :
+				  (rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL);
+#elif defined(AICWF_SDIO_SUPPORT)
+			rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv : NULL;
+#elif defined(AICWF_USB_SUPPORT)
+			rx_priv = rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL;
 #endif
 			if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_STATION ||
 			    rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT) {
@@ -2749,10 +2762,13 @@ void apm_staloss_work_process(struct work_struct *work)
 		}
 
 #ifdef AICWF_RX_REORDER
-#ifdef AICWF_SDIO_SUPPORT
-		rx_priv = rwnx_hw->sdiodev->rx_priv;
-#else
-		rx_priv = rwnx_hw->usbdev->rx_priv;
+#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
+		rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv :
+			  (rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL);
+#elif defined(AICWF_SDIO_SUPPORT)
+		rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv : NULL;
+#elif defined(AICWF_USB_SUPPORT)
+		rx_priv = rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL;
 #endif
 		if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_STATION ||
 		    rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT) {
@@ -4951,12 +4967,24 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	rwnx_hw->plat = rwnx_plat;
 	rwnx_hw->dev = rwnx_platform_get_dev(rwnx_plat);
 	strscpy(rwnx_hw->country_abbr, "WW", 2); //"00"
-#ifdef AICWF_SDIO_SUPPORT
+#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
+	if (rwnx_plat->sdiodev) {
+		rwnx_hw->sdiodev = rwnx_plat->sdiodev;
+		rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->sdiodev->chipid);
+		rwnx_plat->sdiodev->rwnx_hw = rwnx_hw;
+		rwnx_hw->cmd_mgr = &rwnx_plat->sdiodev->cmd_mgr;
+	} else if (rwnx_plat->usbdev) {
+		rwnx_hw->usbdev = rwnx_plat->usbdev;
+		rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->usbdev->chipid);
+		rwnx_plat->usbdev->rwnx_hw = rwnx_hw;
+		rwnx_hw->cmd_mgr = &rwnx_plat->usbdev->cmd_mgr;
+	}
+#elif defined(AICWF_SDIO_SUPPORT)
 	rwnx_hw->sdiodev = rwnx_plat->sdiodev;
 	rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->sdiodev->chipid);
 	rwnx_plat->sdiodev->rwnx_hw = rwnx_hw;
 	rwnx_hw->cmd_mgr = &rwnx_plat->sdiodev->cmd_mgr;
-#else
+#elif defined(AICWF_USB_SUPPORT)
 	rwnx_hw->usbdev = rwnx_plat->usbdev;
 	rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->usbdev->chipid);
 	rwnx_plat->usbdev->rwnx_hw = rwnx_hw;
@@ -5275,7 +5303,8 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
 	rwnx_hw->started_jiffies = 0;
 	rwnx_hw->temp = 0;
-	aicwf_tp_ctrl_init(rwnx_hw->sdiodev);
+	if (rwnx_hw->sdiodev)
+		aicwf_tp_ctrl_init(rwnx_hw->sdiodev);
 #endif
 
 #ifdef CONFIG_AIC8800_POWER_LIMIT
@@ -5349,7 +5378,8 @@ void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw)
 	hdev_exit();
 #endif
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
-	aicwf_tp_ctrl_deinit(rwnx_hw->sdiodev);
+	if (rwnx_hw->sdiodev)
+		aicwf_tp_ctrl_deinit(rwnx_hw->sdiodev);
 #endif
 
 	flush_workqueue(rwnx_hw->apm_staloss_wq);

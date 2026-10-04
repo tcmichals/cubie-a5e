@@ -712,26 +712,23 @@ static int aicwf_parse_usb(struct aic_usb_dev *usb_dev, struct usb_interface *in
 		goto exit;
 	}
 
-	/* Check deviceclass */
-#ifndef CONFIG_USB_BT
-	if (usb->descriptor.bDeviceClass != 0x00) {
+	/* Check deviceclass: 0x00, USB_CLASS_MISC (0xEF), or USB_CLASS_VENDOR_SPEC (0xFF) */
+	if (usb->descriptor.bDeviceClass != 0x00 &&
+	    usb->descriptor.bDeviceClass != USB_CLASS_MISC &&
+	    usb->descriptor.bDeviceClass != USB_CLASS_VENDOR_SPEC) {
 		usb_err("DeviceClass %d not supported\n",
-		usb->descriptor.bDeviceClass);
+			usb->descriptor.bDeviceClass);
 		ret = -ENODEV;
 		goto exit;
 	}
-#endif
 
-	/* Check interface number */
-#ifdef CONFIG_USB_BT
-	if (usb->actconfig->desc.bNumInterfaces != 3) {
-#else
-	if (usb->actconfig->desc.bNumInterfaces != 1) {
-#endif
-	usb_err("Number of interfaces: %d not supported\n",
-		usb->actconfig->desc.bNumInterfaces);
-	ret = -ENODEV;
-	goto exit;
+	/* Check interface number: 1 (Wi-Fi only) or 3 (Wi-Fi + BT combo) */
+	if (usb->actconfig->desc.bNumInterfaces != 1 &&
+	    usb->actconfig->desc.bNumInterfaces != 3) {
+		usb_err("Number of interfaces: %d not supported\n",
+			usb->actconfig->desc.bNumInterfaces);
+		ret = -ENODEV;
+		goto exit;
 	}
 
 	if ((interface_desc->bInterfaceClass != USB_CLASS_VENDOR_SPEC) ||
@@ -925,19 +922,10 @@ static int aicwf_usb_reset_resume(struct usb_interface *intf)
 }
 
 static struct usb_device_id aicwf_usb_id_table[] = {
-#ifndef CONFIG_USB_BT
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800)},
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8801)},
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_BOOT)},
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_COMBO)},
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_WIFI)},
-#else
 	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800, 0xff, 0xff, 0xff)},
 	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8801, 0xff, 0xff, 0xff)},
-	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_BOOT, 0xff, 0xff, 0xff)},
 	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_COMBO, 0xff, 0xff, 0xff)},
 	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_PRODUCT_ID_AIC8800D80_WIFI, 0xff, 0xff, 0xff)},
-#endif
 	{}
 };
 
@@ -966,8 +954,10 @@ void aicwf_usb_register(void)
 
 void aicwf_usb_exit(void)
 {
-	if (g_rwnx_plat && g_rwnx_plat->enabled)
+	if (g_rwnx_plat && g_rwnx_plat->enabled &&
+	    g_rwnx_plat->usbdev && g_rwnx_plat->usbdev->rwnx_hw)
 		rwnx_platform_deinit(g_rwnx_plat->usbdev->rwnx_hw);
 	usb_deregister(&aicwf_usbdrvr);
 	kfree(g_rwnx_plat);
+	g_rwnx_plat = NULL;
 }

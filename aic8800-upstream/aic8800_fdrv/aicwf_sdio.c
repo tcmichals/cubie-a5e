@@ -347,6 +347,9 @@ static void aicwf_temp_ctrl_timer(struct timer_list *t)
 
 void aicwf_tp_ctrl_init(struct aic_sdio_dev *sdiodev)
 {
+	if (!sdiodev)
+		return;
+
 	spin_lock_init(&sdiodev->tp_ctrl.tm_lock);
 	sdiodev->tp_ctrl.net_stop = false;
 	sdiodev->tp_ctrl.on_off = true;
@@ -371,6 +374,9 @@ void aicwf_tp_ctrl_init(struct aic_sdio_dev *sdiodev)
 
 void aicwf_tp_ctrl_deinit(struct aic_sdio_dev *sdiodev)
 {
+	if (!sdiodev)
+		return;
+
 	spin_lock_bh(&sdiodev->tp_ctrl.tm_lock);
 	sdiodev->tp_ctrl.tm_start = 0;
 	if (timer_pending(&sdiodev->tp_ctrl.tp_ctrl_timer)) {

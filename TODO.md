@@ -14,7 +14,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 | Board Platform | SoC / Architecture | Co-Processor | Current Status | Primary Active Milestones |
 | :--- | :--- | :--- | :--- | :--- |
 | **Radxa Cubie A5E** | Allwinner A527 / T527<br>(8× Cortex-A55 @ 1.8 GHz) | XuanTie E906<br>(200 MHz, RV32IMAFDC) | **Production Bring-Up & RFC v2 Hardened**<br>• Gemini Pro AI Audit: 100% Passed<br>• 67 KUnit Tests Built-in<br>• Sub-15 $\mu$s IPC Verified | 1. On-Board Testing & run_full_sweep.py<br>2. Camera Capture & VPU Encoding<br>3. 2 TOPS NPU (Etnaviv/Teflon) |
-| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **Active Silicon Bring-Up**<br>• Hub & Wi-Fi Power Configured<br>• U-Boot Ethernet Verified | 1. USB Hub & Wi-Fi Enumeration<br>2. GMAC210 TX DMA Watchdog Fix<br>3. E902 Dual-Mode RemoteProc |
+| **Radxa Cubie A7A** | Allwinner A733<br>(4× A76 + 4× A55) | XuanTie E902<br>(200 MHz, RV32EMC) | **Active Silicon Bring-Up**<br>• High-Speed USB Host & FE1.1S Hub Verified<br>• AIC8800 Wi-Fi 6 wlan0 Interface Up<br>• U-Boot Ethernet Verified | 1. GMAC210 TX DMA Watchdog Fix<br>2. E902 Dual-Mode RemoteProc<br>3. Camera & VINC Subsystem |
 
 ---
 
@@ -848,20 +848,17 @@ This is the **single centralized source of truth** for all tasks, hardware bring
       - Proved `maximum-speed = "super-speed-plus"` stalls `xhci-hcd` probe for 13.6s without PIPE3 clock. Maintained `maximum-speed = "high-speed"` in DTS.
     - [x] **Step 5: Configure Analog Line State (`PHY_USB2_ISCR`)**:
       - Added `FORCE_VBUS_HIGH` (`3 << 12`) and `FORCE_ID_LOW` (`2 << 14`) in `phy-sun60i-usb2.c` to lock the analog squelch receiver comparator in Host mode.
-    - [ ] **Step 6: Top External USB Port (`CON1`) Functional Test**:
-      - [ ] Power cycle target to boot updated kernel #4.
-      - [ ] Verify `dmesg` reports clean High-Speed enumeration of FE1.1S (`1a40:0101`).
-      - [ ] Verify SD card reader / USB flash disk enumerates on Downstream Port 1 (`CON1`).
-    - [ ] **Step 7: AIC8800 Wi-Fi 6 Module Enumeration & Driver Load**:
-      - [ ] Verify AIC8800 USB device appears on Downstream Port 4 (`0xa69c:0x8800`):
-        ```sh
-        lsusb | grep -i "a69c"
-        ```
-      - [ ] Load the `aic8800_fdrv` driver and verify `wlan0` interface appears:
-        ```sh
-        modprobe aic8800_fdrv
-        ip link show wlan0
-        ```
+    - [x] **Step 6: Top External USB Port (`CON1`) Functional Test (COMPLETED & VERIFIED)**:
+      - [x] Verified clean High-Speed (480 Mbps) enumeration of FE1.1S hub (`1a40:0101`) across DWC3 controller and Sun60i USB 2.0 PHY.
+      - [x] Verified USB Mass Storage (`/dev/sda`, 61.9 GB flash disk) mounted and read successfully at 480 Mbps on external top USB-A port (`CON1`).
+    - [x] **Step 7: AIC8800 Wi-Fi 6 Module Enumeration & Driver Bring-Up (COMPLETED & VERIFIED)**:
+      - [x] Verified AIC8800 BootROM device appears on Downstream Port 4 (`a69c:8d80`).
+      - [x] Integrated `aic_load_fw.ko` firmware loader and verified clean upload of all 5 USB firmware/patch binaries into chip RAM in 126 ms.
+      - [x] Verified chip resets and cleanly re-enumerates as `a69c:8d81` High-Speed USB combo device with 3 interfaces (BT + WLAN).
+      - [x] Updated `aic8800_fdrv` driver (`aicwf_usb.c`, `rwnx_main.c`, `aicwf_sdio.c`) to support `0xEF` (USB_CLASS_MISC) composite descriptor, match WLAN interface 2 (`0xFF:0xFF:0xFF`), and guard SDIO struct accesses.
+      - [x] Verified `phy0` registration and `wlan0` interface active (`00:25:92:31:8f:5a`, `UP`).
+      - [x] Verified 100% backward compatibility with SDIO on Cubie A5E (`bld.a5e` builds `aic8800_bsp.ko` and `aic8800_fdrv.ko` with zero errors).
+      - [x] Verified clean warm-reboot lifecycle without system lockup or kernel crash.
 
 ---
 
