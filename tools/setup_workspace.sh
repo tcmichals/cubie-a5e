@@ -22,6 +22,16 @@ echo "======================================================================"
 
 cd "${WORKSPACE_ROOT}"
 
+# 0. Initialize or Update Git Submodules in cubie-a5e
+echo ""
+echo "[0/4] Initializing Git submodules in cubie-a5e..."
+if [ -d "${WORKSPACE_ROOT}/cubie-a5e/.git" ] || [ -f "${WORKSPACE_ROOT}/cubie-a5e/.git" ]; then
+    (
+        cd "${WORKSPACE_ROOT}/cubie-a5e"
+        git submodule update --init --recursive
+    )
+fi
+
 # 1. Clone or Update linux-cubie
 echo ""
 echo "[1/4] Checking linux-cubie repository..."

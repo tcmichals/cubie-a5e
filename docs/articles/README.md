@@ -12,9 +12,9 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
    * **Topics**: Why use the co-processor (deterministic SRAM vs. DRAM, offloading Linux, safety), silicon taxonomy, T527 User Manual register mappings, SRAM / TCM hardware architecture & RemoteProc boot mechanics, and the JTAG-less DMEM paradigm.
 2. **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](part2_building_remoteproc_and_hardware_proof.md)**
    * **Topics**: Implementing `sunxi_rproc.c` on Linux 7.1, memory-mapped ELF loading into PubSRAM C and Dedicated MCU SRAM, live trace logging via `.resource_table`, and systematically proving hardware state using the all-new `riscv-firmware/apps` verification suite (testBasic, testStringBinaryTrace0, testCrash, testPing, testPingRpmsg, testDRAMMsg).
-3. **[Part 3: Bare-Metal Firmware, Lightweight IPC, and C++ Coroutines Intro](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
+3. **[Part 3: Ultra-Low-Latency IPC: Connecting Linux and RISC-V on Allwinner T527](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
    * **Topics**: Memory determinism (zero-wait-state 1-cycle TCM vs DDR DRAM arbitration), lightweight lock-free circular ring buffer (libmetal) + Hardware Mailbox doorbell interrupts, interactive OpenOCD/GDB debugging, and introduction to stackless C++20 coroutines.
-4. **[Part 4: Deploying the AbstractX C++20 Coroutine Framework on XuanTie E906](part4_deep_dive_baremetal_cpp_coroutines.md)**
+4. **[Part 4: C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V: 19x Faster Context Switching](part4_deep_dive_baremetal_cpp_coroutines.md)**
    * **Topics**: Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO (Heap Allocation eLision Optimization) for zero-cost coroutines, benchmarks vs FreeRTOS (19x speedup, <400 B RAM for 8 tasks), and non-blocking hardware awaiters.
 
 ---

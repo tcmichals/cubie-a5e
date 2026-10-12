@@ -1,129 +1,97 @@
-# Heterogeneous RISC-V on Allwinner SoCs (Part 4): The AbstractX Flight Stack
+<!--
+================================================================================
+HACKSTER.IO PROJECT SETTINGS (Copy & Paste into Hackster Form)
+================================================================================
+Project Title: C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V: 19x Faster Context Switching (Part 4)
+Elevator Pitch: Benchmarking modern C++20 stackless coroutines against FreeRTOS on the XuanTie E906 co-processor: 18 ns context switches, <400 B RAM for 8 tasks, and zero dynamic heap.
+Hardware: Radxa Cubie A5E (Allwinner T527 / A527)
+Software: AbstractX Framework, GCC 14+ / Clang 18+, Linux RemoteProc
+Tags: #RISCV #Coroutines #FreeRTOS #CPP20 #Embedded #RealTime #Allwinner #AbstractX
+================================================================================
+-->
 
-In **[Part 1](part1_heterogeneous_riscv_intro_architecture.md)**,
-**[Part 2](part2_building_remoteproc_and_hardware_proof.md)**, and
-**[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we built
-the Linux `remoteproc` driver, established the TRM memory map (dedicated MCU
-SRAM, no ITCM/DTCM), and built the standalone `riscv-firmware` verification
-suite to systematically prove out co-processor boot, hardware FPU, memory
-subsystems, and inter-processor communication paradigms.
+# C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V: 19x Faster Context Switching (Part 4)
 
-In this final article (**Part 4**), we transition from bare-metal bring-up
-proofs to the production flight software architecture. We deploy the
-**[AbstractX](https://github.com/tcmichals/AbstractX)** open-source framework
-onto the **Allwinner T527 / XuanTie E906** co-processor:
-1. **The Architectural Shift**: Why `cubie-a5e/firmware/riscv-firmware` uses
-   simple, separate test apps, while `AbstractX` delivers a unified,
-   full-featured C++20 production design pattern.
-2. **Unlocking Full Hardware Caching**: Enabling the L1 Data Cache (`mhcr.DE=1`)
-   and executing verified Tina SDK maintenance opcodes
-   (`dcache.cpa` and `dcache.iva`).
-3. **Polymorphic IPC (`IRpmsg`)**: Encapsulating Linux VirtIO (`Rpmsg`) and
-   zero-overhead on-chip SRAM (`RpmsgLiteMetal`) under a single virtual API.
-4. **Pure Asynchrony (Zero Polling)**: Wiring `co_await async_receive()`
-   to the hardware MSGBOX ISR for sub-25 ns wakeup latency.
-5. **Threshold-Balanced Peripherals**: Direct CPU FIFO for small bursts vs.
-   chained DMA awaiters for high-bandwidth streaming.
-6. **Hard Benchmarks**: AbstractX Coroutines vs. FreeRTOS on E906 @ 200 MHz.
-7. **Deployment**: Building and booting the AbstractX ELF via Linux RemoteProc.
+*Part 4 of Bringing Up Heterogeneous RISC-V on Allwinner SoCs (Radxa Cubie A5E)*
+
+In **[Part 1](https://www.hackster.io/MichalsTC/unlocking-the-xuantie-risc-v-core-on-allwinner-t527-part-1-976063)**, **[Part 2](https://www.hackster.io/MichalsTC/bringing-up-heterogeneous-risc-v-on-allwinner-socs-part-2-53deb8)**, and **[Part 3](#part-3)**, we built the Linux `remoteproc` driver, mapped the TRM memory spaces, and proved out three distinct inter-processor communication paradigms between Linux and the **Allwinner T527 / XuanTie E906** co-processor.
+
+Now, we shift from bring-up verification to production firmware architecture.
+
+Instead of writing fragmented state machines or paying the heavy RAM and latency penalties of a traditional RTOS, we deploy the **[AbstractX](https://github.com/tcmichals/AbstractX)** open-source framework onto bare-metal RISC-V.
+
+Here is the head-to-head performance reality measured directly on the Radxa Cubie A5E hardware.
 
 ---
 
-## 1. The Architectural Shift: Bring-up Suite vs. Production Flight Stack
+## 1. The Head-to-Head Benchmark: AbstractX vs. FreeRTOS
 
-Throughout this series, we maintained two parallel codebases:
+We ran a controlled benchmark measuring 10,000 consecutive task switches on the XuanTie E906 running at 200 MHz:
 
-| Dimension | `riscv-firmware` (Parts 2 & 3) | `AbstractX` (Part 4) |
-| :--- | :--- | :--- |
-| **Role** | Educational hardware proof | Full-featured design pattern |
-| **Structure** | Separate isolated apps | Unified C++20 framework |
-| **D-Cache** | Disabled (`mhcr.DE = 0`) | Enabled (`mhcr.DE = 1`) |
-| **IPC Types** | Separate binaries per test | Polymorphic (`IRpmsg`) |
-| **Execution** | Synchronous polling loops | Event-driven C++20 coroutines |
-| **Overhead** | Raw register writes | Zero-overhead C++20 abstractions |
+| Performance Metric | FreeRTOS 10.5 (Preemptive RTOS) | State Machine (C switch/case) | AbstractX (C++20 Coroutines) |
+| :--- | :---: | :---: | :---: |
+| **Task Switch Latency** | **210 cycles (350 ns)** | 6 cycles (10 ns) | **11 cycles (18 ns)** |
+| **RAM Footprint (8 Tasks)** | **16,384 bytes (16 KB)** | 128 bytes | **384 bytes (Total)** |
+| **Registers Saved / Restored** | 32 GPRs (Full Stack Frame) | None | Zero (Only Active Locals) |
+| **Dynamic Heap Allocation** | Required (Tasks / Queues) | None | **Zero (Compiler HALO Elision)** |
+| **Memory Stack Model** | Dedicated stack per task | Single stack | **Single shared execution stack** |
+| **Code Readability** | High (Sequential) | Low (Fragmented Enums) | **High (Linear `co_await`)** |
 
-In **`cubie-a5e/firmware/riscv-firmware`**, each application was intentionally
-isolated into a separate ELF binary (`testBasic`, `testPing`, `testCrash`,
-`testDRAMMsg`) with D-Cache disabled to eliminate silicon variables during
-driver bring-up.
+```text
+Task Switch Latency (Cycles, Lower is Better):
+FreeRTOS 10.5       [████████████████████████████████████████████] 210 cycles
+AbstractX (C++20)   [██] 11 cycles  (19x Faster)
+State Machine       [█] 6 cycles
 
-In **`AbstractX`**, modern C++20 eliminates this fragmentation. A single
-polymorphic hierarchy encapsulates cache maintenance, transport selection,
-and hardware interrupts behind clean, zero-allocation interfaces.
-
-### 1.1 AbstractX Design Philosophy: Linear Coding & Minimal Memory
-
-It is vital to clarify what AbstractX actually is:
-> **The focus of AbstractX is NOT specifically a flight controller.**
-> Flight sensor fusion was simply a demanding proof-of-concept to stress-test
-> high-bandwidth I/O. AbstractX is a **universal embedded design pattern**:
-> a methodology to write **linear, sequential asynchronous code with an
-> ultra-small memory footprint** across bare-metal and RTOS targets.
-
-#### 1. RTOS vs. Bare-Metal Memory Footprint:
-* **The RTOS Stack Problem**: In a traditional RTOS (e.g. FreeRTOS, Zephyr),
-  every task demands its own pre-allocated stack (2 KB – 8 KB). With 10 tasks,
-  20 KB to 80 KB of scarce SRAM is locked up in idle stacks, accompanied by
-  stack-overflow hazards and 32-register context-switching overhead.
-* **AbstractX Single-Stack Architecture**: On bare metal, the processor core
-  runs on a **single execution stack** (1–2 KB total) for all ISRs and nested
-  function calls. Each suspended coroutine requires only a tiny state frame
-  (~64–128 bytes) in static memory. This delivers up to **95% RAM savings**.
-* **Flexible RTOS/Linux Hosting**: AbstractX is not anti-RTOS. It can run
-  inside a *single* FreeRTOS task (e.g. on ESP32-P4) or POSIX thread (on Linux),
-  multiplexing dozens of cooperative coroutines without spawning dozens of heavy
-  OS threads.
-
-#### 2. Linear Programming Beyond Protothreads:
-* Traditional non-blocking embedded software often degenerates into
-  **callback hell** or state machine enum spaghetti.
-* While Adam Dunkels' *Protothreads* introduced stackless C cooperative
-  multithreading via Duff's device, protothreads destroyed local variables
-  across yields and lacked type safety.
-* AbstractX uses **modern C++20 stackless coroutines (`co_await`)**: code reads
-  linearly from top to bottom like synchronous code, but executes asynchronously
-  with full C++ type safety, RAII lifetime, and zero heap allocations.
-
-#### 3. Solving the Cooperative Debugging Problem with Built-in Telemetry:
-* The classic critique of cooperative state machines is: *"How do you debug an
-  async task graph when something hangs?"*
-* AbstractX treats **barectf CTF 1.8 telemetry as a first-class citizen**:
-  the runtime automatically logs coroutine transitions (`coro_spawn`,
-  `coro_suspend` with reason codes, `coro_resume` with queue latency, and
-  `coro_done`) into on-chip SRAM buffers.
-* The AbstractX Studio GUI renders a microsecond-accurate Dual-Plane Gantt
-  timeline, providing 100% visual transparency into every coroutine.
-
----
-
-## 2. Unlocking Full Hardware Caching on XuanTie E906
-
-Running high-rate attitude estimation, Kalman filters, and motor mixing without
-an L1 Data Cache wastes massive CPU headroom. AbstractX activates the full
-XuanTie hardware cache pipeline.
-
-### 2.1 The Instruction Trap: Unlocking `CSR_MXSTATUS`
-On XuanTie cores, vendor instructions are disabled at reset. Executing cache
-maintenance opcodes without unlocking the CPU triggers an immediate **Illegal
-Instruction exception (`mcause = 2`)**.
-
-As confirmed in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`),
-software must first unlock bit 22 (`THEADISAEE`) in `CSR_MXSTATUS` (0x7C0)
-before configuring hardware caches:
-
-```s
-/* bsp/startup.S */
-li   t0, (1 << 22) | (1 << 15)  /* THEADISAEE (bit 22) + MM (bit 15) */
-csrs 0x7C0, t0                  /* CSR_MXSTATUS: Unlock vendor opcodes */
+RAM Footprint for 8 Tasks (Bytes, Lower is Better):
+FreeRTOS 10.5       [████████████████████████████████████████████] 16,384 B
+AbstractX (C++20)   [█] 384 B  (97.6% RAM Reduction)
 ```
 
-### 2.2 Enabling I-Cache and D-Cache (`CSR_MHCR`)
-Once vendor instructions are active, AbstractX invalidates all stale lines via
-`CSR_MCOR` (0x7C2) and enables the Instruction Cache (`IE`), Data Cache (`DE`),
-Write-Back allocation (`WB`, `WA`), Branch Target Buffer (`BTB`), and Return
-Stack (`RS`):
+### Why the Difference is Staggering
 
-```s
+1. **The RTOS Stack Problem**:
+   Every traditional RTOS task demands its own isolated stack (typically 2 KB – 4 KB) to accommodate worst-case register spilling and ISR preemption. Across 8 tasks, **16 KB of scarce on-chip SRAM** is permanently consumed by idle stack space. On a micro-controller with 32 KB or 64 KB of dedicated SRAM, FreeRTOS stacks consume up to half the available memory before writing a single line of business logic.
+2. **AbstractX Single-Stack Architecture**:
+   With C++20 stackless coroutines, the entire firmware executes on a **single 1 KB to 2 KB execution stack**. When a coroutine awaits a peripheral event (`co_await`), it does not push 32 General Purpose Registers onto a task stack. The C++ compiler generates a compact state frame containing *only the variables that survive across the suspension point*.
+3. **19x Faster Context Switching**:
+   A FreeRTOS context switch forces an interrupt or `PendSV` handler to save and restore all 32 integer and floating-point registers. AbstractX resumes a suspended coroutine via a direct function pointer jump in **18 nanoseconds (11 clock cycles)**.
+
+---
+
+## 2. What AbstractX Is (And What It Isn’t)
+
+> 💡 **Design Clarification:**
+> AbstractX is **NOT** strictly a drone or flight controller framework. Flight sensor fusion (GPS, IMU, magnetometer, motor control) was simply chosen as the most demanding real-time testbed to prove high-bandwidth I/O under microsecond deadlines.
+> 
+> AbstractX is a **universal embedded asynchronous design pattern**: a disciplined methodology to write **linear, readable, zero-heap asynchronous code** with a near-zero memory footprint across bare-metal MCUs, co-processors, and RTOS hosts.
+
+### The Problem with Callbacks & Protothreads
+* **Callback Hell:** Traditional event-driven embedded code fragments algorithms into disconnected callback functions and giant `switch(state)` blocks that obscure program flow.
+* **Protothreads Limitations:** While Adam Dunkels’ *Protothreads* introduced stackless C concurrency using Duff’s device, they destroy local variables across yields and offer zero type safety.
+* **The Modern C++20 Approach:** Code reads top-to-bottom like synchronous code, preserves local variables across suspension points, enforces RAII resource safety, and relies on **HALO (Heap Allocation eLision Optimization)** to guarantee zero dynamic allocations at compile time.
+
+---
+
+## 3. Unlocking Full Hardware Caching on XuanTie E906
+
+Running complex control loops, Kalman filters, and math algorithms with the L1 Data Cache disabled (`mhcr.DE = 0`) wastes massive CPU headroom. AbstractX activates the full XuanTie hardware cache pipeline.
+
+### 3.1 The Silicon Landmine: Unlocking `CSR_MXSTATUS`
+On XuanTie cores, vendor custom instructions are disabled at reset. Executing cache maintenance opcodes without first unlocking the CPU triggers an immediate **Illegal Instruction exception (`mcause = 2`)**!
+
+As confirmed in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`), software must first set bit 22 (`THEADISAEE`) and bit 15 (`MM`) in `CSR_MXSTATUS` (0x7C0):
+
+```assembly
+/* bsp/startup.S */
+li   t0, (1 << 22) | (1 << 15)  /* THEADISAEE (bit 22) + MM (bit 15) */
+csrs 0x7C0, t0                  /* CSR_MXSTATUS: Unlock T-Head vendor opcodes */
+```
+
+### 3.2 Activating I-Cache, D-Cache & Branch Prediction
+Once unlocked, startup code invalidates stale cache lines via `CSR_MCOR` (0x7C2) and activates the Instruction Cache, Data Cache, Write-Back allocation, and the Branch Target Buffer (BTB) via `CSR_MHCR` (0x7C1):
+
+```assembly
 /* bsp/startup.S */
 li   t0, (1 << 6) | (1 << 17)   /* Invalidate I-Cache & D-Cache lines */
 csrw 0x7C2, t0                  /* CSR_MCOR */
@@ -132,11 +100,8 @@ li   t0, 0x7177                 /* IE, DE, WB, WA, RS, BPE, BTB */
 csrw 0x7C1, t0                  /* CSR_MHCR: Enable Full Caching */
 ```
 
-### 2.3 Verified Tina SDK Cache Opcodes
-Because standard RISC-V PMP has zero cacheability bits and the E906 SYSMAP is
-hardwired in ASIC gates, all RAM is marked cacheable. Coherency across Linux DMA
-boundaries requires explicit software line maintenance. AbstractX implements
-verified raw machine opcodes from the Tina SDK:
+### 3.3 Verified Tina SDK Cache Maintenance Opcodes
+Because standard RISC-V PMP has no cacheability bits and the E906 SYSMAP unit hardwires all DDR RAM as cacheable, synchronizing shared DMA memory requires explicit line flushes. AbstractX implements the verified machine opcodes directly from the Tina SDK:
 
 ```cpp
 /* Clean (Write-Back) D-Cache line by physical address (dcache.cpa a5) */
@@ -162,10 +127,9 @@ void Pmp::dcache_invalidate_range(uintptr_t addr, size_t len) noexcept {
 
 ---
 
-## 3. The Unified Polymorphic IPC Engine (`IRpmsg`)
+## 4. The Polymorphic IPC Engine (`IRpmsg`)
 
-To eliminate runtime `if` branching and keep application code clean,
-AbstractX defines the pure virtual **`IRpmsg`** interface:
+To eliminate runtime branch overhead and decouple application algorithms from physical transports, AbstractX defines the pure virtual **`IRpmsg`** interface:
 
 ```text
                      ┌──────────────────────────────┐
@@ -191,37 +155,23 @@ AbstractX defines the pure virtual **`IRpmsg`** interface:
 └───────────────────────┘                             └───────────────────────┘
 ```
 
-### 3.1 Standard Linux VirtIO Driver (`class Rpmsg`)
-Used when communicating with the Linux kernel's standard `virtio_rpmsg_bus`
-subsystem over dynamic DDR carveouts (`0x48000000`+).
-* **On RX (`poll()`)**: Invalidates the VirtIO `avail` ring and incoming packet
-  buffer via `dcache.iva` so the CPU reads fresh data written by Linux ARM64.
-* **On TX (`reply()`)**: Cleans the outgoing response buffer and `used` ring
-  via `dcache.cpa` before kicking MSGBOX Channel 0.
-
-### 3.2 Lite-Metal Driver (`class RpmsgLiteMetal`)
-Used for ultra-low-latency direct shared SRAM channels (`0x3FFC0000` /
-`0x07130000`) or Linux UIO applications:
-* Bypasses all cache maintenance instructions.
-* Reads and writes memory directly at bus speed with zero cache flush penalties.
-
-### 3.3 Zero-Branch Configuration in `main()`
-In `main.cpp`, switching between the two drivers takes **one line of code**:
+### 1-Line Transport Switching in `main()`
+Switching the entire co-processor firmware between Linux VirtIO DDR and ultra-low-latency on-chip SRAM takes **one line of code**:
 
 ```cpp
 #include "hal/rpmsg.hpp"
 
-// Standard Linux VirtIO in DDR (with automatic D-Cache maintenance):
+// Option A: Standard Linux VirtIO in DDR (with automated D-Cache maintenance):
 static hal::Rpmsg g_rpmsg;
 
-// Or for direct zero-copy SRAM / UIO:
+// Option B: Direct zero-copy SRAM channel for hard real-time UIO:
 // static hal::RpmsgLiteMetal g_rpmsg;
 
 int main(void) {
     g_rpmsg.init(&g_resource_table);
     g_rpmsg.register_endpoint(0x400, on_telemetry_request);
 
-    // Coroutines and flight tasks only interact with IRpmsg&
+    // Coroutines interact strictly with IRpmsg& interface
     scheduler.spawn(telemetry_task(g_rpmsg));
     scheduler.run();
 }
@@ -229,39 +179,32 @@ int main(void) {
 
 ---
 
-## 4. Pure Asynchrony: Wiring Coroutines to the Hardware MSGBOX ISR
+## 5. Pure Asynchrony: Wiring Coroutines to the Hardware MSGBOX ISR
 
-In a hard real-time system, polling `while (!poll())` burns 100% of the CPU
-and introduces massive scheduling jitter. AbstractX provides a native C++20
-coroutine awaiter (**`AsyncRxAwaiter`**) wired directly into the XuanTie
-PLIC interrupt dispatcher.
-
-### 4.1 The Non-Blocking Coroutine Lifecycle
+In hard real-time systems, polling `while (!poll())` wastes 100% of the CPU and injects massive timing jitter. AbstractX wires a native C++20 coroutine awaiter directly into the XuanTie PLIC interrupt dispatcher:
 
 ```text
 1. Application Coroutine calls:
    co_await g_rpmsg.async_receive();
    │
    ├─► await_ready(): Packet already pending in vring?
-   │   └─► YES: Returns immediately (0 ns overhead, no suspension)
+   │   ├─► YES: Returns immediately (0 ns overhead, zero suspension)
    │   └─► NO : Saves coroutine_handle and SUSPENDS in ~18 ns
    ▼
-2. XuanTie E906 Core is FREE to run other tasks or sleep in low-power 'wfi'.
-   │ (0% CPU wasted while waiting for Linux host)
+2. XuanTie E906 Core is FREE to service other tasks or sleep in low-power wfi.
    │
-   │ Linux Host dispatches packet & kicks MSGBOX Channel 1...
-   │ Hardware asserts PLIC IRQ (MSGBOX Interrupt)
+   │ Linux Host sends packet and writes MSGBOX Channel 1...
+   │ Hardware triggers PLIC IRQ 25 (MSGBOX Interrupt)
    ▼
-3. MSGBOX Top-Half ISR (fc_msgbox_doorbell_isr) fires (< 100 ns):
+3. MSGBOX Top-Half ISR (fc_msgbox_doorbell_isr) fires in < 100 ns:
    ├─► Clears hardware MSGBOX interrupt flag
    └─► Resumes the suspended RPMsg coroutine handle
    ▼
-4. Coroutine WAKES in ~25 ns:
-   ├─► Executes driver->poll() (cleans/invalidates D-cache if Rpmsg)
-   └─► Resumes right where it left off, zero-copy, with fresh payload!
+4. Coroutine RESUMES in ~25 ns:
+   ├─► Executes driver->poll() (cleans/invalidates D-Cache if DDR VirtIO)
+   └─► Continues sequential execution with fresh packet payload!
 ```
 
-### 4.2 The Awaiter Implementation
 ```cpp
 /* targets/allwinner_e906/src/rpmsg.cpp */
 namespace hal {
@@ -272,10 +215,8 @@ bool IRpmsg::AsyncRxAwaiter::await_ready() const noexcept {
     return driver && driver->is_rx_pending();
 }
 
-void IRpmsg::AsyncRxAwaiter::await_suspend(
-    std::coroutine_handle<> handle) noexcept {
+void IRpmsg::AsyncRxAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
     s_rpmsg_coroutine_handle = handle;
-    // Enable Channel 1 receive interrupt so Linux doorbell triggers PLIC IRQ
     MsgBox::enable_rx_irq(MsgBox::Channel::Channel1, true);
 }
 
@@ -286,31 +227,24 @@ bool IRpmsg::AsyncRxAwaiter::await_resume() noexcept {
 
 } // namespace hal
 
-// Hardware MSGBOX ISR (Overrides weak declaration in irq_dispatcher.cpp)
+// Hardware MSGBOX ISR (Direct PLIC Interrupt Vector)
 extern "C" __attribute__((section(".fastcode")))
 void fc_msgbox_doorbell_isr() noexcept {
-    // 1. Clear hardware interrupt status
     hal::MsgBox::clear_irq_status(hal::MsgBox::Channel::Channel1);
 
-    // 2. Resume waiting coroutine directly (< 25 ns wakeup latency)
-    if (hal::s_rpmsg_coroutine_handle &&
-        !hal::s_rpmsg_coroutine_handle.done()) {
+    if (hal::s_rpmsg_coroutine_handle && !hal::s_rpmsg_coroutine_handle.done()) {
         auto h = hal::s_rpmsg_coroutine_handle;
         hal::s_rpmsg_coroutine_handle = nullptr;
-        h.resume();
+        h.resume(); // Direct wakeup (< 25 ns)
     }
 }
 ```
 
 ---
 
-## 5. Threshold-Balanced Peripheral HAL (Fast FIFO vs. Coroutine DMA)
+## 6. Threshold-Balanced Peripheral HAL (Fast FIFO vs. DMA)
 
-In peripheral drivers, setting up a DMA descriptor for small 1–4 byte sensor
-reads or single UART commands introduces more latency than the bus transfer
-itself.
-
-AbstractX implements **Threshold Balancing** across all HAL drivers:
+Setting up a DMA transfer for small 1–4 byte sensor register reads incurs more setup latency than the actual SPI or I2C transaction. AbstractX implements **Threshold Balancing** across all HAL drivers:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -324,45 +258,17 @@ AbstractX implements **Threshold Balancing** across all HAL drivers:
 └───────────────────┴───────────────────┴─────────────────────┘
 ```
 
-* **Fast FIFO Path**: Small payloads are pushed directly into hardware FIFO
-  registers via single-cycle MMIO writes. No DMA channels are consumed, and
-  execution proceeds without suspension.
-* **Coroutine DMA Path**: Large streaming payloads (> 32 bytes) arm the
-  dedicated co-processor DMA controller (channels 8..15) and immediately
-  suspend the calling coroutine (`co_await`). When the transfer finishes,
-  the DMA ISR wakes the task.
-
----
-
-## 6. Benchmarks: AbstractX vs. FreeRTOS on XuanTie E906 @ 200 MHz
-
-We ran side-by-side performance benchmarks on the Radxa Cubie A5E board:
-
-```text
-Benchmark: 10,000 Consecutive Task Resumptions / Switches
-```
-
-| Metric | FreeRTOS 10.5 | State Machine | AbstractX (C++20) |
-| :--- | :---: | :---: | :---: |
-| **Switch Time** | **210 cyc (350ns)** | **6 cyc (10ns)** | **11 cyc (18ns)** |
-| **RAM (8 Tasks)** | **16,384 B (16 KB)** | **128 B** | **384 B** |
-| **Saved Regs** | 32 GPRs (Full Stack) | None | Zero (Active Locals) |
-| **HALO Elision** | No | N/A | **Yes (0 cyc / 0 B)** |
-| **Readability** | High (Sequential) | Low (Fragmented) | High (Sequential) |
-
-* **Context Switching**: AbstractX switches tasks **19x faster than FreeRTOS**.
-* **RAM Footprint**: 8 concurrent AbstractX tasks consume
-  **less than 400 bytes** of SRAM, freeing over 95% of memory.
-  of SRAM, freeing over 95% of memory for actual application data.
+* **Fast FIFO Path**: Small register reads are pushed directly into hardware FIFO registers via single-cycle MMIO writes. No DMA channels are consumed, and execution proceeds synchronously without task suspension.
+* **Coroutine DMA Path**: High-rate bulk streams (> 32 bytes) arm the co-processor DMA controller (channels 8..15) and immediately suspend the calling coroutine (`co_await`). The DMA completion ISR wakes the task.
 
 ---
 
 ## 7. Deploying AbstractX via Linux RemoteProc
 
-Deploying the compiled AbstractX firmware to the Allwinner T527 board:
+Deploying the compiled AbstractX firmware to the Radxa Cubie A5E:
 
 ```bash
-# 1. Compile AbstractX firmware with the e906 preset
+# 1. Compile AbstractX firmware with the standardized e906 preset
 cmake --build --preset e906
 
 # 2. Copy the ELF to the Linux target filesystem
@@ -381,8 +287,7 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 
 ## 8. Series Summary & Complete Architecture
 
-Across this 4-part series, we walked through the complete stack for
-heterogeneous RISC-V on modern SoCs:
+Across this 4-part series, we walked through the complete engineering progression for heterogeneous silicon:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -392,10 +297,10 @@ heterogeneous RISC-V on modern SoCs:
 │ 2. Part 2: Building Linux remoteproc & Hardware Proof       │
 │    - sunxi_rproc.c driver, ELF routing & dmi_test.py proof  │
 ├─────────────────────────────────────────────────────────────┤
-│ 3. Part 3: Bare-Metal Firmware & Lightweight Shared SRAM IPC│
+│ 3. Part 3: Low-Latency IPC & Lightweight Shared SRAM       │
 │    - SPSC in SRAM, DDR bulk buffers & VirtIO RPMsg bring-up │
 ├─────────────────────────────────────────────────────────────┤
-│ 4. Part 4: Deploying the Full AbstractX Coroutine Stack     │
+│ 4. Part 4: C++20 Coroutines vs. FreeRTOS (AbstractX)        │
 │    - Zero-allocation C++20 coroutines, IRpmsg & L1 D-Cache  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -403,13 +308,11 @@ heterogeneous RISC-V on modern SoCs:
 ---
 
 ### Series Complete Navigation
-* **[Part 1: Architecture & Debugging][part1]**
+* **[Part 1: Architecture and Memory-Mapped Debugging](https://www.hackster.io/MichalsTC/unlocking-the-xuantie-risc-v-core-on-allwinner-t527-part-1-976063)**
+* **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](https://www.hackster.io/MichalsTC/bringing-up-heterogeneous-risc-v-on-allwinner-socs-part-2-53deb8)**
+* **[Part 3: Ultra-Low-Latency IPC: Connecting Linux and RISC-V on Allwinner T527](#part-3)**
+* **Part 4: C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V** *(You are here)*
 
-[part1]: part1_heterogeneous_riscv_intro_architecture.md
-* **[Part 2: Linux RemoteProc & Verification][part2]**
+---
 
-[part2]: part2_building_remoteproc_and_hardware_proof.md
-* **[Part 3: IPC Deep Dive][part3]**
-
-[part3]: part3_baremetal_firmware_ipc_and_coroutines_intro.md
-* **Part 4: Deploying the AbstractX Coroutine Flight Stack** *(You are here)*
+#EmbeddedSystems #RISCV #Linux #RemoteProc #FreeRTOS #Coroutines #CPP20 #Allwinner #RealTime #AbstractX
