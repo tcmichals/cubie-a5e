@@ -1,0 +1,129 @@
+From c7dabce2aab90c9ff773c246ec00eaab786b7a47 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Mon, 12 Oct 2026 21:52:42 -0500
+Subject: [PATCH v3 0/7] remoteproc: sunxi: Add Allwinner XuanTie E907 RemoteProc and Message Box support
+
+This patch series (v3) introduces mainline Linux support for the Alibaba
+T-Head XuanTie E907 (RV32IMAFCX @ 200 MHz) RISC-V auxiliary co-processor
+integrated into Allwinner A523, A527, and T527 (sun55i) SoCs.
+
+The series adds a standalone 4-port hardware Message Box driver, the
+XuanTie RemoteProc driver, the associated Devicetree binding schemas,
+in-kernel KUnit unit test suites, and DT node enablement.
+
+Per review policy, this v3 series is submitted as a standalone top-level
+thread rather than chained in-reply-to v2.
+
+Hardware Architecture & Memory Map
+==================================
+Allwinner sun55i SoCs integrate an octa-core ARM Cortex-A55 cluster
+alongside an auxiliary XuanTie E907 RISC-V co-processor. The co-processor
+boots from on-chip dedicated SRAM Space 0 (Host PA 0x07280000 / Core DA
+0x3FFC0000, 256 KB), can access secondary switchable SRAM Space 1 (Host PA
+0x072C0000 / Core DA 0x40000000, 256 KB), and interacts with external DDR
+DRAM across the SoC's internal AXI bus.
+
+Inter-processor communication (IPC) is coordinated via a 4-port hardware
+Message Box controller (CPUX_MSGBOX at 0x03003000). The mailbox acts as a
+star crossbar connecting four processors on the silicon die:
+  - Port 0: ARM Cortex-A55 host cluster
+  - Port 1: Cadence Tensilica HiFi4 Audio DSP
+  - Port 2: Power Management Unit (CPUS)
+  - Port 3: XuanTie E907 RISC-V co-processor
+
+The Cortex-A55 exposes 12 logical channels (4 per remote processor),
+where Channels 8..11 route directly to the XuanTie E907.
+
+Changes from v2 to v3
+=====================
+
+1. Device Tree Binding Schemas (Krzysztof Kozlowski & Rob Herring):
+   - allwinner,sun55i-rproc.yaml:
+     * Replaced 'enum' list in 'reg-names' with a strict positional list
+       using '- const:' entries ('cfg', 'r_sram', 'r_sram1', 'remap').
+     * Removed redundant type references and normalized formatting.
+   - allwinner,sun55i-a523-msgbox.yaml:
+     * Constrained 'interrupts' and 'interrupt-names' to an explicit
+       positional list with 'minItems: 1', eliminating narrative text
+       rules and enum permutations.
+     * Aligned DSP register (0x07120000) and CPUS register (0x07094000)
+       ordering between DTSI and the binding schema example.
+   - sun55i-a523.dtsi:
+     * Aligned register order in the msgbox node to match schema positions.
+
+2. Mailbox Subsystem Controller & Client Contracts (Jassi Brar & Reviewers):
+   - In sun55i-msgbox.c:
+     * Clamped 'platform_irq_count()' in probe to SUN55I_NUM_PORTS to
+       prevent potential out-of-bounds writes.
+     * Pacing contract: updated last_tx_done() to confirm remote FIFO
+       drain (count == 0), mirroring Allwinner sibling sun6i-msgbox.
+     * Teardown safety: cleared chan->con_priv before deregistration in
+       shutdown() to avoid dereferencing stale pointers during late IRQs.
+     * SMP hardirq concurrency: protected status check and FIFO drain in
+       ISR with spin_lock_irqsave() to prevent TOCTOU underflows across
+       concurrent cores.
+
+3. RemoteProc Lifecycle & Address Translation (Bjorn Andersson & Mathieu Poirier):
+   - In sunxi_rproc.c:
+     * Converted crash_irq_enabled to atomic bitops to prevent unbalanced
+       disable_irq() races across concurrent contexts.
+     * Replaced heap/struct kick message buffer with stack-local payload
+       since mailbox core synchronizes FIFO copy during send_data().
+     * RemoteProc kick completion: explicit mbox_client_txdone() handling
+       on successful kick when operating with knows_txdone client contract.
+     * Memory attributes: consolidated Write-Combining mapping for shared
+       SRAM buffers to avoid ARM64 WB vs WC attribute aliases.
+     * Teardown ordering: strictly enforced LIFO unwind order in remove
+       (free_irq -> mbox_free_channel -> cancel_work_sync -> rproc_del).
+     * ATT translation: added strict bounds validation in da_to_va against
+       registered carveout regions.
+     * Posted write flush: added readl() flush of STA_ADD_REG before
+       deasserting core reset.
+
+4. KUnit Test Suites & Test Harness:
+   - Added '!UML' Kconfig dependencies to KUnit test suites to prevent
+     invalid MMIO accesses on User Mode Linux logic_iomem stubs.
+   - Fixed Big-Endian mock MMIO accessors to use readl() instead of raw
+     pointer array dereferences.
+   - Synchronized test fixtures with the v3 mailbox completion contract.
+
+Verification
+============
+- make dt_binding_check passed with 0 errors and 0 warnings.
+- scripts/checkpatch.pl --strict passed with 0 errors on all 7 patches.
+- In-tree ARM64 cross-compile with W=1 built cleanly with 0 errors.
+
+Tim Michals (7):
+  dt-bindings: mailbox: add Allwinner sun55i msgbox schema
+  mailbox: sun55i: add Allwinner sun55i/sun60i 4-port Message Box driver
+  mailbox: sun55i: add KUnit test suite for sun55i msgbox driver
+  dt-bindings: remoteproc: add Allwinner sun55i-rproc schema
+  remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver
+  remoteproc: sunxi: add KUnit test suite for sunxi remoteproc driver
+  arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 100 ++
+ .../remoteproc/allwinner,sun55i-rproc.yaml    | 139 +++
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi |  39 +
+ drivers/mailbox/Kconfig                       |  20 +
+ drivers/mailbox/Makefile                      |   2 +
+ drivers/mailbox/sun55i-msgbox.c               | 405 ++++++++
+ drivers/mailbox/sun55i-msgbox.h               |  58 ++
+ drivers/mailbox/sun55i_msgbox_test.c          | 826 ++++++++++++++++
+ drivers/remoteproc/Kconfig                    |  18 +
+ drivers/remoteproc/Makefile                   |   2 +
+ drivers/remoteproc/sunxi_rproc.c              | 908 ++++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.h              | 116 +++
+ drivers/remoteproc/sunxi_rproc_test.c         | 697 ++++++++++++++
+ 13 files changed, 3330 insertions(+)
+ create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
+ create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml
+ create mode 100644 drivers/mailbox/sun55i-msgbox.c
+ create mode 100644 drivers/mailbox/sun55i-msgbox.h
+ create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
+ create mode 100644 drivers/remoteproc/sunxi_rproc.c
+ create mode 100644 drivers/remoteproc/sunxi_rproc.h
+ create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
+
+-- 
+2.53.0
