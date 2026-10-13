@@ -1,4 +1,4 @@
-From 11dd480eb833d7831533224d4c1e97436cf45389 Mon Sep 17 00:00:00 2001
+From d9dd1f89692c44b8147d6de505293699eb76ea4f Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v3 4/7] dt-bindings: remoteproc: add Allwinner
@@ -14,17 +14,17 @@ reserved memory regions, and hardware mailbox channels.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
- .../allwinner,sun55i-a523-rproc.yaml          | 137 ++++++++++++++++++
+ .../allwinner,sun55i-a523-rproc.yaml          | 139 ++++++++++++++++++
  MAINTAINERS                                   |   8 +
- 2 files changed, 145 insertions(+)
+ 2 files changed, 147 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 
 diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 new file mode 100644
-index 000000000000..eb59d6ac1157
+index 000000000000..9ab41cb0bb89
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,139 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -125,6 +125,10 @@ index 000000000000..eb59d6ac1157
 +    items:
 +      - const: crash
 +
++dependencies:
++  mboxes: [mbox-names]
++  mbox-names: [mboxes]
++
 +required:
 +  - compatible
 +  - reg
@@ -133,8 +137,6 @@ index 000000000000..eb59d6ac1157
 +  - clock-names
 +  - resets
 +  - reset-names
-+  - mboxes
-+  - mbox-names
 +
 +additionalProperties: false
 +

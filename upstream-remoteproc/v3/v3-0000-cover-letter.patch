@@ -1,4 +1,4 @@
-From 26d82843797245665c6c3c9e1f1311eda8aa1a85 Mon Sep 17 00:00:00 2001
+From 91fc06ec9ee4893b9f024244c01841dd8e0e4b1e Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Tue, 13 Oct 2026 12:20:22 -0500
 Subject: [PATCH v3 0/7] remoteproc: sunxi: Add Allwinner XuanTie E906 RemoteProc and Message Box support
@@ -119,21 +119,21 @@ Tim Michals (7):
   remoteproc: sunxi: add KUnit test suite for sunxi remoteproc driver
   arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
 
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 117 +++
- .../allwinner,sun55i-a523-rproc.yaml          | 137 +++
- MAINTAINERS                                   |  15 +
- .../arm64/boot/dts/allwinner/sun55i-a523.dtsi |  43 +
- drivers/mailbox/Kconfig                       |  20 +
- drivers/mailbox/Makefile                      |   2 +
- drivers/mailbox/sun55i-msgbox.c               | 346 ++++++++
- drivers/mailbox/sun55i-msgbox.h               |  56 ++
- drivers/mailbox/sun55i_msgbox_test.c          | 831 ++++++++++++++++++
- drivers/remoteproc/Kconfig                    |  18 +
- drivers/remoteproc/Makefile                   |   2 +
- drivers/remoteproc/sunxi_rproc.c              | 716 +++++++++++++++
- drivers/remoteproc/sunxi_rproc.h              | 125 +++
- drivers/remoteproc/sunxi_rproc_test.c         | 675 ++++++++++++++
- 14 files changed, 3103 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml      | 117 +++
+ .../remoteproc/allwinner,sun55i-a523-rproc.yaml    | 139 ++++
+ MAINTAINERS                                        |  15 +
+ arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi     |  43 ++
+ drivers/mailbox/Kconfig                            |  20 +
+ drivers/mailbox/Makefile                           |   2 +
+ drivers/mailbox/sun55i-msgbox.c                    | 346 +++++++++
+ drivers/mailbox/sun55i-msgbox.h                    |  56 ++
+ drivers/mailbox/sun55i_msgbox_test.c               | 831 +++++++++++++++++++++
+ drivers/remoteproc/Kconfig                         |  18 +
+ drivers/remoteproc/Makefile                        |   2 +
+ drivers/remoteproc/sunxi_rproc.c                   | 722 ++++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.h                   | 125 ++++
+ drivers/remoteproc/sunxi_rproc_test.c              | 675 +++++++++++++++++
+ 14 files changed, 3111 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
  create mode 100644 drivers/mailbox/sun55i-msgbox.c

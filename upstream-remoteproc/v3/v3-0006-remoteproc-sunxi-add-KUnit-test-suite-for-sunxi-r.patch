@@ -1,4 +1,4 @@
-From 9a3315bb48eb3ef6a202c6eed165d8b748a6da6e Mon Sep 17 00:00:00 2001
+From c565eb0a49d6b6833c7701b8ae49d5843f3d7a36 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 6/7] remoteproc: sunxi: add KUnit test suite for sunxi

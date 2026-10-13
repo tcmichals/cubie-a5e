@@ -30,5 +30,7 @@
      * When UIO is active, RemoteProc runs in standalone lifecycle mode.
      * The mailbox is owned by uio_pdrv_genirq for userspace real-time IPC.
      */
+    /delete-property/ mboxes;
+    /delete-property/ mbox-names;
     status = "okay";
 };
