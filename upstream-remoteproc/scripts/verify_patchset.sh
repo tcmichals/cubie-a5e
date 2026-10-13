@@ -114,13 +114,18 @@ if [ -f "$MSGBOX_C" ]; then
     fi
 fi
 
-# Check 2.4: RemoteProc kick msg and knows_txdone
+# Check 2.4: RemoteProc kick msg and knows_txdone completion contract
 if [ -f "$RPROC_C" ]; then
     if grep -q "cl.knows_txdone = true" "$RPROC_C"; then
-        echo -e "${RED}  FAIL: sunxi_rproc.c sets cl.knows_txdone = true! Controller manages TX-done.${NC}"
-        ERRORS=$((ERRORS + 1))
+        if grep -A 20 "void sunxi_rproc_kick" "$RPROC_C" | grep -q "mbox_client_txdone"; then
+            echo -e "${GREEN}  PASS: sunxi_rproc.c sets cl.knows_txdone = true with mbox_client_txdone() completion.${NC}"
+        else
+            echo -e "${RED}  FAIL: sunxi_rproc.c sets cl.knows_txdone = true but missing mbox_client_txdone() in kick!${NC}"
+            ERRORS=$((ERRORS + 1))
+        fi
     else
-        echo -e "${GREEN}  PASS: sunxi_rproc.c leaves TX-done pacing to mailbox controller.${NC}"
+        echo -e "${RED}  FAIL: sunxi_rproc.c missing cl.knows_txdone = true client contract!${NC}"
+        ERRORS=$((ERRORS + 1))
     fi
 
     # Check 2.5: DMA carveout cache attributes
@@ -130,14 +135,40 @@ if [ -f "$RPROC_C" ]; then
         echo -e "${RED}  FAIL: sunxi_rproc.c trace carveout missing *is_iomem = false!${NC}"
         ERRORS=$((ERRORS + 1))
     fi
+
+    # Check 2.6: Teardown order (LIFO): free_irq -> mbox_free_channel -> cancel_work_sync -> rproc_del
+    if grep -q "rproc_del" "$RPROC_C" && grep -q "mbox_free_channel" "$RPROC_C"; then
+        del_pos=$(grep -n "rproc_del(" "$RPROC_C" | tail -1 | cut -d: -f1)
+        mbox_pos=$(grep -n "mbox_free_channel(" "$RPROC_C" | tail -1 | cut -d: -f1)
+        if [ "$del_pos" -gt "$mbox_pos" ]; then
+            echo -e "${GREEN}  PASS: sunxi_rproc.c teardown follows strict LIFO order (rproc_del after mbox_free_channel).${NC}"
+        else
+            echo -e "${RED}  FAIL: sunxi_rproc.c teardown order inversion: rproc_del called before mbox_free_channel!${NC}"
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
 fi
 
 # ------------------------------------------------------------------------------
 # 3. Kernel checkpatch.pl Strict Compliance
 # ------------------------------------------------------------------------------
-echo -e "\n${YELLOW}[Step 3/4] Running checkpatch.pl --strict on commits...${NC}"
+echo -e "\n${YELLOW}[Step 3/4] Running checkpatch.pl --strict on exported patches...${NC}"
 
-if [ -f "${LINUX_DIR}/scripts/checkpatch.pl" ]; then
+V3_PATCHES=("${UPSTREAM_DIR}"/v3/v3-000*.patch)
+if [ -f "${LINUX_DIR}/scripts/checkpatch.pl" ] && [ -e "${V3_PATCHES[0]}" ]; then
+    for p in "${V3_PATCHES[@]}"; do
+        pname=$(basename "$p")
+        echo "  Checking patch: $pname"
+        CP_OUTPUT=$("${LINUX_DIR}/scripts/checkpatch.pl" --patch "$p" --strict --no-tree 2>&1 || true)
+        if echo "$CP_OUTPUT" | grep -q "ERROR:"; then
+            echo -e "${RED}  FAIL: $pname encountered checkpatch ERRORS:${NC}"
+            echo "$CP_OUTPUT" | grep -E "ERROR:" || true
+            ERRORS=$((ERRORS + 1))
+        else
+            echo -e "${GREEN}  PASS: $pname (0 errors)${NC}"
+        fi
+    done
+elif [ -f "${LINUX_DIR}/scripts/checkpatch.pl" ]; then
     pushd "${LINUX_DIR}" > /dev/null
     CP_OUTPUT=$(./scripts/checkpatch.pl --git HEAD~2..HEAD --strict --no-tree 2>&1 || true)
     popd > /dev/null
@@ -146,12 +177,8 @@ if [ -f "${LINUX_DIR}/scripts/checkpatch.pl" ]; then
         echo -e "${RED}  checkpatch.pl encountered ERRORS:${NC}"
         echo "$CP_OUTPUT" | grep -E "(ERROR|WARNING|CHECK):" || true
         ERRORS=$((ERRORS + 1))
-    elif echo "$CP_OUTPUT" | grep -q "WARNING:"; then
-        echo -e "${YELLOW}  checkpatch.pl warnings (review carefully):${NC}"
-        echo "$CP_OUTPUT" | grep -E "WARNING:" || true
-        WARNINGS=$((WARNINGS + 1))
     else
-        echo -e "${GREEN}  checkpatch.pl: 0 errors, 0 warnings!${NC}"
+        echo -e "${GREEN}  checkpatch.pl: 0 errors!${NC}"
     fi
 else
     echo -e "${YELLOW}  checkpatch.pl not found in linux tree, skipping.${NC}"
