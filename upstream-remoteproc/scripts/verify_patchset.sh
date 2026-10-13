@@ -37,7 +37,7 @@ echo -e "\n${YELLOW}[Step 1/4] Screening Devicetree YAML Bindings...${NC}"
 
 YAML_FILES=(
     "${LINUX_DIR}/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml"
-    "${LINUX_DIR}/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml"
+    "${LINUX_DIR}/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml"
 )
 
 for yf in "${YAML_FILES[@]}"; do
@@ -106,11 +106,13 @@ if [ -f "$MSGBOX_C" ]; then
     fi
 
     # Check 2.3: Teardown synchronization
-    if ! grep -q "synchronize_irq" "$MSGBOX_C"; then
-        echo -e "${RED}  FAIL: sun55i-msgbox.c remove() missing synchronize_irq()!${NC}"
-        ERRORS=$((ERRORS + 1))
-    else
+    if grep -q "devm_mbox_controller_register" "$MSGBOX_C"; then
+        echo -e "${GREEN}  PASS: sun55i-msgbox.c uses devm_mbox_controller_register; devm manages teardown safely.${NC}"
+    elif grep -q "synchronize_irq" "$MSGBOX_C"; then
         echo -e "${GREEN}  PASS: sun55i-msgbox.c synchronizes IRQs before controller unregister.${NC}"
+    else
+        echo -e "${RED}  FAIL: sun55i-msgbox.c non-devm teardown missing synchronize_irq()!${NC}"
+        ERRORS=$((ERRORS + 1))
     fi
 fi
 
@@ -136,14 +138,14 @@ if [ -f "$RPROC_C" ]; then
         ERRORS=$((ERRORS + 1))
     fi
 
-    # Check 2.6: Teardown order: rproc_del -> cancel_work_sync -> mbox_free_channel
-    if grep -q "rproc_del" "$RPROC_C" && grep -q "mbox_free_channel" "$RPROC_C"; then
-        del_pos=$(grep -n "rproc_del(" "$RPROC_C" | tail -1 | cut -d: -f1)
-        mbox_pos=$(grep -n "mbox_free_channel(" "$RPROC_C" | tail -1 | cut -d: -f1)
-        if [ "$del_pos" -lt "$mbox_pos" ]; then
+    # Check 2.6: Teardown order: rproc_del -> free_mbox / mbox_free_channel
+    if grep -A 15 "sunxi_rproc_remove" "$RPROC_C" | grep -q "rproc_del"; then
+        rem_rproc_del=$(grep -A 15 "sunxi_rproc_remove" "$RPROC_C" | grep -n "rproc_del" | head -1 | cut -d: -f1)
+        rem_mbox_free=$(grep -A 15 "sunxi_rproc_remove" "$RPROC_C" | grep -nE "(free_mbox|mbox_free_channel)" | head -1 | cut -d: -f1)
+        if [ -n "$rem_rproc_del" ] && [ -n "$rem_mbox_free" ] && [ "$rem_rproc_del" -lt "$rem_mbox_free" ]; then
             echo -e "${GREEN}  PASS: sunxi_rproc.c teardown halts rproc before freeing mailbox channels.${NC}"
         else
-            echo -e "${RED}  FAIL: sunxi_rproc.c teardown order inversion: mbox_free_channel called before rproc_del!${NC}"
+            echo -e "${RED}  FAIL: sunxi_rproc.c teardown order inversion: mbox freed before rproc_del!${NC}"
             ERRORS=$((ERRORS + 1))
         fi
     fi
