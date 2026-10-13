@@ -1,4 +1,4 @@
-From a09a2edb2a35d7d43c63732dc4f0101db862a384 Mon Sep 17 00:00:00 2001
+From b69ec98b9b77ba5fb60ecc638b615f761762c58f Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 5/7] remoteproc: sunxi: add Allwinner XuanTie RISC-V
@@ -24,9 +24,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 722 +++++++++++++++++++++++++++++++
- drivers/remoteproc/sunxi_rproc.h | 125 ++++++
- 4 files changed, 856 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c | 726 +++++++++++++++++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.h | 126 ++++++
+ 4 files changed, 861 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
 
@@ -60,10 +60,10 @@ index 689686de0d41..02acefa6d880 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
 new file mode 100644
-index 000000000000..e8483d345686
+index 000000000000..07fe27410309
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,722 @@
+@@ -0,0 +1,726 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906 RISC-V Remote Processor Driver
@@ -132,7 +132,8 @@ index 000000000000..e8483d345686
 +{
 +	struct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);
 +
-+	schedule_work(&priv->vq_work);
++	if (test_bit(SUNXI_RPROC_RUNNING, &priv->flags))
++		schedule_work(&priv->vq_work);
 +}
 +
 +static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
@@ -300,6 +301,8 @@ index 000000000000..e8483d345686
 +		return ret;
 +	}
 +
++	set_bit(SUNXI_RPROC_RUNNING, &priv->flags);
++
 +	if (priv->crash_irq > 0 &&
 +	    !test_and_set_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
 +		enable_irq(priv->crash_irq);
@@ -326,6 +329,7 @@ index 000000000000..e8483d345686
 +	    test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
 +		disable_irq(priv->crash_irq);
 +
++	clear_bit(SUNXI_RPROC_RUNNING, &priv->flags);
 +	cancel_work_sync(&priv->vq_work);
 +
 +	return 0;
@@ -788,10 +792,10 @@ index 000000000000..e8483d345686
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/remoteproc/sunxi_rproc.h b/drivers/remoteproc/sunxi_rproc.h
 new file mode 100644
-index 000000000000..86f761ea81ab
+index 000000000000..bf01ef65ae07
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.h
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,126 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +#ifndef _SUNXI_RPROC_H_
 +#define _SUNXI_RPROC_H_
@@ -838,6 +842,7 @@ index 000000000000..86f761ea81ab
 +
 +#define SUNXI_RPROC_MAX_RMEM		3
 +#define SUNXI_RPROC_CRASH_IRQ_ARMED	0
++#define SUNXI_RPROC_RUNNING		1
 +
 +struct sunxi_rproc_rmem {
 +	const char *name;

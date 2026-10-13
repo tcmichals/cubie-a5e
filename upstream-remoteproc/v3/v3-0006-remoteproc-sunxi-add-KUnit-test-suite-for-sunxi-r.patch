@@ -1,4 +1,4 @@
-From c565eb0a49d6b6833c7701b8ae49d5843f3d7a36 Mon Sep 17 00:00:00 2001
+From e04fa01c2761be76f60b6eec21bbdf04fc0c4b5b Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 6/7] remoteproc: sunxi: add KUnit test suite for sunxi
@@ -24,8 +24,8 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig            |  10 +
  drivers/remoteproc/Makefile           |   1 +
- drivers/remoteproc/sunxi_rproc_test.c | 675 ++++++++++++++++++++++++++
- 3 files changed, 686 insertions(+)
+ drivers/remoteproc/sunxi_rproc_test.c | 679 ++++++++++++++++++++++++++
+ 3 files changed, 690 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
@@ -60,10 +60,10 @@ index 02acefa6d880..a3503a71f332 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)	+= sunxi_rproc_test.o
 diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/sunxi_rproc_test.c
 new file mode 100644
-index 000000000000..260c2cb891bc
+index 000000000000..9e5d2f4efe0e
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc_test.c
-@@ -0,0 +1,675 @@
+@@ -0,0 +1,679 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * KUnit tests for Allwinner XuanTie RISC-V remoteproc driver (sunxi_rproc.c)
@@ -548,6 +548,7 @@ index 000000000000..260c2cb891bc
 +
 +	/* Check that bootaddr was written to STA_ADD_REG (offset 0x204) */
 +	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x40014000U);
++	KUNIT_EXPECT_TRUE(test, test_bit(SUNXI_RPROC_RUNNING, &ctx->priv.flags));
 +}
 +
 +static void test_start_rejects_bootaddr_overflow(struct kunit *test)
@@ -567,8 +568,11 @@ index 000000000000..260c2cb891bc
 +	struct test_context *ctx = create_test_ctx(test);
 +	int ret;
 +
++	set_bit(SUNXI_RPROC_RUNNING, &ctx->priv.flags);
++
 +	ret = sunxi_rproc_stop(&ctx->rproc);
 +	KUNIT_EXPECT_EQ(test, ret, 0);
++	KUNIT_EXPECT_FALSE(test, test_bit(SUNXI_RPROC_RUNNING, &ctx->priv.flags));
 +}
 +
 +/* ==================== Lifecycle: prepare & unprepare ==================== */
