@@ -7,7 +7,7 @@
 
 | | |
 |---|---|
-| Generated | 2026-10-13 16:05 by `scripts/make_audit_bundle.py` |
+| Generated | 2026-10-13 16:36 by `scripts/make_audit_bundle.py` |
 | Repo / ref | `linux-cubie` @ `de05871656d4` |
 | Series range | `37bd6c3df802ecbd3d8c63c5a35d83b0ecf2af5e^..de05871656d47fb8da1e339aa8d6a612ea09882d` |
 | Mode | full (with prior review comments) |
@@ -19470,10 +19470,10 @@ ModuleNotFoundError: No module named 'ply'
 
 ### make dt_binding_check (examples vs schema) (exit 0)
 
-`$ make -j32 O=/tmp/dtcheck-_27eky1_ dt_binding_check DT_SCHEMA_FILES=mailbox/allwinner,sun55i-a523-msgbox.yaml:remoteproc/allwinner,sun55i-a523-rproc.yaml`
+`$ make -j32 O=/tmp/dtcheck-n7hvll_0 dt_binding_check DT_SCHEMA_FILES=mailbox/allwinner,sun55i-a523-msgbox.yaml:remoteproc/allwinner,sun55i-a523-rproc.yaml`
 
 ```
-make[1]: Entering directory '/tmp/dtcheck-_27eky1_'
+make[1]: Entering directory '/tmp/dtcheck-n7hvll_0'
   HOSTCC  scripts/basic/fixdep
   HOSTCC  scripts/dtc/dtc.o
   HOSTCC  scripts/dtc/flattree.o
@@ -19497,7 +19497,7 @@ make[1]: Entering directory '/tmp/dtcheck-_27eky1_'
   DTEX    Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.example.dts
   DTC [C] Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.example.dtb
   DTC [C] Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.example.dtb
-make[1]: Leaving directory '/tmp/dtcheck-_27eky1_'
+make[1]: Leaving directory '/tmp/dtcheck-n7hvll_0'
 WARNING: Unable to reopen jobserver read-side pipe: FileNotFoundError(2, 'No such file or directory')
 ```
 
