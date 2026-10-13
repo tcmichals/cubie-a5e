@@ -292,7 +292,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every `interrupts` and `interrupt-names` uses positional `items:` with `minItems`.
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
-- [ ] Mailbox `last_tx_done()` checks `count < SUN55I_FIFO_MAX` (Broadcom BCM2835 FIFO capacity pacing).
+- [ ] Mailbox `last_tx_done()` checks `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`).
 - [ ] RemoteProc kick sets `cl.knows_txdone = true` AND calls `mbox_client_txdone()` on `ret >= 0` pass case.
 - [ ] Mailbox hardirq is protected by `spin_lock_irqsave`.
 - [ ] Teardown sequence strictly follows LIFO order (`rproc_del()` called last).

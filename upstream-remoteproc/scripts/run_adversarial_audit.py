@@ -56,9 +56,9 @@ STAGE2_CHECKS = [
 STAGE3_CHECKS = [
     {
         "id": "MAILBOX_FIFO_PACING",
-        "desc": "last_tx_done() must check FIFO capacity (count < SUN55I_FIFO_MAX) rather than empty (count == 0)",
+        "desc": "last_tx_done() must check remote FIFO drain (count == 0) rather than capacity headroom",
         "pattern": r"(bool\s+[a-zA-Z0-9_]+last_tx_done\s*\([^)]*\)\s*\{[\s\S]*?\})",
-        "forbidden": [r"count\s*==\s*0"],
+        "forbidden": [r"count\s*<\s*SUN55I_FIFO_MAX"],
     },
     {
         "id": "RPROC_DOORBELL_PASS_CASE_ACK",
@@ -131,14 +131,14 @@ def analyze_source_code(filepath, content):
         match = re.search(r"sun55i_msgbox_last_tx_done\([^)]*\)\s*\{([\s\S]*?)\}", code_no_comments)
         if match:
             body = match.group(1)
-            if "count == 0" in body and "SUN55I_FIFO_MAX" not in body:
+            if "count < SUN55I_FIFO_MAX" in body:
                 findings.append({
                     "stage": 3,
                     "severity": "High",
                     "id": "M2",
                     "file": filepath,
-                    "title": "FIFO Capacity Pacing Violation (checking count == 0)",
-                    "desc": "last_tx_done() must check hardware FIFO capacity (count < SUN55I_FIFO_MAX). Checking count == 0 destroys hardware pipelining and forces 1ms hrtimer polling stalls."
+                    "title": "FIFO Capacity Pacing Violation (checking count < FIFO_MAX)",
+                    "desc": "last_tx_done() must verify the remote processor drained the message (count == 0). Returning true when messages remain in FIFO falsely signals transmission completion."
                 })
 
     if basename == "sunxi_rproc.c":
@@ -216,10 +216,10 @@ def generate_report(findings, output_md):
             f.write("| ID | Target | Severity | Finding | Resolution in v3 | Status |\n")
             f.write("|:---|:---|:---:|:---|:---|:---:|\n")
             f.write("| **M1** | `sun55i-msgbox.c` | **High** | Out-of-bounds array write in probe due to unbounded DT `irq_cnt` | Clamped `irq_cnt` to `SUN55I_NUM_PORTS` with explicit check. | **FIXED** |\n")
-            f.write("| **M2** | `sun55i-msgbox.c` | **High** | Broken `last_tx_done` FIFO capacity pacing | Configured `count < SUN55I_FIFO_MAX` (BCM2835 capacity pacing). | **FIXED** |\n")
+            f.write("| **M2** | `sun55i-msgbox.c` | **High** | Broken `last_tx_done` FIFO capacity pacing | Configured `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`). | **FIXED** |\n")
             f.write("| **M3** | `sun55i-msgbox.c` | **High** | NULL pointer deref in IRQ handler during teardown | Cleared `chan->con_priv` before deregistration in `shutdown()`. | **FIXED** |\n")
             f.write("| **M4** | `sun55i-msgbox.c` | **High** | Multi-IRQ concurrency / TOCTOU underflow race | Enclosed status check and FIFO popping inside `spin_lock_irqsave(&mbox->lock)`. | **FIXED** |\n")
-            f.write("| **T1** | `drivers/mailbox/Kconfig` | **Low** | Missing `SUN55I_MSGBOX` dependency for KUnit tests | Added `depends on MAILBOX && SUN55I_MSGBOX`. | **FIXED** |\n")
+            f.write("| **T1** | `drivers/mailbox/Kconfig` | **Low** | Missing dependencies for KUnit tests | Added `depends on SUN55I_MSGBOX && KUNIT && !UML` to guard against logic_iomem traps. | **FIXED** |\n")
             f.write("| **T2** | `sun55i_msgbox_test.c` | **Medium** | MMIO endianness bug in mock registers on Big-Endian | Converted mock assertions from direct array indexing to `readl()`. | **FIXED** |\n")
             f.write("| **T3** | `sun55i_msgbox_test.c` | **Low** | Mock bypass causes `startup()` flush test to silently succeed | Configured mock to simulate non-empty FIFO properly. | **FIXED** |\n\n")
             f.write("### RemoteProc Driver & Tests (`drivers/remoteproc/`)\n")
@@ -236,7 +236,7 @@ def generate_report(findings, output_md):
             f.write("| **R9** | `sunxi_rproc.c` | **Medium** | Missing teardown of crash IRQ on start failure leaks state | Added symmetric unwind in `sunxi_rproc_start` error path. | **FIXED** |\n")
             f.write("| **R10**| `sunxi_rproc.c` | **Medium** | Missing write flush of boot address causes execution race | Added `readl()` readback flush before core reset de-assertion. | **FIXED** |\n")
             f.write("| **R11**| `sunxi_rproc.c` | **High** | Missing `mbox_client_txdone()` in kick pass case causes queue leak | Added `mbox_client_txdone()` on `ret >= 0` pass case in `sunxi_rproc_kick()`. | **FIXED** |\n")
-            f.write("| **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing `SUNXI_REMOTEPROC` dependency in Kconfig | Added `depends on REMOTEPROC && SUNXI_REMOTEPROC`. | **FIXED** |\n")
+            f.write("| **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing dependencies for KUnit tests | Added `depends on SUNXI_REMOTEPROC && KUNIT && !UML` to guard against logic_iomem traps. | **FIXED** |\n")
             f.write("| **K2** | `sunxi_rproc_test.c` | **Medium** | KUnit test mock MMIO reads fail on Big-Endian | Replaced array indexing with endian-safe `readl(ctx->priv.cfg_va + offset)`. | **FIXED** |\n")
             f.write("| **K3** | `sunxi_rproc_test.c` | **Medium** | False positive KUnit test for obsolete `kick_msg` field | Test updated to inspect stack-local transmit buffer. | **FIXED** |\n")
         else:
