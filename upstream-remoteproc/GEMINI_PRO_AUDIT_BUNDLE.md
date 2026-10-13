@@ -603,8 +603,6 @@ void sunxi_rproc_kick(struct rproc *rproc, int vqid)
 	ret = mbox_send_message(priv->tx_chan, &msg);
 	if (ret < 0)
 		dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
-	else
-		mbox_client_txdone(priv->tx_chan, 0);
 }
 
 #if IS_ENABLED(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)
@@ -1012,7 +1010,7 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
 	priv->cl.dev = dev;
 	priv->cl.rx_callback = sunxi_rproc_mb_rx_callback;
 	priv->cl.tx_block = false;
-	priv->cl.knows_txdone = true;
+	priv->cl.knows_txdone = false;
 
 	/*
 	 * If the hardware mailbox is assigned to userspace (generic-uio) or
@@ -1175,8 +1173,8 @@ MODULE_LICENSE("GPL");
 #define SUNXI_MSGBOX_MSG_STATUS(n, p)		(0x060 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
 #define SUNXI_MSGBOX_MSG_FIFO(n, p)		(0x070 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
 
-#define RD_IRQ_EN_BIT(p)			BIT((p) * 2)
-#define RD_IRQ_PEND_BIT(p)			BIT((p) * 2)
+#define RD_IRQ_EN_BIT(p)			BIT_U32((p) * 2)
+#define RD_IRQ_PEND_BIT(p)			BIT_U32((p) * 2)
 #define MSG_NUM_MASK				GENMASK(3, 0)
 
 struct sun55i_route {
@@ -2868,7 +2866,7 @@ static void test_functional_send_data_all_twelve_channels(struct kunit *test)
 		sun55i_msgbox_chan_ops.send_data(&fix->chans[ch], &val);
 
 		reg_idx = SUNXI_MSGBOX_MSG_FIFO(remote_n, p) / 4;
-		KUNIT_EXPECT_EQ(test, fix->regs[remote_id][reg_idx], val);
+		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[remote_id][reg_idx]), val);
 	}
 }
 
@@ -2881,7 +2879,7 @@ static void test_functional_send_data_null(struct kunit *test)
 	sun55i_msgbox_chan_ops.send_data(&fix->chans[8], NULL);
 
 	reg_idx = SUNXI_MSGBOX_MSG_FIFO(2, 0) / 4;
-	KUNIT_EXPECT_EQ(test, fix->regs[3][reg_idx], 0U);
+	KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[3][reg_idx]), 0U);
 }
 
 static void test_functional_send_data_patterns(struct kunit *test)
@@ -2895,7 +2893,7 @@ static void test_functional_send_data_patterns(struct kunit *test)
 
 	for (i = 0; i < ARRAY_SIZE(patterns); i++) {
 		sun55i_msgbox_chan_ops.send_data(&fix->chans[8], (void *)&patterns[i]);
-		KUNIT_EXPECT_EQ(test, fix->regs[3][reg_idx], patterns[i]);
+		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[3][reg_idx]), patterns[i]);
 	}
 }
 

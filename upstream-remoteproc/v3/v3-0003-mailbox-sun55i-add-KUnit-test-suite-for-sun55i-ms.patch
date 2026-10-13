@@ -1,4 +1,4 @@
-From 8cda3336cb8e2d5604fcab2b3e5ea420f42844bf Mon Sep 17 00:00:00 2001
+From 22fc1fbd7faf98a88afab9bcbb9b02852d005983 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v3 3/7] mailbox: sun55i: add KUnit test suite for sun55i
@@ -58,7 +58,7 @@ index aa17f9d0acd4..6fe1f1112c10 100644
  
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
 new file mode 100644
-index 000000000000..e170dbf8a1d5
+index 000000000000..69ff7673696c
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
 @@ -0,0 +1,826 @@
@@ -358,7 +358,7 @@ index 000000000000..e170dbf8a1d5
 +		sun55i_msgbox_chan_ops.send_data(&fix->chans[ch], &val);
 +
 +		reg_idx = SUNXI_MSGBOX_MSG_FIFO(remote_n, p) / 4;
-+		KUNIT_EXPECT_EQ(test, fix->regs[remote_id][reg_idx], val);
++		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[remote_id][reg_idx]), val);
 +	}
 +}
 +
@@ -371,7 +371,7 @@ index 000000000000..e170dbf8a1d5
 +	sun55i_msgbox_chan_ops.send_data(&fix->chans[8], NULL);
 +
 +	reg_idx = SUNXI_MSGBOX_MSG_FIFO(2, 0) / 4;
-+	KUNIT_EXPECT_EQ(test, fix->regs[3][reg_idx], 0U);
++	KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[3][reg_idx]), 0U);
 +}
 +
 +static void test_functional_send_data_patterns(struct kunit *test)
@@ -385,7 +385,7 @@ index 000000000000..e170dbf8a1d5
 +
 +	for (i = 0; i < ARRAY_SIZE(patterns); i++) {
 +		sun55i_msgbox_chan_ops.send_data(&fix->chans[8], (void *)&patterns[i]);
-+		KUNIT_EXPECT_EQ(test, fix->regs[3][reg_idx], patterns[i]);
++		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[3][reg_idx]), patterns[i]);
 +	}
 +}
 +

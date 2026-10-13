@@ -116,15 +116,15 @@ fi
 
 # Check 2.4: RemoteProc kick msg and knows_txdone completion contract
 if [ -f "$RPROC_C" ]; then
-    if grep -q "cl.knows_txdone = true" "$RPROC_C"; then
-        if grep -A 20 "void sunxi_rproc_kick" "$RPROC_C" | grep -q "mbox_client_txdone"; then
-            echo -e "${GREEN}  PASS: sunxi_rproc.c sets cl.knows_txdone = true with mbox_client_txdone() completion.${NC}"
+    if grep -q "cl.knows_txdone = false" "$RPROC_C"; then
+        if ! grep -A 20 "void sunxi_rproc_kick" "$RPROC_C" | grep -q "mbox_client_txdone"; then
+            echo -e "${GREEN}  PASS: sunxi_rproc.c sets cl.knows_txdone = false; controller polls pacing natively.${NC}"
         else
-            echo -e "${RED}  FAIL: sunxi_rproc.c sets cl.knows_txdone = true but missing mbox_client_txdone() in kick!${NC}"
+            echo -e "${RED}  FAIL: sunxi_rproc.c calls mbox_client_txdone while controller handles pacing!${NC}"
             ERRORS=$((ERRORS + 1))
         fi
     else
-        echo -e "${RED}  FAIL: sunxi_rproc.c missing cl.knows_txdone = true client contract!${NC}"
+        echo -e "${RED}  FAIL: sunxi_rproc.c must set cl.knows_txdone = false to let controller manage pacing!${NC}"
         ERRORS=$((ERRORS + 1))
     fi
 

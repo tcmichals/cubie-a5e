@@ -1,4 +1,4 @@
-From d07640e78bfbb3a85041c2af4c28c00d4fb140ef Mon Sep 17 00:00:00 2001
+From b04eae663dc432f47fb4929383ef28be3e4c4534 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 5/7] remoteproc: sunxi: add Allwinner XuanTie RISC-V
@@ -21,9 +21,9 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 908 +++++++++++++++++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.c | 906 +++++++++++++++++++++++++++++++
  drivers/remoteproc/sunxi_rproc.h | 116 ++++
- 4 files changed, 1033 insertions(+)
+ 4 files changed, 1031 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
 
@@ -57,10 +57,10 @@ index 689686de0d41..02acefa6d880 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
 new file mode 100644
-index 000000000000..83dfbe246c1f
+index 000000000000..a3258268c14c
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,908 @@
+@@ -0,0 +1,906 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906/E907 RISC-V Remote Processor Driver
@@ -431,8 +431,6 @@ index 000000000000..83dfbe246c1f
 +	ret = mbox_send_message(priv->tx_chan, &msg);
 +	if (ret < 0)
 +		dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
-+	else
-+		mbox_client_txdone(priv->tx_chan, 0);
 +}
 +
 +#if IS_ENABLED(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)
@@ -840,7 +838,7 @@ index 000000000000..83dfbe246c1f
 +	priv->cl.dev = dev;
 +	priv->cl.rx_callback = sunxi_rproc_mb_rx_callback;
 +	priv->cl.tx_block = false;
-+	priv->cl.knows_txdone = true;
++	priv->cl.knows_txdone = false;
 +
 +	/*
 +	 * If the hardware mailbox is assigned to userspace (generic-uio) or

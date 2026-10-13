@@ -1,4 +1,4 @@
-From ef6967c630a4b55e8b3c9cae0b827adc72942831 Mon Sep 17 00:00:00 2001
+From 8129514b60c733ffda3dc1d3ec31bb4b6ab3f7ab Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 7/7] arm64: dts: allwinner: add a523 msgbox and remoteproc

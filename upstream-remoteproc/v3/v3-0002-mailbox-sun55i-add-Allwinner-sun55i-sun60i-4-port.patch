@@ -1,4 +1,4 @@
-From a131ea7ce9725e7e12bdf6c818671eda2971d5f9 Mon Sep 17 00:00:00 2001
+From 7b85cde1d1a2bb2dbe61cb5ba598e780c290e0ef Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v3 2/7] mailbox: sun55i: add Allwinner sun55i/sun60i 4-port
@@ -468,7 +468,7 @@ index 000000000000..d952c1a23789
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/mailbox/sun55i-msgbox.h b/drivers/mailbox/sun55i-msgbox.h
 new file mode 100644
-index 000000000000..2ab79a9149c0
+index 000000000000..1fd5175dc8c6
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.h
 @@ -0,0 +1,58 @@
@@ -502,8 +502,8 @@ index 000000000000..2ab79a9149c0
 +#define SUNXI_MSGBOX_MSG_STATUS(n, p)		(0x060 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
 +#define SUNXI_MSGBOX_MSG_FIFO(n, p)		(0x070 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
 +
-+#define RD_IRQ_EN_BIT(p)			BIT((p) * 2)
-+#define RD_IRQ_PEND_BIT(p)			BIT((p) * 2)
++#define RD_IRQ_EN_BIT(p)			BIT_U32((p) * 2)
++#define RD_IRQ_PEND_BIT(p)			BIT_U32((p) * 2)
 +#define MSG_NUM_MASK				GENMASK(3, 0)
 +
 +struct sun55i_route {
