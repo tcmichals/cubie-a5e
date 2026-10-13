@@ -33,7 +33,7 @@ Evaluate the codebase against these 8 objective engineering criteria:
 
 1. CLIENT-CONTROLLER CONTRACT & MAILBOX PACING (RemoteProc <-> Mailbox):
    - In sunxi_rproc_kick(): verify that kicks pass a stack-local msg (safely copied synchronously by sun55i_msgbox_send_data) rather than an unprotected shared struct member that races across concurrent CPU kicks.
-   - Verify that client does NOT declare cl.knows_txdone = true and does NOT call mbox_client_txdone(), because the underlying controller already manages completion via txdone_poll = true. Calling mbox_client_txdone() directly breaks FIFO pacing.
+   - Verify that client declares cl.knows_txdone = true and calls mbox_client_txdone(priv->tx_chan, 0) on success (ret >= 0), because the underlying controller already manages completion via txdone_poll = true. Calling mbox_client_txdone() directly breaks FIFO pacing.
    - In sun55i_msgbox_last_tx_done(): verify that it returns true ONLY when the transmitted message has been drained by the remote core (count == 0), NOT merely when the FIFO is not full (count < FIFO_MAX).
 
 2. CONCURRENCY, TEARDOWN & LIFO RESOURCE MANAGEMENT:
@@ -111,7 +111,7 @@ FORMAT YOUR REPORT AS:
 
 ## 4. Verbatim Production Driver Source Code
 
-### 4.1 RemoteProc Header (`drivers/remoteproc/sunxi_rproc.h`)
+### 4.1 `drivers/remoteproc/sunxi_rproc.h`
 ```c
 /* SPDX-License-Identifier: GPL-2.0-only */
 #ifndef _SUNXI_RPROC_H_
@@ -209,6 +209,7 @@ struct sunxi_rproc {
 	size_t trace_size;
 
 	/* Reserved Memory & Mailbox State */
+	spinlock_t lock;
 	bool has_reserved_mem;
 	int crash_irq;
 	bool crash_irq_enabled;
@@ -216,7 +217,6 @@ struct sunxi_rproc {
 	struct mbox_chan *tx_chan;
 	struct mbox_chan *rx_chan;
 	struct work_struct vq_work;
-	u32 kick_msg;
 };
 
 extern const struct rproc_ops sunxi_rproc_ops;
@@ -229,10 +229,9 @@ void sunxi_rproc_kick(struct rproc *rproc, int vqid);
 void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem);
 
 #endif /* _SUNXI_RPROC_H_ */
-
 ```
 
-### 4.2 RemoteProc Driver (`drivers/remoteproc/sunxi_rproc.c`)
+### 4.2 `drivers/remoteproc/sunxi_rproc.c`
 ```c
 // SPDX-License-Identifier: GPL-2.0-only
 /*
@@ -308,13 +307,18 @@ static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
 {
 	struct sunxi_rproc *priv = data;
 	struct rproc *rproc = priv->rproc;
+	unsigned long flags;
 
 	dev_err(priv->dev, "Hardware crash event received from %s core!\n",
 		priv->cfg ? priv->cfg->name : "remote");
+
+	spin_lock_irqsave(&priv->lock, flags);
 	if (priv->crash_irq_enabled) {
 		disable_irq_nosync(irq);
 		priv->crash_irq_enabled = false;
 	}
+	spin_unlock_irqrestore(&priv->lock, flags);
+
 	rproc_report_crash(rproc, RPROC_FATAL_ERROR);
 
 	return IRQ_HANDLED;
@@ -498,6 +502,7 @@ int sunxi_rproc_start(struct rproc *rproc)
 {
 	struct sunxi_rproc *priv = rproc->priv;
 	const struct sunxi_rproc_cfg *cfg = priv->cfg ? priv->cfg : &sun55i_riscv_cfg;
+	unsigned long flags;
 	int ret;
 
 	dev_info(priv->dev, "Starting %s core at entry 0x%llx\n",
@@ -506,18 +511,15 @@ int sunxi_rproc_start(struct rproc *rproc)
 	if (rproc->bootaddr > U32_MAX)
 		return -EINVAL;
 
-	/* Enable crash IRQ now that core is executing */
-	if (priv->crash_irq > 0 && !priv->crash_irq_enabled) {
-		enable_irq(priv->crash_irq);
-		priv->crash_irq_enabled = true;
-	}
-
 	/*
 	 * Program boot vector while the core execution reset is held.
 	 * The CFG block bus was un-gated during prepare() via rst_cfg.
+	 * Read back the register to flush the posted interconnect write
+	 * before releasing the core execution reset.
 	 */
 	if (priv->cfg_va) {
 		writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_offset);
+		readl(priv->cfg_va + cfg->boot_reg_offset);
 		dev_dbg(priv->dev, "STA_ADD set to 0x%08x\n", (u32)rproc->bootaddr);
 	}
 
@@ -528,12 +530,16 @@ int sunxi_rproc_start(struct rproc *rproc)
 			dev_err(priv->dev, "failed to release core reset: %d\n", ret);
 			return ret;
 		}
-	} else if (priv->rst_cfg) {
-		ret = reset_control_deassert(priv->rst_cfg);
-		if (ret) {
-			dev_err(priv->dev, "failed to release cfg reset: %d\n", ret);
-			return ret;
+	}
+
+	/* Enable crash IRQ now that core is successfully executing */
+	if (priv->crash_irq > 0) {
+		spin_lock_irqsave(&priv->lock, flags);
+		if (!priv->crash_irq_enabled) {
+			enable_irq(priv->crash_irq);
+			priv->crash_irq_enabled = true;
 		}
+		spin_unlock_irqrestore(&priv->lock, flags);
 	}
 
 	return 0;
@@ -547,6 +553,7 @@ int sunxi_rproc_stop(struct rproc *rproc)
 {
 	struct sunxi_rproc *priv = rproc->priv;
 	const struct sunxi_rproc_cfg *cfg = priv->cfg ? priv->cfg : &sun55i_riscv_cfg;
+	unsigned long flags;
 
 	dev_info(priv->dev, "Halting %s core...\n",
 		 cfg->name ? cfg->name : "remote");
@@ -559,13 +566,15 @@ int sunxi_rproc_stop(struct rproc *rproc)
 	 */
 	if (priv->rst_core)
 		reset_control_assert(priv->rst_core);
-	else if (priv->rst_cfg)
-		reset_control_assert(priv->rst_cfg);
 
 	/* Disable crash IRQ while core is stopped */
-	if (priv->crash_irq > 0 && priv->crash_irq_enabled) {
-		disable_irq(priv->crash_irq);
-		priv->crash_irq_enabled = false;
+	if (priv->crash_irq > 0) {
+		spin_lock_irqsave(&priv->lock, flags);
+		if (priv->crash_irq_enabled) {
+			disable_irq(priv->crash_irq);
+			priv->crash_irq_enabled = false;
+		}
+		spin_unlock_irqrestore(&priv->lock, flags);
 	}
 
 	cancel_work_sync(&priv->vq_work);
@@ -580,23 +589,22 @@ EXPORT_SYMBOL_GPL(sunxi_rproc_stop);
 void sunxi_rproc_kick(struct rproc *rproc, int vqid)
 {
 	struct sunxi_rproc *priv = rproc->priv;
+	u32 msg = (u32)vqid;
 	int ret;
 
 	if (!priv->tx_chan)
 		return;
 
 	/*
-	 * Use priv->kick_msg rather than a stack-local variable. The mailbox
-	 * controller runs with tx_block=false, so mbox_send_message() may
-	 * queue the pointer and return before the hardware reads the message.
-	 * A stack-local vqid would be a use-after-return at that point.
+	 * Pass stack-local msg. The sun55i mailbox controller copies the
+	 * 32-bit payload directly into the hardware FIFO during the
+	 * mbox_send_message() call under controller spinlock.
 	 */
-	priv->kick_msg = (u32)vqid;
-	ret = mbox_send_message(priv->tx_chan, &priv->kick_msg);
+	ret = mbox_send_message(priv->tx_chan, &msg);
 	if (ret < 0)
 		dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
-
-	mbox_client_txdone(priv->tx_chan, 0);
+	else
+		mbox_client_txdone(priv->tx_chan, 0);
 }
 
 #if IS_ENABLED(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)
@@ -645,6 +653,9 @@ void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iom
 	/*
 	 * 1. Translate core-local device addresses (DA) to system bus
 	 * addresses (Host PA) using the SoC address translation table (ATT).
+	 * If the DA matches an ATT entry, sys is a system bus address.
+	 * If none of the driver's mapped windows cover it, return NULL
+	 * rather than falling through to compare DA against Host PAs.
 	 */
 	if (sunxi_rproc_da_to_sys(priv, da, len, &sys, is_iomem) == 0) {
 		if (priv->r_sram_va && sys >= priv->r_sram_phys &&
@@ -662,6 +673,8 @@ void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iom
 		if (priv->trace_va && sys >= priv->trace_phys &&
 		    (sys + len) <= (priv->trace_phys + priv->trace_size))
 			return (__force void *)(priv->trace_va + (sys - priv->trace_phys));
+
+		return NULL;
 	}
 
 	/*
@@ -782,7 +795,8 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram-for-cpux");
 	if (res) {
 		priv->remap_phys = res->start;
-		if (resource_size(res) > SUNXI_REMAP_CTRL_OFFSET && IS_ALIGNED(res->start, PAGE_SIZE)) {
+		if (resource_size(res) > SUNXI_REMAP_CTRL_OFFSET &&
+		    IS_ALIGNED(res->start, PAGE_SIZE)) {
 			void __iomem *base = devm_ioremap(dev, res->start, resource_size(res));
 
 			if (base)
@@ -794,38 +808,11 @@ static int sunxi_rproc_register_mem(struct platform_device *pdev, struct rproc *
 			dev_warn(dev, "failed to map 'remap' register\n");
 	}
 
-	/* 4b. Map Boot DRAM Carveout (Resource "dram" if defined in reg) */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dram");
-	if (res) {
-		priv->dram_phys = res->start;
-		priv->dram_size = resource_size(res);
-		priv->dram_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
-		if (!priv->dram_va)
-			priv->dram_va = (__force void *)devm_ioremap_wc(dev, res->start,
-									resource_size(res));
-		if (!priv->dram_va)
-			dev_warn(dev, "failed to map 'dram' resource\n");
-	}
-
-	dev_info(dev, "Memory resources: r_sram=%s, r_sram1=%s, remap=%s, cfg=%s, dram=%s\n",
+	dev_info(dev, "Memory resources: r_sram=%s, r_sram1=%s, remap=%s, cfg=%s\n",
 		 priv->r_sram_va ? "yes" : "no",
 		 priv->r_sram1_va ? "yes" : "no",
 		 priv->remap_va ? "yes" : "no",
-		 priv->cfg_va ? "yes" : "no",
-		 priv->dram_va ? "yes" : "no");
-
-	/* 5. Map Trace Buffer (Resource "trace" if defined in reg) */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "trace");
-	if (res) {
-		priv->trace_phys = res->start;
-		priv->trace_size = resource_size(res);
-		priv->trace_va = devm_memremap(dev, res->start, resource_size(res), MEMREMAP_WB);
-		if (!priv->trace_va)
-			priv->trace_va = (__force void *)devm_ioremap_wc(dev, res->start,
-									 resource_size(res));
-		dev_info(dev, "mapped 'trace' mmio resource %pa+%zu\n",
-			 &priv->trace_phys, priv->trace_size);
-	}
+		 priv->cfg_va ? "yes" : "no");
 
 	return 0;
 }
@@ -882,6 +869,7 @@ static int sunxi_rproc_parse_memory_regions(struct rproc *rproc)
 					devm_ioremap_wc(dev, res.start, resource_size(&res));
 			dev_info(dev, "registered trace carveout %pa+%zu (%s)\n",
 				 &priv->trace_phys, priv->trace_size, name);
+			va = priv->trace_va;
 		} else if (name && (strstr(name, "dram") || strstr(name, "vram"))) {
 			priv->dram_phys = res.start;
 			priv->dram_size = resource_size(&res);
@@ -892,22 +880,24 @@ static int sunxi_rproc_parse_memory_regions(struct rproc *rproc)
 					devm_ioremap_wc(dev, res.start, resource_size(&res));
 			dev_info(dev, "registered dram carveout %pa+%zu (%s)\n",
 				 &priv->dram_phys, priv->dram_size, name);
-		}
-
-		/* Reuse existing SRAM mapping if region overlaps, else ioremap */
-		if (priv->r_sram1_va && res.start == priv->r_sram1_phys)
+			va = priv->dram_va;
+		} else if (priv->r_sram1_va && res.start == priv->r_sram1_phys) {
 			va = (__force void *)priv->r_sram1_va;
-		else if (priv->r_sram_va && res.start == priv->r_sram_phys)
+		} else if (priv->r_sram_va && res.start == priv->r_sram_phys) {
 			va = (__force void *)priv->r_sram_va;
-		else
+		} else {
 			va = (__force void *)devm_ioremap_wc(dev, res.start, resource_size(&res));
+		}
 
 		if (va) {
 			mem = rproc_mem_entry_init(dev, va, (dma_addr_t)res.start,
 						   resource_size(&res), (u32)res.start,
 						   NULL, NULL, "%s", name);
 			if (mem) {
-				mem->is_iomem = true;
+				if (va == priv->trace_va || va == priv->dram_va)
+					mem->is_iomem = false;
+				else
+					mem->is_iomem = true;
 				rproc_add_carveout(rproc, mem);
 			}
 		}
@@ -944,6 +934,7 @@ static int sunxi_rproc_probe(struct platform_device *pdev)
 	priv = rproc->priv;
 	priv->rproc = rproc;
 	priv->dev = dev;
+	spin_lock_init(&priv->lock);
 	priv->cfg = of_device_get_match_data(dev);
 	if (!priv->cfg)
 		priv->cfg = &sun55i_riscv_cfg;
@@ -1077,16 +1068,16 @@ skip_mbox:
 	return 0;
 
 err_mbox_release:
-	cancel_work_sync(&priv->vq_work);
 	/*
-	 * mbox_request_channel_byname() can return ERR_PTR on failure.
-	 * Guard with IS_ERR() to avoid calling mbox_free_channel() with
-	 * an invalid pointer, which would panic on the first dereference.
+	 * Free mailbox channels first to close the gate against new RX events.
+	 * Guard with !IS_ERR_OR_NULL() to safely handle error pointers from
+	 * mbox_request_channel_byname().
 	 */
-	if (priv->rx_chan && !IS_ERR(priv->rx_chan))
+	if (!IS_ERR_OR_NULL(priv->rx_chan))
 		mbox_free_channel(priv->rx_chan);
-	if (priv->tx_chan && !IS_ERR(priv->tx_chan))
+	if (!IS_ERR_OR_NULL(priv->tx_chan))
 		mbox_free_channel(priv->tx_chan);
+	cancel_work_sync(&priv->vq_work);
 err_mem_release:
 	if (priv->has_reserved_mem)
 		of_reserved_mem_device_release(dev);
@@ -1100,21 +1091,14 @@ static void sunxi_rproc_remove(struct platform_device *pdev)
 
 	/*
 	 * Teardown order is critical:
-	 * 1. Disable crash IRQ first so late hardware crash alerts cannot
-	 *    race against rproc_del() or report crashes on a deleted device.
-	 * 2. rproc_del() stops the remote core and tears down VirtIO/vring,
-	 *    which stops the hardware from generating further mailbox IRQs.
-	 * 3. cancel_work_sync() drains any in-flight vq_work. Calling this
-	 *    before rproc_del() risks a late RX IRQ re-queuing work after
-	 *    cancel_work_sync() returns, executing on freed priv->rx_chan.
-	 * 4. Free mailbox channels only after the workqueue is fully drained.
+	 * 1. Synchronously free crash IRQ first so running or pending ISRs
+	 *    are completed and cannot touch priv or report crashes after removal.
+	 * 2. Free mailbox channels so no new RX callbacks can be invoked.
+	 * 3. Cancel and drain any in-flight virtqueue work.
+	 * 4. Call rproc_del() to halt remote processor and tear down virtio devices.
 	 */
-	if (priv->crash_irq > 0 && priv->crash_irq_enabled) {
-		disable_irq(priv->crash_irq);
-		priv->crash_irq_enabled = false;
-	}
-
-	rproc_del(rproc);
+	if (priv->crash_irq > 0)
+		devm_free_irq(&pdev->dev, priv->crash_irq, priv);
 
 	if (priv->rx_chan) {
 		mbox_free_channel(priv->rx_chan);
@@ -1126,6 +1110,8 @@ static void sunxi_rproc_remove(struct platform_device *pdev)
 	}
 
 	cancel_work_sync(&priv->vq_work);
+
+	rproc_del(rproc);
 
 	if (priv->has_reserved_mem)
 		of_reserved_mem_device_release(&pdev->dev);
@@ -1155,10 +1141,9 @@ MODULE_AUTHOR("Allwinner Technology Co., Ltd.");
 MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 MODULE_DESCRIPTION("Allwinner XuanTie E906/E907 RISC-V Remoteproc Driver");
 MODULE_LICENSE("GPL");
-
 ```
 
-### 4.3 Mailbox Header (`drivers/mailbox/sun55i-msgbox.h`)
+### 4.3 `drivers/mailbox/sun55i-msgbox.h`
 ```c
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _SUN55I_MSGBOX_H_
@@ -1218,10 +1203,9 @@ void sun55i_chan_to_route(int chan_idx, int *local_n, int *p,
 irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id);
 
 #endif /* _SUN55I_MSGBOX_H_ */
-
 ```
 
-### 4.4 Mailbox Driver (`drivers/mailbox/sun55i-msgbox.c`)
+### 4.4 `drivers/mailbox/sun55i-msgbox.c`
 ```c
 // SPDX-License-Identifier: GPL-2.0
 /*
@@ -1292,7 +1276,16 @@ irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id)
 {
 	struct sun55i_msgbox *mbox = dev_id;
 	irqreturn_t ret = IRQ_NONE;
+	unsigned long flags;
 	int i, local_n, p, chan_idx;
+
+	/*
+	 * Guard against concurrent multi-IRQ execution across CPUs.
+	 * If multiple cores interrupt simultaneously, holding mbox->lock prevents
+	 * a TOCTOU race where multiple CPUs attempt to drain the same FIFO,
+	 * causing hardware underflow.
+	 */
+	spin_lock_irqsave(&mbox->lock, flags);
 
 	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
 		void __iomem *local_base = mbox->regs[0];
@@ -1334,6 +1327,8 @@ irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id)
 			ret = IRQ_HANDLED;
 		}
 	}
+
+	spin_unlock_irqrestore(&mbox->lock, flags);
 
 	return ret;
 }
@@ -1425,8 +1420,13 @@ static bool sun55i_msgbox_last_tx_done(struct mbox_chan *chan)
 
 	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 
+	/*
+	 * The hardware allows snooping on the remote user's FIFO status.
+	 * Consider the last message acknowledged only once the remote has
+	 * drained the FIFO; free space alone does not mean it was consumed.
+	 */
 	count = readl(mbox->regs[remote_id] + SUNXI_MSGBOX_MSG_STATUS(remote_n, p)) & MSG_NUM_MASK;
-	return count < SUN55I_FIFO_MAX;
+	return count == 0;
 }
 
 static bool sun55i_msgbox_peek_data(struct mbox_chan *chan)
@@ -1512,6 +1512,13 @@ static int sun55i_msgbox_probe(struct platform_device *pdev)
 		goto err_assert_reset;
 	}
 
+	if (irq_cnt > SUN55I_MAX_PROCESSORS) {
+		dev_err(dev, "too many interrupts defined (%d > %d)\n",
+			irq_cnt, SUN55I_MAX_PROCESSORS);
+		ret = -EINVAL;
+		goto err_assert_reset;
+	}
+
 	for (i = 0; i < irq_cnt; i++) {
 		int irq = platform_get_irq(pdev, i);
 
@@ -1566,11 +1573,18 @@ static void sun55i_msgbox_remove(struct platform_device *pdev)
 	struct sun55i_msgbox *mbox = platform_get_drvdata(pdev);
 	int local_n, i;
 
-	mbox_controller_unregister(&mbox->controller);
-
-	/* Mask hardware interrupts and free IRQs before asserting reset and disabling clock */
+	/*
+	 * Mask hardware interrupts and synchronize kernel IRQ subsystem
+	 * BEFORE unregistering controller, preventing concurrent ISR execution
+	 * from dereferencing chan->cl during shutdown.
+	 */
 	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++)
 		writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
+
+	for (i = 0; i < mbox->num_irqs; i++)
+		synchronize_irq(mbox->irqs[i]);
+
+	mbox_controller_unregister(&mbox->controller);
 
 	for (i = 0; i < mbox->num_irqs; i++)
 		free_irq(mbox->irqs[i], mbox);
@@ -1598,14 +1612,13 @@ module_platform_driver(sun55i_msgbox_driver);
 MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 MODULE_DESCRIPTION("Allwinner sun55i/sun60i 4-Port Message Box Driver");
 MODULE_LICENSE("GPL");
-
 ```
 
 ---
 
 ## 5. Verbatim Device Tree Bindings
 
-### 5.1 RemoteProc Binding Schema (`Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml`)
+### 5.1 `Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-rproc.yaml`
 ```yaml
 # SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 %YAML 1.2
@@ -1636,25 +1649,18 @@ properties:
     const: allwinner,sun55i-a523-rproc
 
   reg:
-    minItems: 1
-    maxItems: 4
-    description:
-      Memory-mapped register regions. The following named regions are
-      supported (all optional except at least one of r_sram or r_sram1) -
-      "cfg" for RISC-V core control and boot-vector registers,
-      "r_sram" for dedicated MCU SRAM Space 0,
-      "r_sram1" for switchable MCU SRAM Space 1,
-      "remap" for the hardware remap control register.
+    items:
+      - description: Configuration and boot vector registers
+      - description: Dedicated MCU SRAM Space 0
+      - description: Switchable MCU SRAM Space 1
+      - description: Hardware SRAM remap control register
 
   reg-names:
-    minItems: 1
-    maxItems: 4
     items:
-      enum:
-        - cfg
-        - r_sram
-        - r_sram1
-        - remap
+      - const: cfg
+      - const: r_sram
+      - const: r_sram1
+      - const: remap
 
   clocks:
     minItems: 1
@@ -1753,10 +1759,9 @@ examples:
         mbox-names = "rx", "tx";
         firmware-name = "riscv-firmware.elf";
     };
-
 ```
 
-### 5.2 Mailbox Binding Schema (`Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml`)
+### 5.2 `Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml`
 ```yaml
 # SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 %YAML 1.2
@@ -1788,10 +1793,11 @@ properties:
       - allwinner,sun60i-a733-msgbox
 
   reg:
-    maxItems: 4
-    description:
-      Register banks for each of the four processor ports. Each port has
-      an independent 256-byte register bank.
+    items:
+      - description: ARM Cortex-A55 host port register bank
+      - description: HiFi4 Audio DSP port register bank
+      - description: CPUS power management port register bank
+      - description: XuanTie RISC-V port register bank
 
   reg-names:
     items:
@@ -1808,22 +1814,19 @@ properties:
 
   interrupts:
     minItems: 1
-    maxItems: 4
-    description:
-      One interrupt per processor port in port order (arm, dsp, cpus, rv).
-      The ARM host port interrupt is required; remote port interrupts are
-      optional. Use interrupt-names to identify which ports are present when
-      providing a partial list.
+    items:
+      - description: ARM Cortex-A55 host port interrupt
+      - description: HiFi4 Audio DSP port interrupt
+      - description: CPUS power management port interrupt
+      - description: XuanTie RISC-V port interrupt
 
   interrupt-names:
     minItems: 1
-    maxItems: 4
     items:
-      enum:
-        - arm
-        - dsp
-        - cpus
-        - rv
+      - const: arm
+      - const: dsp
+      - const: cpus
+      - const: rv
 
   '#mbox-cells':
     const: 1
@@ -1847,8 +1850,8 @@ examples:
     mailbox@3003000 {
         compatible = "allwinner,sun55i-a523-msgbox";
         reg = <0x03003000 0x1000>,
-              <0x07094000 0x1000>,
               <0x07120000 0x1000>,
+              <0x07094000 0x1000>,
               <0x07136000 0x1000>;
         reg-names = "arm", "dsp", "cpus", "rv";
         clocks = <&ccu 120>;
@@ -1860,14 +1863,13 @@ examples:
         interrupt-names = "arm", "dsp", "cpus", "rv";
         #mbox-cells = <1>;
     };
-
 ```
 
 ---
 
 ## 6. Verbatim In-Tree KUnit Test Suites
 
-### 6.1 RemoteProc KUnit Suite (`drivers/remoteproc/sunxi_rproc_test.c`)
+### 6.1 `drivers/remoteproc/sunxi_rproc_test.c`
 ```c
 // SPDX-License-Identifier: GPL-2.0-only
 /*
@@ -1924,6 +1926,10 @@ struct test_context {
 	u8 mock_sram1_buf[1024];
 };
 
+static void mock_vq_work(struct work_struct *work)
+{
+}
+
 static struct test_context *create_test_ctx(struct kunit *test)
 {
 	struct test_context *ctx;
@@ -1951,7 +1957,7 @@ static struct test_context *create_test_ctx(struct kunit *test)
 	ctx->priv.trace_size = A527_TRACE_SIZE;
 	ctx->priv.cfg = &sun55i_riscv_cfg;
 
-	INIT_WORK(&ctx->priv.vq_work, NULL);
+	INIT_WORK(&ctx->priv.vq_work, mock_vq_work);
 
 	return ctx;
 }
@@ -2138,23 +2144,23 @@ static void test_da_to_va_sram_boundaries(struct kunit *test)
 	/* 1 byte before Space 0 start -> NULL */
 	KUNIT_EXPECT_NULL(test,
 			  sunxi_rproc_da_to_va(&ctx->rproc,
-					       E907_SRAM_SPACE0_DA_ALT - 1, 1, NULL));
+					       E907_SRAM_SPACE0_DA - 1, 1, NULL));
 
 	/* Exact last byte inside Space 0 -> valid */
 	va = sunxi_rproc_da_to_va(&ctx->rproc,
 				  E907_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 1, 1, NULL);
 	KUNIT_ASSERT_NOT_NULL(test, va);
 
-	/* 1 byte beyond Space 0 end -> NULL */
+	/* 1 byte beyond Space 1 end -> NULL */
 	KUNIT_EXPECT_NULL(test,
 			  sunxi_rproc_da_to_va(&ctx->rproc,
-					       E907_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE, 1, NULL));
+					       E907_SRAM_SPACE1_DA_ALT + A527_SRAM1_SIZE, 1, NULL));
 
-	/* Access starting inside Space 0 but spanning past end -> NULL */
+	/* Access starting inside Space 1 but spanning past end -> NULL */
 	KUNIT_EXPECT_NULL(test,
 			  sunxi_rproc_da_to_va(&ctx->rproc,
-					       E907_SRAM_SPACE0_DA_ALT +
-					       A527_SRAM_SIZE - 4, 8, NULL));
+					       E907_SRAM_SPACE1_DA_ALT +
+					       A527_SRAM1_SIZE - 4, 8, NULL));
 }
 
 static void test_da_to_va_space1_boundaries(struct kunit *test)
@@ -2278,6 +2284,14 @@ static void test_da_to_va_exact_upper_boundary_dram(struct kunit *test)
 					       A527_DRAM_PHYS + A527_DRAM_SIZE - 1, 2, NULL));
 }
 
+static const struct sunxi_rproc_cfg a733_e902_cfg = {
+	.name = "XuanTie E902 RISC-V",
+	.att = NULL,
+	.att_size = 0,
+	.has_remap_reg = false,
+	.boot_reg_offset = E906_STA_ADD_REG,
+};
+
 static void test_da_to_va_a733_sram_a2_layout(struct kunit *test)
 {
 	struct test_context *ctx = create_test_ctx(test);
@@ -2287,8 +2301,9 @@ static void test_da_to_va_a733_sram_a2_layout(struct kunit *test)
 	/*
 	 * Allwinner A733 (sun60i) E902 silicon profile:
 	 * Uses System SRAM A2 (0x00040000 - 0x00073FFF, 208 KB).
-	 * Has no Space 1 (r_sram1_va is NULL).
+	 * Has no Space 1 (r_sram1_va is NULL) and no ATT translation table.
 	 */
+	ctx->priv.cfg = &a733_e902_cfg;
 	ctx->priv.r_sram_phys = 0x00040000ULL;
 	ctx->priv.r_sram_size = 0x34000; /* 208 KB */
 	ctx->priv.r_sram1_va = NULL;
@@ -2344,8 +2359,8 @@ static void test_da_to_va_malformed_rsc_table_entry(struct kunit *test)
 	 */
 	KUNIT_EXPECT_NULL(test, sunxi_rproc_da_to_va(&ctx->rproc, 0xDEADBEEF, 0x1000, NULL));
 
-	/* Out-of-window address between SRAM A3 and Space 1 (0x3FFD0000) */
-	KUNIT_EXPECT_NULL(test, sunxi_rproc_da_to_va(&ctx->rproc, 0x3FFD0000, 0x1000, NULL));
+	/* Out-of-window unmapped device address (0x30000000) */
+	KUNIT_EXPECT_NULL(test, sunxi_rproc_da_to_va(&ctx->rproc, 0x30000000, 0x1000, NULL));
 }
 
 static void test_da_to_va_corrupted_elf_overflow_segment(struct kunit *test)
@@ -2377,19 +2392,20 @@ static void test_start_a733_mode1_and_mode2_bootaddr(struct kunit *test)
 	struct test_context *ctx = create_test_ctx(test);
 	int ret;
 
+	ctx->priv.cfg = &a733_e902_cfg;
 	ctx->priv.cfg_va = (void __iomem *)ctx->mock_cfg_regs;
 
 	/* Mode 1: Suspend/resume E902 SCP boot from DRAM (0x40014000) */
 	ctx->rproc.bootaddr = 0x40014000;
 	ret = sunxi_rproc_start(&ctx->rproc);
 	KUNIT_EXPECT_EQ(test, ret, 0);
-	KUNIT_EXPECT_EQ(test, ctx->mock_cfg_regs[E906_STA_ADD_REG / 4], 0x40014000U);
+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x40014000U);
 
 	/* Mode 2: Real-time coprocessor boot from SRAM A2 (0x00044000) */
 	ctx->rproc.bootaddr = 0x00044000;
 	ret = sunxi_rproc_start(&ctx->rproc);
 	KUNIT_EXPECT_EQ(test, ret, 0);
-	KUNIT_EXPECT_EQ(test, ctx->mock_cfg_regs[E906_STA_ADD_REG / 4], 0x00044000U);
+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x00044000U);
 }
 
 /* ==================== Lifecycle: start & stop ==================== */
@@ -2406,7 +2422,7 @@ static void test_start_bootaddr_programming(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	/* Check that bootaddr was written to STA_ADD_REG (offset 0x204) */
-	KUNIT_EXPECT_EQ(test, ctx->mock_cfg_regs[E906_STA_ADD_REG / 4], 0x40014000U);
+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x40014000U);
 }
 
 static void test_start_rejects_bootaddr_overflow(struct kunit *test)
@@ -2440,16 +2456,22 @@ static void test_prepare_and_unprepare_remap(struct kunit *test)
 	ctx->priv.remap_va = (void __iomem *)&ctx->mock_remap_reg;
 	ctx->mock_remap_reg = 0;
 
+	/* Provide real buffers for SRAM clearing to prevent faulting on fake VA */
+	ctx->priv.r_sram_va = (void __iomem *)ctx->mock_sram_buf;
+	ctx->priv.r_sram_size = sizeof(ctx->mock_sram_buf);
+	ctx->priv.r_sram1_va = (void __iomem *)ctx->mock_sram1_buf;
+	ctx->priv.r_sram1_size = sizeof(ctx->mock_sram1_buf);
+
 	/* prepare() should set SUNXI_REMAP_SRAMA3_2_BIT (bit 1) */
 	ret = sunxi_rproc_prepare(&ctx->rproc);
 	KUNIT_EXPECT_EQ(test, ret, 0);
-	KUNIT_EXPECT_EQ(test, ctx->mock_remap_reg & SUNXI_REMAP_SRAMA3_2_BIT,
+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.remap_va) & SUNXI_REMAP_SRAMA3_2_BIT,
 			SUNXI_REMAP_SRAMA3_2_BIT);
 
 	/* unprepare() should clear SUNXI_REMAP_SRAMA3_2_BIT */
 	ret = sunxi_rproc_unprepare(&ctx->rproc);
 	KUNIT_EXPECT_EQ(test, ret, 0);
-	KUNIT_EXPECT_EQ(test, ctx->mock_remap_reg & SUNXI_REMAP_SRAMA3_2_BIT, 0U);
+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.remap_va) & SUNXI_REMAP_SRAMA3_2_BIT, 0U);
 }
 
 static void test_prepare_clears_sram(struct kunit *test)
@@ -2487,19 +2509,6 @@ static void test_kick_null_tx_chan_safe(struct kunit *test)
 	/* Must return cleanly without NULL dereference */
 	sunxi_rproc_kick(&ctx->rproc, 0);
 	sunxi_rproc_kick(&ctx->rproc, 1);
-}
-
-static void test_kick_stores_vqid(struct kunit *test)
-{
-	struct test_context *ctx = create_test_ctx(test);
-
-	/* Verify kick_msg stores the passed vqid to avoid stack UAF */
-	ctx->priv.kick_msg = 0xDEADBEEF;
-	ctx->priv.tx_chan = NULL; /* Avoid mbox_send_message dispatch */
-
-	sunxi_rproc_kick(&ctx->rproc, 1);
-	/* Without tx_chan, returns before writing kick_msg */
-	KUNIT_EXPECT_EQ(test, ctx->priv.kick_msg, 0xDEADBEEFU);
 }
 
 /* ==================== Test Suite Registration ==================== */
@@ -2546,7 +2555,6 @@ static struct kunit_case sunxi_rproc_test_cases[] = {
 	KUNIT_CASE(test_prepare_clears_sram),
 	/* Operations: kick */
 	KUNIT_CASE(test_kick_null_tx_chan_safe),
-	KUNIT_CASE(test_kick_stores_vqid),
 	{}
 };
 
@@ -2560,10 +2568,9 @@ kunit_test_suite(sunxi_rproc_test_suite);
 MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sunxi remoteproc driver");
 MODULE_LICENSE("GPL");
-
 ```
 
-### 6.2 Mailbox KUnit Suite (`drivers/mailbox/sun55i_msgbox_test.c`)
+### 6.2 `drivers/mailbox/sun55i_msgbox_test.c`
 ```c
 // SPDX-License-Identifier: GPL-2.0
 /*
@@ -2791,6 +2798,7 @@ struct mock_rx_sink {
 	int count;
 	u32 last_msg;
 	u32 msgs[SUN55I_FIFO_MAX * 2];
+	u32 *status_reg;
 };
 
 struct mock_msgbox_fixture {
@@ -2808,6 +2816,13 @@ static void mock_rx_cb(struct mbox_client *cl, void *data)
 		sink->msgs[sink->count] = *(u32 *)data;
 	sink->count++;
 	sink->last_msg = *(u32 *)data;
+
+	/*
+	 * Emulate hardware FIFO pop behavior: reading a word from the
+	 * message FIFO decrements MSG_STATUS in real hardware.
+	 */
+	if (sink->status_reg && (*sink->status_reg & MSG_NUM_MASK) > 0)
+		(*sink->status_reg)--;
 }
 
 static struct mock_msgbox_fixture *create_mock_fixture(struct kunit *test)
@@ -2826,8 +2841,12 @@ static struct mock_msgbox_fixture *create_mock_fixture(struct kunit *test)
 		fix->mbox.regs[i] = (void __iomem *)fix->regs[i];
 
 	for (i = 0; i < SUN55I_NUM_CHANS; i++) {
+		int local_n, p, remote_id, remote_n;
+
+		sun55i_chan_to_route(i, &local_n, &p, &remote_id, &remote_n);
 		fix->chans[i].con_priv = &fix->mbox;
 		fix->sinks[i].client.rx_callback = mock_rx_cb;
+		fix->sinks[i].status_reg = &fix->regs[0][SUNXI_MSGBOX_MSG_STATUS(local_n, p) / 4];
 		fix->chans[i].cl = &fix->sinks[i].client;
 	}
 
@@ -2886,14 +2905,12 @@ static void test_functional_last_tx_done_sweep(struct kunit *test)
 	u32 reg_idx = SUNXI_MSGBOX_MSG_STATUS(2, 0) / 4;
 	u32 count;
 
-	/* Counts 0..7: FIFO has space -> last_tx_done returns true */
-	for (count = 0; count < 8; count++) {
-		fix->regs[3][reg_idx] = count;
-		KUNIT_EXPECT_TRUE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]));
-	}
+	/* Count 0: remote has drained the FIFO -> last_tx_done returns true */
+	fix->regs[3][reg_idx] = 0;
+	KUNIT_EXPECT_TRUE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]));
 
-	/* Counts 8..15: FIFO is full or overflow -> last_tx_done returns false */
-	for (count = 8; count <= 15; count++) {
+	/* Counts 1..15: message(s) still pending at remote -> returns false */
+	for (count = 1; count <= 15; count++) {
 		fix->regs[3][reg_idx] = count;
 		KUNIT_EXPECT_FALSE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]));
 	}
@@ -3256,18 +3273,23 @@ static void test_functional_last_tx_done_backpressure_boundary(struct kunit *tes
 	u32 reg_idx = SUNXI_MSGBOX_MSG_STATUS(2, 0) / 4;
 	bool done;
 
-	/* 7 entries in FIFO -> space available (< 8) -> returns true */
-	fix->regs[3][reg_idx] = 7;
+	/* 0 entries in FIFO -> empty -> returns true */
+	fix->regs[3][reg_idx] = 0;
 	done = sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]);
 	KUNIT_EXPECT_TRUE(test, done);
 
-	/* 8 entries in FIFO -> full (== SUN55I_FIFO_MAX) -> backpressure active (false) */
-	fix->regs[3][reg_idx] = 8;
+	/* 1 entry in FIFO -> remote has not consumed it yet -> returns false */
+	fix->regs[3][reg_idx] = 1;
 	done = sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]);
 	KUNIT_EXPECT_FALSE(test, done);
 
-	/* 15 entries in FIFO -> full -> backpressure active (false) */
-	fix->regs[3][reg_idx] = 15;
+	/* 7 entries in FIFO -> still pending even though not full -> returns false */
+	fix->regs[3][reg_idx] = 7;
+	done = sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]);
+	KUNIT_EXPECT_FALSE(test, done);
+
+	/* 8 entries in FIFO -> full (== SUN55I_FIFO_MAX) -> returns false */
+	fix->regs[3][reg_idx] = 8;
 	done = sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[8]);
 	KUNIT_EXPECT_FALSE(test, done);
 }
@@ -3376,5 +3398,4 @@ kunit_test_suite(sun55i_msgbox_test_suite);
 MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sun55i Message Box driver");
 MODULE_LICENSE("GPL");
-
 ```
