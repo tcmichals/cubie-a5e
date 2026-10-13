@@ -62,9 +62,8 @@ STAGE3_CHECKS = [
     },
     {
         "id": "RPROC_DOORBELL_PASS_CASE_ACK",
-        "desc": "RemoteProc kick must call mbox_client_txdone on mbox_send_message success (ret >= 0)",
-        "pattern": r"(void\s+sunxi_rproc_kick\s*\([^)]*\)\s*\{[\s\S]*?\})",
-        "required_near": [r"mbox_client_txdone"],
+        "desc": "RemoteProc client sets knows_txdone = false so controller handles pacing natively",
+        "pattern": r"(cl\.knows_txdone\s*=\s*false)",
     },
     {
         "id": "ATT_FALLTHROUGH_HAZARD",
@@ -235,7 +234,7 @@ def generate_report(findings, output_md):
             f.write("| **R8** | `sunxi_rproc.c` | **Medium** | `da_to_va` translates unmatched ATT addresses as host PAs | Added strict bounds validation against registered carveouts. | **FIXED** |\n")
             f.write("| **R9** | `sunxi_rproc.c` | **Medium** | Missing teardown of crash IRQ on start failure leaks state | Added symmetric unwind in `sunxi_rproc_start` error path. | **FIXED** |\n")
             f.write("| **R10**| `sunxi_rproc.c` | **Medium** | Missing write flush of boot address causes execution race | Added `readl()` readback flush before core reset de-assertion. | **FIXED** |\n")
-            f.write("| **R11**| `sunxi_rproc.c` | **High** | Missing `mbox_client_txdone()` in kick pass case causes queue leak | Added `mbox_client_txdone()` on `ret >= 0` pass case in `sunxi_rproc_kick()`. | **FIXED** |\n")
+            f.write("| **R11**| `sunxi_rproc.c` | **High** | Double completion / bypass of controller pacing | Configured `cl.knows_txdone = false`, letting mailbox framework poll `last_tx_done` natively. | **FIXED** |\n")
             f.write("| **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing dependencies for KUnit tests | Added `depends on SUNXI_REMOTEPROC && KUNIT && !UML` to guard against logic_iomem traps. | **FIXED** |\n")
             f.write("| **K2** | `sunxi_rproc_test.c` | **Medium** | KUnit test mock MMIO reads fail on Big-Endian | Replaced array indexing with endian-safe `readl(ctx->priv.cfg_va + offset)`. | **FIXED** |\n")
             f.write("| **K3** | `sunxi_rproc_test.c` | **Medium** | False positive KUnit test for obsolete `kick_msg` field | Test updated to inspect stack-local transmit buffer. | **FIXED** |\n")
