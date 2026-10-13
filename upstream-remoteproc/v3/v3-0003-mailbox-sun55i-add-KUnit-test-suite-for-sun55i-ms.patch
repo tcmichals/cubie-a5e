@@ -1,4 +1,4 @@
-From 22fc1fbd7faf98a88afab9bcbb9b02852d005983 Mon Sep 17 00:00:00 2001
+From 470065ebc1660246240e82b7466be1a774964340 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:55 -0500
 Subject: [PATCH v3 3/7] mailbox: sun55i: add KUnit test suite for sun55i
@@ -19,17 +19,17 @@ Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/mailbox/Kconfig              |  10 +
  drivers/mailbox/Makefile             |   1 +
- drivers/mailbox/sun55i_msgbox_test.c | 826 +++++++++++++++++++++++++++
- 3 files changed, 837 insertions(+)
+ drivers/mailbox/sun55i_msgbox_test.c | 831 +++++++++++++++++++++++++++
+ 3 files changed, 842 insertions(+)
  create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
 
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
-index 9067f5161276..8278affaec54 100644
+index f4890b55f866..03d7dc37aae3 100644
 --- a/drivers/mailbox/Kconfig
 +++ b/drivers/mailbox/Kconfig
 @@ -342,6 +342,16 @@ config SUN55I_MSGBOX
- 	  provides 12 hardware FIFO channels for communication between the
- 	  Cortex-A55 host, CPUS, HiFi4 DSP, and XuanTie E907 RISC-V coprocessors.
+ 	  hardware FIFO channels for communication between the Cortex-A55 host,
+ 	  CPUS, HiFi4 DSP, and XuanTie E906 RISC-V coprocessors.
  
 +config SUN55I_MSGBOX_KUNIT_TEST
 +	tristate "KUnit tests for Allwinner sun55i msgbox" if !KUNIT_ALL_TESTS
@@ -58,10 +58,10 @@ index aa17f9d0acd4..6fe1f1112c10 100644
  
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
 new file mode 100644
-index 000000000000..69ff7673696c
+index 000000000000..28a338189905
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
-@@ -0,0 +1,826 @@
+@@ -0,0 +1,831 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * KUnit tests for Allwinner sun55i 4-port Message Box driver (sun55i-msgbox.c)
@@ -358,7 +358,9 @@ index 000000000000..69ff7673696c
 +		sun55i_msgbox_chan_ops.send_data(&fix->chans[ch], &val);
 +
 +		reg_idx = SUNXI_MSGBOX_MSG_FIFO(remote_n, p) / 4;
-+		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[remote_id][reg_idx]), val);
++		KUNIT_EXPECT_EQ(test,
++				le32_to_cpu((__force __le32)fix->regs[remote_id][reg_idx]),
++				val);
 +	}
 +}
 +
@@ -385,7 +387,9 @@ index 000000000000..69ff7673696c
 +
 +	for (i = 0; i < ARRAY_SIZE(patterns); i++) {
 +		sun55i_msgbox_chan_ops.send_data(&fix->chans[8], (void *)&patterns[i]);
-+		KUNIT_EXPECT_EQ(test, le32_to_cpu((__force __le32)fix->regs[3][reg_idx]), patterns[i]);
++		KUNIT_EXPECT_EQ(test,
++				le32_to_cpu((__force __le32)fix->regs[3][reg_idx]),
++				patterns[i]);
 +	}
 +}
 +
@@ -885,9 +889,10 @@ index 000000000000..69ff7673696c
 +
 +kunit_test_suite(sun55i_msgbox_test_suite);
 +
++MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sun55i Message Box driver");
 +MODULE_LICENSE("GPL");
 -- 
-2.53.0
+2.43.0
 

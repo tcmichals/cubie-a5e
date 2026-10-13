@@ -100,14 +100,17 @@ The official prompt templates live in `sashiko-dev/sashiko` under `third_party/p
 ### Stage 3: Subsystem Framework Contracts (`dt-bindings.md`, Framework Pacing)
 * **Source**: `third_party/prompts/kernel/subsystem/dt-bindings.md`
 * **Invariants**:
-  1. **Mailbox Pacing & RemoteProc Kick Contracts**:
-     * For FIFO-buffered mailbox controllers, `last_tx_done(chan)` returns `true` when the hardware FIFO has capacity (`count < FIFO_MAX` or `!(status & FULL)`), enabling hardware FIFO pipelining (Broadcom BCM2835 pattern).
-     * For RemoteProc clients using mailboxes as virtqueue kick doorbells, `cl.knows_txdone = true` must be declared.
-     * **Mandatory Pass-Case Handling**: On `mbox_send_message()` success (`ret >= 0`), `mbox_client_txdone(chan, 0)` MUST be called immediately to clear `chan->active_req`. Omitting this leaks the channel request state and causes `Try increasing MBOX_TX_QUEUE_LEN` software queue overflows.
-  2. **Device Tree Binding Schemas**:
+  1. **Mailbox Pacing & RemoteProc Kick Contracts** (ONE consistent model - the two halves must be reviewed together):
+     * Controller: `txdone_poll = true`, `last_tx_done()` returns true only when the *remote* FIFO is drained (`count == 0`).
+     * Client: `cl.knows_txdone = false`; the client NEVER calls `mbox_client_txdone()`.
+     * **Consequence (object lifetime)**: with this model a send issued while a previous request is still active is *queued by pointer* and read later from the poll timer. Therefore the `mssg` argument of `mbox_send_message()` MUST point to storage that outlives the call (static/const table or a struct member that is not rewritten while queued). A pointer to a stack local is a use-after-return. The "controller copies it synchronously" argument is only valid for an EMPTY queue and is NOT an acceptable justification.
+     * If the model is ever changed (e.g. back to `knows_txdone = true`), re-run the whole item; do not patch one half.
+  2. **Queue/flush ordering parity**: when an ISR uses "clear pending BEFORE drain", every other path touching the same FIFO (`startup()`, `shutdown()`, flush helpers) must use the same order.
+  3. **Cache-attribute uniqueness**: a physical range must have exactly one mapping attribute. Check `of_reserved_mem_device_init()` (DMA pool, WC) against every `devm_memremap(MEMREMAP_WB)` / `devm_ioremap_wc()` of the same `memory-region` entry; verify against the actual DT, not just the C.
+  4. **Device Tree Binding Schemas**:
      * NEVER use `enum` in `reg-names`, `clock-names`, or `reset-names`. Hardware registers have fixed addresses; always use positional `items:` lists with `- const:`.
      * Never use freeform narrative text in `description:` for interrupts. Use positional `items:` with `minItems: 1`.
-  3. **RemoteProc ATT & Carveout Translation**:
+  5. **RemoteProc ATT & Carveout Translation**:
      * Strict bounds checking on `da + len` to prevent 64-bit integer overflow.
      * Memory attributes parity: On-chip SRAM (`mem->is_iomem = true`), System DDR carveouts (`mem->is_iomem = false`). Never double-map as device/non-cacheable.
 

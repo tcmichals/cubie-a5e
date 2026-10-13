@@ -1,10 +1,10 @@
-From fc337333f68942117473e9551471daeb120bac33 Mon Sep 17 00:00:00 2001
+From 9a3315bb48eb3ef6a202c6eed165d8b748a6da6e Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Fri, 25 Sep 2026 14:26:56 -0500
 Subject: [PATCH v3 6/7] remoteproc: sunxi: add KUnit test suite for sunxi
  remoteproc driver
 
-Add comprehensive in-kernel KUnit unit test suite (34 tests) for the
+Add comprehensive in-kernel KUnit unit test suite (32 tests) for the
 Allwinner sunxi remoteproc driver.
 
 Tests validate:
@@ -18,17 +18,18 @@ Tests validate:
 - Symmetrical prepare/unprepare SRAM remap bit manipulation and memory
   clearing.
 - Safe kick handling when transmit mailbox channels are unconfigured.
+- Carveout registration lifecycle in .prepare() across restarts.
 
 Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
  drivers/remoteproc/Kconfig            |  10 +
  drivers/remoteproc/Makefile           |   1 +
- drivers/remoteproc/sunxi_rproc_test.c | 697 ++++++++++++++++++++++++++
- 3 files changed, 708 insertions(+)
+ drivers/remoteproc/sunxi_rproc_test.c | 675 ++++++++++++++++++++++++++
+ 3 files changed, 686 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
-index d35b033b9106..e4f6cbec8c10 100644
+index 3a346d8923f8..ad2d0e0a53f0 100644
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
 @@ -396,6 +396,16 @@ config SUNXI_REMOTEPROC
@@ -59,10 +60,10 @@ index 02acefa6d880..a3503a71f332 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)	+= sunxi_rproc_test.o
 diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/sunxi_rproc_test.c
 new file mode 100644
-index 000000000000..7b1769ab4b51
+index 000000000000..260c2cb891bc
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc_test.c
-@@ -0,0 +1,697 @@
+@@ -0,0 +1,675 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * KUnit tests for Allwinner XuanTie RISC-V remoteproc driver (sunxi_rproc.c)
@@ -131,6 +132,7 @@ index 000000000000..7b1769ab4b51
 +
 +	ctx->rproc.priv = &ctx->priv;
 +	ctx->priv.rproc = &ctx->rproc;
++	INIT_LIST_HEAD(&ctx->rproc.carveouts);
 +
 +	ctx->priv.r_sram_va = FAKE_SRAM_VA;
 +	ctx->priv.r_sram_phys = A527_SRAM_PHYS;
@@ -162,7 +164,7 @@ index 000000000000..7b1769ab4b51
 +
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA_ALT, 0, NULL));
++					       E906_SRAM_SPACE0_DA_ALT, 0, NULL));
 +}
 +
 +static void test_da_to_va_overflow_guard(struct kunit *test)
@@ -179,7 +181,7 @@ index 000000000000..7b1769ab4b51
 +	void *va;
 +
 +	/* Must succeed without dereferencing NULL is_iomem */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA_ALT, 0x100, NULL);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA_ALT, 0x100, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR);
 +}
@@ -192,7 +194,7 @@ index 000000000000..7b1769ab4b51
 +	bool is_iomem = false;
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA_ALT, 0x100, &is_iomem);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA_ALT, 0x100, &is_iomem);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR);
 +	KUNIT_EXPECT_TRUE(test, is_iomem);
@@ -203,7 +205,7 @@ index 000000000000..7b1769ab4b51
 +	struct test_context *ctx = create_test_ctx(test);
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA_ALT + 0x1000, 0x100, NULL);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA_ALT + 0x1000, 0x100, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + 0x1000);
 +}
@@ -236,7 +238,7 @@ index 000000000000..7b1769ab4b51
 +	bool is_iomem = false;
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA, 0x100, &is_iomem);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA, 0x100, &is_iomem);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR);
 +	KUNIT_EXPECT_TRUE(test, is_iomem);
@@ -248,7 +250,7 @@ index 000000000000..7b1769ab4b51
 +	bool is_iomem = false;
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_C_DA, 0x100, &is_iomem);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_C_DA, 0x100, &is_iomem);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR);
 +	KUNIT_EXPECT_TRUE(test, is_iomem);
@@ -274,7 +276,7 @@ index 000000000000..7b1769ab4b51
 +	bool is_iomem = false;
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE1_DA, 0x100, &is_iomem);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE1_DA, 0x100, &is_iomem);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM1_PTR);
 +	KUNIT_EXPECT_TRUE(test, is_iomem);
@@ -286,7 +288,7 @@ index 000000000000..7b1769ab4b51
 +	bool is_iomem = false;
 +	void *va;
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE1_DA_ALT, 0x100, &is_iomem);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE1_DA_ALT, 0x100, &is_iomem);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM1_PTR);
 +	KUNIT_EXPECT_TRUE(test, is_iomem);
@@ -336,22 +338,22 @@ index 000000000000..7b1769ab4b51
 +	/* 1 byte before Space 0 start -> NULL */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA - 1, 1, NULL));
++					       E906_SRAM_SPACE0_DA - 1, 1, NULL));
 +
 +	/* Exact last byte inside Space 0 -> valid */
 +	va = sunxi_rproc_da_to_va(&ctx->rproc,
-+				  E907_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 1, 1, NULL);
++				  E906_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 1, 1, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +
 +	/* 1 byte beyond Space 1 end -> NULL */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA_ALT + A527_SRAM1_SIZE, 1, NULL));
++					       E906_SRAM_SPACE1_DA_ALT + A527_SRAM1_SIZE, 1, NULL));
 +
 +	/* Access starting inside Space 1 but spanning past end -> NULL */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA_ALT +
++					       E906_SRAM_SPACE1_DA_ALT +
 +					       A527_SRAM1_SIZE - 4, 8, NULL));
 +}
 +
@@ -361,13 +363,13 @@ index 000000000000..7b1769ab4b51
 +	void *va;
 +
 +	/* Exact last byte inside Space 1 -> valid */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 1, NULL);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 1, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +
 +	/* Spanning past Space 1 end -> NULL */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 4, 8, NULL));
++					       E906_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 4, 8, NULL));
 +}
 +
 +static void test_da_to_va_unmapped_regions_return_null(struct kunit *test)
@@ -378,19 +380,19 @@ index 000000000000..7b1769ab4b51
 +	ctx->priv.r_sram_va = NULL;
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA_ALT, 0x100, NULL));
++					       E906_SRAM_SPACE0_DA_ALT, 0x100, NULL));
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
 +					       A527_SRAM_PHYS, 0x100, NULL));
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_C_DA, 0x100, NULL));
++					       E906_SRAM_C_DA, 0x100, NULL));
 +
 +	/* When SRAM Space 1 is unmapped, Space 1 views return NULL */
 +	ctx->priv.r_sram1_va = NULL;
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA, 0x100, NULL));
++					       E906_SRAM_SPACE1_DA, 0x100, NULL));
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
 +					       A527_SRAM1_PHYS, 0x100, NULL));
@@ -407,13 +409,13 @@ index 000000000000..7b1769ab4b51
 +	struct test_context *ctx = create_test_ctx(test);
 +
 +	/*
-+	 * Space 1 DA (E907_SRAM_SPACE1_DA) must NEVER resolve to Space 0, even when
++	 * Space 1 DA (E906_SRAM_SPACE1_DA) must NEVER resolve to Space 0, even when
 +	 * Space 1 is unmapped.
 +	 */
 +	ctx->priv.r_sram1_va = NULL;
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA, 0x100, NULL));
++					       E906_SRAM_SPACE1_DA, 0x100, NULL));
 +}
 +
 +static void test_da_to_va_exact_upper_boundary_space0(struct kunit *test)
@@ -421,26 +423,26 @@ index 000000000000..7b1769ab4b51
 +	struct test_context *ctx = create_test_ctx(test);
 +	void *va;
 +
-+	/* Exact last byte of Space 0 (E907_SRAM_SPACE0_DA + 256K - 1) */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA + A527_SRAM_SIZE - 1, 1, NULL);
++	/* Exact last byte of Space 0 (E906_SRAM_SPACE0_DA + 256K - 1) */
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA + A527_SRAM_SIZE - 1, 1, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + A527_SRAM_SIZE - 1);
 +
 +	/* Spanning 1 byte beyond Space 0 must be rejected */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA + A527_SRAM_SIZE - 1, 2, NULL));
++					       E906_SRAM_SPACE0_DA + A527_SRAM_SIZE - 1, 2, NULL));
 +
-+	/* Exact last byte of Alt Space 0 (E907_SRAM_SPACE0_DA_ALT + 256K - 1) */
++	/* Exact last byte of Alt Space 0 (E906_SRAM_SPACE0_DA_ALT + 256K - 1) */
 +	va = sunxi_rproc_da_to_va(&ctx->rproc,
-+				  E907_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 1, 1, NULL);
++				  E906_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 1, 1, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + A527_SRAM_SIZE - 1);
 +
 +	/* Spanning 1 byte beyond Alt Space 0 must be rejected */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA_ALT +
++					       E906_SRAM_SPACE0_DA_ALT +
 +					       A527_SRAM_SIZE - 1, 2, NULL));
 +}
 +
@@ -449,15 +451,15 @@ index 000000000000..7b1769ab4b51
 +	struct test_context *ctx = create_test_ctx(test);
 +	void *va;
 +
-+	/* Exact last byte of Space 1 (E907_SRAM_SPACE1_DA + 256K - 1) */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 1, NULL);
++	/* Exact last byte of Space 1 (E906_SRAM_SPACE1_DA + 256K - 1) */
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 1, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM1_PTR + A527_SRAM1_SIZE - 1);
 +
 +	/* Spanning 1 byte beyond Space 1 must be rejected */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 2, NULL));
++					       E906_SRAM_SPACE1_DA + A527_SRAM1_SIZE - 1, 2, NULL));
 +}
 +
 +static void test_da_to_va_exact_upper_boundary_dram(struct kunit *test)
@@ -476,65 +478,17 @@ index 000000000000..7b1769ab4b51
 +					       A527_DRAM_PHYS + A527_DRAM_SIZE - 1, 2, NULL));
 +}
 +
-+static const struct sunxi_rproc_cfg a733_e902_cfg = {
-+	.name = "XuanTie E902 RISC-V",
-+	.att = NULL,
-+	.att_size = 0,
-+	.has_remap_reg = false,
-+	.boot_reg_offset = E906_STA_ADD_REG,
-+};
-+
-+static void test_da_to_va_a733_sram_a2_layout(struct kunit *test)
-+{
-+	struct test_context *ctx = create_test_ctx(test);
-+	void *va;
-+	bool is_iomem = false;
-+
-+	/*
-+	 * Allwinner A733 (sun60i) E902 silicon profile:
-+	 * Uses System SRAM A2 (0x00040000 - 0x00073FFF, 208 KB).
-+	 * Has no Space 1 (r_sram1_va is NULL) and no ATT translation table.
-+	 */
-+	ctx->priv.cfg = &a733_e902_cfg;
-+	ctx->priv.r_sram_phys = 0x00040000ULL;
-+	ctx->priv.r_sram_size = 0x34000; /* 208 KB */
-+	ctx->priv.r_sram1_va = NULL;
-+	ctx->priv.r_sram1_size = 0;
-+
-+	/* Base of SRAM A2 */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, 0x00040000, 0x100, &is_iomem);
-+	KUNIT_ASSERT_NOT_NULL(test, va);
-+	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR);
-+	KUNIT_EXPECT_TRUE(test, is_iomem);
-+
-+	/* Entry offset in SRAM A2 (0x00044000) */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, 0x00044000, 0x1000, &is_iomem);
-+	KUNIT_ASSERT_NOT_NULL(test, va);
-+	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + 0x4000);
-+
-+	/* Exact last byte of SRAM A2 (0x00040000 + 0x34000 - 1 = 0x00073FFF) */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, 0x00073FFF, 1, &is_iomem);
-+	KUNIT_ASSERT_NOT_NULL(test, va);
-+	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + 0x33FFF);
-+
-+	/* Beyond SRAM A2 boundary must return NULL */
-+	KUNIT_EXPECT_NULL(test,
-+			  sunxi_rproc_da_to_va(&ctx->rproc, 0x00074000, 1, NULL));
-+	KUNIT_EXPECT_NULL(test,
-+			  sunxi_rproc_da_to_va(&ctx->rproc, 0x00073FFF, 2, NULL));
-+}
-+
 +static void test_da_to_va_unaligned_lengths(struct kunit *test)
 +{
 +	struct test_context *ctx = create_test_ctx(test);
 +	void *va;
 +
 +	/* 3-byte and 7-byte transfers must translate correctly without faulting */
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE0_DA + 3, 3, NULL);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE0_DA + 3, 3, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM_PTR + 3);
 +
-+	va = sunxi_rproc_da_to_va(&ctx->rproc, E907_SRAM_SPACE1_DA + 7, 7, NULL);
++	va = sunxi_rproc_da_to_va(&ctx->rproc, E906_SRAM_SPACE1_DA + 7, 7, NULL);
 +	KUNIT_ASSERT_NOT_NULL(test, va);
 +	KUNIT_EXPECT_PTR_EQ(test, va, FAKE_SRAM1_PTR + 7);
 +}
@@ -565,39 +519,18 @@ index 000000000000..7b1769ab4b51
 +	 */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA_ALT,
++					       E906_SRAM_SPACE0_DA_ALT,
 +					       (size_t)-1, NULL));
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE1_DA,
++					       E906_SRAM_SPACE1_DA,
 +					       (size_t)-16, NULL));
 +
 +	/* Segment starts near end of Space 0 and extends 4KB beyond valid SRAM */
 +	KUNIT_EXPECT_NULL(test,
 +			  sunxi_rproc_da_to_va(&ctx->rproc,
-+					       E907_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 0x100,
++					       E906_SRAM_SPACE0_DA_ALT + A527_SRAM_SIZE - 0x100,
 +					       0x200, NULL));
-+}
-+
-+static void test_start_a733_mode1_and_mode2_bootaddr(struct kunit *test)
-+{
-+	struct test_context *ctx = create_test_ctx(test);
-+	int ret;
-+
-+	ctx->priv.cfg = &a733_e902_cfg;
-+	ctx->priv.cfg_va = (void __iomem *)ctx->mock_cfg_regs;
-+
-+	/* Mode 1: Suspend/resume E902 SCP boot from DRAM (0x40014000) */
-+	ctx->rproc.bootaddr = 0x40014000;
-+	ret = sunxi_rproc_start(&ctx->rproc);
-+	KUNIT_EXPECT_EQ(test, ret, 0);
-+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x40014000U);
-+
-+	/* Mode 2: Real-time coprocessor boot from SRAM A2 (0x00044000) */
-+	ctx->rproc.bootaddr = 0x00044000;
-+	ret = sunxi_rproc_start(&ctx->rproc);
-+	KUNIT_EXPECT_EQ(test, ret, 0);
-+	KUNIT_EXPECT_EQ(test, readl(ctx->priv.cfg_va + E906_STA_ADD_REG), 0x00044000U);
 +}
 +
 +/* ==================== Lifecycle: start & stop ==================== */
@@ -622,7 +555,7 @@ index 000000000000..7b1769ab4b51
 +	struct test_context *ctx = create_test_ctx(test);
 +	int ret;
 +
-+	/* Addresses beyond 32-bit range are invalid for 32-bit XuanTie E907 */
++	/* Addresses beyond 32-bit range are invalid for 32-bit XuanTie E906 */
 +	ctx->rproc.bootaddr = 0x100000000ULL;
 +
 +	ret = sunxi_rproc_start(&ctx->rproc);
@@ -691,6 +624,52 @@ index 000000000000..7b1769ab4b51
 +		KUNIT_EXPECT_EQ(test, ctx->mock_sram1_buf[i], 0);
 +}
 +
++static void test_prepare_carveout_lifecycle(struct kunit *test)
++{
++	struct test_context *ctx = create_test_ctx(test);
++	struct rproc_mem_entry *entry, *tmp;
++	int count, ret;
++
++	/* Setup a mock reserved memory entry */
++	ctx->priv.num_rmem = 1;
++	ctx->priv.rmem[0].name = "dram";
++	ctx->priv.rmem[0].va = ctx->mock_sram_buf;
++	ctx->priv.rmem[0].phys = A527_DRAM_PHYS;
++	ctx->priv.rmem[0].size = sizeof(ctx->mock_sram_buf);
++	ctx->priv.rmem[0].is_iomem = false;
++
++	/* First boot */
++	ret = sunxi_rproc_prepare(&ctx->rproc);
++	KUNIT_EXPECT_EQ(test, ret, 0);
++
++	count = 0;
++	list_for_each_entry(entry, &ctx->rproc.carveouts, node)
++		count++;
++	KUNIT_EXPECT_EQ(test, count, 1);
++
++	/* Simulate rproc_resource_cleanup() freeing carveouts on shutdown */
++	list_for_each_entry_safe(entry, tmp, &ctx->rproc.carveouts, node) {
++		list_del(&entry->node);
++		kfree(entry);
++	}
++	KUNIT_EXPECT_TRUE(test, list_empty(&ctx->rproc.carveouts));
++
++	/* Second boot (restart/recovery): prepare() must re-add the carveout */
++	ret = sunxi_rproc_prepare(&ctx->rproc);
++	KUNIT_EXPECT_EQ(test, ret, 0);
++
++	count = 0;
++	list_for_each_entry(entry, &ctx->rproc.carveouts, node)
++		count++;
++	KUNIT_EXPECT_EQ(test, count, 1);
++
++	/* Clean up */
++	list_for_each_entry_safe(entry, tmp, &ctx->rproc.carveouts, node) {
++		list_del(&entry->node);
++		kfree(entry);
++	}
++}
++
 +/* ==================== Operations: kick ==================== */
 +
 +static void test_kick_null_tx_chan_safe(struct kunit *test)
@@ -733,18 +712,17 @@ index 000000000000..7b1769ab4b51
 +	KUNIT_CASE(test_da_to_va_exact_upper_boundary_space0),
 +	KUNIT_CASE(test_da_to_va_exact_upper_boundary_space1),
 +	KUNIT_CASE(test_da_to_va_exact_upper_boundary_dram),
-+	KUNIT_CASE(test_da_to_va_a733_sram_a2_layout),
 +	KUNIT_CASE(test_da_to_va_unaligned_lengths),
 +	KUNIT_CASE(test_da_to_va_malformed_rsc_table_entry),
 +	KUNIT_CASE(test_da_to_va_corrupted_elf_overflow_segment),
 +	/* Lifecycle: start and stop */
 +	KUNIT_CASE(test_start_bootaddr_programming),
-+	KUNIT_CASE(test_start_a733_mode1_and_mode2_bootaddr),
 +	KUNIT_CASE(test_start_rejects_bootaddr_overflow),
 +	KUNIT_CASE(test_stop_succeeds),
 +	/* Lifecycle: prepare and unprepare */
 +	KUNIT_CASE(test_prepare_and_unprepare_remap),
 +	KUNIT_CASE(test_prepare_clears_sram),
++	KUNIT_CASE(test_prepare_carveout_lifecycle),
 +	/* Operations: kick */
 +	KUNIT_CASE(test_kick_null_tx_chan_safe),
 +	{}
@@ -757,9 +735,10 @@ index 000000000000..7b1769ab4b51
 +
 +kunit_test_suite(sunxi_rproc_test_suite);
 +
++MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Comprehensive KUnit tests for Allwinner sunxi remoteproc driver");
 +MODULE_LICENSE("GPL");
 -- 
-2.53.0
+2.43.0
 

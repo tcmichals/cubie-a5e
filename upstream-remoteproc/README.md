@@ -16,6 +16,8 @@ This workspace consolidates all upstream Linux kernel submissions, Devicetree bi
   Clean 5-tier adversarial audit results and complete 23-item verification matrix.
 * 📬 **[Archived Review Feedback](v2/COMMENTS.md)**  
   Verbatim mailing list reviews in [v1/COMMENTS.md](v1/COMMENTS.md) and [v2/COMMENTS.md](v2/COMMENTS.md).
+* 📥 **[Lore Email Ingest Pipeline Guide (EMAIL_INGEST_GUIDE.md)](EMAIL_INGEST_GUIDE.md)**  
+  Documentation and runbook for fetching review emails from lore.kernel.org public-inbox and generating COMMENTS.md.
 
 ---
 
@@ -42,7 +44,7 @@ upstream-remoteproc/
 │   ├── COMMENTS.md             # Verbatim parsed feedback from Krzysztof & Sashiko
 │   └── AUDIT.md                # v2 audit report (flagged M2, K2)
 └── v3/                         # v3 patch series workspace
-    └── AUDIT.md                # v3 verification matrix & adversarial audit report (Status: CLEAN)
+    └── AUDIT.md                # v3 verification matrix & adversarial audit report (Status: Verification in Progress)
 ```
 
 ---

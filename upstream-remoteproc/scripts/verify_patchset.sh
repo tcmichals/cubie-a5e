@@ -136,14 +136,14 @@ if [ -f "$RPROC_C" ]; then
         ERRORS=$((ERRORS + 1))
     fi
 
-    # Check 2.6: Teardown order (LIFO): free_irq -> mbox_free_channel -> cancel_work_sync -> rproc_del
+    # Check 2.6: Teardown order: rproc_del -> cancel_work_sync -> mbox_free_channel
     if grep -q "rproc_del" "$RPROC_C" && grep -q "mbox_free_channel" "$RPROC_C"; then
         del_pos=$(grep -n "rproc_del(" "$RPROC_C" | tail -1 | cut -d: -f1)
         mbox_pos=$(grep -n "mbox_free_channel(" "$RPROC_C" | tail -1 | cut -d: -f1)
-        if [ "$del_pos" -gt "$mbox_pos" ]; then
-            echo -e "${GREEN}  PASS: sunxi_rproc.c teardown follows strict LIFO order (rproc_del after mbox_free_channel).${NC}"
+        if [ "$del_pos" -lt "$mbox_pos" ]; then
+            echo -e "${GREEN}  PASS: sunxi_rproc.c teardown halts rproc before freeing mailbox channels.${NC}"
         else
-            echo -e "${RED}  FAIL: sunxi_rproc.c teardown order inversion: rproc_del called before mbox_free_channel!${NC}"
+            echo -e "${RED}  FAIL: sunxi_rproc.c teardown order inversion: mbox_free_channel called before rproc_del!${NC}"
             ERRORS=$((ERRORS + 1))
         fi
     fi

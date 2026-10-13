@@ -168,23 +168,73 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ## 3. RemoteProc Subsystem Rules (Bjorn Andersson & Mathieu Poirier)
 
-### Lesson 3.1: Strict LIFO Teardown Symmetry to Prevent UAF
+### Lesson 3.1: RemoteProc Teardown Order: `rproc_del()` MUST Be Called First
 * **What Went Wrong**:
-  In `sunxi_rproc_remove()`, calling `rproc_del()` before freeing mailbox channels:
+  In early revisions, an inverted order freed mailbox channels before calling `rproc_del()`:
   ```c
-  /* WRONG: Destroys rproc before closing incoming mailbox IRQs */
-  rproc_del(rproc);
-  cancel_work_sync(&priv->vq_work);
+  /* WRONG: Frees mailbox channels while remote core and virtio devices are still active */
   mbox_free_channel(priv->rx_chan);
+  mbox_free_channel(priv->tx_chan);
+  cancel_work_sync(&priv->vq_work);
+  rproc_del(rproc);
   ```
 * **The Upstream Rule**:
-  `rproc_del()` tears down VirtIO vrings and destroys internal data structures. If a remote core raises a mailbox interrupt during or after `rproc_del()`, the incoming message queues `vq_work` that attempts to access destroyed virtqueues.
+  `rproc_del()` shuts down the remoteproc framework (`rproc_shutdown()`), stops the remote core via `ops->stop()`, and unregisters VirtIO devices. During VirtIO teardown, drivers flush buffers and may kick the mailbox. If mailbox channels are freed *before* `rproc_del()`, VirtIO teardown will attempt to access freed or NULL mailbox channels.
 * **The Correct Pattern**:
-  LIFO (Last-In, First-Out) symmetry:
-  1. `devm_free_irq(crash_irq)` — Stop and synchronize crash notifications first.
-  2. `mbox_free_channel(rx_chan / tx_chan)` — Close the mailbox gate so no new RX interrupts can trigger.
-  3. `cancel_work_sync(&priv->vq_work)` — Drain any already queued worker items.
-  4. `rproc_del(rproc)` — Halt remote core and destroy virtqueues **last**, when no concurrent execution paths exist.
+  In `remove()`:
+  1. `rproc_del(rproc)` — Halt remote core and unregister VirtIO devices first.
+  2. `sunxi_rproc_free_mbox(priv)` — Free mailbox channels after `rproc_del()` returns, preventing kick after free.
+  3. `cancel_work_sync(&priv->vq_work)` — Drain any remaining worker items.
+  4. `of_reserved_mem_device_release()` — Release reserved memory last.
+  (The crash IRQ is devm-managed and disarmed in `stop()`).
+
+---
+
+### Lesson 3.1b: Never Call `disable_irq()` Under a Spinlock (Sleep in Atomic Context)
+* **What Went Wrong**:
+  Wrapping `disable_irq()` inside `spin_lock_irqsave(&priv->lock, flags)` or holding a lock to guard an enable flag.
+* **The Upstream Rule**:
+  `disable_irq()` calls `synchronize_irq()`, which waits for in-flight interrupt handlers and **sleeps** (`kernel/irq/manage.c`). Calling it while holding a spinlock triggers `might_sleep()` and kernel panics (`BUG: scheduling while atomic`). Furthermore, rproc ops are already serialized by `rproc->lock`.
+* **The Correct Pattern**:
+  Use atomic bit operations (`test_and_clear_bit` / `test_and_set_bit`) without a spinlock:
+  ```c
+  /* In crash handler (interrupt context) */
+  if (test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
+      disable_irq_nosync(irq);
+
+  /* In stop() (process context) */
+  if (priv->crash_irq > 0 &&
+      test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
+      disable_irq(priv->crash_irq);
+  ```
+
+---
+
+### Lesson 3.1c: Static Carveouts Must Be Registered in `.prepare()`
+* **What Went Wrong**:
+  Registering static carveouts in `probe()` via `rproc_add_carveout()`.
+* **The Upstream Rule**:
+  `rproc_shutdown()` invokes `rproc_resource_cleanup()`, which purges and frees all entries in `rproc->carveouts`. If carveouts are only registered during `probe()`, they vanish after the first stop, breaking subsequent boots.
+* **The Correct Pattern**:
+  Register static carveouts inside `rproc->ops->prepare()`, matching upstream `imx_rproc` and `stm32_rproc`. `prepare()` is invoked on every boot, ensuring carveouts exist on every lifecycle run.
+
+---
+
+### Lesson 3.1d: `devm_memremap()` Returns `ERR_PTR`, Never `NULL`
+* **What Went Wrong**:
+  Checking the return value of `devm_memremap()` with `if (!va)` or `if (va)`.
+* **The Upstream Rule**:
+  `devm_memremap()` returns an `ERR_PTR` on failure (e.g. `-ENOMEM` or `-EINVAL`), never `NULL`. Testing `if (va)` treats error pointers as valid mappings, passing corrupt pointers to `rproc_add_carveout()`.
+* **The Correct Pattern**:
+  Always check `IS_ERR(va)` and propagate `PTR_ERR(va)`.
+
+---
+
+### Lesson 3.1e: Exact Match on `memory-region-names`
+* **What Went Wrong**:
+  Using `strstr(name, "dram") || strstr(name, "vram")` caused both DT regions to match the same branch, overwriting `priv->dram_va` with whichever region came last.
+* **The Upstream Rule**:
+  Use exact string matching (`!strcmp(rmem->name, "dram")`) for distinct memory region declarations.
 
 ---
 
@@ -294,6 +344,8 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
 - [ ] Mailbox `last_tx_done()` checks `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`).
 - [ ] RemoteProc kick sets `cl.knows_txdone = true` AND calls `mbox_client_txdone()` on `ret >= 0` pass case.
-- [ ] Mailbox hardirq is protected by `spin_lock_irqsave`.
-- [ ] Teardown sequence strictly follows LIFO order (`rproc_del()` called last).
+- [ ] Teardown sequence halts remoteproc first (rproc_del() called before freeing mailbox channels).
+- [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
+- [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
+- [ ] Mailbox driver only requests the ARM host port interrupt that Linux services.
 - [ ] `git send-email` dispatched as an independent top-level thread (NO `--in-reply-to` linking to previous versions).

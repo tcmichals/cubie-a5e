@@ -41,9 +41,14 @@ STAGE1_CHECKS = [
 
 STAGE2_CHECKS = [
     {
-        "id": "TEARDOWN_INVERSION_RPROC_DEL",
-        "desc": "rproc_del() called before mbox_free_channel() (Virtqueue UAF hazard)",
-        "pattern": r"rproc_del\s*\([^)]*\);[\s\S]*?mbox_free_channel",
+        "id": "TEARDOWN_ORDER_RPROC_DEL",
+        "desc": "mbox_free_channel() called before rproc_del() in remove (remote core active during mbox teardown)",
+        "pattern": r"mbox_free_channel\s*\([^)]*\);[\s\S]*?rproc_del",
+    },
+    {
+        "id": "SLEEP_IN_SPINLOCK",
+        "desc": "disable_irq or synchronize_irq called under spinlock (might_sleep in atomic context)",
+        "pattern": r"spin_lock[a-z_]*\s*\([^)]*\);[\s\S]*?(disable_irq\s*\(|synchronize_irq\s*\()[\s\S]*?spin_unlock",
     },
     {
         "id": "UNGUARDED_MBOX_FREE",
@@ -115,15 +120,18 @@ def analyze_source_code(filepath, content):
             body = remove_match.group(1)
             del_pos = body.find("rproc_del(")
             mbox_pos = body.find("mbox_free_channel(")
-            if del_pos != -1 and mbox_pos != -1 and del_pos < mbox_pos:
+            if mbox_pos == -1:
+                mbox_pos = body.find("sunxi_rproc_free_mbox(")
+            if del_pos != -1 and mbox_pos != -1 and mbox_pos < del_pos:
                 findings.append({
                     "stage": 2,
                     "severity": "High",
                     "id": "R5",
                     "file": filepath,
-                    "title": "Teardown order inversion (rproc_del before mbox_free_channel)",
-                    "desc": "rproc_del() frees virtqueues while mailbox is still open, allowing late IRQ to cause UAF."
+                    "title": "mailbox freed before rproc_del() (kick after free)",
+                    "desc": "rproc_del() stops the remote core and removes virtio devices, which may still kick. Mailbox channels must outlive rproc_del()."
                 })
+
 
     # Stage 3: Contracts
     if basename == "sun55i-msgbox.c" and "sun55i_msgbox_last_tx_done" in content:
@@ -181,13 +189,134 @@ def analyze_source_code(filepath, content):
                     "desc": "STA_ADD_REG write is posted on interconnect; must read back with readl() before deasserting core reset."
                 })
 
+    # Stage 3b: Async-API object lifetime (P1). mbox_send_message() with
+    # tx_block=false queues the *pointer*; it is read later from the poll
+    # timer whenever a previous request is still active. Any pointer to a
+    # non-static local is therefore a stack use-after-return.
+    if basename == "sunxi_rproc.c":
+        kick_match = re.search(r"void sunxi_rproc_kick\([^)]*\)\s*\{([\s\S]*?)\n\}", code_no_comments)
+        if kick_match:
+            body = kick_match.group(1)
+            local = re.search(r"\b(?:u32|int|u64)\s+(\w+)\s*=", body)
+            send = re.search(r"mbox_send_message\([^,]+,\s*(?:\(void \*\))?\s*&(\w+)", body)
+            if local and send and send.group(1) == local.group(1):
+                findings.append({
+                    "stage": 3, "severity": "High", "id": "P1_ASYNC_STACK_PTR", "file": filepath,
+                    "title": "Stack-local pointer passed to async mbox_send_message()",
+                    "desc": "With txdone_poll, a second send while the first is active is queued by pointer and read after the caller returns. Use static/persistent storage."
+                })
+
+    # Stage 1b: Flush-then-clear race (P2). Whenever an ISR fix is 'clear pending
+    # BEFORE drain', every other path that touches the same FIFO (startup/
+    # shutdown) must use the same order, or a late message is blackholed.
+    if basename == "sun55i-msgbox.c":
+        st = re.search(r"sun55i_msgbox_startup\([^)]*\)\s*\{([\s\S]*?)\n\}", code_no_comments)
+        if st:
+            body = st.group(1)
+            drain = body.find("MSG_FIFO")
+            clear = body.find("READ_IRQ_STATUS")
+            if drain != -1 and clear != -1 and drain < clear:
+                findings.append({
+                    "stage": 1, "severity": "Medium", "id": "P2_FLUSH_THEN_CLEAR", "file": filepath,
+                    "title": "startup() drains FIFO before clearing pending status",
+                    "desc": "A message arriving between drain and clear is left unread with no pending bit. Clear pending first, then drain (same order as the ISR)."
+                })
+
+    # Stage 2b: Cache-attribute aliasing (P3). Same reserved region reachable via
+    # DMA pool (WC) and memremap(WB) is a mismatched-attribute alias on arm64.
+    if basename == "sunxi_rproc.c":
+        if "of_reserved_mem_device_init(" in code_no_comments and "MEMREMAP_WB" in code_no_comments:
+            findings.append({
+                "stage": 2, "severity": "Medium", "id": "P3_WB_WC_ALIAS", "file": filepath,
+                "title": "Reserved region may be mapped both WC (DMA pool) and WB (memremap)",
+                "desc": "Verify against the DT that the DMA-pool region index never overlaps a region mapped via devm_memremap(MEMREMAP_WB), or use one attribute for both."
+            })
+
+    # SLEEP_UNDER_SPINLOCK: Flag sleeping calls inside spinlock critical sections
+    for lock_match in re.finditer(r"spin_lock(?:_irqsave|_irq)?\s*\([^)]*\);([\s\S]*?)spin_unlock(?:_irqrestore|_irq)?\s*\(", code_no_comments):
+        span = lock_match.group(1)
+        sleepers = [
+            "disable_irq(", "synchronize_irq(", "cancel_work_sync(", "flush_work(",
+            "msleep(", "mutex_lock(", "GFP_KERNEL", "devm_"
+        ]
+        for s in sleepers:
+            if s in span:
+                findings.append({
+                    "stage": 1, "severity": "High", "id": "SLEEP_UNDER_SPINLOCK", "file": filepath,
+                    "title": f"Sleeping function '{s}' called while holding spinlock",
+                    "desc": f"Holding a spinlock across '{s}' violates atomic context and risks deadlocks or scheduling-while-atomic bugs."
+                })
+                break
+
+    # RPROC_CARVEOUT_IN_PROBE: Carveouts from DT must be registered in .prepare(), not probe
+    if basename == "sunxi_rproc.c":
+        probe_matches = re.finditer(r"(static\s+(?:int|void)\s+(?:sunxi_rproc_parse_memory_regions|sunxi_rproc_probe)\s*\([^)]*\)\s*\{[\s\S]*?\n\})", code_no_comments)
+        for pm in probe_matches:
+            if "rproc_add_carveout(" in pm.group(1):
+                findings.append({
+                    "stage": 2, "severity": "High", "id": "RPROC_CARVEOUT_IN_PROBE", "file": filepath,
+                    "title": "rproc_add_carveout() called during probe instead of .prepare()",
+                    "desc": "rproc_resource_cleanup() frees all carveouts on shutdown. Carveouts registered only in probe are lost after first stop."
+                })
+
+    # MEMREMAP_NULL_CHECK: devm_memremap returns ERR_PTR, not NULL
+    for memremap_match in re.finditer(r"([\w\->.]+)\s*=\s*devm_memremap\s*\([^;]+;\s*(if\s*\([^)]+\))", code_no_comments):
+        var = memremap_match.group(1).split("->")[-1]
+        chk = memremap_match.group(2)
+        if re.search(rf"\bif\s*\(\s*!?\s*[\w\->.]*{re.escape(var)}\s*\)", chk):
+            findings.append({
+                "stage": 2, "severity": "High", "id": "MEMREMAP_NULL_CHECK", "file": filepath,
+                "title": "devm_memremap result checked with NULL check instead of IS_ERR",
+                "desc": "devm_memremap() returns ERR_PTR on failure, never NULL. Testing with if (ptr) or if (!ptr) lets error pointers through."
+            })
+            break
+
+    # FOREIGN_IRQ_REQUEST: Loop over platform_irq_count() when handler only reads regs[0]
+    if basename == "sun55i-msgbox.c":
+        if "platform_irq_count(" in code_no_comments and "request_irq(" in code_no_comments:
+            if "regs[0]" in code_no_comments and "regs[1]" not in code_no_comments:
+                findings.append({
+                    "stage": 2, "severity": "High", "id": "FOREIGN_IRQ_REQUEST", "file": filepath,
+                    "title": "Foreign IRQ lines requested in loop",
+                    "desc": "Looping over platform_irq_count() requests peer processor interrupts that the host ISR cannot service."
+                })
+
     return findings
+
+# Claims made in cover letters / AUDIT text must be backed by code (P4).
+# (claim regex in prose, evidence regex in a source file, file)
+CLAIM_CHECKS = [
+    (r"test_and_clear_bit", r"test_and_clear_bit", "drivers/remoteproc/sunxi_rproc.c"),
+    (r"con_priv\s*(?:=\s*NULL|before)|cleared\s+'?chan->con_priv", r"con_priv\s*=\s*NULL", "drivers/mailbox/sun55i-msgbox.c"),
+    (r"!UML", r"KUNIT\s*&&\s*!UML", "drivers/remoteproc/Kconfig"),
+    (r"!UML", r"KUNIT\s*&&\s*!UML", "drivers/mailbox/Kconfig"),
+]
+
+def verify_claims(args):
+    """Return findings where prose claims are not backed by the source tree."""
+    out = []
+    prose = ""
+    for rel in ("v3/v3-0000-cover-letter.patch",):  # never read AUDIT.md: it embeds this tool's own output
+        p = os.path.join(BASE_DIR, rel)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8", errors="replace") as f:
+                prose += f.read()
+    for claim_re, evidence_re, rel_path in CLAIM_CHECKS:
+        if re.search(claim_re, prose):
+            src = get_file_content(args, rel_path) or ""
+            if not re.search(evidence_re, src):
+                out.append({
+                    "stage": 5, "severity": "Low", "id": "P4_CLAIM_MISMATCH", "file": rel_path,
+                    "title": f"Prose claims '{claim_re}' but '{evidence_re}' not found in source",
+                    "desc": "Cover letter / AUDIT text must describe the code as written. Fix the code or the text."
+                })
+    return out
 
 def generate_report(findings, output_md):
     """Stage 5: Adversarial Gatekeeper & Report Generator."""
     with open(output_md, "w", encoding="utf-8") as f:
         f.write("# Sashiko-Grade Multi-Stage Adversarial Review Report\n\n")
-        f.write(f"**Audit Status**: {'CLEAN (0 Issues Found)' if not findings else f'FLAGGED ({len(findings)} Issues Detected)'}\n\n")
+        f.write(f"**Audit Status**: {'NO REGRESSIONS OF KNOWN FINDINGS' if not findings else f'FLAGGED ({len(findings)} Issues Detected)'}\n\n")
         f.write("---\n\n")
         
         f.write("## Review Stage Breakdown\n")
@@ -199,45 +328,12 @@ def generate_report(findings, output_md):
         f.write("---\n\n")
 
         if not findings:
-            f.write("### ✅ All Multi-Stage Adversarial Checks PASSED\n\n")
-            f.write("The reviewed code satisfies all 21 Linux kernel invariants enforced by Sashiko-bot.\n")
-            f.write("No race conditions, teardown inversions, MMU attribute conflicts, or endianness bugs were detected.\n\n")
-            f.write("---\n\n")
-            f.write("## 2. Complete Issue-by-Issue Resolution Matrix\n\n")
-            f.write("All 23 issues identified across v2 review emails (maintainers + Sashiko) are resolved in the source tree:\n\n")
-            f.write("### Devicetree Bindings & Threading Policy\n")
-            f.write("| ID | Target | Severity | Finding | Resolution in v3 | Status |\n")
-            f.write("|:---|:---|:---:|:---|:---|:---:|\n")
-            f.write("| **D1** | `allwinner,sun55i-rproc.yaml` | **High** | `reg-names` used `enum` instead of positional list | Replaced with fixed positional `- const:` entries (`cfg`, `r_sram`, `r_sram1`, `remap`). | **FIXED** |\n")
-            f.write("| **D2** | `allwinner,sun55i-a523-msgbox.yaml` | **High** | `interrupts` had unconstrained narrative text & `enum` names | Replaced with positional `items:` list and `minItems: 1` (`arm`, `dsp`, `cpus`, `rv`). | **FIXED** |\n")
-            f.write("| **D3** | Upstream Dispatch | **Medium** | Threading v3 under v2 via `In-Reply-To` breaks patch workflow | Dispatch v3 as a fresh, standalone top-level thread. | **RESOLVED** |\n\n")
-            f.write("### Mailbox Driver & Tests (`drivers/mailbox/`)\n")
-            f.write("| ID | Target | Severity | Finding | Resolution in v3 | Status |\n")
-            f.write("|:---|:---|:---:|:---|:---|:---:|\n")
-            f.write("| **M1** | `sun55i-msgbox.c` | **High** | Out-of-bounds array write in probe due to unbounded DT `irq_cnt` | Clamped `irq_cnt` to `SUN55I_NUM_PORTS` with explicit check. | **FIXED** |\n")
-            f.write("| **M2** | `sun55i-msgbox.c` | **High** | Broken `last_tx_done` FIFO capacity pacing | Configured `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`). | **FIXED** |\n")
-            f.write("| **M3** | `sun55i-msgbox.c` | **High** | NULL pointer deref in IRQ handler during teardown | Cleared `chan->con_priv` before deregistration in `shutdown()`. | **FIXED** |\n")
-            f.write("| **M4** | `sun55i-msgbox.c` | **High** | Multi-IRQ concurrency / TOCTOU underflow race | Enclosed status check and FIFO popping inside `spin_lock_irqsave(&mbox->lock)`. | **FIXED** |\n")
-            f.write("| **T1** | `drivers/mailbox/Kconfig` | **Low** | Missing dependencies for KUnit tests | Added `depends on SUN55I_MSGBOX && KUNIT && !UML` to guard against logic_iomem traps. | **FIXED** |\n")
-            f.write("| **T2** | `sun55i_msgbox_test.c` | **Medium** | MMIO endianness bug in mock registers on Big-Endian | Converted mock assertions from direct array indexing to `readl()`. | **FIXED** |\n")
-            f.write("| **T3** | `sun55i_msgbox_test.c` | **Low** | Mock bypass causes `startup()` flush test to silently succeed | Configured mock to simulate non-empty FIFO properly. | **FIXED** |\n\n")
-            f.write("### RemoteProc Driver & Tests (`drivers/remoteproc/`)\n")
-            f.write("| ID | Target | Severity | Finding | Resolution in v3 | Status |\n")
-            f.write("|:---|:---|:---:|:---|:---|:---:|\n")
-            f.write("| **R1** | `sunxi_rproc.c` | **High** | Unbalanced `disable_irq` via `crash_irq_enabled` race | Replaced boolean with atomic `test_and_clear_bit(0, &priv->crash_irq_enabled)`. | **FIXED** |\n")
-            f.write("| **R2** | `sunxi_rproc.c` | **High** | Race on `kick_msg` and immediate `txdone` | Switched from shared heap/struct member to stack-local payload. | **FIXED** |\n")
-            f.write("| **R3** | `sunxi_rproc.c` | **High** | Double mapping of DT regions (WB vs WC attributes conflict) | Unified Write-Combining mapping for shared SRAM buffers. | **FIXED** |\n")
-            f.write("| **R4** | `sunxi_rproc.c` | **High** | Premature core execution due to broken reset fallback | Asserted reset before configuring clocks; explicit error abort. | **FIXED** |\n")
-            f.write("| **R5** | `sunxi_rproc.c` | **High** | UAF of virtqueues due to late mailbox interrupts in remove | Strict LIFO teardown: `free_irq` $\\rightarrow$ `mbox_free_channel` $\\rightarrow$ `cancel_work_sync` $\\rightarrow$ `rproc_del`. | **FIXED** |\n")
-            f.write("| **R6** | `sunxi_rproc.c` | **High** | UAF of `priv` in probe error path due to workqueue teardown | Cancelled workqueue before freeing `rproc` resource. | **FIXED** |\n")
-            f.write("| **R7** | `sunxi_rproc.c` | **High** | UAF of `rproc` in remove due to `crash_irq_enabled` data race | Synchronized IRQ before rproc unregistration. | **FIXED** |\n")
-            f.write("| **R8** | `sunxi_rproc.c` | **Medium** | `da_to_va` translates unmatched ATT addresses as host PAs | Added strict bounds validation against registered carveouts. | **FIXED** |\n")
-            f.write("| **R9** | `sunxi_rproc.c` | **Medium** | Missing teardown of crash IRQ on start failure leaks state | Added symmetric unwind in `sunxi_rproc_start` error path. | **FIXED** |\n")
-            f.write("| **R10**| `sunxi_rproc.c` | **Medium** | Missing write flush of boot address causes execution race | Added `readl()` readback flush before core reset de-assertion. | **FIXED** |\n")
-            f.write("| **R11**| `sunxi_rproc.c` | **High** | Double completion / bypass of controller pacing | Configured `cl.knows_txdone = false`, letting mailbox framework poll `last_tx_done` natively. | **FIXED** |\n")
-            f.write("| **K1** | `drivers/remoteproc/Kconfig` | **Low** | Missing dependencies for KUnit tests | Added `depends on SUNXI_REMOTEPROC && KUNIT && !UML` to guard against logic_iomem traps. | **FIXED** |\n")
-            f.write("| **K2** | `sunxi_rproc_test.c` | **Medium** | KUnit test mock MMIO reads fail on Big-Endian | Replaced array indexing with endian-safe `readl(ctx->priv.cfg_va + offset)`. | **FIXED** |\n")
-            f.write("| **K3** | `sunxi_rproc_test.c` | **Medium** | False positive KUnit test for obsolete `kick_msg` field | Test updated to inspect stack-local transmit buffer. | **FIXED** |\n")
+            f.write("### ✅ NO REGRESSIONS OF KNOWN FINDINGS\n\n")
+            f.write("All encoded regression rules (R1-R11, M1-M4, K1-K3, P1-P4, SLEEP_UNDER_SPINLOCK, RPROC_CARVEOUT_IN_PROBE, MEMREMAP_NULL_CHECK, FOREIGN_IRQ_REQUEST) passed cleanly.\n\n")
+            f.write("This means no known regressions were detected by static checks. Full upstream readiness additionally requires:\n")
+            f.write("1. Running the Tier 0 prior-review regression matrix from code comments,\n")
+            f.write("2. Executing KUnit and hardware board tests, and\n")
+            f.write("3. Running an independent `sashiko review` pass.\n\n")
         else:
             f.write("### ⚠️ Flagged Issues Requiring Resolution\n\n")
             f.write("| Stage | Severity | ID | File | Finding Description |\n")
@@ -269,7 +365,7 @@ def get_file_content(args, rel_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Sashiko-Grade Multi-Stage Adversarial Review Tool")
-    parser.add_argument("--repo", default="/home/tcmichals/projects/cubie/linux-cubie", help="Path to linux kernel repo")
+    parser.add_argument("--repo", default="/home/tcmichals/ssdData/projects/home/CubieA5E/linux-cubie", help="Path to linux kernel repo")
     parser.add_argument("--git-ref", default=None, help="Git branch/tag/commit to audit (e.g. origin/v2-sun55i-rproc-msgbox or HEAD)")
     parser.add_argument("--output", default=None, help="Output markdown path")
     args = parser.parse_args()
@@ -291,6 +387,7 @@ def main():
             findings = analyze_source_code(rel_path, content)
             all_findings.extend(findings)
 
+    all_findings.extend(verify_claims(args))
     generate_report(all_findings, args.output)
 
 if __name__ == "__main__":
