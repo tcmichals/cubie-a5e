@@ -33,7 +33,7 @@ Evaluate the codebase against these 8 objective engineering criteria:
 
 1. CLIENT-CONTROLLER CONTRACT & MAILBOX PACING (RemoteProc <-> Mailbox):
    - In sunxi_rproc_kick(): verify that kicks pass a stack-local msg (safely copied synchronously by sun55i_msgbox_send_data) rather than an unprotected shared struct member that races across concurrent CPU kicks.
-   - Verify that client declares cl.knows_txdone = true and calls mbox_client_txdone(priv->tx_chan, 0) on success (ret >= 0), because the underlying controller already manages completion via txdone_poll = true. Calling mbox_client_txdone() directly breaks FIFO pacing.
+   - Verify that client declares cl.knows_txdone = false and does NOT invoke mbox_client_txdone(), allowing the underlying mailbox controller to natively pace transmissions via txdone_poll = true and last_tx_done() drain polling without double completion or race conditions.
    - In sun55i_msgbox_last_tx_done(): verify that it returns true ONLY when the transmitted message has been drained by the remote core (count == 0), NOT merely when the FIFO is not full (count < FIFO_MAX).
 
 2. CONCURRENCY, TEARDOWN & LIFO RESOURCE MANAGEMENT:
