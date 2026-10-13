@@ -130,10 +130,10 @@ Tim Michals (7):
  drivers/mailbox/sun55i_msgbox_test.c               | 851 +++++++++++++++++++++
  drivers/remoteproc/Kconfig                         |  18 +
  drivers/remoteproc/Makefile                        |   2 +
- drivers/remoteproc/sunxi_rproc.c                   | 726 ++++++++++++++++++
- drivers/remoteproc/sunxi_rproc.h                   | 126 +++
- drivers/remoteproc/sunxi_rproc_test.c              | 679 ++++++++++++++++
- 14 files changed, 3140 insertions(+)
+ drivers/remoteproc/sunxi_rproc.c                   | 706 +++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.h                   | 124 +++
+ drivers/remoteproc/sunxi_rproc_test.c              | 669 ++++++++++++++++
+ 14 files changed, 3108 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
