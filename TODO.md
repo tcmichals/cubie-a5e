@@ -681,7 +681,7 @@ Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the
 | D6 | Binding clocks/resets `minItems: 2` (Krzysztof: "cannot be flexible") | F5 | ✅ | `db61f8ab26f3` `9eac875ca931` |
 | D7 | Region 0 registered as carveout and DMA pool; `da_to_va` duplicates core lookup | F7 | ⬜ | |
 | D8 | Small cleanups: unused includes, stale ISR comment, dead `cfg` fallback, `default ARCH_SUNXI` (A7A/A7Z configs now enable the msgbox explicitly). Firmware default name `riscv-firmware.elf` kept (board rootfs uses it) | F11 | ✅ | `da51547fade6` |
-| D9 | Remap reg `0x07010364` shared with the DSP (vendor DSP driver owns bit 0) | F3, vendor DT | ❓ owner (syscon/CCU) — ask Chen-Yu | |
+| D9 | Remap reg `0x07010364` shared with the DSP (vendor DSP driver owns bit 0) | F3, vendor DT | ✅ decided 2026-10-13: keep sharing it — rproc maps the 4-byte `remap` reg and only read-modify-writes bit 1 (works on silicon). Cover letter (T1) must state: PRCM register, bit 1 = SRAM A3_2 → MCU, bit 0 = DSP, unlocked RMW is safe only while no other Linux driver writes it; open to moving it to a syscon/r-ccu if maintainers ask | |
 | D10 | Memory-region names `vram/dram/trace` vs standard `vdev0buffer/vdev0vring*` | vendor DT | ❓ | |
 | D11 | One vs two mailbox channels | vendor DT | ❓ keep two for v3 | |
 | D12 | Msgbox clocks/resets for all 4 banks vs ARM bank only — the board-tested 7.1 DTS and the vendor DT use the ARM bank only; the v3 4-bank DTS was never board-tested. Also settles F8 (unbind no longer asserts remote banks' resets) | vendor DT, 7.1 DTS, F8 | ✅ (board test pending) | `36f04f6e046b` `acbe383ec84c` |
