@@ -244,7 +244,7 @@ rproc: remoteproc@7130000 {
   - **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG`, disables CCU clocks, and asserts bus resets.
 - **DA Translation (`sunxi_rproc_da_to_va`)**:
   - Guarded against 64-bit integer wrap-around: `if (da > U64_MAX - len) return NULL;`.
-  - ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000`, plus host-PA identity entries; then the DT memory regions (trace, DRAM). DA `0x40040000`+ is DRAM, mapped 1:1.
+  - ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000`, plus host-PA identity entries. DRAM firmware, trace and vrings are registered carveouts and resolve through the core. DA `0x40040000`+ is DRAM, mapped 1:1.
   - Returns `NULL` for dynamic DDR carveouts to delegate translation directly to the Linux remoteproc core's `rproc->carveouts` linked list.
 - **Teardown Order**: `rproc_del()` -> `mbox_free_channel()` -> `cancel_work_sync()` (the optional crash IRQ is disarmed by `stop()` inside `rproc_del()`).
 - **Reference Guide**: For full architectural rules and comparisons across mainline drivers, refer to [**`LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`**](../architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md).
@@ -918,6 +918,6 @@ devmem2 0x07130248 w
    # Check KUnit results in dmesg at boot:
    dmesg | grep -i kunit
    ```
-   * **`sunxi_rproc` suite**: 27 test cases validating `da_to_va` across Space 0/1/Host PA/Trace/DRAM, 64-bit integer overflow protection, mock MMIO lifecycle (`start`, `stop`, `prepare`, `unprepare`, `kick`), and `rproc_ops` table integrity.
-   * **`sun55i_msgbox` suite**: 28 test cases validating the 12-channel routing table, invalid channel index clamping, register formulas, mock MMIO ops, FIFO status sweeps (0..15), startup/shutdown stale FIFO purging, hardirq burst drains capped at `SUN55I_FIFO_MAX` (8), channel crosstalk isolation, and simultaneous 3-route concurrency.
+   * **`sunxi_rproc` suite** (32 tests): `da_to_va` SRAM windows, boundaries and overflow, DRAM/trace through `rproc_da_to_va()` carveouts, start/stop/prepare/unprepare on mock MMIO, carveout lifecycle, and the rx-callback-defers-to-workqueue regression test.
+   * **`sun55i_msgbox` suite** (29 tests): channel routing, send/peek/`last_tx_done`, startup/shutdown FIFO flushing, and IRQ handling (spurious, drain cap, cross-talk).
    * Target: 55/55 PASS (100% success).

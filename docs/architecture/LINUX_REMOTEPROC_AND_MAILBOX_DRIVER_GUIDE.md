@@ -31,7 +31,7 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 | **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot |
 | **`.stop()`** | Asserts `rst_core`, disarms the optional crash IRQ (`disable_irq()`, no lock held) | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot |
 | **`.unprepare()`** | Clears remap bit 1, disables clocks, asserts debug/SRAM/cfg resets, drops the power domains | Disables clocks | Asserts module-reset via TI-SCI | N/A |
-| **`.da_to_va()`** | ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000` (256 KB each), plus host-PA identity entries; then the DT memory regions. DA `0x40040000`+ is DRAM 1:1 | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` |
+| **`.da_to_va()`** | ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000` (256 KB each), plus host-PA identity entries. Everything else returns `NULL`: DRAM firmware, trace and vrings resolve through the core's carveout list (DA `0x40040000`+ is DRAM 1:1) | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` |
 | **`.kick()`** | Sends a pointer to an immutable `static const u32` payload per vring; the msgbox controller paces TX (`txdone_poll`), the client never calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue |
 | **Crash Handling** | Optional `crash` IRQ (no DTS wires one; the vendor BSP has none): `disable_irq_nosync()` + `rproc_report_crash(rproc, RPROC_FATAL_ERROR)`; an atomic "armed" bit re-enables it in `.start()` | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` |
 
@@ -106,7 +106,7 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 
 ### Rule 9: Let the RemoteProc Core Translate DDR Carveouts
 - **The Rule**: The remoteproc core's `rproc_da_to_va()` searches `rproc->carveouts` after `ops->da_to_va()` returns `NULL`. Driver `.da_to_va()` only needs the SoC-specific windows with core-local aliases (the E906 SRAM spaces).
-- **Current state**: `sunxi_rproc_da_to_va()` still looks up the DT memory regions itself, and memory-region 0 is registered both as the vdev DMA pool and as a carveout. Removing both is tracked as D7 (review finding F7) in `TODO.md` §5.6a.
+- **Current state**: Done (D7). `sunxi_rproc_da_to_va()` only handles the SRAM windows; every memory region (`vram`, `dram`, `trace`) is registered as a carveout in `prepare()`, so DRAM firmware, trace and vrings resolve through the core.
 
 ### Rule 10: Unit Tests Must Directly Exercise Driver Functions (No Mirroring)
 - **The Antipattern**: Writing a KUnit test that duplicates the driver's routing tables, address math, or macros inside the test file. Such tests are tautological—they test their own copy-pasted math rather than the driver code.
