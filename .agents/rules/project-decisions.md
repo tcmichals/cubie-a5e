@@ -23,13 +23,17 @@ Hardware facts and the v3 fix tracker live in `TODO.md` §5.6 / §5.6a.
 5. **E906 D-cache is off** (`mhcr.DE = 0`). Linux maps the DMA pool and carveouts uncached
    (`shared-dma-pool`, `MEMREMAP_WC`; no `dma-coherent`), so no cache maintenance is needed
    today. Cache enable and clean/invalidate belong to AbstractX, not to this repo's tests.
+6. **Memory regions stay positional and listed (D10).** The binding lists the `memory-region`
+   items (`vram` = DMA pool at index 0, then `dram`, `trace`), as Krzysztof asked in v1. Do not
+   switch to the stm32/imx style (free `memory-region` list, meaning from `vdev0buffer` /
+   `vdev0vringN` node names) because a review or the vendor DT uses it.
 
 ## Workflow
 
-6. **Commit and push when work is done.** The owner works on more than one PC and pulls with
+7. **Commit and push when work is done.** The owner works on more than one PC and pulls with
    `tools/sync_kernel.sh pull`. Push `linux-cubie` (`cubie-linux-7.1`) and `cubie-a5e` (`main`)
    after committing. Never push upstream submission branches or send patches to mailing lists
    without explicit approval.
-7. **Finish the fix set before building.** Do not start board kernel builds in the middle of a
+8. **Finish the fix set before building.** Do not start board kernel builds in the middle of a
    batch of fixes; compile-check the touched drivers (`make W=1 drivers/...`) instead, then build
    once when the batch is complete.
