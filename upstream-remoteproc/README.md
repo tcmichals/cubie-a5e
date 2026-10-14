@@ -18,6 +18,26 @@ This workspace consolidates all upstream Linux kernel submissions, Devicetree bi
   Verbatim mailing list reviews in [v1/COMMENTS.md](v1/COMMENTS.md) and [v2/COMMENTS.md](v2/COMMENTS.md).
 * 📥 **[Lore Email Ingest Pipeline Guide (EMAIL_INGEST_GUIDE.md)](EMAIL_INGEST_GUIDE.md)**  
   Documentation and runbook for fetching review emails from lore.kernel.org public-inbox and generating COMMENTS.md.
+* 🛠️ **[Kernel Review Skill (/kreview)](../.agents/skills/kreview/SKILL.md)**  
+  Code quality, race condition, DT schema, and peer comparative analysis skill.
+* 📦 **[Patch Reconciliation & Series Assembly Skill (/kseries)](../.agents/skills/kseries/SKILL.md)**  
+  Feedback reconciliation, zero-missed-comment gate, range-diff, and patchset assembly skill.
+
+---
+
+## The Two Kernel Skills: `/kreview` vs `/kseries`
+
+To prevent two very different kinds of upstream submission failures, the workspace provides two specialized skills:
+
+| Skill | Primary Goal | The Fatal Problem It Prevents | Key Checks & Invariants |
+| :--- | :--- | :--- | :--- |
+| **`/kreview`** | **Technical Code & Schema Quality** | Submitting code with race conditions, memory leaks, broken unwinds, or invalid DT schemas | • **Tier 1**: DT binding schema rules (positional items, no `enum:`, `minItems: 1`).<br>• **Tier 2**: Memory attributes (WC vs WB), atomic RX callback deferral to workqueue, FIFO pacing (`count == 0`).<br>• **Tier 3**: Unwind ladder LIFO ordering (`rproc_del` before `mbox_free_channel`).<br>• **Tier 4**: SMP races & hardirq bounds (`FIFO_MAX = 8`).<br>• **Tier 5**: Cross-audit against peer drivers (`imx_rproc`, `stm32_rproc`, `ti_k3`). |
+| **`/kseries`** | **Reviewer Feedback Reconciliation & Patch Assembly** | Ignoring or forgetting reviewer comments across v1/v2/v3 emails (*"So you completely ignored my feedback and sent exactly the same"*) | • **Stage 1**: Scrapes Lore emails and atomizes critiques into numbered tokens (`KK-1`, `JB-1`, `MP-1`).<br>• **Stage 2**: Enforces the 1-to-1 gate (every critique MUST be `FIXED` with commit hash or `EXPLAINED`).<br>• **Stage 3**: `git range-diff v<N-1>..v<N>` verification to audit all inter-version code churn.<br>• **Stage 4**: Generates polite, point-by-point inline email replies to maintainers.<br>• **Stage 5**: Places `Changes in vX:` below `---` line, verifies cover letter test metrics, audits 0 AI trailers, and verifies independent top-level threading. |
+
+### How to Use Them in the Workflow:
+1. When developing or fixing drivers in `linux-cubie`, run **`/kreview`** to verify that C code, headers, and DT schemas are technically sound.
+2. When getting ready to spin a new patch revision or reply to mailing list feedback, run **`/kseries`** to ensure every single reviewer critique from `v<N>/emails/` is accounted for and no feedback was missed.
+
 
 ---
 
