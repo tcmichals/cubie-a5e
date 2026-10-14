@@ -36,9 +36,9 @@ BENCHMARK_ITEMS = [
     },
     {
         "id": "ISSUE-05",
-        "title": "Missing per-bank clocks and resets",
-        "keywords": [r"CLK_BUS_MSGBOX|CLK_BUS_MCU_DSP_MSGBOX|CLK_BUS_R_MSGBOX|CLK_BUS_MCU_RISCV_MSGBOX", r"bulk", r"4.*clock|four.*clock"],
-        "required_citation": r"clk_bulk|dt-bindings/clock",
+        "title": "Linux claims the other processors' msgbox bank clocks/resets (D12)",
+        "keywords": [r"CLK_BUS_MCU_DSP_MSGBOX|CLK_BUS_R_MSGBOX|CLK_BUS_MCU_RISCV_MSGBOX", r"remote bank|other processor|foreign bank", r"reset.*unbind|unbind.*reset"],
+        "required_citation": r"reset_control_assert|devm_reset|dt-bindings/reset",
     },
     {
         "id": "ISSUE-06",

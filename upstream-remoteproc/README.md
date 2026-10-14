@@ -14,8 +14,6 @@ This workspace consolidates all upstream Linux kernel submissions, Devicetree bi
   Detailed analysis of reviewer feedback (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson), anti-patterns identified, and the mandatory Linux kernel rules learned.
 * 📌 **[Design Decisions (DESIGN_DECISIONS.md)](DESIGN_DECISIONS.md)**  
   The owner's decisions for the drivers and bindings (DRAM, memory-region layout, remap register, KUnit, ...) and why. Reviews that disagree are raised with the owner, not applied.
-* 🛡️ **[v3 Verification & Audit Report (v3/AUDIT.md)](v3/AUDIT.md)**  
-  Clean 5-tier adversarial audit results and complete 23-item verification matrix.
 * 📬 **[Archived Review Feedback](v2/COMMENTS.md)**  
   Verbatim mailing list reviews in [v1/COMMENTS.md](v1/COMMENTS.md) and [v2/COMMENTS.md](v2/COMMENTS.md).
 * 📥 **[Lore Email Ingest Pipeline Guide (EMAIL_INGEST_GUIDE.md)](EMAIL_INGEST_GUIDE.md)**  
@@ -35,7 +33,7 @@ upstream-remoteproc/
 ├── scripts/                    # Review fetching and adversarial audit tools
 │   ├── fetch_lore_reviews.py   # Scrapes Lore threads and populates v<N>/emails/
 │   ├── make_audit_bundle.py    # Builds the single-file Gemini Pro review bundle from git
-│   ├── score_review.py         # Grades a saved review against v<N>/REVIEW_ANSWER_KEY.md
+│   ├── score_review.py         # Grades a saved review against v<N>/review/REVIEW_ANSWER_KEY.md
 │   ├── prompts/review/protocol.md   # Review protocol (stages S0-S8 + output format) — edit this
 │   ├── prompts/subsystem/*.md  # Project guides; EVERY *.md here is embedded automatically
 │   ├── run_adversarial_audit.py # Multi-stage 5-tier kernel static audit harness
@@ -51,7 +49,9 @@ upstream-remoteproc/
 │   ├── COMMENTS.md             # Verbatim parsed feedback from Krzysztof & Sashiko
 │   └── AUDIT.md                # v2 audit report (flagged M2, K2)
 └── v3/                         # v3 patch series workspace
-    └── AUDIT.md                # v3 verification matrix & adversarial audit report (Status: Verification in Progress)
+    ├── v3-*.patch              # exported series (re-exported after the fixes are folded in)
+    ├── COVER_LETTER_DRAFT.txt  # cover letter draft until export
+    └── review/                 # pre-send reviews of the v3 draft (CLAUDE_REVIEW, GEMINI_REVIEW) and the scoring answer key
 ```
 
 ---
@@ -86,7 +86,7 @@ python3 scripts/make_audit_bundle.py            # -> GEMINI_PRO_AUDIT_BUNDLE.md 
 
 1. Open Gemini, select the **Pro** model, start a **new** chat.
 2. Attach `GEMINI_PRO_AUDIT_BUNDLE.md` and send: `Follow Part 1 of the attached file.`
-3. Save the full reply as `v<N>/GEMINI_REVIEW.md`.
+3. Save the full reply as `v<N>/review/GEMINI_REVIEW.md`.
 4. If the reply has a `NEEDS_CONTEXT` list, add those files and regenerate:
    `python3 scripts/make_audit_bundle.py --extra kernel/time/hrtimer.c:hrtimer_cancel --extra drivers/base/dd.c`
    (`path` embeds the whole file; `path:fn1,fn2` embeds only those functions.)

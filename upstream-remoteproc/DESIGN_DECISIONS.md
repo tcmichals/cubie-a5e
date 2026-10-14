@@ -53,8 +53,7 @@ it. Move it to a syscon or the R-CCU only if maintainers ask.
 ### Message box: host bank clock and reset only (D12)
 The msgbox node enables only the ARM host bank's clock and reset, like the vendor DT and the
 board-tested 7.1 kernel. The other banks belong to the other processors; asserting their
-resets on unbind would break them. (`v3/REVIEW_ANSWER_KEY.md` ISSUE-05 predates this
-decision and says the opposite.)
+resets on unbind would break them.
 
 ### One mailbox channel (D11, 2026-10-14)
 The remoteproc node uses a single message box channel: `mboxes = <&msgbox 9>`, no

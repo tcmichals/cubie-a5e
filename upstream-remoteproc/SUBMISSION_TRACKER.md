@@ -10,7 +10,7 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
 | :---: | :---: | :--- | :--- |
 | **RFC v1** | 2026-09-22 | [`20260922034711.190253-1-tcmichals@gmail.com`](https://lore.kernel.org/linux-sunxi/CAGb2v66_AaPnwErV72eF=KQ2k15spXA2UJcugnOcGcp5PAKVXw@mail.gmail.com/) | **Superseded**<br>Initial RFC submission (7 patches). Reviewed by Krzysztof Kozlowski, Rob Herring, and Chen-Yu Tsai. |
 | **v2** | 2026-09-26 | [`20260927002021.797069-1-tcmichals@gmail.com`](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/) | **Reviewed**<br>Added 68 in-tree KUnit tests. Flagged for: `last_tx_done` pacing (`M2`), big-endian mock MMIO (`K2`), DT `reg-names` enum (`D1`), and unconstrained interrupts (`D2`). |
-| **v3** | *Ready for Submission* | **Standalone Top-Level Thread**<br>*(Do NOT thread as in-reply-to v2 per Krzysztof Kozlowski)* | **Remediation & Export Complete**<br>• Per-bank clocks/resets enabled; ARM port IRQ only.<br>• Teardown order: rproc_del() before mailbox free; atomic crash IRQ disarm.<br>• Carveouts registered in prepare(); exact memory-region-names matching.<br>• Removed unverified A733/sun60i; renamed rproc binding to match compatible.<br>• Clean 7-patch series exported with comprehensive cover letter.<br>• 0 errors / 0 warnings on checkpatch.pl and dt_binding_check. |
+| **v3** | *Not sent* | **Standalone top-level thread**<br>*(no `--in-reply-to`, per Krzysztof Kozlowski)* | **Fixes done on `cubie-linux-7.1`, board test pending**<br>• First v3 draft reviewed (v3/review/CLAUDE_REVIEW.md, "not ready"); fixes D1–D16 in [TODO.md](../TODO.md) §5.6a.<br>• Decisions in [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md): one mailbox channel, listed memory regions, shared remap bit 1, host msgbox bank only, KUnit last.<br>• Next: board test → fold into `next-sun55i-rproc-msgbox` → re-export → final review → send (owner approval). |
 
 ---
 
@@ -22,8 +22,8 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
   Detailed breakdown of why specific patterns were rejected by maintainers (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson) and the exact code patterns required.
 * **[Design Decisions](DESIGN_DECISIONS.md)**:  
   The owner's decisions for the drivers and bindings. Check before acting on a review comment.
-* **[v3 Verification & Audit Results](v3/AUDIT.md)**:  
-  Multi-stage adversarial audit report and regression verification matrix.
+* **[v3 Pre-Send Review](v3/review/CLAUDE_REVIEW.md)**:  
+  Review of the first v3 draft (findings F1-F12); the fixes are tracked as D1-D16 in [TODO.md](../TODO.md) §5.6a.
 * **[v2 Review Comments](v2/COMMENTS.md)** & **[v2 Audit Report](v2/AUDIT.md)**:  
   Archived verbatim emails and flagged issues from v2 review cycle.
 * **[v1 Review Comments](v1/COMMENTS.md)**:  
@@ -56,30 +56,41 @@ upstream-remoteproc/
 │   ├── COMMENTS.md             # Verbatim parsed feedback from Krzysztof & Sashiko
 │   └── AUDIT.md                # v2 audit report (flagged M2, K2)
 └── v3/                         # v3 patch series workspace
-    └── AUDIT.md                # v3 verification matrix & adversarial audit report (Status: Verification in Progress)
+    ├── v3-*.patch              # exported series (re-exported after the fixes are folded in)
+    ├── COVER_LETTER_DRAFT.txt  # cover letter draft until export
+    └── review/                 # pre-send reviews and the scoring answer key
 ```
 
 ---
 
 ## 4. Upstream Submission Workflow (Submitting v3)
 
-When ready to send v3 to `linux-sunxi@lists.linux.dev`, `linux-remoteproc@vger.kernel.org`, and `linux-mailbox`:
+Every step happens in `linux-cubie` (`/home/tcmichals/projects/cubie/linux-cubie`):
 
-1. **Verify Silicon Smoke Test**: Ensure test suite runs cleanly on the physical Radxa Cubie A5E board.
-2. **Generate Patches**:
+1. **Board test**: the fixes on `cubie-linux-7.1` pass the full test sweep on the Cubie A5E, plus one non-RT boot with `CONFIG_DEBUG_ATOMIC_SLEEP=y`.
+2. **Fold and export**: fold the fixes into `next-sun55i-rproc-msgbox` (KUnit patches last), delete the old `v3/v3-*.patch`, then:
    ```bash
-   git format-patch -v3 --cover-letter -o v3/ origin/master..HEAD
+   git format-patch -v3 --cover-letter -o ../cubie-a5e/upstream-remoteproc/v3/ 5c4d4169604b..next-sun55i-rproc-msgbox
    ```
-3. **Draft Cover Letter**:
-   * Summarize the 18 driver fixes and the 2 DT binding positional list fixes.
-   * Include the Lore reference to v2 (`20260927002021.797069-1-tcmichals@gmail.com`).
-4. **Dispatch as Independent Thread**:
+   (`5c4d4169604b` = linux-next 20260921, the series base.)
+3. **Cover letter**: paste `v3/COVER_LETTER_DRAFT.txt` into `v3-0000-cover-letter.patch` and fill in the Testing section from step 1.
+4. **Dispatch as Independent Thread** (recipients = v2 list, see `TODO.md` T3; no get_maintainer keyword-only matches):
    ```bash
-   # DO NOT use --in-reply-to!
-   git send-email --to="linux-sunxi@lists.linux.dev" \
-                  --to="linux-remoteproc@vger.kernel.org" \
-                  --cc="devicetree@vger.kernel.org" \
-                  --cc="krzk+dt@kernel.org" \
-                  --cc="robh@kernel.org" \
-                  v3/*.patch
+   # DO NOT use --in-reply-to!  Send only with the owner's go-ahead.
+   git send-email \
+       --to="Jassi Brar <jassisinghbrar@gmail.com>" \
+       --to="Bjorn Andersson <andersson@kernel.org>" \
+       --to="Mathieu Poirier <mathieu.poirier@linaro.org>" \
+       --cc="Rob Herring <robh@kernel.org>" \
+       --cc="Krzysztof Kozlowski <krzk+dt@kernel.org>" \
+       --cc="Conor Dooley <conor+dt@kernel.org>" \
+       --cc="Chen-Yu Tsai <wens@kernel.org>" \
+       --cc="Jernej Skrabec <jernej.skrabec@gmail.com>" \
+       --cc="Samuel Holland <samuel@sholland.org>" \
+       --cc=linux-sunxi@lists.linux.dev \
+       --cc=linux-remoteproc@vger.kernel.org \
+       --cc=devicetree@vger.kernel.org \
+       --cc=linux-arm-kernel@lists.infradead.org \
+       --cc=linux-kernel@vger.kernel.org \
+       v3/*.patch
    ```

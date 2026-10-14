@@ -15,7 +15,7 @@ The bundle is regenerated from git, so it can never go stale:
 
 --blind leaves out everything that names the known bugs (prior comments and
 the local remoteproc invariant guide) so the result can be graded honestly with
-score_review.py against v<N>/REVIEW_ANSWER_KEY.md. The answer key itself is
+score_review.py against v<N>/review/REVIEW_ANSWER_KEY.md. The answer key itself is
 never embedded.
 
 Usage:

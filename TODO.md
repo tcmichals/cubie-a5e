@@ -666,7 +666,7 @@ Moved to [`docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`](docs
 
 ### 5.6a v3 Driver Fix Tracker (2026-10-13)
 
-Sources: `upstream-remoteproc/v3/CLAUDE_REVIEW.md` (F-numbers), vendor BSP comparison in
+Sources: `upstream-remoteproc/v3/review/CLAUDE_REVIEW.md` (F-numbers), vendor BSP comparison in
 `docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md` §4.2.
 Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the matching patch on
 `next-sun55i-rproc-msgbox` (v3 export source). Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ needs decision.
@@ -731,7 +731,7 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
 - [x] `docs/ABSTRACTX_E906_SPECIFICATION.md:44-47` — Space 0 host PA `0x07130000` (that is the CFG block; SRAM is `0x07280000`); Space 1 at `0x40040000` (it is `0x40000000`).
 - [x] `docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md:27` — check the Space 1 row wording.
 - [x] `docs/platforms/ALLWINNER_T527_CHIP_SPEC_REFERENCE.md:126` — remap bit 1 text says Space 1 appears at `0x40040000`.
-- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md:34` and `TODO.md` §5.5 (~lines 638, 653-655) — list `0x3FF80000`, `0x00020000`, `0x40040000` as valid E906 SRAM aliases; they are not (driver bug, see v3/CLAUDE_REVIEW.md F10).
+- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md:34` and `TODO.md` §5.5 (~lines 638, 653-655) — list `0x3FF80000`, `0x00020000`, `0x40040000` as valid E906 SRAM aliases; they are not (driver bug, see v3/review/CLAUDE_REVIEW.md F10).
 - [x] `docs/TINA_ALLWINNER_COPROCESSOR_SOURCE_OF_TRUTH.md:254` (`STA_ADD` reset shown as 0; silicon = `0x3FFC0000`), `:267` (remap reg filed under HiFi4 registers), `:284` (msg count `[2:0]` cannot hold 8 — confirm width in manual).
 
 **D. Wrong msgbox IRQ (SPI 147 is `csi3`; ARM msgbox bank is SPI 0)**
