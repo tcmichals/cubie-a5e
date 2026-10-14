@@ -62,7 +62,7 @@ From Chapter 4 of the **Allwinner A733 Datasheet V0.93** and vendor kernel regis
 | PRCM R_CCU            | 0x07010000 - 0x070103FF  | Deep Sleep & PRCM Power Management CCU  |
 | PRCM R_PIO            | 0x07025000 - 0x0702540F  | Port L (14 pins) and Port M (6 pins)     |
 | PMIC I2C (R_I2C0)     | 0x07083000 - 0x070833FF  | AXP318 / AXP8191 PMIC Communication Bus |
-| RISC-V ITCM Window    | 0x07110000 - 0x0711FFFF  | 64 KiB Instruction Tightly-Coupled Memory|
+| ~~RISC-V ITCM Window~~ | 0x07110000 - 0x0711FFFF | Does not exist: the E902 has no TCMs (access SErrors, see `CUBIE_A7A_DEBUG_LOG.md`) |
 | RISC-V SRAM Window    | 0x07130000 - 0x0717FFFF  | 320 KiB Real-Time SRAM Execution Pool   |
 +───────────────────────+──────────────────────────+─────────────────────────────────────────+
 ```

@@ -39,5 +39,5 @@ sudo dd if=bld.avaota/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=f
 
 The Avaota A1 shares the identical **XuanTie E906 RISC-V co-processor architecture** as the Radxa Cubie A5E:
 * **Lifecycle Management**: Controlled by Linux via `/sys/class/remoteproc/remoteproc0/state`.
-* **Execution Memory**: Runs bare-metal firmware in zero-wait-state MCU SRAM C (`0x00020000`) or ITCM (`0x07110000`).
+* **Execution Memory**: Runs bare-metal firmware from SRAM A3 (Space 0 at DA `0x3FFC0000`, Space 1 at DA `0x40000000`, 256 KB each) or DRAM. The E906 has no TCMs.
 * **IPC**: Lock-free SPSC queues and hardware mailbox doorbells (`0x03003000`).

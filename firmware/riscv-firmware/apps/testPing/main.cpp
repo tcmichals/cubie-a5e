@@ -5,7 +5,7 @@
  *
  * Demonstrates:
  * 1. Zero-copy, lock-free shared SRAM memory channel (ShmPingChannel @ 0x07131000).
- * 2. Hardware Mailbox Doorbell integration (hal::MsgBox Channel 0 -> ARM GIC SPI 147).
+ * 2. Hardware Mailbox Doorbell integration (hal::MsgBox Channel 0 -> ARM GIC SPI 0).
  * 3. High-frequency ping-pong loop with sub-microsecond response latency.
  * 4. Capturing hardware cycle counts (mcycle) and echoing Linux timestamps.
  * 5. Dual-mode compatibility: Event-Driven UIO Doorbell and direct memory polling.
@@ -29,7 +29,7 @@ int main(void) {
     hal::Trace::puts("================================================================\n");
     hal::Trace::puts("  Allwinner T527 XuanTie E906 testPing (Lite-libmetal UIO/SHM) \n");
     hal::Trace::puts("  Channel : Dedicated MCU SRAM C @ 0x07131000                 \n");
-    hal::Trace::puts("  Doorbell: Hardware MSGBOX Channel 0 (ARM GIC SPI 147)       \n");
+    hal::Trace::puts("  Doorbell: Hardware MSGBOX Channel 0 (ARM GIC SPI 0)         \n");
     hal::Trace::puts("  Mode    : Event-Driven UIO & High-Speed Ping-Pong Echo Loop \n");
     hal::Trace::puts("================================================================\n");
 
@@ -80,7 +80,7 @@ int main(void) {
             SHM_CHANNEL->host_doorbell = 0;
             SHM_CHANNEL->riscv_doorbell = 1;
 
-            // Pulse Hardware Mailbox Doorbell (Channel 0 -> ARM GIC SPI 147) for Linux UIO
+            // Pulse Hardware Mailbox Doorbell (Channel 0 -> ARM GIC SPI 0) for Linux UIO
             hal::MsgBox::send(hal::MsgBox::Channel::Channel0, seq);
 
             SHM_CHANNEL->total_pings = SHM_CHANNEL->total_pings + 1;

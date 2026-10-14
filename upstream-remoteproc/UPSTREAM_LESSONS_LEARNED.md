@@ -118,7 +118,13 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ## 2. Mailbox Subsystem Rules (Jassi Brar & Sashiko AI)
 
-### Lesson 2.1: `last_tx_done()` Means "Remote Consumed", NOT "FIFO Has Free Space"
+### Lesson 2.1: `last_tx_done()` Policy Is a Decision — v3 Uses "Remote Drained" (`count == 0`)
+> **Status (2026-10-13):** This is a design choice, not a framework rule. The v3 driver follows
+> Sashiko's v2 comment and upstream `sun6i-msgbox` (`count == 0`, poll). The Allwinner vendor BSP
+> (`drivers/msgbox/sunxi-msgbox.c`) instead treats "FIFO not full" as done with a 5 ms poll, or uses
+> the msgbox write IRQ (`txdone_irq`). The drain policy costs throughput: back-to-back kicks wait for a
+> poll tick. Revisit after v3 with a benchmark; do not flip it because of a review comment alone.
+
 * **What Went Wrong**:
   ```c
   /* WRONG: Checking available FIFO headroom */
@@ -238,21 +244,27 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ---
 
-### Lesson 3.2: RemoteProc Doorbell Protocol: `cl.knows_txdone = true` with Mandatory Pass-Case `mbox_client_txdone()`
+### Lesson 3.2: RemoteProc Doorbell Protocol: `cl.knows_txdone = false`, Controller Paces TX
+> **Superseded (2026-10-13).** An earlier version of this lesson said to set `knows_txdone = true` and
+> call `mbox_client_txdone()` after every send. That contradicts the controller's own pacing and was
+> flagged by Sashiko on v2 ("immediate txdone corrupts mailbox"). The code and this ledger now agree.
 * **What Went Wrong**:
-  In early revisions, RemoteProc kicks either relied on software `hrtimer` polling (`knows_txdone = false`), adding 1 ms latency per kick, OR set `knows_txdone = true` without calling `mbox_client_txdone()` on successful sends.
-* **The Upstream Rule**:
-  In the Linux Mailbox framework (`drivers/mailbox/mailbox.c`), RemoteProc virtqueue kicks are fire-and-forget doorbells.
-  1. Setting `cl.knows_txdone = true` bypasses software timer polling and eliminates 1 ms latency.
-  2. **Mandatory Pass-Case Handling**: When `cl.knows_txdone = true`, `mbox_send_message()` marks `chan->active_req`. The client MUST handle the pass case (`ret >= 0`) by calling `mbox_client_txdone(chan, 0)` immediately:
-     ```c
-     ret = mbox_send_message(priv->tx_chan, &msg);
-     if (ret < 0)
-         dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
-     else
-         mbox_client_txdone(priv->tx_chan, 0);
-     ```
-  3. Omitting `mbox_client_txdone()` in the pass case leaks `chan->active_req`, queuing subsequent kicks into the 20-message software FIFO until it overflows with `-ENOBUFS` and floods dmesg with `Try increasing MBOX_TX_QUEUE_LEN`.
+  The kick protocol was flipped between versions: polling (`knows_txdone = false`, 1 ms poll latency per queued kick) → client-reported completion (`knows_txdone = true` + `mbox_client_txdone()`) → back to polling. Each flip was driven by a review comment, not a decision.
+* **The Rule**:
+  1. The sun55i msgbox controller sets `txdone_poll = true`, so the controller decides when a message is done (`last_tx_done()`, see Lesson 2.1).
+  2. The client sets `cl.knows_txdone = false` and `cl.tx_block = false`, and never calls `mbox_client_txdone()`.
+  3. Payloads must outlive `mbox_send_message()` because the core queues the pointer: use immutable `static const u32` values, one per vring (no shared writable `kick_msg`).
+  4. The Allwinner vendor BSP uses the same client settings (`knows_txdone` unset, `tx_block = false`).
+* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller (write-IRQ `txdone_irq`, or a different `last_tx_done` policy), measured on the board — not `knows_txdone = true` in the client.
+
+---
+
+### Lesson 3.2b: Mailbox `rx_callback` Is Atomic — Defer rpmsg Work
+* **What Went Wrong**:
+  The rx callback called `rproc_vq_interrupt()` directly (commit `45501e5ae8a4`). The sun55i msgbox calls `rx_callback` from its hardirq handler with `mbox->lock` held, and the virtio/rpmsg receive path takes mutexes (`rpmsg_recv_single()`). This is a sleep in atomic context on every received message on a non-RT kernel. The board runs PREEMPT_RT, which force-threads IRQ handlers, so silicon tests never showed it.
+* **The Rule**:
+  `include/linux/mailbox_client.h` documents `rx_callback` as an atomic callback. Queue a work item and call `rproc_vq_interrupt()` from it (vendor BSP and `stm32_rproc` do the same). Free the mailbox channels before `cancel_work_sync()`.
+* **How to catch it**: run once per version on a non-RT kernel with `CONFIG_DEBUG_ATOMIC_SLEEP=y` and `CONFIG_PROVE_LOCKING=y`.
 
 ---
 
@@ -260,11 +272,12 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 * **What Went Wrong**:
   In `sunxi_rproc_parse_memory_regions()`, all carveouts were marked `mem->is_iomem = true`.
 * **The Upstream Rule**:
-  On ARM64, physical memory allocated via standard CMA / reserved-memory (like DDR trace buffers or virtio buffers) is already mapped by the kernel page tables as **Write-Back (WB) Cacheable**.
-  If remoteproc maps it with `ioremap_wc()` (Device / Non-cacheable) while claiming `is_iomem = true`, the CPU architecture encounters **conflicting memory attributes** for the same physical address, which causes unpredictable behavior or hardware bus aborts.
+  On ARM64, the same physical range must not be mapped twice with different memory attributes (WB vs WC vs Device). The project's DRAM regions are `reserved-memory` with `no-map`, so the kernel linear map does **not** cover them; the DMA pool (`shared-dma-pool`) maps its region write-combining.
+  `is_iomem` tells the remoteproc core which copy routine to use (`memcpy_toio` vs `memcpy`); it is not a cache attribute.
 * **The Correct Pattern**:
-  * On-chip SRAM (`r_sram`, `r_sram1`): `mem->is_iomem = true` (I/O memory).
-  * System DRAM carveouts (`trace`, `dram`, VirtIO vrings): `mem->is_iomem = false` (Normal memory).
+  * On-chip SRAM (`r_sram`, `r_sram1`): `devm_ioremap_wc()`, `mem->is_iomem = true`.
+  * DRAM `no-map` regions (`trace`, `dram`, vrings): map once with the same attribute as the DMA pool (`devm_memremap(..., MEMREMAP_WC)`), `mem->is_iomem = false`.
+  * (An earlier version of this lesson said DRAM is "already mapped WB"; that is only true for regions without `no-map`, which this project does not use.)
 
 ---
 
@@ -294,6 +307,7 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 ---
 
 ### Lesson 3.6: State Machine Completion vs Syntactic Error Checks
+> **Note (2026-10-13):** The example is the old `knows_txdone = true` client. The project now uses `knows_txdone = false` (Lesson 3.2), where the controller completes TX and the client must *not* call `mbox_client_txdone()`. The general lesson — check the success path too — still applies.
 * **What Went Wrong**:
   Review linters and bots verified `if (ret < 0) dev_err(...)` on `mbox_send_message()` and considered the code complete. They completely missed that in `cl.knows_txdone = true` mode, the **pass branch (`ret >= 0`)** requires `mbox_client_txdone()` to clear `chan->active_req`.
 * **The Upstream Rule**:
@@ -329,7 +343,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 * 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
   1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
   2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
-  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing (`count < FIFO_MAX`), RemoteProc ATT bounds, and `mbox_client_txdone()` pass-case completion.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing (v3 decision: `count == 0`), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
   4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
   5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
 * 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.
@@ -343,8 +357,11 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
 - [ ] Mailbox `last_tx_done()` checks `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`).
-- [ ] RemoteProc kick sets `cl.knows_txdone = true` AND calls `mbox_client_txdone()` on `ret >= 0` pass case.
-- [ ] Teardown sequence halts remoteproc first (rproc_del() called before freeing mailbox channels).
+- [ ] RemoteProc kick uses `cl.knows_txdone = false`, `tx_block = false`, immutable per-vring payloads; never calls `mbox_client_txdone()`.
+- [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.
+- [ ] Teardown: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()` (probe error path: free mailbox → cancel work).
+- [ ] One non-RT kernel run with `CONFIG_DEBUG_ATOMIC_SLEEP=y` + `CONFIG_PROVE_LOCKING=y` (PREEMPT_RT hides atomic-context bugs).
+- [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`old-kernels/linux-aw2501/.git/modules/bsp`), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
 - [ ] Mailbox driver only requests the ARM host port interrupt that Linux services.

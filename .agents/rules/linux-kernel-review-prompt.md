@@ -44,12 +44,15 @@ For every call to `mbox_send_message()`, `dma_async_memcpy_pg_offload()`, `call_
    - Does the underlying driver's `send_data` callback copy the payload synchronously before returning (e.g., via `memcpy` or `writel`)?
    - If yes: a local stack variable is safe and avoids shared-state races.
    - If no (the framework or driver queues the pointer itself): the pointer MUST point to memory that remains valid until completion.
-3. If message data lives in a `struct` member (e.g. `priv->kick_msg`):
+3. If message data lives in a writable shared variable or `struct` member:
    - Can multiple CPUs call this function concurrently (e.g., virtqueue kicks on different cores)?
-   - If yes: is the assignment to the struct member protected by a spinlock? Without locking, concurrent calls will overwrite the shared variable, causing dropped or corrupted payloads.
+   - If yes: concurrent calls overwrite the shared variable while it is still queued. Immutable storage (e.g. a `static const` value per vring, as the sunxi driver uses) avoids this without a lock.
 4. Does the client set `cl.knows_txdone = true`?
    - Does the underlying controller already manage TX completion via `txdone_poll = true` or `txdone_irq = true`?
-   - If the controller manages TX completion, the client must NOT set `cl.knows_txdone = true` and must NEVER call `mbox_client_txdone()`. Calling it immediately breaks the controller's FIFO pacing.
+   - If the controller manages TX completion, the client must NOT set `cl.knows_txdone = true` and must NEVER call `mbox_client_txdone()`. Calling it immediately breaks the controller's FIFO pacing. (Project decision: `knows_txdone = false` — see `upstream-patch-submissions.md` §3.)
+5. Execution context of `rx_callback`:
+   - `include/linux/mailbox_client.h` documents it as an atomic callback. Does the client call anything that can sleep (mutexes, `rproc_vq_interrupt()` → virtio/rpmsg receive path)?
+   - If yes: it must defer to a work item. PREEMPT_RT test boards hide this bug; it shows on non-RT kernels with `CONFIG_DEBUG_ATOMIC_SLEEP`.
 
 ---
 
@@ -91,12 +94,13 @@ In `start()` and `recovery` paths:
 
 ## CHECK GROUP 6: Teardown and Error-Unwind Order (Preventing Use-After-Free)
 
-In `remove()`:
+In `remove()` (remoteproc client with a mailbox):
 
-1. **Cut off event generation FIRST:** Free or disable the external interrupt/mailbox sources (`devm_free_irq()`, `mbox_free_channel()`) so no new incoming hardware events or interrupts can be received.
-2. **Drain in-flight async workers SECOND:** Call `cancel_work_sync()` to ensure any work items already queued have completely finished executing.
-3. **Destroy framework objects LAST:** Only after interrupt sources are closed and workqueues are idle, call `rproc_del()`, `mbox_controller_unregister()`, etc.
-   - *Why?* If `rproc_del()` is called while the mailbox channel is still open, late interrupts will trigger `sunxi_rproc_vq_work` which calls `rproc_vq_interrupt()` on already-destroyed virtqueues, causing a kernel crash!
+1. **`rproc_del()` FIRST:** it stops the core and removes the virtio devices. Virtio removal can still kick, so the tx channel must still exist. Freeing the mailbox before `rproc_del()` is a use-after-free on the channel.
+2. **Free the mailbox channels SECOND:** after `mbox_free_channel()` returns, no rx callback can run or re-queue work.
+3. **Drain work LAST:** `cancel_work_sync()` (or let a devm workqueue be destroyed by devres after `remove()`).
+   - A work item that runs after the virtqueues are gone is safe: `rproc_vq_interrupt()` looks them up under the remoteproc vq SRCU (`drivers/remoteproc/remoteproc_virtio.c`).
+   - Precedent: `stm32_rproc` and the Allwinner vendor BSP (`rproc_del()` → free mailbox → `destroy_workqueue()`).
 
 In `probe()` error unwind (`err_mbox_release`):
 
@@ -105,12 +109,13 @@ In `probe()` error unwind (`err_mbox_release`):
 
 In `stop()`:
 
-1. `reset_control_assert()` (halt core to prevent new interrupts) → `disable_irq()` → `cancel_work_sync()` (drain work).
+1. `reset_control_assert()` (halt core) → disarm the crash IRQ (`disable_irq()` without holding a spinlock). The mailbox stays open: virtio teardown in `rproc_stop()` happens before `ops->stop()` and may still kick.
 
 **Expected answer:**
-- `remove()`: `devm_free_irq()` → `mbox_free_channel()` → `cancel_work_sync()` → `rproc_del()`
+- `remove()`: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()`
 - `probe()` error: `mbox_free_channel()` → `cancel_work_sync()`
-- `stop()`: `reset_control_assert()` → `disable_irq()` → `cancel_work_sync()`
+- `stop()`: `reset_control_assert()` → disarm crash IRQ
+- ❌ Flag as a bug: freeing mailbox channels before `rproc_del()`, or `cancel_work_sync()` before `mbox_free_channel()`.
 
 ---
 
@@ -121,7 +126,8 @@ In `da_to_va()` or any address translation function:
 1. Does any DA alias appear in more than one `if` branch?
 2. Specifically: if both `r_sram` (Space 0) and `r_sram1` (Space 1) are present, and both check `da >= 0x40000000`, which branch wins?
 3. Does mapping `0x40000000` in the Space 0 block silently redirect what should be Space 1 accesses into the wrong SRAM window?
-4. For each constant DA alias used (e.g. `0x40000000`, `0x3ffc0000`, `0x3ff80000`): is it documented which hardware space it belongs to, and does only one `if` branch handle it?
+4. For each constant DA alias used: is it documented which hardware space it belongs to, and does only one `if` branch handle it?
+   - Verified E906 map (silicon + vendor Tina `sun55iw3/memory.c`): Space 0 = DA `0x3FFC0000` ↔ PA `0x07280000`; Space 1 = DA `0x40000000` ↔ PA `0x072C0000`; DA `0x40040000`+ = DRAM 1:1; `0x00020000` = HiFi4 DSP RAM. Any other SRAM alias (e.g. `0x3FF80000`, `0x40040000`→Space 1, `0x00020000`→Space 0) is a bug.
 
 **Expected answer:** Each DA alias appears in exactly one branch. Ambiguous aliases (like `0x40000000` shared by Space 0 and Space 1) are resolved by checking which resource is present, or removed from the wrong block.
 

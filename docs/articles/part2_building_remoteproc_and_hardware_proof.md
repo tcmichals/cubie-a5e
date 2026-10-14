@@ -172,9 +172,9 @@ Because this driver executes inside kernel space with native `ioremap_wc()`, **w
 Upstream kernel maintainers and static analysis bots enforce strict lifecycle and concurrency invariants that were resolved in `sunxi_rproc.c`:
 
 * **Workqueue Initialization vs Mailbox Requests**: `INIT_WORK(&priv->vq_work, ...)` is initialized ahead of all mailbox channel requests to avoid jumping to uninitialized work items on deferred probe.
-* **Crash IRQ Teardown Order**: In `sunxi_rproc_remove()`, `disable_irq(priv->crash_irq)` is called *before* `rproc_del()`. This ensures in-flight crash alerts cannot trigger on a destroyed `rproc` pointer.
-* **Stack Use-After-Free Prevention**: With asynchronous mailbox delivery (`tx_block = false`), passing local stack pointers risks use-after-return. We assign kicks to `priv->kick_msg = (u32)vqid` inside `struct sunxi_rproc`.
-* **PREEMPT_RT Safe VirtIO Dispatch**: Rather than invoking `rproc_vq_interrupt()` directly inside the mailbox interrupt context (which triggers "scheduling while atomic" warnings on real-time kernels), the driver schedules work via `schedule_work(&priv->vq_work)`.
+* **Teardown Order**: `sunxi_rproc_remove()` calls `rproc_del()` first (it stops the core, whose `stop()` disarms the optional crash IRQ, and removes the virtio devices, which may still kick), then frees the mailbox channels, then `cancel_work_sync()`. Once the channels are freed nothing can queue the work again.
+* **Stack Use-After-Free Prevention**: With asynchronous mailbox delivery (`tx_block = false`), passing local stack pointers risks use-after-return. With `txdone_poll` the mailbox core may queue the message *pointer* and read it later, so each vring has an immutable `static const u32` payload (`sunxi_rproc_kick_msg[vqid]`).
+* **Atomic rx Callback, Deferred VirtIO Dispatch**: The mailbox `rx_callback` runs in hardirq context with the msgbox spinlock held, and the rpmsg receive path takes mutexes. The callback therefore only queues `vq_work` on a driver-owned ordered `WQ_HIGHPRI` workqueue, and the work calls `rproc_vq_interrupt()`. (PREEMPT_RT force-threads the IRQ handler and hides the bug; test on a non-RT kernel with `CONFIG_DEBUG_ATOMIC_SLEEP=y`.)
 
 ---
 

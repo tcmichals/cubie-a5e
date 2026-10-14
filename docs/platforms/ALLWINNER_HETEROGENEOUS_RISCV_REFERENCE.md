@@ -1,7 +1,7 @@
 # Allwinner XuanTie RISC-V Co-Processor Reference Guide (T527 E906 / A733 E902)
 
 > **Target Co-Processors**: 
-> - **Allwinner T527 / A527**: T-Head / XuanTie **E906** (with Cadence Tensilica HiFi4 Audio DSP, ITCM/DTCM)
+> - **Allwinner T527 / A527**: T-Head / XuanTie **E906** (RV32IMAFCX, with Cadence Tensilica HiFi4 Audio DSP; no TCMs)
 > - **Allwinner A733**: T-Head / XuanTie **E902** (up to 200 MHz per Linux-Sunxi, No DSP, Shared SRAM A2 @ 0x00040000)
 > **Host Kernel**: Linux 7.1 PREEMPT_RT (`drivers/remoteproc/sunxi_rproc.c`)  
 
@@ -9,7 +9,7 @@
 
 ## 1. Co-Processor Architectural Summary
 
-- The **Allwinner T527** integrates the **XuanTie E906** (with Cadence Tensilica HiFi4 DSP and dedicated ITCM/DTCM).
+- The **Allwinner T527** integrates the **XuanTie E906** (with Cadence Tensilica HiFi4 DSP; no TCMs — it runs from SRAM A3 and DRAM).
 - The **Allwinner A733** integrates the **XuanTie E902** (no DSP, executes directly from SRAM A2).
 
 ### Why Confusion Exists in the Manuals & Register Tables
@@ -27,8 +27,8 @@ However, the hardware initialization sections, core description chapters, and co
 |  +---------------------------------------+   +-------------------------------------+  |
 |  | - Core: XuanTie E906 RISC-V (200 MHz) |   | - Core: XuanTie E902 RISC-V (200MHz)|  |
 |  | - DSP: Cadence HiFi4 Audio DSP (600M) |   | - DSP: None (Silicon omitted)       |  |
-|  | - Memory: ITCM (64KB), DTCM (64KB),   |   | - Memory: SRAM A2 (208 KB @ 0x40000)|  |
-|  |   SRAM A3 (1024KB @ 0x07280000)       |   | - Interconnect: R-CCU @ 0x07010000  |  |
+|  | - Memory: no TCMs; SRAM Space 0 + 1   |   | - Memory: SRAM A2 (208 KB @ 0x40000)|  |
+|  |   (2x 256KB @ 0x07280000/0x072C0000)  |   | - Interconnect: R-CCU @ 0x07010000  |  |
 |  | - Control: MCU CCU @ 0x07102000       |   | - Boot: Hardwired to 0x00040000     |  |
 |  +---------------------------------------+   +-------------------------------------+  |
 +---------------------------------------------------------------------------------------+
@@ -43,13 +43,15 @@ On the T527, the E906 RISC-V core shares the MCU/DSP subsystem with the Cadence 
 
 | Memory / Register Region | Host (ARM64) Address | RISC-V Core Address | Size | Primary Usage |
 | :--- | :--- | :--- | :--- | :--- |
-| **Dedicated SRAM / ITCM** (`r_sram`)| `0x07110000` / `0x07280000`| `0x00000000` | 256 KB | Reset Vector Table (`.vectors`), ISRs |
-| **DTCM** | `0x07120000` | `0x00080000` | 64 KB | Fast Data, Stack |
+| **SRAM Space 0** (`r_sram`) | `0x07280000` | `0x3FFC0000` | 256 KB | Reset vector (`STA_ADD` reset value), code, data |
+| **SRAM Space 1** (`r_sram1`, remap bit 1) | `0x072C0000` | `0x40000000` | 256 KB | Code, data, IPC buffers |
+| **DRAM** | `0x40040000`+ | `0x40040000`+ (1:1) | — | Reserved-memory carveouts, vrings |
 | **Shared SRAM** (`sram`) | `0x00040000` | `0x00040000` | 160 KB | Shared SRAM A2 (Telemetry, SPSC Rings) |
 | **MCU CCU** (`cfg`) | `0x07102000` | `0x07102000` | 4 KB | E906 / DSP Clock, Reset, Bus Bridges |
 | **E906 CFG Block** (`e906-cfg`) | `0x07130000` | `0x07130000` | 4 KB | E906 Boot Vector (`0x0204`), Work Mode, Wakeup |
 | **HiFi4 DSP Config** | `0x07100000` | `0x07100000` | 1 KB | Cadence Tensilica HiFi4 Subsystem Control |
-| **MSGBOX (IPI)** | `0x03004000` | `0x07094000` | 4 KB | Inter-Core Mailbox Doorbell IRQ |
+| **MSGBOX ARM bank** | `0x03003000` | — | 4 KB | Host receive FIFOs; GIC SPI 0 |
+| **MSGBOX RISC-V bank** | `0x07136000` | `0x07136000` | 4 KB | E906 receive FIFOs (host writes here to kick) |
 
 #### T527 XuanTie E906 CFG Registers (`0x07130000`):
 * `0x0000` (`E906_VER_REG`): E906 Version Register
@@ -94,7 +96,7 @@ E906 HALT / STOP SEQUENCE:
 > [!IMPORTANT]
 > **WHY THE A733 IS FUNDAMENTALLY DIFFERENT: THE E902 HAS NO TCMs**
 > The XuanTie E902 is an ultra-compact embedded core that **does not implement Tightly Coupled Memories (NO ITCM, NO DTCM)**.
-> - On the **T527 (E906)**: Dedicated ITCM (`0x07110000`) and DTCM (`0x07120000`) exist for zero-wait-state code and stack.
+> - On the **T527 (E906)**: no TCMs either; the E906 runs from SRAM A3 (Space 0 at DA `0x3FFC0000`, Space 1 at DA `0x40000000`) and DRAM. (Earlier versions of this guide wrongly listed ITCM `0x07110000` / DTCM `0x07120000` for the T527.)
 > - On the **A733 (E902)**: Addresses `0x07110000` and `0x07120000` **do not exist in silicon**. Any attempt to access them triggers an immediate interconnect DECERR / asynchronous SError abort!
 > - **Everything executes out of Shared SRAM A2 (`0x00040000`–`0x00073FFF`)**: The hardware reset vector, code, data, BSS, and stack all reside in Shared SRAM A2.
 > - The A733 Device Tree does not declare TCM memory windows, and the linker script (`firmware.ld`) links directly to `ORIGIN = 0x00044000`.
@@ -157,7 +159,7 @@ cp firmware.elf /lib/firmware/riscv-firmware.elf
 # 2. Assign firmware to remoteproc instance
 echo riscv-firmware.elf > /sys/class/remoteproc/remoteproc0/firmware
 
-# 3. Boot XuanTie E906/E906 RISC-V core
+# 3. Boot XuanTie E906 RISC-V core
 echo start > /sys/class/remoteproc/remoteproc0/state
 
 # 4. View real-time printk / trace buffer from RISC-V
@@ -167,30 +169,47 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 echo stop > /sys/class/remoteproc/remoteproc0/state
 ```
 
-### B. Device Tree Node (T527 / A523 DTS)
+### B. Device Tree Nodes (T527 / A523, `sun55i-a523.dtsi`)
+The board DTS adds `memory-region`/`memory-region-names` and sets `status = "okay"` on the remoteproc node.
 ```dts
 msgbox: mailbox@3003000 {
-    compatible = "allwinner,sun55i-a523-msgbox", "allwinner,sun8i-a83t-msgbox";
-    reg = <0x03003000 0x1000>;
+    compatible = "allwinner,sun55i-a523-msgbox";
+    reg = <0x03003000 0x1000>,
+          <0x07120000 0x1000>,
+          <0x07094000 0x1000>,
+          <0x07136000 0x1000>;
+    reg-names = "arm", "dsp", "cpus", "rv";
     clocks = <&ccu CLK_BUS_MSGBOX>;
     resets = <&ccu RST_BUS_MSGBOX>;
-    interrupts = <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
+    interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+    interrupt-names = "arm", "dsp", "cpus", "rv";
     #mbox-cells = <1>;
 };
 
-rproc: remoteproc@7102000 {
-    compatible = "allwinner,sun55i-a523-rproc",
-                 "allwinner,sun55i-a527-rproc",
-                 "allwinner,sun55i-t527-rproc",
-                 "allwinner,sunxi-rproc";
-    reg = <0x02001000 0x1000>,
-          <0x07102000 0x1000>,
+rproc: remoteproc@7130000 {
+    compatible = "allwinner,sun55i-a523-rproc";
+    reg = <0x07130000 0x1000>,
           <0x07280000 0x40000>,
-          <0x00020000 0x20000>;
-    reg-names = "main_ccu", "ccu", "r_sram", "sram";
-    mboxes = <&msgbox 0>, <&msgbox 1>;
+          <0x072c0000 0x40000>,
+          <0x07010364 0x4>;
+    reg-names = "cfg", "r_sram", "r_sram1", "remap";
+    clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
+             <&mcu_ccu CLK_MCU_RISCV>,
+             <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
+    clock-names = "bus", "core", "sram";
+    resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
+             <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
+             <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
+             <&mcu_ccu RST_BUS_MCU_RISCV_DEBUG>;
+    reset-names = "cfg", "core", "sram", "debug";
+    power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
+    power-domain-names = "riscv", "sram";
+    mboxes = <&msgbox 8>, <&msgbox 9>;
     mbox-names = "rx", "tx";
-    status = "okay";
+    status = "disabled";
 };
 ```
 

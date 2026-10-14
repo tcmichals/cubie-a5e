@@ -238,15 +238,15 @@ rproc: remoteproc@7130000 {
 #### 3. RemoteProc Driver Lifecycle & Hardening Invariants (`sunxi_rproc.c`)
 - **Probe (`sunxi_rproc_probe` / `register_mem`)**: Maps `"r_sram"` (`0x07280000`), `"r_sram1"` (`0x072c0000`), and `"remap"` (`0x07010364`). Initializes workqueues (`INIT_WORK(&priv->vq_work)`) *before* requesting mailbox channels to eliminate race conditions on early interrupts or deferred probes.
 - **Two-Stage Reset Architecture**:
-  - **Prepare (`sunxi_rproc_prepare`)**: Deasserts bus/interconnect resets (`rst_cfg`, `rst_sram`, `rst_msgbox`) and enables clocks. Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Clears SRAM via `memset_io` to eliminate stale data / ECC noise. Keeps CPU pipeline reset (`rst_core`) asserted so firmware can be loaded into SRAM without premature execution.
+  - **Prepare (`sunxi_rproc_prepare`)**: Powers the `riscv`/`sram` power domains, deasserts the cfg/SRAM/debug resets (`rst_core` stays asserted) and enables clocks. Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Clears SRAM via `memset_io` to eliminate stale data / ECC noise. Keeps CPU pipeline reset (`rst_core`) asserted so firmware can be loaded into SRAM without premature execution.
   - **Start (`sunxi_rproc_start`)**: Deasserts `rst_core` and writes entry point to `STA_ADD_REG` (`0x07130204`). Re-enables the hardware crash IRQ if previously disabled during recovery.
   - **Stop (`sunxi_rproc_stop`)**: Asserts `rst_core` to freeze execution, then drains `vq_work` via `cancel_work_sync()`.
   - **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG`, disables CCU clocks, and asserts bus resets.
 - **DA Translation (`sunxi_rproc_da_to_va`)**:
   - Guarded against 64-bit integer wrap-around: `if (da > U64_MAX - len) return NULL;`.
-  - Translates Space 0 (`0x3FF80000`, `0x3FFC0000`, `0x00020000`), Space 1 (`0x40000000`, `0x40040000`), Host PAs (`0x07280000`, `0x072C0000`), Trace, and DRAM.
+  - ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000`, plus host-PA identity entries; then the DT memory regions (trace, DRAM). DA `0x40040000`+ is DRAM, mapped 1:1.
   - Returns `NULL` for dynamic DDR carveouts to delegate translation directly to the Linux remoteproc core's `rproc->carveouts` linked list.
-- **Teardown Order**: `disable_irq(priv->crash_irq)` -> `rproc_del()` -> `cancel_work_sync()` -> `mbox_free_channel()`.
+- **Teardown Order**: `rproc_del()` -> `mbox_free_channel()` -> `cancel_work_sync()` (the optional crash IRQ is disarmed by `stop()` inside `rproc_del()`).
 - **Reference Guide**: For full architectural rules and comparisons across mainline drivers, refer to [**`LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`**](../architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md).
 
 ---

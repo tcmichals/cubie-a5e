@@ -243,7 +243,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
 * **Architecture**:
   - Lock-free Single-Producer Single-Consumer (SPSC) circular ring buffers in on-chip SRAM (`0x3FFC0000`).
   - Two operational modes:
-    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Converts the hardware Message Box (`0x03003000`) into a generic UIO device (`/dev/uio0`). Host blocks asynchronously on `select.epoll()` with **0% idle CPU utilization**; E906 pulses GIC SPI 147 interrupt to wake host.
+    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Converts the hardware Message Box (`0x03003000`) into a generic UIO device (`/dev/uio0`). Host blocks asynchronously on `select.epoll()` with **0% idle CPU utilization**; E906 raises the ARM message box bank interrupt (GIC SPI 0) to wake the host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via physical mmap, achieving theoretical maximum bus transfer rate.
 * **Host Benchmark Tools**:
   - **`ping_uio.py`**: Python client using `select.epoll()` on `/dev/uio0`.
@@ -694,30 +694,25 @@ python3 /usr/bin/run_tests.py --test msgbox
 python3 /usr/bin/run_tests.py --test dual-msgbox
 ```
 
-## 7. Silicon Core Identification (E906 vs E906 Verification)
+## 7. Silicon Core Identification (E906 vs E907)
 
 ### Background: Why Both Names Appear
-* **Board & Marketing Layer**: Radxa Cubie A5E promotional specs, product briefs, and technical writeups refer to the co-processor as the **T-Head XuanTie E906**.
-* **Silicon RTL & Vendor BSP Layer**: Allwinner's internal hardware register maps (`0x07130000`), device trees (`sun55iw3p1.dtsi`), and Linux 5.15 BSP drivers refer to it as the **XuanTie E906** (`E906_VER_REG`, `E906_STA_ADD_REG`, `CONFIG_AW_REMOTEPROC_E906_BOOT`).
-* **Binary Compatibility**: Both cores share the same 32-bit RV32IMAFDC 5-stage pipeline architecture. Binaries compiled with `-march=rv32imafdc -mabi=ilp32d` execute identically on both.
+* **Board & Marketing Layer**: Some Radxa Cubie A5E product briefs call the co-processor a **T-Head XuanTie E907**.
+* **Silicon RTL & Vendor BSP Layer**: Allwinner's register maps (`0x07130000`), device trees (`sun55iw3p1.dtsi`), and Linux 5.15 BSP drivers call it the **XuanTie E906** (`E906_VER_REG`, `E906_STA_ADD_REG`, `CONFIG_AW_REMOTEPROC_E906_BOOT`).
+* **Silicon readback**: the running core reports `misa = 0x40901125` = **`RV32IMAFCX`** (+ `U` mode): single-precision `F`, **no** `D`, **no** `P`. The project firmware builds soft-float (`-march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32`, `firmware/common/common.mk`); `rv32imafc`/`ilp32f` is the most the core supports, and `d`/`ilp32d` code traps on double-precision instructions.
 
-To verify the exact silicon core implemented on physical hardware, run the following tests:
-
-### Method 1: Query the `misa` CSR (Bit 15 — 'P' Extension)
-The primary architectural difference between an E906 and an E906 is the presence of T-Head's packed-SIMD / DSP extension (**`P`**):
-* **E906**: Implements `RV32IMAFDC` (Standard Integer, Multiply, Atomic, Float, Double, Compressed; bit 15 is 0).
-* **E906**: Implements `RV32IMAFDCP` (Adds T-Head Packed-SIMD / DSP math; bit 15 is 1).
+### Method 1: Query the `misa` CSR
+`misa` bits: `A`=0, `C`=2, `D`=3, `F`=5, `I`=8, `M`=12, `P`=15, `U`=20, `X`=23.
+* **E906 (this board)**: `0x40901125` — `D` (bit 3) and `P` (bit 15) are both 0.
+* An E907 with the packed-SIMD / DSP extension would set bit 15 (`P`).
 
 In bare-metal C/C++ firmware:
 ```cpp
 uint32_t misa;
 asm volatile("csrr %0, misa" : "=r"(misa));
 
-if (misa & (1 << 15)) {
-    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E906 (DSP / 'P' extension enabled)\n", misa);
-} else {
-    hal::Trace::printf("[CPU-ID] misa=0x%08x -> XuanTie E906 (RV32IMAFDC standard without 'P')\n", misa);
-}
+hal::Trace::printf("[CPU-ID] misa=0x%08x D=%u P=%u\n", misa,
+                   (misa >> 3) & 1, (misa >> 15) & 1);
 ```
 
 ### Method 2: Query Machine Architecture ID (`marchid`) & T-Head Model (`mprid`)

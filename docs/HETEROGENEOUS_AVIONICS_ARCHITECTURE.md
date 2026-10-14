@@ -20,7 +20,7 @@ flowchart TB
         end
 
         subgraph "RISC-V Domain (Bare-Metal Microcontroller)"
-            E906["XuanTie E906 / E902 Core (RV32IMAC @ 600 MHz)<br/>• ITCM: 0x07110000 (64 KB)<br/>• DTCM: 0x07120000 (64 KB)<br/>• SRAM C: 0x07130000 (320 KB)<br/>• Hardware DMA Channels 8–15"]
+            E906["XuanTie E906 Core (RV32IMAFCX @ up to 200 MHz)<br/>• No TCMs<br/>• SRAM Space 0: DA 0x3FFC0000 (256 KB)<br/>• SRAM Space 1: DA 0x40000000 (256 KB)<br/>• Hardware DMA Channels 8–15"]
         end
 
         subgraph "Inter-Processor Communications (IPC)"

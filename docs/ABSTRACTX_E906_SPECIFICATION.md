@@ -13,7 +13,7 @@ directly traceable by implementation source files via `// @impl [SPEC-E906-*]`.
 ## 1. System Architecture Specifications (`SPEC-E906-ARCH`)
 
 ### `[SPEC-E906-ARCH-01]` Processor Core Architecture
-* **Target Core**: T-Head / XuanTie E906 (32-bit RISC-V: RV32IMAFDC).
+* **Target Core**: T-Head / XuanTie E906 (32-bit RISC-V: RV32IMAFCX — single-precision FPU, no `D`, no `P`; `misa = 0x40901125`).
 * **Operating Frequency**: Up to 200 MHz driven by the MCU CCU PLL.
 * **Privilege Modes**: Machine (M) and User (U) modes only.
 * **MMU Absence**: The E906 does NOT implement Supervisor mode virtual memory
@@ -42,10 +42,12 @@ directly traceable by implementation source files via `// @impl [SPEC-E906-*]`.
 * **Silicon Reality**: There is **NO ITCM and NO DTCM** on the T527 E906.
   Addresses `0x00000000` (ITCM) and `0x00080000` (DTCM) do not exist in silicon.
 * **Execution Window**: E906 executes out of dedicated on-chip **SRAM A3**:
-  * **SRAM Space 0**: `0x3FFC0000`–`0x40000000` (256 KB Dedicated Slice,
-    Host PA `0x07130000`). Reset vector and default boot window.
-  * **SRAM Space 1**: `0x40040000`–`0x40080000` (256 KB Switchable Slice,
-    enabled via `REMAP_CTRL_REG[1] = 1`).
+  * **SRAM Space 0**: `0x3FFC0000`–`0x3FFFFFFF` (256 KB Dedicated Slice,
+    Host PA `0x07280000`). Reset vector (`STA_ADD` resets to `0x3FFC0000`)
+    and default boot window. (`0x07130000` is the RISC-V CFG block, not SRAM.)
+  * **SRAM Space 1**: `0x40000000`–`0x4003FFFF` (256 KB Switchable Slice,
+    Host PA `0x072C0000`, enabled via `REMAP_CTRL_REG[1] = 1`).
+  * **DRAM**: DA `0x40040000` and up is host DRAM, mapped 1:1.
 * **Implementation Target**: `targets/allwinner_e906/bsp/e906_sram.ld`
 
 ### `[SPEC-E906-MEM-02]` Control vs. Data Plane Memory Split
@@ -180,7 +182,7 @@ directly traceable by implementation source files via `// @impl [SPEC-E906-*]`.
 
 | Design Requirement | Description | Primary Implementation File |
 | :--- | :--- | :--- |
-| `[SPEC-E906-ARCH-01]` | E906 RV32IMAFDC Core (No MMU) | `bsp/startup.S` |
+| `[SPEC-E906-ARCH-01]` | E906 RV32IMAFCX Core (No MMU) | `bsp/startup.S` |
 | `[SPEC-E906-ARCH-02]` | Hardwired ASIC SYSMAP PMAs | `include/memory_map.h` |
 | `[SPEC-E906-MEM-01]`  | Dedicated MCU SRAM (Zero TCM) | `bsp/e906_sram.ld` |
 | `[SPEC-E906-MEM-02]`  | SPSC in SRAM / DDR Buffers | `dram_spsc_protocol.h` |

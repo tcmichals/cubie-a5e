@@ -14,7 +14,7 @@
  *   map1: MCU Dedicated SRAM    @ 0x072B0000 (4 KB) - For Shared Ringbuffer / Ping
  *
  * Hardware IRQ:
- *   GIC SPI 147 (Allwinner Hardware Message Box IRQ)
+ *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox)
  *
  * In /boot/config.txt:
  *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing

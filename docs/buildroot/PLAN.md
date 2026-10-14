@@ -3,7 +3,7 @@
 **Current Milestone:** Phase 2 — Firmware Execution & Telemetry  
 **Primary Platform:** Radxa Cubie A5E (Allwinner T527 / A527)  
 **Secondary Platform:** Radxa Cubie A7A (Allwinner A733) — See [**`A7A Mainline Bring-Up Plan`**](../platforms/A7A_MAINLINE_PLAN.md)  
-**Co-Processor:** XuanTie E906 RISC-V (RV32IMAC @ 600 MHz)  
+**Co-Processor:** XuanTie E906 RISC-V (RV32IMAFCX @ up to 200 MHz)  
 **Build System:** Buildroot Out-of-Tree (`BR2_EXTERNAL=project-cubie-a5e`)
 
 ---

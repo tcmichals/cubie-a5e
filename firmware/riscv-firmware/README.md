@@ -29,7 +29,7 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
 |  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906 RISC-V Co-Processor  |  |  |
-|  |  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|  |  +-------------------------------------+   |  | (RV32IMAFCX, single-prec. FPU)    |  |  |
 |  |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  |  +-------------------------------------+   |  +-----------------------------------+  |  |
 |  |  |             NPU Engine              |   |  +-----------------------------------+  |  |
@@ -49,17 +49,16 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 ```
 
 The auxiliary co-processor on the Allwinner T527 is an enterprise-grade 32-bit RISC-V core:
-* **Architecture**: **RV32IMAFDC** (RV32GC)
+* **Architecture**: **RV32IMAFCX** (+ `U` mode) — `misa = 0x40901125` read from the running core
   - **I**: 32 standard 32-bit General Purpose Registers (`x0`–`x31`).
   - **M**: Hardware Integer Multiplication and Division.
   - **A**: Atomic Memory Operations (`lr.w`, `sc.w`, `amo*`).
-  - **F**: Single-precision IEEE 754 Hardware Floating Point Unit.
-  - **D**: Double-precision IEEE 754 Hardware Floating Point Unit (`f0`–`f31` 64-bit float registers).
+  - **F**: Single-precision IEEE 754 Hardware Floating Point Unit (no `D`: no double precision).
   - **C**: Compressed 16-bit instructions for high code density.
-  - **DSP / RVP**: Packed SIMD & DSP extensions for accelerated digital signal processing and audio/sensor filtering.
+  - **X**: T-Head custom (non-standard) extensions. No `P` (packed-SIMD / DSP) extension.
   - **_zicsr**: Standard Control & Status Register manipulation.
 * **Pipeline & Speed**: 5-stage dual-issue in-order pipeline operating at **up to 200 MHz** (managed by `mcu_ccu` @ `0x07102000`). *(Note: The companion Cadence Tensilica HiFi4 Audio DSP on T527 operates at 600 MHz).*
-* **Toolchain / ABI**: Target `-march=rv32imafdc_zicsr_zifencei -mabi=ilp32d -mcmodel=medany`.
+* **Toolchain / ABI**: The firmware builds soft-float: `-march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32` (`firmware/common/common.mk`). The core supports at most `rv32imafc` / `ilp32f`; `d` / `ilp32d` code traps.
 
 ---
 
@@ -277,7 +276,7 @@ python3 /usr/local/bin/fast_sram_telemetry.py
 * **Functionality**:
   - Direct lock-free shared SRAM channel (`ShmPingChannel` in on-chip SRAM Space 0 `0x3FFC0000`).
   - Dual operational modes:
-    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E906 pulses GIC SPI 147 interrupt to wake host.
+    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E906 raises the ARM message box bank interrupt (GIC SPI 0) to wake the host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via kernel UIO mapping and polls on memory flags for theoretical raw bus latency measurements.
 * **Linux Companion Tools**:
   - **`ping_uio.py`**: Event-driven Python Lite-libmetal client using `select.epoll()`. Maps `map0` (Mailbox MMIO) and `map1` (MCU SRAM) directly from `/dev/uio0` (no root privileges required).

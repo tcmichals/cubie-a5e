@@ -56,7 +56,7 @@ Communication between the Linux ARM host and the XuanTie RISC-V co-processor use
      ARM Linux (Host)                           XuanTie E906 (Co-processor)
 ┌─────────────────────────┐                     ┌─────────────────────────┐
 │ Real-Time SCHED_FIFO    │                     │ Bare-Metal Coroutine    │
-│ Daemon (Core 7)         │                     │ Flight Loop (ITCM)      │
+│ Daemon (Core 7)         │                     │ Flight Loop (SRAM A3)   │
 └────────────┬────────────┘                     └────────────▲────────────┘
              │                                               │
              │ Write SPSC Ringbuffer (PubSRAM C: 0x00020000) │

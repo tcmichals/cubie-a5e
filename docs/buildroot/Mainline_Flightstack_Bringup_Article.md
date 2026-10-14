@@ -44,7 +44,7 @@ To stream live H.264 video telemetry over the network:
 ## 4. Blueprint 3: XuanTie RISC-V Bare-Metal Ingestion
 
 To achieve microsecond-level deterministic attitude estimation:
-* **Memory Isolation:** The co-processor firmware runs fully isolated inside the processor's **Instruction TCM (ITCM)** and **Data TCM (DTCM)** blocks. This ensures zero bus contention with the ARM host's DDR memory access.
+* **Memory Isolation:** The co-processor firmware runs from its own on-chip SRAM A3 (2 × 256 KB: Space 0 at DA `0x3FFC0000`, Space 1 at DA `0x40000000`). The E906 has no TCMs; keeping code and hot data in SRAM avoids contending with the ARM host for DDR bandwidth.
 * **Dual SPI Ring-Buffer:** The RISC-V core runs a dedicated SPI interrupt handler that ingests hardware-timestamped IMU sensor blocks from the FPGA. Data is queued into fixed-size circular buffers in TCM without any heap allocation or lock stalls.
 
 ---

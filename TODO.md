@@ -209,7 +209,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [x] **B.2: `da_to_va` address translation tests** (pure logic, verified host-side compilation with `aarch64-linux-gcc`):
   - [x] `test_da_to_va_sram_space0_core_da` — DA=`0x3FFC0000`+offset → `r_sram_va` + offset
   - [x] `test_da_to_va_sram_space0_host_phys` — DA=`0x07280000`+offset → `r_sram_va` + offset
-  - [x] `test_da_to_va_sram_space0_alt_0x3ff80000` — DA=`0x3FF80000` fallback view
+  - [x] ~~`test_da_to_va_sram_space0_alt_0x3ff80000` — DA=`0x3FF80000` fallback view~~ (removed: `0x3FF80000` is not a real E906 window — D4)
   - [x] `test_da_to_va_sram_space0_alt_0x3ffc0000` — DA=`0x3FFC0000` primary view
   - [x] `test_da_to_va_sram_space1_host_phys` — DA=`r_sram1_phys` → `r_sram1_va`
   - [x] `test_da_to_va_sram_space1_core_da_0x40000000` — DA=`0x40000000` → `r_sram1_va`
@@ -238,7 +238,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] `test_da_to_va_corrupted_elf_overflow_segment` — rejects wrapping lengths and segments exceeding SRAM
 - [x] **B.5: `kick` and `ops` table completeness tests** [closes rproc #10, #11, #14]:
   - [x] `test_kick_null_tx_chan_safe` — `priv->tx_chan = NULL` → early return, no crash
-  - [x] `test_kick_stores_vqid` — `priv->kick_msg` updated with correct vqid
+  - [x] ~~`test_kick_stores_vqid` — `priv->kick_msg` updated with correct vqid~~ (removed: `kick_msg` replaced by static per-vring payloads)
   - [x] `test_rproc_ops_completeness` — verify all ops pointers populated (start, stop, kick, da_to_va, etc.)
 - [x] **B.6: Add Kconfig entry and Makefile rule** for `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST`:
   - [x] Added to `drivers/remoteproc/Kconfig` (0 checkpatch errors/warnings)
@@ -436,7 +436,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 > Sashiko: *"`0x40000000` is `E906_SRAM_SPACE1_DA` (Space 1), but the Space 0 `r_sram` block checks `da >= 0x40000000`, intercepting valid Space 1 accesses."*
 
-- [x] **S1.2**: Removed `0x40000000` DA alias from `r_sram` (Space 0) block. Space 0 core-DA views are `0x3ff80000`, `0x3ffc0000`, and `0x00020000`. The `0x40000000` and `0x40040000` checks belong exclusively in `r_sram1` (Space 1).
+- [x] **S1.2**: Removed `0x40000000` DA alias from `r_sram` (Space 0) block. Space 0 core-DA views are `0x3ff80000`, `0x3ffc0000`, and `0x00020000`. The `0x40000000` and `0x40040000` checks belong exclusively in `r_sram1` (Space 1). *(Superseded 2026-10-13: see §5.6a D4 / the driver guide.)*
 
 ---
 
@@ -485,7 +485,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 > Sashiko: *"Since `tx_block = false`, `mbox_send_message()` queues the pointer and returns immediately. The local `int vqid` is on the stack. When the mailbox's async ticker later reads this pointer, the stack frame is gone."*
 
-- [x] **S1.8**: Added `u32 kick_msg` in `struct sunxi_rproc` and use `priv->kick_msg = (u32)vqid; mbox_send_message(priv->tx_chan, &priv->kick_msg);`.
+- [x] **S1.8**: Added `u32 kick_msg` in `struct sunxi_rproc` and use `priv->kick_msg = (u32)vqid; mbox_send_message(priv->tx_chan, &priv->kick_msg);`. *(Superseded 2026-10-13: see §5.6a D4 / the driver guide.)*
 
 ---
 
@@ -625,35 +625,8 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - Category 7 (Address Translation Table ATT): **Clean** (Gold-standard `imx_rproc` design, 0 hardcoded hex literals).
 - [x] **Code & Audit Status**: **ALL DRIVER ISSUES AND CODE AUDITS ARE COMPLETE (100% DONE).**
 
-#### 1. Mainline Driver Architectural Comparison Matrix
-
-| Aspect / Function | `sunxi_rproc.c` (Allwinner E906) | `imx_rproc.c` (NXP i.MX M4/M7) | `ti_k3_r5_remoteproc.c` (TI K3 R5F) | `stm32_rproc.c` (ST STM32MP1 M4) | `rcar_rproc.c` (Renesas R-Car CR7) |
-|---|---|---|---|---|---|
-| **Architecture** | XuanTie E906 RISC-V co-processor | Cortex-M4/M7 microcontroller | Cortex-R5F in lockstep/split mode | Cortex-M4 microcontroller | Cortex-R7 co-processor |
-| **Reset Hierarchy** | Two-stage: `rst_cfg`/`rst_sram` (bus) vs `rst_core` (CPU) | SMC call or SRC register bits | Two-stage: `module-reset` (bus/RAM) vs `local-reset` (CPU) | Syscon hold_boot / SCMI / SMC | Single reset controller (`rst`) |
-| **`.prepare()`** | Deasserts bus resets, enables clocks, enables SRAM remap, clears SRAM (`memset_io`) | Maps memory (`imx_rproc_addr_init`), enables clocks | Deasserts module-reset to allow loading internal RAM while CPU reset is held | Registers reserved memory carveouts, allocates vrings | Registers reserved memory carveouts |
-| **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address register | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot | Sets boot address via `rcar_rst`, deasserts reset |
-| **`.stop()`** | Asserts `rst_core`, then syncs `vq_work` | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot | Asserts reset |
-| **`.unprepare()`** | Restores SRAM remap bit, disables CCU clocks, asserts bus resets | Disables clocks | Asserts module-reset via TI-SCI | N/A | N/A |
-| **`.da_to_va()`** | Translates Space 0 (Host PA, DA 0x3ff80000, 0x3ffc0000, 0x00020000), Space 1 (PA, DA 0x40000000, 0x40040000); returns `NULL` for DDR carveouts | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` | N/A (direct 1:1 physical map) |
-| **`.kick()`** | Sends `vqid` via `priv->kick_msg` struct member (avoids stack UAF), calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue | N/A (no mbox) |
-| **Crash Handling** | `disable_irq_nosync()` + `rproc_report_crash(rproc, RPROC_FATAL_ERROR)`; re-enabled on `.start()` | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` | N/A |
-| **Teardown Order** | `disable_irq(crash)` -> `rproc_del()` -> `cancel_work_sync()` -> `mbox_free_channel()` | `rproc_del()` -> `destroy_workqueue()` -> free channels | `rproc_del()` -> `mbox_free_channel()` | `rproc_shutdown()` -> `rproc_del()` -> `free_mbox()` -> `destroy_workqueue()` | `pm_runtime_disable()` |
-
-#### 2. Deep Dive: Why Does `sunxi_rproc` Do What It Does?
-
-1. **Two-Stage Reset Sequencing (`prepare` vs `start`)**:
-   - Both `ti_k3_common.c` and `sunxi_rproc.c` share identical hardware topologies: the co-processor sits behind an interconnect/bus interface that has its own clock/reset domain, separate from the remote CPU execution pipeline (`rst_core`).
-   - When the Linux kernel remoteproc ELF loader runs (`rproc_boot()` -> `rproc_load_segments()`), the remote CPU must NOT execute yet (otherwise it would execute incomplete code and crash). However, the internal SRAM banks and CFG registers must be clocked and un-reset so the ARM host can write the ELF segments into SRAM.
-   - **`prepare()`**: Asserts `rst_cfg`, `rst_sram`, `rst_msgbox` release, turns on CCU clocks. The CPU pipeline remains held in reset by `rst_core`.
-   - **`start()`**: Writes entry point to `STA_ADD_REG` and releases `rst_core`. The remote core begins execution strictly at the entry point.
-2. **Memory Mapping & `da_to_va` Rationale**:
-   - **Why `da_to_va` returns `NULL` for dynamic carveouts**: The Linux remoteproc core maintains an internal list of carveouts (`rproc->carveouts`). When `rproc_da_to_va()` runs, if `ops->da_to_va()` returns `NULL`, the core automatically searches `rproc->carveouts`. In `sunxi_rproc_parse_memory_regions()`, all `reserved-memory` nodes (vdev0vring0, vdev0vring1, vdev0buffer) are registered with `rproc_add_carveout()`. Letting the core handle DDR carveouts avoids duplicate address translation code and ensures full compatibility with dynamic DMA allocations.
-   - **Why multiple DA aliases exist for SRAM**: The XuanTie E906 core has multiple address decode windows:
-     - Space 0 local view: `0x3ff80000` (primary) and `0x3ffc0000` (secondary).
-     - Legacy view: `0x00020000` (PubSRAM C alias used in older BSP firmware).
-     - Space 1 switchable view: `0x40000000` and `0x40040000` (mapped via `remap` bit 1).
-     - Host physical address view: `0x07280000` and `0x072c0000` (used when firmware is compiled with flat physical addresses).
+#### 1–2. Driver Comparison Matrix & Design Rationale
+Moved to [`docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`](docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md) (kept in sync with the driver; updated 2026-10-13). The earlier copy here described pre-v3 code (`kick_msg` + `mbox_client_txdone()`, `rst_msgbox`, SRAM aliases `0x3FF80000` / `0x00020000` / `0x40040000`, crash-IRQ-first teardown) and was removed.
 
 #### 3. What Sashiko AI & Upstream Reviewers Look For (The 8 Golden Invariants)
 
@@ -690,6 +663,96 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - Profile 3 (Userspace UIO Direct Mailbox)
 - [x] **S6.13**: Generate clean v2 7-patch series and update cover letter with hardware validation proof
 - [x] **S6.14**: Submit v2 patch set to `linux-remoteproc@vger.kernel.org` and `linux-sunxi@lists.linux.dev` (Submitted via git-send-email on 2026-09-26)
+
+### 5.6a v3 Driver Fix Tracker (2026-10-13)
+
+Sources: `upstream-remoteproc/v3/CLAUDE_REVIEW.md` (F-numbers), vendor BSP comparison in
+`docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md` §4.2.
+Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the matching patch on
+`next-sun55i-rproc-msgbox` (v3 export source). Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ needs decision.
+
+| # | Issue | Source | Status | Commit (7.1) |
+| :--- | :--- | :--- | :---: | :--- |
+| D1 | rx callback called `rproc_vq_interrupt()` in hardirq (sleep in atomic on non-RT) | F1 | ✅ (board test pending) | `23bdbbde39b0` |
+| D2 | Power domains missing: E906 needs `PD_RISCV` + `PD_SRAM` (`ppu`) | vendor DT | ✅ (board test pending; check `pm_genpd_summary`) | `3b1615e1ad83` `5781bbc58cc0` `079c2a21b899` |
+| D3 | Required `cfg`/`remap`/SRAM mappings treated as optional | F2 | ✅ | `033c6a4a6e28` |
+| D4 | ATT wrong: `0x00020000` is DSP RAM 1:1 (E906 can use it — tested), `0x40040000`+ is DRAM 1:1, `0x3FF80000` does not exist | F10, vendor `memory-mappings` | ✅ | `b7d889dfa29a` |
+| D5 | Debug reset (`RST_BUS_MCU_RISCV_DEBUG`) missing from binding + driver | vendor DT | ✅ (board test pending) | `db61f8ab26f3` `9eac875ca931` `ec2d603e3683` |
+| D6 | Binding clocks/resets `minItems: 2` (Krzysztof: "cannot be flexible") | F5 | ✅ | `db61f8ab26f3` `9eac875ca931` |
+| D7 | Region 0 registered as carveout and DMA pool; `da_to_va` duplicates core lookup | F7 | ⬜ | |
+| D8 | Small cleanups: unused includes, stale ISR comment, dead `cfg` fallback, `default ARCH_SUNXI` | F11 | ⬜ | |
+| D9 | Remap reg `0x07010364` shared with the DSP (vendor DSP driver owns bit 0) | F3, vendor DT | ❓ owner (syscon/CCU) — ask Chen-Yu | |
+| D10 | Memory-region names `vram/dram/trace` vs standard `vdev0buffer/vdev0vring*` | vendor DT | ❓ | |
+| D11 | One vs two mailbox channels | vendor DT | ❓ keep two for v3 | |
+| D12 | Msgbox clocks/resets for all 4 banks vs ARM bank only — the board-tested 7.1 DTS and the vendor DT use the ARM bank only; the v3 4-bank DTS was never board-tested. Also settles F8 (unbind no longer asserts remote banks' resets) | vendor DT, 7.1 DTS, F8 | ✅ (board test pending) | `36f04f6e046b` `acbe383ec84c` |
+| D16 | 7.1 rproc node has extra `"msgbox"` clock/reset not in the binding and unused by the driver | 7.1 DTS | ✅ | `ec2d603e3683` |
+| D13 | Msgbox clears IRQ pending before drain (vendor: only after FIFO empty) | vendor msgbox | ⬜ measure on board | |
+| D14 | Crash IRQ: kept (user decision); no DTS wires it; the vendor BSP has no crash IRQ either (it reports crashes in software via `sunxi_rproc_report_crash()`); cover letter must not claim it is tested | F9, vendor | ✅ decided | |
+| D15 | Drop KUnit patches from upstream series | F12 | ❓ | |
+| T1 | Commit messages / cover letter rewrite (A733 claim, workqueue, trace0, remap bit, test counts, E907→E906) | F4 | ⬜ | |
+| T2 | Binding subjects: drop "schema" | F5 | ⬜ | |
+| T3 | Send list: full To/Cc for every patch (as v2) | S0 CY3 | ⬜ | |
+| P1 | Kick throughput (poll + drain policy); vendor uses "not full" / write IRQ | F6 | after v3 | |
+
+### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
+
+Ground truth used: silicon readbacks (`firmware/tests.md` heartbeat `MISA=0x40901125`, live register probes)
+and vendor source quoted in the docs (Tina `sun55iw3/memory.c`). Verified facts:
+E906 = `RV32IMAFCX` (no `D`, no `P`); SRAM Space 0 = DA `0x3FFC0000` ↔ PA `0x07280000`;
+SRAM Space 1 = DA `0x40000000` ↔ PA `0x072C0000` (needs remap bit 1); DA `0x40040000`+ = DRAM 1:1;
+`0x00020000` = HiFi4 DSP RAM (not E906); no ITCM/DTCM on the E906; remap `0x07010364` bit 1 = SRAM A3_2 → MCU,
+bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank IRQ = GIC SPI 0 (works on silicon).
+
+**A. Rule / review files that contradict each other (these drive the v1→v3 flip-flopping — fix first)**
+- [x] `.agents/rules/upstream-patch-submissions.md:47-49` — teardown "rproc_del() last" is wrong; correct order is `rproc_del()` → free mailbox → `cancel_work_sync()`.
+- [x] `.agents/rules/linux-kernel-review-prompt.md:98` — same wrong teardown rule.
+- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md` Rule 3 — same wrong teardown order.
+- [x] `upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md` Lesson 3.2 — says `knows_txdone = true` + `mbox_client_txdone()`; contradicts the code and `scripts/sashiko_protocols.md:105` (`knows_txdone = false`). Pick one, record why.
+- [x] `upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md:332` — says `last_tx_done` pacing is `count < FIFO_MAX`; code (and v2 review) is `count == 0`.
+- [x] `.agents/rules/linux-kernel-review-prompt.md:47-52` — still describes `priv->kick_msg`; code uses static const per-vring payloads.
+- [x] Add a rule: mailbox `rx_callback` is atomic (`mailbox_client.h`), so rpmsg/virtio work must be deferred; PREEMPT_RT hides violations — test once on a non-RT kernel with `DEBUG_ATOMIC_SLEEP`.
+
+**B. Wrong core ISA (`RV32IMAFDC` / double FPU / DSP) — silicon says `RV32IMAFCX`**
+- [x] `docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md:23,200-212` — `misa = 0x400062B7` and decode are wrong.
+- [x] `firmware/tests.md:702-719` — §7 says RV32IMAFDC; lines 708/709 both say "E906" with different ISAs (one should be E907).
+- [x] `firmware/riscv-firmware/README.md:32,52`
+- [x] `docs/ABSTRACTX_E906_SPECIFICATION.md:16,183`
+- [x] `docs/platforms/CUBIE_A5E_PLATFORM_GUIDE.md:21,44`
+- [x] `docs/platforms/ALLWINNER_T527_CHIP_SPEC_REFERENCE.md:26`
+- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md:28,116`
+- [x] `docs/architecture/dsp_decoupling_rationale.md:13,57`
+- [x] `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md:29`
+- [x] `docs/articles/introToCubieA5E.md:14,27` — also "up to 600 MHz", "DSP extensions".
+
+**C. Wrong address map (TCMs, aliases)**
+- [x] `docs/platforms/ALLWINNER_HETEROGENEOUS_RISCV_REFERENCE.md:46-47,97` — claims ITCM `0x07110000` / DTCM `0x07120000` on T527; also stale DT example (lines ~170-195: SPI 147, `reg` layout, compatibles).
+- [x] `docs/HETEROGENEOUS_AVIONICS_ARCHITECTURE.md:23` — ITCM/DTCM, "RV32IMAC @ 600 MHz".
+- [x] `docs/ABSTRACTX_E906_SPECIFICATION.md:44-47` — Space 0 host PA `0x07130000` (that is the CFG block; SRAM is `0x07280000`); Space 1 at `0x40040000` (it is `0x40000000`).
+- [x] `docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md:27` — check the Space 1 row wording.
+- [x] `docs/platforms/ALLWINNER_T527_CHIP_SPEC_REFERENCE.md:126` — remap bit 1 text says Space 1 appears at `0x40040000`.
+- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md:34` and `TODO.md` §5.5 (~lines 638, 653-655) — list `0x3FF80000`, `0x00020000`, `0x40040000` as valid E906 SRAM aliases; they are not (driver bug, see v3/CLAUDE_REVIEW.md F10).
+- [x] `docs/TINA_ALLWINNER_COPROCESSOR_SOURCE_OF_TRUTH.md:254` (`STA_ADD` reset shown as 0; silicon = `0x3FFC0000`), `:267` (remap reg filed under HiFi4 registers), `:284` (msg count `[2:0]` cannot hold 8 — confirm width in manual).
+
+**D. Wrong msgbox IRQ (SPI 147 is `csi3`; ARM msgbox bank is SPI 0)**
+- [x] `firmware/tests.md:246`
+- [x] `firmware/riscv-firmware/README.md:280`
+- [x] `docs/articles/introToCubieA5E.md:47`
+- [x] `docs/articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md:150,163`
+- [x] `docs/platforms/ALLWINNER_T527_CHIP_SPEC_REFERENCE.md:191-193` — DSP/RV bank IRQs listed with two values each; confirm against the manual.
+
+**E. Stale driver descriptions (pre-v3 code)**
+- [x] `docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md:35,88` — `kick_msg` + `mbox_client_txdone()`; Rule 10 promotes KUnit exports (decide after the KUnit drop decision).
+- [x] `docs/articles/part2_building_remoteproc_and_hardware_proof.md:176` — kick description.
+- [x] `TODO.md` §5.1/§5.3/§5.5 — test names and fix notes that describe removed code (`kick_msg`, `test_kick_stores_vqid`, `0x3ff80000` test).
+
+**F. A733 docs to re-check (not part of v3)**
+- [ ] `docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md:65` (✅ row struck through 2026-10-13), `docs/platforms/CUBIE_A7A_DEBUG_LOG.md:314-386` (historical log, leave), `../vendor-a733-reference/README.md:82` — ITCM `0x07110000` claims vs `A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` ("no TCMs").
+
+**G. Needs the T527 User Manual (V0.92) — not on this machine**
+- [ ] E906 crash interrupt: does a GIC line exist, and which SPI? (driver supports it; no DTS uses it; `testCrash` verifies via trace0, not the IRQ).
+- [ ] Is `RST_BUS_MCU_RISCV_DEBUG` required (vendor deasserts it; our binding omits it)?
+- [x] Msgbox `MSG_STA` count field width: 4 bits (`MSG_NUM_MASK 0xF`, FIFO depth 8) — vendor `sunxi-msgbox.c`. Bank GIC numbers: SPI 0/1/181/174 (vendor dtsi).
+- [x] Crash interrupt: none in the vendor BSP (software-reported crashes only).
 
 ---
 

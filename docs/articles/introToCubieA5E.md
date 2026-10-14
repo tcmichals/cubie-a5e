@@ -11,7 +11,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 * **Form Factor**: Compact single-board computer (credit-card format, 85 mm × 56 mm).
 * **SoC**: Allwinner T527 (commercial) / A527 (industrial/automotive), 22nm FinFET.
 * **Primary CPU**: Octa-Core ARM Cortex-A55 @ up to 1.80 GHz (Armv8.2-A, 64-bit).
-* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFDC) @ 200 MHz (up to 600 MHz).
+* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFCX) @ up to 200 MHz.
 * **DSP**: Cadence Tensilica HiFi4 Audio DSP @ 600 MHz.
 * **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8).
 * **GPU**: ARM Mali-G57 MC1 (Valhall architecture).
@@ -24,7 +24,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 
 ### Compute & Acceleration
 * **Application Processor**: Allwinner T527 / A527 (`sun55i-a523`), 8× ARM Cortex-A55 @ 1.80 GHz (32 KB I/D L1 per core, 512 KB unified DSU L3 cache)
-* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFDC) @ 200–600 MHz with double-precision FPU, DSP extensions, 64 KB ITCM, and 64 KB DTCM
+* **Co-Processor**: T-Head XuanTie E906 RISC-V (RV32IMAFCX) @ up to 200 MHz with a single-precision FPU and no TCMs; runs from 2× 256 KB SRAM A3 and DRAM
 * **Audio DSP**: Cadence Tensilica HiFi4 @ 600 MHz
 * **NPU**: VeriSilicon VIP9000 (2.0 TOPS @ INT8), supported upstream via Linux `etnaviv`
 * **GPU**: ARM Mali-G57 MC1 (Vulkan 1.3, OpenGL ES 3.2, OpenCL 2.0)
@@ -44,7 +44,7 @@ The Radxa Cubie A5E is a compact, credit-card-sized single-board computer (SBC) 
 * **Wireless**: Wi-Fi 6 (802.11ax) + Bluetooth 5.2 via AIC8800 (SDIO 3.0 / UART)
 * **USB Ports**: 1× USB 3.0 Type-A Host, 1× USB 2.0 Type-A Host, 1× USB Type-C (5V/3A Power & OTG)
 * **Expansion**: 40-pin GPIO header (2.54mm pitch) with UART, SPI, I2C, PWM, GPIO, and CAN bus
-* **Interrupt Controller**: ARM GIC-600 (GICv3) with 256 SPIs (MSGBOX on SPI 147)
+* **Interrupt Controller**: ARM GIC-600 (GICv3) with 256 SPIs (MSGBOX ARM bank on SPI 0)
 * **Power Supply**: 5V / 3A DC via USB-C (typical idle: ~1.8W, full load: <7.5W)
 * **Dimensions**: 85 mm × 56 mm (standard credit-card SBC format)
 

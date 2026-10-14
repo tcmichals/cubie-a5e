@@ -251,7 +251,7 @@ A critical architectural hazard in heterogeneous embedded design is **clock cont
 | :--- | :--- | :--- | :--- | :--- |
 | `0x0000` | `E906_VER_REG` | RO | `0x00010000` | Hardware IP Version Register |
 | `0x0010` | `E906_RF1P_CFG_REG` | RW | `0x00000000` | Core SRAM / Register File Power Configuration |
-| `0x0204` | `E906_STA_ADD_REG` | RW | `0x00000000` | **Reset Vector PC Entry Point** (e.g. `0x60000000` or `0x00040000`) |
+| `0x0204` | `E906_STA_ADD_REG` | RW | `0x3FFC0000` | **Reset Vector PC Entry Point** (silicon reset value = SRAM Space 0 base) |
 | `0x0220` | `E906_WAKEUP_EN_REG`| RW | `0x00000000` | Core Wakeup Event Enable Register |
 | `0x0248` | `E906_WORK_MODE_REG`| RW | `0x00000000` | Power Saving / Low Power Work Mode Control |
 
@@ -264,7 +264,12 @@ A critical architectural hazard in heterogeneous embedded design is **clock cont
 | `0x0000` | `HIFI4_CTRL_REG0` | RW | `0x00000001` | Control Register 0: Bit 0 = `RUN_STALL`, Bit 1 = `START_VEC_SEL`, Bit 2 = `CLKEN` |
 | `0x0004` | `HIFI4_ALT_RESET_VEC`| RW | `0x00000000` | **Alternate Reset Vector** (Default: `0x00400660` or DDR `0x3a000200`) |
 | `0x0010` | `HIFI4_STAT_REG` | RO | `0x00000000` | DSP Core Execution Status Register |
-| `0x0364` | `SRAM_REMAP_REG` (`0x07010364`) | RW | `0x00000001` | SRAM Remap: Bit 0 = `1` (CPUX access), Bit 0 = `0` (DSP access) |
+
+---
+
+> **SRAM remap register `0x07010364`** is in the PRCM page (`0x07010000`), not in the HiFi4 block:
+> Bit 0 (reset `1`) = DSP local memory sharing (owned by the vendor DSP driver);
+> Bit 1 (reset `0`) = SRAM A3_2 → MCU (E906 SRAM Space 1 at DA `0x40000000`; set by `sunxi_rproc`).
 
 ---
 
@@ -281,7 +286,7 @@ $$\text{Address} = \text{CoreBase} + \text{RegOffset} + (n \times 0x100) + (p \t
 | `0x30 + n*0x100` | `MSGBOX_WR_IRQ_EN_REG` | RW | Write FIFO Not Full Interrupt Enable |
 | `0x34 + n*0x100` | `MSGBOX_WR_IRQ_STA_REG`| W1C | Write FIFO Not Full Interrupt Status |
 | `0x50 + n*0x100 + p*0x4`| `MSGBOX_FIFO_STA_REG`| RO | FIFO Full Flag (Bit 0: `1` = FIFO Full, `0` = Space Available) |
-| `0x60 + n*0x100 + p*0x4`| `MSGBOX_MSG_STA_REG` | RO | Message Count (Bits [2:0] = Number of unread words in FIFO) |
+| `0x60 + n*0x100 + p*0x4`| `MSGBOX_MSG_STA_REG` | RO | Message Count (Bits [3:0] = Number of unread words in FIFO, 0–8; vendor `MSG_NUM_MASK 0xF`) |
 | `0x70 + n*0x100 + p*0x4`| `MSGBOX_MSG_REG` | RW | **32-Bit FIFO Data Port** (Read pops from FIFO; write pushes to FIFO) |
 
 #### Routing Index $n$ Matrix (`to_coef_n[local][remote]`):

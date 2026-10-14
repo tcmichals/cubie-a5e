@@ -22,8 +22,8 @@ The Allwinner T527 / A527 is an advanced, heterogeneous octa-core ARM applicatio
 |  +---------------------------------------+   +-------------------------------------------------+  |
 |  |           CPUX DOMAIN (ARM64)         |   |          MCU SUBSYSTEM (MCU_SYS DOMAIN)         |  |
 |  |  +---------------------------------+  |   |  +-------------------------------------------+  |  |
-|  |  | 4x ARM Cortex-A55 @ 1.8 GHz     |  |   |  | XuanTie E906/E906 32-bit RISC-V Core      |  |  |
-|  |  | L1: 32KB I / 32KB D, L2: 128KB   |  |   |  | @ up to 200 MHz (RV32IMAFDC + DSP/RVP)    |  |  |
+|  |  | 4x ARM Cortex-A55 @ 1.8 GHz     |  |   |  | XuanTie E906 32-bit RISC-V Core           |  |  |
+|  |  | L1: 32KB I / 32KB D, L2: 128KB   |  |   |  | @ up to 200 MHz (RV32IMAFCX)              |  |  |
 |  |  +---------------------------------+  |   |  | (Avionics, low-jitter control, RT tasks)   |  |  |
 |  |  +---------------------------------+  |   |  +-------------------------------------------+  |  |
 |  |  | 4x ARM Cortex-A55 @ 1.8 GHz     |  |   |  +-------------------------------------------+  |  |
@@ -123,7 +123,7 @@ The interconnection and sharing of memory between the main system bus (ARM Corte
 | Bit | Field Name | Type | Reset | Description & Operational Behavior |
 | :---: | :--- | :---: | :---: | :--- |
 | **31:2**| *Reserved* | R | `0x0` | Reserved. Reads undefined, write as zero. |
-| **1** | **`SRAMA3_2_RAM_REMAP`** | R/W | `0x0` | **SRAM A3 Partition 2 Sharing Control**:<br>• **`0`**: `SRAMA3_2` does **not** bridge for `MCU_SYS`.<br>• **`1`**: `SRAMA3_2` **bridges for `MCU_SYS`**, exposing the secondary SRAM_A3 bank at Core DA **`0x40040000`** for high-speed E906 execution/IPC. |
+| **1** | **`SRAMA3_2_RAM_REMAP`** | R/W | `0x0` | **SRAM A3 Partition 2 Sharing Control**:<br>• **`0`**: `SRAMA3_2` does **not** bridge for `MCU_SYS`.<br>• **`1`**: `SRAMA3_2` **bridges for `MCU_SYS`**, exposing the secondary SRAM_A3 bank (host PA `0x072C0000`, 256 KB) at Core DA **`0x40000000`** (SRAM Space 1) for E906 execution/IPC. DA `0x40040000`+ is DRAM, mapped 1:1. |
 | **0** | **`MCU_RAM_REMAP`** | R/W | `0x1` | **DSP Local Memory Sharing Control**:<br>• **`0`**: DSP local memory (`0x00020000` / `0x00400000`) is **only for HiFi4 DSP**.<br>• **`1`**: DSP memory window is bridged into the host address map so ARM CPUX (Linux kernel) can peek in to send IPC messages to the DSP. *(E906 leaves this as 0).* |
 
 ---
@@ -182,15 +182,15 @@ Because the ARM Cortex-A55, XuanTie RISC-V, and Tensilica HiFi4 DSP connect to t
 | `0x000C` | `HIFI4_PRID_REG` | Processor ID | Tensilica architectural ID |
 | `0x0010` | `HIFI4_STAT_REG` | Execution Status | Run / stall / interrupt pending flags |
 
-### 5.3 Hardware Message Box Channels (`0x03004000` / `0x03003000`)
+### 5.3 Hardware Message Box Channels (ARM bank `0x03003000`)
 
-The central mailbox controller routes doorbells and 32-bit data words between the 3 processing domains:
+The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every host channel raises the **ARM bank interrupt, GIC SPI 0** (verified on silicon). The other banks' GIC lines (vendor `sun55iw3p1.dtsi`) only signal messages pending in those processors' own banks; Linux does not request them.
 
-| Channel Range | Source Domain | Destination Domain | Host Interrupt | Co-Processor Interrupt |
+| Host Channels | Remote Processor | Remote Bank | Remote Bank GIC Line | Co-Processor Interrupt |
 | :--- | :--- | :--- | :--- | :--- |
-| **Channels 0–3** | ARM CPUX | CPUS (Power Core) | GIC SPI 0 | CPUS IRQ 12 |
-| **Channels 4–7** | ARM CPUX | Cadence HiFi4 DSP | GIC SPI 355 / 181 | DSP IRQ 7 |
-| **Channels 8–11**| ARM CPUX | XuanTie RISC-V | GIC SPI 345 / 174 | PLIC IRQ 25 / Core Local IRQ |
+| **0–3** | CPUS (Power Core) | `0x07094000` | SPI 181 | CPUS IRQ 12 |
+| **4–7** | Cadence HiFi4 DSP | `0x07120000` | SPI 1 | DSP IRQ 7 |
+| **8–11** | XuanTie RISC-V | `0x07136000` | SPI 174 | PLIC IRQ 25 / Core Local IRQ |
 
 ---
 

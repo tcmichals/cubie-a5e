@@ -18,7 +18,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 |  |  +-------------------------------+  |   |  +-----------------------------------+  |  |
 |  |  | DynamIQ Shared Unit (DSU)     |  |   |  +-----------------------------------+  |  |
 |  |  | L3 Cache: 512 KB              |  |   |  | XuanTie E906 RISC-V Core          |  |  |
-|  +-------------------------------------+   |  | (RV32IMAFDC + Double FPU + DSP)   |  |  |
+|  +-------------------------------------+   |  | (RV32IMAFCX, single-prec. FPU)    |  |  |
 |                                            |  | Clock: Up to 200 MHz (MCU_PRCM)   |  |  |
 |  +-------------------------------------+   |  +-----------------------------------+  |  |
 |  |             NPU Engine              |   |  +-----------------------------------+  |  |
@@ -41,7 +41,7 @@ This document is the dedicated hardware, bootloader, and peripheral specificatio
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 (`sun55iw3`) | 8× ARM Cortex-A55 Cores (Octa-core) |
 | **RAM** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | Dynamic probing via U-Boot `dram_init` |
-| **Co-Processors** | **XuanTie E906 RISC-V** (up to 200 MHz, RV32IMAFDC) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | RISC-V wrapped in legacy `e906-cfg` (`0x07130000`); Pure SRAM architecture (no ITCM/DTCM) |
+| **Co-Processors** | **XuanTie E906 RISC-V** (up to 200 MHz, RV32IMAFCX) + **Cadence Tensilica HiFi4 Audio DSP** (600 MHz) | RISC-V wrapped in legacy `e906-cfg` (`0x07130000`); Pure SRAM architecture (no ITCM/DTCM) |
 | **NPU** | **2.0 TOPS VeriSilicon VIP9000** | VIPLite / Galcore kernel driver (`0x07122000`) |
 | **Camera Subsystem** | **Allwinner Gen-4 Video In (VIN)** | 4× MIPI CSI-2 receivers + ISP + Multi-scalers |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Base MMIO at `0x03400000` / `0x03460000` |

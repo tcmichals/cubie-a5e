@@ -20,7 +20,7 @@ Early bring-up efforts inherited assumptions from older chips (Allwinner D1, V85
 
 | Architectural Item | Early / Flawed Assumption | Verified Silicon Reality on Radxa Cubie A5E | Source of Truth |
 | :--- | :--- | :--- | :--- |
-| **Processor Model** | XuanTie E906 (Integer / basic FPU) | **Alibaba T-Head XuanTie E906** (RV32IMAFDC + 64-bit Double-Precision FPU) | CSR `misa` = `0x400062B7`, `marchid` = `0x30529073` |
+| **Processor Model** | XuanTie E907 (marketing name) | **Alibaba T-Head XuanTie E906** (`RV32IMAFCX`: single-precision FPU, no `D`, no `P`) | CSR `misa` = `0x40901125` (`firmware/tests.md` testBasic heartbeat) |
 | **Silicon Wrapper IP** | Generic MCU | **`e906-cfg` (Version 1.0 @ `0x07130000`)** | Register `0x07130000` (`VER_REG`) = `0x00010000` |
 | **Silicon Reset Vector** | `0x00000000` or `0x40000000` | **`0x3FFC0000`** (Silicon factory default in `STA_ADD_REG`) | Reading `0x07130204` immediately upon hardware reset |
 | **SRAM Space 0 Mapping** | DA `0x40000000` $\rightarrow$ PA `0x07280000` | **DA `0x3FFC0000`–`0x3FFFFFFF` $\rightarrow$ PA `0x07280000` (256 KB)** | Vendor DTS `reg = <0x07280000 0x40000>`, live probe |
@@ -78,62 +78,125 @@ In earlier revisions of the Linux RemoteProc driver (`sunxi_rproc.c`):
 
 ## 4. Vendor BSP Source Code & Device Tree References
 
-### 4.1 Vendor Device Tree Node (`sun55iw3p1.dtsi` / `board.dts`)
+### 4.0 Where the Vendor Source Lives (local, no download needed)
 
-The official Allwinner vendor BSP declares the RISC-V RemoteProc node as follows:
+The Radxa vendor kernel package is at `old-kernels/linux-aw2501`. Its submodule checkouts are empty,
+but the git objects are present, so files are read directly:
+
+```bash
+cd /home/tcmichals/projects/cubie/old-kernels/linux-aw2501
+B=.git/modules/bsp            # https://github.com/radxa/allwinner-bsp (cubie-aiot-v1.4.6, HEAD 2045a3ca)
+V=.git/modules/device-a527    # https://github.com/radxa/allwinner-device (device-a527-v1.4.6, HEAD a23224f)
+git --git-dir=$B show HEAD:drivers/remoteproc/sunxi_rproc.c            # generic rproc core
+git --git-dir=$B show HEAD:drivers/remoteproc/sunxi_rproc_e906_boot.c  # E906 clocks/resets/start/stop
+git --git-dir=$B show HEAD:drivers/msgbox/sunxi-msgbox.c               # msgbox controller
+git --git-dir=$B show HEAD:configs/linux-5.15/sun55iw3p1.dtsi          # SoC dtsi
+git --git-dir=$V show HEAD:configs/cubie_a5e/linux-5.15/board.dts      # Cubie A5E board DT
+```
+
+The `src` submodule (radxa/kernel `allwinner-aiot-linux-5.15`) is not stored locally.
+
+### 4.1 Vendor Device Tree Nodes (verified from the files above, 2026-10-13)
+
+> An earlier version of this section showed a node with `compatible = "allwinner,sun55i-a523-rproc"`,
+> `reg-names = "cfg", "r_sram", "r_sram1"` and `clocks = <&ccu CLK_BUS_E906>…`. That was not the vendor
+> DT; it was our own binding written in vendor style. The real nodes are below.
+
+**SoC dtsi (`configs/linux-5.15/sun55iw3p1.dtsi`):**
 
 ```dts
-/* Reference from Allwinner Linux 5.15 / 6.1 BSP: arch/arm64/boot/dts/sunxi/sun55iw3p1.dtsi */
-
-rproc: remoteproc@7130000 {
-    compatible = "allwinner,sun55i-a523-rproc", "allwinner,sun55i-a527-rproc";
-    reg = <0x0 0x07130000 0x0 0x1000>,    /* CFG block: VER_REG, STA_ADD, WORK_MODE */
-          <0x0 0x07280000 0x0 0x40000>,   /* r_sram:  SRAM Space 0 (256 KB) */
-          <0x0 0x072c0000 0x0 0x40000>;   /* r_sram1: SRAM Space 1 (256 KB) */
-    reg-names = "cfg", "r_sram", "r_sram1";
-
-    clocks = <&ccu CLK_BUS_E906>,
-             <&ccu CLK_E906>,
-             <&ccu CLK_SRAM_A3>;
-    clock-names = "bus", "core", "sram";
-
-    resets = <&ccu RST_BUS_E906>,
-             <&ccu RST_E906_CORE>,
-             <&ccu RST_SRAM_A3>;
-    reset-names = "cfg", "core", "sram";
-
-    /* Hardware Mailbox Channel 8 for RISC-V Doorbells */
-    mboxes = <&msgbox 8>;
-    mbox-names = "arm-e906";
-
-    /* VirtIO Dynamic Memory Carveouts in System DRAM */
-    memory-region = <&rv_vdev0buffer>, <&rv_vdev0vring0>, <&rv_vdev0vring1>;
-    status = "okay";
+e906_rproc: e906_rproc@7130000 {
+    compatible = "allwinner,e906-rproc";
+    clocks = <&mcu_ccu CLK_BUS_PUBSRAM>, <&mcu_ccu CLK_BUS_RV>, <&mcu_ccu CLK_BUS_RV_CFG>;
+    clock-names = "pubsram", "mod", "cfg";
+    resets = <&mcu_ccu RST_BUS_PUBSRAM>, <&mcu_ccu RST_BUS_RV>, <&mcu_ccu RST_BUS_RV_CFG>, <&mcu_ccu RST_BUS_RV_DBG>;
+    reset-names = "pubsram-rst", "mod-rst", "cfg-rst", "dbg-rst";
+    firmware-name = "amp_rv0.bin";
+    reg = <0x0 0x07130000 0x0 0x1000>;
+    reg-names = "e906-cfg";
+    power-domains = <&pd A523_PD_RISCV>, <&pd A523_PD_SRAM>;
+    power-domain-names = "pd_riscv", "pd_sram";
+    status = "disabled";
 };
 
-/* VirtIO Reserved Memory Carveouts in board.dts */
+msgbox: msgbox@3003000 {
+    compatible = "allwinner,sun55iw3-msgbox";
+    #mbox-cells = <1>;
+    reg = <0x0 0x03003000 0x0 0x1000>,     /* ARM bank  */
+          <0x0 0x07120000 0x0 0x1000>,     /* DSP bank  */
+          <0x0 0x07094000 0x0 0x1000>,     /* CPUS bank */
+          <0x0 0x07136000 0x0 0x1000>;     /* RV bank   */
+    interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,
+                 <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+    clocks = <&ccu CLK_MSGBOX0>;           /* only the ARM bank clock */
+    resets = <&ccu RST_BUS_MSGBOX0>;       /* only the ARM bank reset */
+    local_id = <0>;
+};
+
+dsp0_rproc: dsp0_rproc@0 {
+    compatible = "allwinner,hifi4-rproc";
+    reg = <0x0 0x07010364 0x0 0x04>,       /* "sram-for-cpux": the remap register */
+          <0x0 0x07100000 0x0 0x40>;
+    reg-names = "sram-for-cpux", "hifi4-cfg";
+    power-domains = <&pd A523_PD_DSP>, <&pd A523_PD_SRAM>;
+    /* ... */
+};
+
 reserved-memory {
-    #address-cells = <2>;
-    #size-cells = <2>;
-    ranges;
-
-    rv_vdev0buffer: vdev0buffer@4ae00000 {
-        compatible = "shared-dma-pool";
-        reg = <0x0 0x4ae00000 0x0 0x40000>; /* 256 KB RPMsg Packet Buffer */
-        no-map;
-    };
-
-    rv_vdev0vring0: vdev0vring0@4ae40000 {
-        reg = <0x0 0x4ae40000 0x0 0x2000>;  /* 8 KB vring 0 */
-        no-map;
-    };
-
-    rv_vdev0vring1: vdev0vring1@4ae42000 {
-        reg = <0x0 0x4ae42000 0x0 0x2000>;  /* 8 KB vring 1 */
-        no-map;
-    };
+    riscvsram0_reserved: riscvsram0@7280000 { reg = <0x0 0x07280000 0x0 0x40000>; no-map; };
+    riscvsram1_reserved: riscvsram1@72c0000 { reg = <0x0 0x072c0000 0x0 0x40000>; no-map; };
+    e906_mem_fw:  e906_mem_fw@5F000000 { reg = <0x0 0x5F000000 0x0 0x00a00000>; };  /* boot0/u-boot ELF load */
+    e906_dram_reserved: e906_dram@60000000 { reg = <0x0 0x60000000 0x0 0x00a00000>; no-map; };
+    rv_vdev0buffer: vdev0buffer@4ae00000 { compatible = "shared-dma-pool"; reg = <0x0 0x4ae00000 0x0 0x40000>; no-map; };
+    rv_vdev0vring0: vdev0vring0@4ae40000 { reg = <0x0 0x4ae40000 0x0 0x2000>; no-map; };
+    rv_vdev0vring1: vdev0vring1@4ae42000 { reg = <0x0 0x4ae42000 0x0 0x2000>; no-map; };
 };
 ```
+
+**Cubie A5E board (`configs/cubie_a5e/linux-5.15/board.dts`):**
+
+```dts
+&e906_rproc {
+    mboxes = <&msgbox 8>;
+    mbox-names = "arm-kick";
+    memory-region = <&riscvsram0_reserved>, <&riscvsram1_reserved>, <&rv_vdev0buffer>,
+                    <&rv_vdev0vring0>, <&rv_vdev0vring1>, <&e906_dram_reserved>;
+    auto-boot;
+    fw-region = <&e906_mem_fw>;
+    memory-mappings =
+        /* < DA         len          PA >  */
+        <  0x20000     0x20000      0x20000 >,      /* DSP RAM (E906 can use it; 1:1) */
+        <  0x40000     0x24000      0x40000 >,      /* SRAM A2 (1:1) */
+        <  0x8000000   0x37f00000   0x8000000 >,    /* DDR (1:1) */
+        <  0x3ffc0000  0x40000      0x07280000 >,   /* SRAM Space 0 */
+        <  0x40000000  0x40000      0x072c0000 >,   /* SRAM Space 1 */
+        <  0x40040000  0x3ffc0000   0x40040000 >;   /* DRAM (1:1) */
+    status = "okay";
+};
+```
+
+### 4.2 What the Vendor Driver Does (and How Ours Differs)
+
+| Area | Vendor BSP (`sunxi_rproc*.c`, `sunxi-msgbox.c`) | Our v3 driver | Action |
+| :--- | :--- | :--- | :--- |
+| **E906 address map** | DT `memory-mappings` table above | ATT: Space 0, Space 1, plus host-PA identity entries | ✅ Fixed in `b7d889dfa29a` (dropped `0x3FF80000`, `0x00020000`→Space 0 and `0x40040000`→Space 1) |
+| **Resets** | `pubsram`, `mod` (core), `cfg`, **`dbg`** | `cfg`, `core`, `sram`, `debug` | ✅ Added in `db61f8ab26f3` `9eac875ca931` `ec2d603e3683` |
+| **Power domains** | `pd_riscv` + `pd_sram`, `dev_pm_domain_attach_by_name()`, `pm_runtime_get_sync()` before copying firmware | `riscv` + `sram` power domains, runtime PM in `prepare()`/`unprepare()` | ✅ Added in `3b1615e1ad83` `5781bbc58cc0` `079c2a21b899` (board test pending) |
+| **Start sequence** | assert mod/cfg/dbg → deassert mod/cfg/dbg → enable `cfg` clk → write `STA_ADD` → enable `mod` clk (core starts) | core clk on in `prepare()`, core starts on `rst_core` deassert in `start()` | Different but both hold the core until the vector is written; keep ours, note it |
+| **Stop sequence** | assert mod rst → mod/cfg clk off → assert cfg/dbg rst → pubsram clk off → `pm_runtime_put_sync()` | assert core rst in `stop()`, rest in `unprepare()` | OK |
+| **Core clock rate** | not set in the E906 driver (DSP node uses `clock-frequency`) | not set | OK |
+| **SRAM** | Space 0/1 as `no-map` reserved-memory via `memory-region` | Space 0/1 as `reg` entries | Reviewers may prefer reserved-memory; decide |
+| **Remap reg `0x07010364`** | owned by the **DSP** driver (`sram-for-cpux`, bit 0); no vendor driver touches bit 1 | E906 driver maps it and sets bit 1 | ❌ Shared register: needs one owner (syscon/CCU), not a raw `reg` in the E906 node |
+| **Memory-region names** | `vdev0buffer`, `vdev0vring0`, `vdev0vring1` (names the remoteproc core looks up) | `vram`, `dram`, `trace` | Decide: standard names would let the core place vrings |
+| **Mailbox channels** | one channel (8, `"arm-kick"`), message = vq id, rx handles that vq only | two channels (8 rx, 9 tx), rx notifies both vqs | Keep two for v3 (firmware depends on it); note |
+| **Rx path** | `queue_work()` from `rx_callback`, `rproc_vq_interrupt()` in the work | same (fixed in `23bdbbde39b0`) | ✅ |
+| **Kick** | `tx_block = false`, `knows_txdone` unset, heap payload freed in `tx_done` | `tx_block = false`, `knows_txdone = false`, `static const` payload | ✅ equivalent |
+| **Teardown** | `rproc_del()` → free mailbox → `destroy_workqueue()` | `rproc_del()` → free mailbox → `cancel_work_sync()` | ✅ |
+| **Msgbox clocks/resets** | ARM bank clock + reset only | ARM bank clock + reset only | ✅ Aligned in `36f04f6e046b` `acbe383ec84c` |
+| **Msgbox `last_tx_done`** | "FIFO not full" (5 ms poll), or write-IRQ `txdone_irq` | "FIFO empty" (`count == 0`, 1 ms poll) | Throughput difference; revisit after v3 with a benchmark |
+| **Msgbox IRQ pending** | cleared **after** draining ("can be cleared only once the FIFO is empty") | cleared **before** draining | Probably one extra IRQ per message; check `/proc/interrupts` on the board |
 
 ---
 
@@ -201,15 +264,13 @@ Script execution on target: `/tmp/read_core_id.sh`
   WORK_MODE_REG                 : 0x0000000B
 ```
 
-**Decoding `CSR misa` (`0x400062B7`):**
-- Bit 30 = `0b01` (MXL = 32-bit RISC-V)
-- Bit 0 (`A`) = Atomic extension
-- Bit 2 (`C`) = Compressed instructions
-- Bit 3 (`D`) = **Double-precision 64-bit hardware floating point** (confirms E906)
-- Bit 5 (`F`) = Single-precision 32-bit hardware floating point
-- Bit 8 (`I`) = Base integer ISA
-- Bit 12 (`M`) = Hardware integer multiply & divide
-- Bit 23 (`X`) = Non-standard T-Head custom extensions
+> **Correction (2026-10-13):** the CSR values above are not a valid E906 readback (the E906 was locked
+> up at the time — entry `0x40000000`, `WORK_MODE_REG = 0x0000000B` — so they did not come from a
+> running E906). The valid readback comes from a running core: the `testBasic` heartbeat reports
+> **`misa = 0x40901125`** (`firmware/tests.md`), which decodes to `RV32IMAFCX` — single-precision
+> `F`, **no** `D`, no `P`. The core is an E906 either way; the `D` claim below is wrong.
+
+~~**Decoding `CSR misa` (`0x400062B7`):**~~ (superseded — see correction above)
 
 ---
 

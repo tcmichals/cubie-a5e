@@ -22,15 +22,15 @@ This document provides the complete hardware, security, and boot architecture fo
 
 ## 2. Silicon Topology & Domain Architecture
 
-Unlike the Allwinner T527 / A523 which features a high-performance XuanTie E906/E906 core with dedicated hardware FPU and ITCM/DTCM inside an open MCU domain (`0x07100000+`), the **A733 integrates a XuanTie E902 core inside the CPUS / Always-On (`R_`) power management subsystem**:
+Unlike the Allwinner T527 / A523 which features a XuanTie E906 core with a single-precision FPU (no TCMs; it runs from SRAM A3 and DRAM) inside an open MCU domain (`0x07100000+`), the **A733 integrates a XuanTie E902 core inside the CPUS / Always-On (`R_`) power management subsystem**:
 
 | Silicon Feature | Allwinner T527 / A523 (Cubie A5E) | Allwinner A733 (Cubie A7A & Banana Pi A733) |
 | :--- | :--- | :--- |
-| **RISC-V Core IP** | XuanTie E906 / E906 (RV32IMAFDC + FPU) | **XuanTie E902 (RV32EMC, 16 GPRs, Integer only)** |
+| **RISC-V Core IP** | XuanTie E906 (RV32IMAFCX, single-precision FPU) | **XuanTie E902 (RV32EMC, 16 GPRs, Integer only)** |
 | **Subsystem Domain** | MCU / DSP Domain (`0x07100000+`) | **CPUS / Always-On (`R_`) Domain (`0x07000000+`)** |
 | **Max Clock Rate** | 200 MHz | 200 MHz |
 | **Registers** | 32 General Purpose Registers (`x0`–`x31`) | **16 General Purpose Registers (`x0`–`x15`)** |
-| **Tightly Coupled Memory** | 64 KB ITCM (`0x00000000`), 64 KB DTCM (`0x00080000`)| **NO TCMs** (Executes out of SRAM A2 or DRAM) |
+| **Tightly Coupled Memory** | **NO TCMs** (SRAM Space 0 DA `0x3FFC0000`, Space 1 DA `0x40000000`, 256 KB each) | **NO TCMs** (Executes out of SRAM A2 or DRAM) |
 | **On-Chip SRAM** | 256 KB Dedicated MCU SRAM (`0x07280000`) | **208 KB System SRAM A2 (`0x00040000`–`0x00073FFF`)** |
 | **CFG Register Base** | `0x07130000` (`MCU_CFG`) | **`0x07032000` (`E902_CFG`)** |
 | **Start Vector Register**| `0x07130204` (`STA_ADD`) | **`0x07032204` (`STA_ADD`)** |

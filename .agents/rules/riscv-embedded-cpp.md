@@ -13,7 +13,7 @@ This rule strictly governs all C++ development targeting the **XuanTie E907 RISC
   * ❌ `std::map` / `std::unordered_map` / `std::set`
   * ❌ `std::function` (with heap allocation)
   * ❌ `new` / `delete` / `malloc` / `free`
-* **Rationale:** The auxiliary core operates with **64 KB DTCM** and **64 KB ITCM**. Heap fragmentation, non-deterministic allocation latency, and out-of-memory panics are unacceptable in hard real-time flight loops.
+* **Rationale:** The auxiliary core (E906, no TCMs) runs from **2 × 256 KB on-chip SRAM** (SRAM A3 Space 0/1) shared by code, data and IPC buffers. Heap fragmentation, non-deterministic allocation latency, and out-of-memory panics are unacceptable in hard real-time flight loops.
 
 ---
 
@@ -29,4 +29,4 @@ This rule strictly governs all C++ development targeting the **XuanTie E907 RISC
 1. **No C++ Exceptions:** Compile with `-fno-exceptions`. Use `pw::Status`, `std::expected`, or return codes.
 2. **No RTTI:** Compile with `-fno-rtti`.
 3. **No Thread-Safe Statics:** Compile with `-fno-threadsafe-statics`.
-4. **AbstractX Coroutine Allocation:** All coroutines must allocate frames statically inside DTCM (`StaticCoroutinePool`) or elide frames via HALO optimization.
+4. **AbstractX Coroutine Allocation:** All coroutines must allocate frames statically in on-chip SRAM (`StaticCoroutinePool`) or elide frames via HALO optimization.

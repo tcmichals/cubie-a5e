@@ -13,7 +13,7 @@
  *   map1: MCU Dedicated SRAM C  @ 0x07131000 (4 KB) - For Shared Ringbuffer / Ping
  *
  * Hardware IRQ:
- *   GIC SPI 147 (Allwinner Hardware Message Box IRQ)
+ *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox)
  * ============================================================================
  */
 
