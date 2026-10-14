@@ -35,3 +35,4 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
 - Develop and compile-check in `linux-cubie`. `bld.a5e/` and `bld.a7a/` are Buildroot
   output, for builds only: never edit or run `make` inside them (see DESIGN_DECISIONS.md).
 - Hardware facts come from silicon readbacks or the vendor BSP, not from project docs alone.
+- Commits must never include `Co-Authored-By` trailers for AI assistants or any AI metadata. All commits must strictly use `Tim Michals <tcmichals@gmail.com>`.
