@@ -6,7 +6,7 @@ the Gemini Pro web UI (attach one .md file, no tools, no API key).
 The bundle is regenerated from git, so it can never go stale:
   Part 1  Review protocol            scripts/prompts/review/protocol.md
   Part 2  Series under review        git format-patch of the series + cover letter
-  Part 3  Review guides              Sashiko prompts (+ local subsystem guide)
+  Part 3  Review guides              Sashiko prompts (+ local subsystem guide, DESIGN_DECISIONS.md)
   Part 4  Post-series source         every touched file, line-numbered, at --ref
   Part 5  Contract & reference code  mailbox/remoteproc core, irq, DT schema docs
   Part 6  Deterministic tool output  checkpatch, yamllint, dt-doc-validate,
@@ -39,6 +39,7 @@ BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 TOP_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 PROTOCOL = os.path.join(SCRIPT_DIR, "prompts", "review", "protocol.md")
 LOCAL_GUIDES_DIR = os.path.join(SCRIPT_DIR, "prompts", "subsystem")  # every *.md here is embedded
+DECISIONS = os.path.join(BASE_DIR, "DESIGN_DECISIONS.md")
 
 # Paths that identify a commit as part of this series (used to auto-detect the range).
 SERIES_GLOBS = [
@@ -319,6 +320,12 @@ def main():
             with open(path) as f:
                 p3 += (f"## Local guide: `scripts/prompts/subsystem/{os.path.basename(path)}` "
                        "(project-specific; mandatory for S2-S6)\n\n" + fence(f.read(), "markdown") + "\n")
+        if os.path.exists(DECISIONS):
+            with open(DECISIONS) as f:
+                p3 += ("## Project design decisions: `DESIGN_DECISIONS.md` (do not report a deliberate "
+                       "decision as a defect; say so if you think one is wrong)\n\n" + fence(f.read(), "markdown") + "\n")
+        else:
+            warnings.append("DESIGN_DECISIONS.md missing")
     parts.append(p3)
 
     # Part 4: post-series sources

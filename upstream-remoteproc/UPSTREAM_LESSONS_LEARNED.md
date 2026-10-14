@@ -4,6 +4,8 @@ This document is a permanent engineering ledger of anti-patterns, maintainer fee
 
 Use this guide as an adversarial pre-flight checklist before submitting any future patch series to the Linux kernel mailing lists.
 
+The owner's design decisions (what we deliberately keep even when a review disagrees) are in **[DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)**.
+
 > [!NOTE]
 > For the 5-stage automated audit specification and LLM prompt templates modeling the Linux Foundation review bot, see **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**. The automated static audit runner is located at **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**.
 
@@ -113,6 +115,30 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
   In v1, we defined `compatible: enum: [allwinner,sun55i-a523-rproc, allwinner,sun55i-a527-rproc, allwinner,sun55i-t527-rproc]`.
 * **The Upstream Rule**:
   If multiple marketing chip names (A523, A527, T527) share the exact same silicon die, upstream DT policy mandates using a **single compatible string** based on the earliest introduced part (`allwinner,sun55i-a523-rproc`). Do not inflate DT schemas with identical hardware compatibles.
+
+---
+
+### Lesson 1.5: List the `memory-region` Items; Do Not Rely on Node Names
+* **What Went Wrong**:
+  In v1 the rproc binding described `memory-region` / `memory-region-names` in free text. Krzysztof asked us to list the items (v1, KK8). The vendor BSP, and older stm32 / i.MX / ZynqMP bindings, use a free list whose meaning comes from reserved-memory node names (`vdev0buffer`, `vdev0vring0`, ...), which a new binding should not copy.
+* **The Upstream Rule**:
+  A new binding lists each `memory-region` entry positionally, with matching `- const:` names. The schema can check positions and names; it cannot check node names.
+* **The Pattern We Use** (TI K3, MediaTek SCP, OMAP do the same):
+  ```yaml
+  memory-region:
+    minItems: 1
+    items:
+      - description: Virtio vring and buffer pool
+      - description: Firmware code and data in DRAM
+      - description: Trace buffer
+  memory-region-names:
+    minItems: 1
+    items:
+      - const: vram
+      - const: dram
+      - const: trace
+  ```
+  Index 0 is a `shared-dma-pool`; the remoteproc core binds it to the virtio device when no `vdev0buffer` carveout exists. Decision record: [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) (D10).
 
 ---
 
@@ -236,11 +262,11 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ---
 
-### Lesson 3.1e: Exact Match on `memory-region-names`
+### Lesson 3.1e: Do Not Match on `memory-region-names` in the Driver
 * **What Went Wrong**:
-  Using `strstr(name, "dram") || strstr(name, "vram")` caused both DT regions to match the same branch, overwriting `priv->dram_va` with whichever region came last.
+  Using `strstr(name, "dram") || strstr(name, "vram")` caused both DT regions to match the same branch, overwriting `priv->dram_va` with whichever region came last. The v3 fix switched to `strcmp()`, but the driver still kept its own DRAM/trace lookup that duplicated the core (F7).
 * **The Upstream Rule**:
-  Use exact string matching (`!strcmp(rmem->name, "dram")`) for distinct memory region declarations.
+  Register every region as a carveout named after its `memory-region-names` entry and let the remoteproc core resolve addresses from the carveout list. The driver uses the names only as labels; behaviour follows from the position (index 0 = DMA pool). Since D7 the driver has no name comparisons at all.
 
 ---
 
@@ -337,6 +363,18 @@ Use this guide as an adversarial pre-flight checklist before submitting any futu
 
 ---
 
+### Lesson 4.2: Every Test Must Be Able to Fail
+* **What Went Wrong**:
+  v1 tests compared register macros with the same literals (Sashiko v1). By v3 the suites still had padding that a maintainer would read as generated: tests with no assertion (`kick` with no channel), tests that only checked ops pointers were non-NULL, tests that read back values the fixture had just set, an IRQ test that "verified" a write-1-to-clear by reading a value the test itself had written, and a stale-FIFO test that passed only because of the `FIFO_MAX` cap (Sashiko v2). The test patches were also larger than the drivers.
+* **The Rule**:
+  1. A test must fail if the driver behaviour it names is broken. If it cannot, drop it.
+  2. Do not assert a register value the test wrote itself before the call; start from a different value.
+  3. One test per behaviour; no near-duplicates for coverage counts. Neither remoteproc nor mailbox has driver KUnit tests upstream yet, so the bar is high.
+  4. Fake MMIO (plain memory behind `readl()`/`writel()`) only behaves like registers on some architectures: `depends on ARM64 || COMPILE_TEST`.
+  5. Put the KUnit patches last in the series and say in the cover letter that they can be dropped without affecting the drivers.
+
+---
+
 ## 5. Automated Multi-Stage Adversarial Review Protocols
 
 To prevent regressions against these kernel rules, review checks are codified into formal protocol stages:
@@ -365,4 +403,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
 - [ ] Mailbox driver only requests the ARM host port interrupt that Linux services.
+- [ ] `memory-region` / `memory-region-names` listed positionally (Lesson 1.5); no driver logic keyed on region names.
+- [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).
+- [ ] Nothing in the series contradicts [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) without the owner's sign-off.
 - [ ] `git send-email` dispatched as an independent top-level thread (NO `--in-reply-to` linking to previous versions).

@@ -1,5 +1,7 @@
 # Cubie A5E — AI Context (Cursor / antigravity IDE)
 
+> Rules for all AI tools: read [AGENTS.md](AGENTS.md) first (design decisions, upstream lessons, TODO tracker).
+
 ## What this repo is
 
 Out-of-tree Buildroot external tree for the **Radxa Cubie A5E** (Allwinner A527/T527, 8-core Cortex-A55).

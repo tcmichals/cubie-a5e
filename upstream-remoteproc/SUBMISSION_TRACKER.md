@@ -20,6 +20,8 @@ This dashboard tracks all upstream Linux kernel submissions, mailing list thread
   Self-contained 2M-token audit bundle containing complete driver code, DT bindings, KUnit suites, and adversarial review prompt.
 * **[Upstream Lessons Learned & Rules Ledger](UPSTREAM_LESSONS_LEARNED.md)**:  
   Detailed breakdown of why specific patterns were rejected by maintainers (Krzysztof Kozlowski, Rob Herring, Jassi Brar, Bjorn Andersson) and the exact code patterns required.
+* **[Design Decisions](DESIGN_DECISIONS.md)**:  
+  The owner's decisions for the drivers and bindings. Check before acting on a review comment.
 * **[v3 Verification & Audit Results](v3/AUDIT.md)**:  
   Multi-stage adversarial audit report and regression verification matrix.
 * **[v2 Review Comments](v2/COMMENTS.md)** & **[v2 Audit Report](v2/AUDIT.md)**:  

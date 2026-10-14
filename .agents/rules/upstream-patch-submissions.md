@@ -9,9 +9,9 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 ## 1. Single Source of Truth & Lessons Learned Reference
 
 * **Mandatory Reference Ledger**:
-  All agents MUST read and strictly adhere to **[cubie-a5e/upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md](../../cubie-a5e/upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md)** before writing driver code or formatting patches.
+  All agents MUST read and strictly adhere to **[cubie-a5e/upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md](../../upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md)** before writing driver code or formatting patches.
 * **Audit Protocols**:
-  Multi-stage adversarial review invariants are codified in **[cubie-a5e/upstream-remoteproc/scripts/sashiko_protocols.md](../../cubie-a5e/upstream-remoteproc/scripts/sashiko_protocols.md)**.
+  Multi-stage adversarial review invariants are codified in **[cubie-a5e/upstream-remoteproc/scripts/sashiko_protocols.md](../../upstream-remoteproc/scripts/sashiko_protocols.md)**.
 * **Adversarial Audit Runner**:
   Run `python3 cubie-a5e/upstream-remoteproc/scripts/run_adversarial_audit.py` before exporting any patch series. Output is stored directly in `v<N>/AUDIT.md`.
 
