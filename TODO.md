@@ -693,6 +693,7 @@ Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the
 | T2 | Binding subjects: drop "schema" | F5 | ⬜ | |
 | T3 | Send list: full To/Cc for every patch (as v2) | S0 CY3 | ⬜ | |
 | P1 | Kick throughput (poll + drain policy); vendor uses "not full" / write IRQ | F6 | after v3 | |
+| C1 | E906 D-cache: enable (`mxstatus.THEADISAEE`, `mhcr.DE`) and implement `hal::Pmp::dcache_clean_range()` / `dcache_invalidate_range()` with `dcache.cpa` / `dcache.ipa` per line + `sync` (add `_xtheadcmo` to `-march`); clean after E906 writes vrings/buffers/trace, invalidate before reading Linux data. Today the D-cache is off (`firmware/common/hal/pmp.cpp`), so DRAM works but uncached. Check the E906 line size in the manual. Linux side unchanged (WC mappings). D7 does **not** remove DRAM: `dram`/`trace` stay carveouts, only the duplicate lookup in `da_to_va()` goes | firmware | after v3 | |
 
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
 
