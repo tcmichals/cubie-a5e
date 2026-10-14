@@ -688,7 +688,7 @@ Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the
 | D16 | 7.1 rproc node has extra `"msgbox"` clock/reset not in the binding and unused by the driver | 7.1 DTS | ✅ | `ec2d603e3683` |
 | D13 | Msgbox clears IRQ pending before drain (vendor: only after FIFO empty) | vendor msgbox | ⬜ measure on board | |
 | D14 | Crash IRQ: kept (user decision); no DTS wires it; the vendor BSP has no crash IRQ either (it reports crashes in software via `sunxi_rproc_report_crash()`); cover letter must not claim it is tested | F9, vendor | ✅ decided | |
-| D15 | Drop KUnit patches from upstream series | F12 | ❓ | |
+| D15 | KUnit in the upstream series | F12 | ✅ decided 2026-10-13: **keep** the KUnit patches, but only tests that exercise driver behaviour. Msgbox: drop the 5 macro-vs-literal tests (`offset_values`, `irq_reg_offsets`, `fifo_reg_offsets`, `irq_bit_positions`, `constants`). Rproc: update `dram_direct`/`trace_direct` with D7; **add** rx-callback-only-queues-work (F1 regression), kick-sends-per-vring-payload, prepare-error-unwind. Fix commit-message test counts (T1) | |
 | T1 | Commit messages / cover letter rewrite (A733 claim, workqueue, trace0, remap bit, test counts, E907→E906) | F4 | ⬜ | |
 | T2 | Binding subjects: drop "schema" | F5 | ⬜ | |
 | T3 | Send list: full To/Cc for every patch (as v2) | S0 CY3 | ⬜ | |
