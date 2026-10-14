@@ -32,4 +32,6 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
   `cubie-a5e` (`main`) when a piece of work is done.
 - Never push upstream submission branches or send patches to a mailing list without the
   owner's explicit go-ahead.
+- Develop and compile-check in `linux-cubie`. `bld.a5e/` and `bld.a7a/` are Buildroot
+  output, for builds only: never edit or run `make` inside them (see DESIGN_DECISIONS.md).
 - Hardware facts come from silicon readbacks or the vendor BSP, not from project docs alone.

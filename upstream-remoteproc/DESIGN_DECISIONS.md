@@ -56,10 +56,14 @@ board-tested 7.1 kernel. The other banks belong to the other processors; asserti
 resets on unbind would break them. (`v3/REVIEW_ANSWER_KEY.md` ISSUE-05 predates this
 decision and says the opposite.)
 
-### Two mailbox channels (D11 — pending decision)
-Today: channel 8 = rx (E906 → host), channel 9 = tx (host → E906). The vendor uses one
-bidirectional channel. Recommendation is to keep two for v3, because the firmware and every
-test overlay depend on it. Update this section when decided.
+### One mailbox channel (D11, 2026-10-14)
+The remoteproc node uses a single message box channel: `mboxes = <&msgbox 9>`, no
+`mbox-names`. The message box has slots per processor pair (ARM ↔ E906, ARM ↔ DSP, ...), and
+each channel has a FIFO in each direction, so one channel carries both the host's vring kicks
+and the E906's notifications. The firmware already uses it that way (`hal::Rpmsg` sends on
+FIFO 1, which is Linux channel 9). The earlier `"rx"` channel 8 never carried rpmsg traffic;
+it only appeared to work because both channels shared one client. This matches the vendor
+BSP, which also uses one channel.
 
 ### Crash interrupt kept (D14)
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
@@ -93,7 +97,20 @@ go-ahead.
 
 ### Finish a batch of fixes before building
 Do not start a board kernel build in the middle of a batch. Compile-check the touched drivers
-(`make W=1 drivers/...`) while fixing, then build and test once when the batch is complete.
+while fixing, then build and test once when the batch is complete.
+
+### Develop in `linux-cubie`, never in the build output
+`bld.a5e/` and `bld.a7a/` are Buildroot output: they are for builds, not development. Never
+edit, copy files into, or run `make` in `bld.*/build/linux-custom` (Buildroot syncs it from
+`linux-cubie` and may delete it). Compile-check from `linux-cubie` with a separate output
+directory and the board config, for example:
+
+```sh
+make O=/tmp/kobj ARCH=arm64 CROSS_COMPILE=aarch64-linux- olddefconfig   # .config from project-cubie-a5e/board/radxa/cubie_a5e/linux.config
+make O=/tmp/kobj ARCH=arm64 CROSS_COMPILE=aarch64-linux- W=1 drivers/remoteproc/sunxi_rproc.o
+```
+
+The Buildroot cross compiler in `bld.a5e/host/bin` may be used on `PATH`.
 
 ### Fixes land on 7.1 first
 Every fix lands on `cubie-linux-7.1` and is board-tested there, then is folded into the
