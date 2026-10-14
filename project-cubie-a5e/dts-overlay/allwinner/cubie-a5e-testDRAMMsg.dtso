@@ -14,6 +14,7 @@
  */
 
 &rproc {
-    memory-region = <&rproc_vdev>;
+    memory-region = <&rproc_vdev>, <&rproc_dram>;
+    memory-region-names = "vram", "dram";
     status = "okay";
 };

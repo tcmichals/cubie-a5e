@@ -106,8 +106,16 @@
             no-map;
         };
 
+        /* Virtio vrings and buffers: DMA pool for the remoteproc device */
         rproc_vdev: vdev@48000000 {
+            compatible = "shared-dma-pool";
             reg = <0x0 0x48000000 0x0 0x00100000>;
+            no-map;
+        };
+
+        /* E906 firmware DRAM (e906_ddr.ld, testDRAMMsg payload pool) */
+        rproc_dram: dram@48100000 {
+            reg = <0x0 0x48100000 0x0 0x00100000>;
             no-map;
         };
     };
