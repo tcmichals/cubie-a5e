@@ -18,6 +18,8 @@ FILES_TO_CACHE = [
     "include/linux/mailbox_client.h",
     "include/linux/mailbox_controller.h",
     "Documentation/devicetree/bindings/remoteproc/st,stm32-rproc.yaml",
+    "Documentation/devicetree/bindings/remoteproc/fsl,imx-rproc.yaml",
+    "Documentation/devicetree/bindings/remoteproc/ti,k3-r5f-rproc.yaml",
     "Documentation/devicetree/bindings/mailbox/allwinner,sun6i-a31-msgbox.yaml",
 ]
 
