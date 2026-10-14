@@ -288,8 +288,8 @@ def analyze_source_code(filepath, content):
 CLAIM_CHECKS = [
     (r"test_and_clear_bit", r"test_and_clear_bit", "drivers/remoteproc/sunxi_rproc.c"),
     (r"con_priv\s*(?:=\s*NULL|before)|cleared\s+'?chan->con_priv", r"con_priv\s*=\s*NULL", "drivers/mailbox/sun55i-msgbox.c"),
-    (r"!UML", r"KUNIT\s*&&\s*!UML", "drivers/remoteproc/Kconfig"),
-    (r"!UML", r"KUNIT\s*&&\s*!UML", "drivers/mailbox/Kconfig"),
+    (r"!UML", r"KUNIT\b[^\n]*r"KUNIT\s*&&\s*!UML"r"KUNIT\s*&&\s*!UML"\s*!UML", "drivers/remoteproc/Kconfig"),
+    (r"!UML", r"KUNIT\b[^\n]*r"KUNIT\s*&&\s*!UML"r"KUNIT\s*&&\s*!UML"\s*!UML", "drivers/mailbox/Kconfig"),
 ]
 
 def verify_claims(args):
