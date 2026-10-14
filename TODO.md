@@ -680,7 +680,7 @@ Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the
 | D5 | Debug reset (`RST_BUS_MCU_RISCV_DEBUG`) missing from binding + driver | vendor DT | ✅ (board test pending) | `db61f8ab26f3` `9eac875ca931` `ec2d603e3683` |
 | D6 | Binding clocks/resets `minItems: 2` (Krzysztof: "cannot be flexible") | F5 | ✅ | `db61f8ab26f3` `9eac875ca931` |
 | D7 | Region 0 registered as carveout and DMA pool; `da_to_va` duplicates core lookup | F7 | ⬜ | |
-| D8 | Small cleanups: unused includes, stale ISR comment, dead `cfg` fallback, `default ARCH_SUNXI` | F11 | ⬜ | |
+| D8 | Small cleanups: unused includes, stale ISR comment, dead `cfg` fallback, `default ARCH_SUNXI` (A7A/A7Z configs now enable the msgbox explicitly). Firmware default name `riscv-firmware.elf` kept (board rootfs uses it) | F11 | ✅ | `da51547fade6` |
 | D9 | Remap reg `0x07010364` shared with the DSP (vendor DSP driver owns bit 0) | F3, vendor DT | ❓ owner (syscon/CCU) — ask Chen-Yu | |
 | D10 | Memory-region names `vram/dram/trace` vs standard `vdev0buffer/vdev0vring*` | vendor DT | ❓ | |
 | D11 | One vs two mailbox channels | vendor DT | ❓ keep two for v3 | |
