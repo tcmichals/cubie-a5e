@@ -163,29 +163,48 @@ def run_ssh(cmd, timeout=30):
     except subprocess.TimeoutExpired:
         return 1, "", "timeout"
 
+def report_remoteproc_presence():
+    """An SSH-reachable board without remoteproc0 is a probe failure, not a boot failure."""
+    code, _, _ = run_ssh("test -e /sys/class/remoteproc/remoteproc0/state", timeout=5)
+    if code == 0:
+        return True
+    print("  \033[91m[WARN] Board is up but remoteproc0 is missing (driver probe failed or deferred)\033[0m")
+    _, out, _ = run_ssh("cat /sys/kernel/debug/devices_deferred 2>/dev/null; "
+                        "dmesg | grep -iE 'rproc|remoteproc|mbox|msgbox' | tail -n 8", timeout=10)
+    for line in out.splitlines():
+        print(f"    >> {line}")
+    return False
+
 def wait_for_target(max_attempts=30):
     print("  Waiting for target board to come online...", end="", flush=True)
     for i in range(max_attempts):
         time.sleep(2)
-        code, out, _ = run_ssh("cat /sys/class/remoteproc/remoteproc0/state 2>/dev/null", timeout=5)
+        code, out, _ = run_ssh("true", timeout=5)
         if code == 0:
             print(" ONLINE!")
             time.sleep(2)
-            return True
+            return report_remoteproc_presence()
         print(".", end="", flush=True)
         if i == 20 and g_serial_logger:
             recent = g_serial_logger.get_recent_lines(5)
             if recent:
                 print(f"\n  [SERIAL LAST]: {''.join(recent).strip()}")
-    print(" TIMEOUT!")
+    print(" \033[91mTIMEOUT! (no SSH)\033[0m")
     return False
 
-def set_overlay_and_reboot(overlay_str, cmdline_str=None):
-    print(f"\n[CONFIG] Setting overlay: '{overlay_str}'")
+def set_overlay_and_reboot(overlay_str, cmdline_str=None, base_dtb=None):
+    """Select base DTB (None = boot.cmd default) and overlays, reboot, wait. True = board and remoteproc0 up."""
+    print(f"\n[CONFIG] Setting overlay: '{overlay_str}'" + (f", base DTB: '{base_dtb}'" if base_dtb else ""))
     run_ssh(f"sed -i '/^[# ]*dtoverlay=/d' /boot/config.txt; echo 'dtoverlay={overlay_str}' >> /boot/config.txt")
     run_ssh("sed -i '/^cmdline=uio_pdrv_genirq/d' /boot/config.txt")
     if cmdline_str:
         run_ssh(f"echo '{cmdline_str}' >> /boot/config.txt")
+    run_ssh("sed -i '/^base_dtb=/d' /boot/config.txt")
+    if base_dtb:
+        code, _, _ = run_ssh(f"test -f /boot/{base_dtb} && echo 'base_dtb={base_dtb}' >> /boot/config.txt")
+        if code != 0:
+            print(f"  \033[91m[FAIL] /boot/{base_dtb} is missing on the target; not rebooting\033[0m")
+            return False
 
     print("[REBOOT] Rebooting target board...")
     try:
@@ -194,6 +213,38 @@ def set_overlay_and_reboot(overlay_str, cmdline_str=None):
         pass
     time.sleep(8)
     return wait_for_target()
+
+def ping_exchanged(code, out, expected=1000, require_integrity=True):
+    """
+    A ping benchmark passes only if it really exchanged messages: exit status 0,
+    every ping sent and answered, no timeouts and (when the tool checks it) intact
+    data. Anything else, including empty output, is a FAIL with the reason in red.
+    """
+    text = strip_ansi(out)
+    def num(pattern):
+        m = re.search(pattern + r'\s*:\s*(\d+)', text)
+        return int(m.group(1)) if m else None
+    sent = num(r'(?:Packets Sent|Total Packets Sent|Total Pings Sent|Messages Sent)')
+    recv = num(r'(?:Packets Recv|Successful Replies|Pongs Received|Messages Recv)')
+    timeouts = num(r'(?:Timeouts|Timed Out Packets)')
+    integrity = re.search(r'Data Integrity\s*:\s*(\S+)', text)
+
+    reasons = []
+    if code != 0:
+        reasons.append(f"exit status {code}")
+    if sent != expected:
+        reasons.append(f"sent {sent if sent is not None else 'nothing'} of {expected}")
+    if recv != expected:
+        reasons.append(f"received {recv if recv is not None else 'nothing'} of {expected}")
+    if timeouts:
+        reasons.append(f"{timeouts} timeouts")
+    if integrity and integrity.group(1) != "PASS":
+        reasons.append("data integrity FAIL")
+    elif require_integrity and not integrity:
+        reasons.append("no data integrity result")
+    for r in reasons:
+        print(f"  \033[91m[FAIL] {r}\033[0m")
+    return "FAIL" if reasons else "PASS"
 
 def parse_target_json_report():
     c, out, _ = run_ssh("cat /tmp/remoteproc_test_results.json", timeout=10)
@@ -226,36 +277,45 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
             return False, "\n".join(filtered[:3])
     return True, "Clean"
 
+def count_kunit_cases(rel_path):
+    """Count KUNIT_CASE entries in a linux-cubie test source; None if it is not checked out."""
+    linux_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "linux-cubie"))
+    try:
+        with open(os.path.join(linux_dir, rel_path)) as f:
+            return len(re.findall(r'^\s*KUNIT_CASE\w*\(', f.read(), re.MULTILINE))
+    except OSError:
+        return None
+
 def validate_kunit_tests():
     """
     Query, validate, and report in-kernel KUnit driver test suites on target hardware.
-    Tests verified:
-      - sunxi_rproc (35 tests): SRAM boundaries, DRAM carveouts, arithmetic overflow guards,
-                                corrupted ELF segments, and malformed resource tables.
-      - sun55i_msgbox (32 tests): CPUS/DSP/RV 12-channel routing, FIFO drain limits (FIFO_MAX),
-                                  backpressure thresholds, multi-port interleaving, spurious IRQs.
-    Total: 67 in-kernel tests.
+    The expected count per suite comes from the KUNIT_CASE entries in linux-cubie,
+    so it follows the test sources instead of going stale.
     """
+    suites_info = {
+        "sunxi_rproc": {
+            "title": "sunxi_rproc (Remoteproc Driver)",
+            "source": "drivers/remoteproc/sunxi_rproc_test.c",
+        },
+        "sun55i_msgbox": {
+            "title": "sun55i_msgbox (Mailbox Driver)",
+            "source": "drivers/mailbox/sun55i_msgbox_test.c",
+        },
+    }
+    for meta in suites_info.values():
+        meta["expected_count"] = count_kunit_cases(meta["source"])
+    known = [m["expected_count"] for m in suites_info.values() if m["expected_count"] is not None]
+    banner = f"{sum(known)} TESTS" if len(known) == len(suites_info) else "EXPECTED COUNT UNKNOWN"
+
     print("\n" + "=" * 76)
-    print("        1.0 IN-KERNEL KUNIT DRIVER TEST VALIDATION (67 TESTS)")
+    print(f"        1.0 IN-KERNEL KUNIT DRIVER TEST VALIDATION ({banner})")
     print("=" * 76)
 
     # Ensure debugfs is mounted on target
     run_ssh("mount -t debugfs none /sys/kernel/debug 2>/dev/null")
 
-    suites_info = {
-        "sunxi_rproc": {
-            "title": "sunxi_rproc (Remoteproc Driver)",
-            "expected_count": 33,
-        },
-        "sun55i_msgbox": {
-            "title": "sun55i_msgbox (Mailbox Driver)",
-            "expected_count": 34,
-        },
-    }
-
     suite_results = {}
-    total_expected = sum(s["expected_count"] for s in suites_info.values())
+    total_expected = 0
     total_passed = 0
     total_failed = 0
     total_skipped = 0
@@ -301,10 +361,21 @@ def validate_kunit_tests():
                 pass_count = sum(1 for t in subtests if t["status"] == "PASS")
                 fail_count = sum(1 for t in subtests if t["status"] == "FAIL")
 
-        suite_status = "PASS" if (pass_count > 0 and fail_count == 0) else ("FAIL" if fail_count > 0 else "MISSING")
+        expected = meta["expected_count"]
+        if expected is None:
+            expected = total_count  # source not available: trust what the kernel ran
+        total_expected += expected
+        if fail_count > 0:
+            suite_status = "FAIL"
+        elif pass_count == 0:
+            suite_status = "MISSING"
+        elif pass_count + skip_count < expected:
+            suite_status = "INCOMPLETE"
+        else:
+            suite_status = "PASS"
         suite_results[suite_name] = {
             "title": meta["title"],
-            "expected_count": meta["expected_count"],
+            "expected_count": expected,
             "total": total_count,
             "passed": pass_count,
             "failed": fail_count,
@@ -325,13 +396,15 @@ def validate_kunit_tests():
     for suite_name, s in suite_results.items():
         color = "\033[92m" if s["status"] == "PASS" else "\033[91m"
         reset = "\033[0m"
-        print(f"  {s['title']:<32} | {s['total']:<6} | {s['passed']:<6} | {s['failed']:<6} | {s['skipped']:<7} | {color}{s['status']}{reset}")
+        tests = f"{s['total']}/{s['expected_count']}"
+        print(f"  {s['title']:<32} | {tests:<6} | {s['passed']:<6} | {s['failed']:<6} | {s['skipped']:<7} | {color}{s['status']}{reset}")
 
     print("  " + "-" * 32 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 7 + "-+-------")
-    overall_status = "PASS" if (total_failed == 0 and total_passed >= total_expected) else "FAIL"
+    overall_status = "PASS" if all(s["status"] == "PASS" for s in suite_results.values()) else "FAIL"
     color = "\033[92m" if overall_status == "PASS" else "\033[91m"
     reset = "\033[0m"
-    print(f"  {'COMBINED TOTAL':<32} | {total_executed:<6} | {total_passed:<6} | {total_failed:<6} | {total_skipped:<7} | {color}{overall_status}{reset}")
+    tests = f"{total_executed}/{total_expected}"
+    print(f"  {'COMBINED TOTAL':<32} | {tests:<6} | {total_passed:<6} | {total_failed:<6} | {total_skipped:<7} | {color}{overall_status}{reset}")
     print("=" * 76)
 
     # If any failures, print alert with test names
@@ -342,7 +415,7 @@ def validate_kunit_tests():
             for ftest in s["failed_tests"]:
                 print(f"  \033[91m  - {suite_name}: {ftest}\033[0m")
         print()
-    elif total_passed >= total_expected:
+    elif overall_status == "PASS":
         print(f"\033[92m[PASS] All {total_passed} in-kernel KUnit tests executed cleanly with 0 failures!\033[0m\n")
     else:
         print(f"\033[93m[WARN] KUnit tests partially executed: {total_passed}/{total_expected} passed.\033[0m\n")
@@ -425,32 +498,33 @@ def audit_engineering_invariants():
     
     audit_results = []
     
-    # Check 1: Remoteproc Doorbell Client Contract (knows_txdone == true)
+    # Check 1: Remoteproc Doorbell Client Contract (knows_txdone == false, UPSTREAM_LESSONS_LEARNED 3.2)
     rproc_file = os.path.join(linux_dir, "drivers/remoteproc/sunxi_rproc.c")
     if os.path.exists(rproc_file):
         with open(rproc_file, "r") as f:
             content = f.read()
-        has_knows_txdone = "priv->cl.knows_txdone = true;" in content
+        controller_paces = ("priv->cl.knows_txdone = false;" in content
+                            and "mbox_client_txdone(" not in content)
         audit_results.append({
             "invariant": "RemoteProc VirtIO Doorbell Contract",
-            "rule": "priv->cl.knows_txdone = true (Bypasses 1ms hrtimer polling)",
+            "rule": "priv->cl.knows_txdone = false, no mbox_client_txdone() (controller paces TX)",
             "file": "drivers/remoteproc/sunxi_rproc.c",
-            "status": "PASS" if has_knows_txdone else "FAIL",
-            "details": "Channel bound to MBOX_TXDONE_BY_ACK (0 µs timer overhead)" if has_knows_txdone else "Missing knows_txdone! Mailbox core will stall on 1ms timer"
+            "status": "PASS" if controller_paces else "FAIL",
+            "details": "TX completion decided by the controller's last_tx_done()" if controller_paces else "Client reports txdone itself; contradicts Lesson 3.2"
         })
     
-    # Check 2: Mailbox FIFO Capacity Pacing (count < FIFO_MAX)
+    # Check 2: Mailbox TX Pacing (count == 0, UPSTREAM_LESSONS_LEARNED 3.2 / 2.1)
     msgbox_file = os.path.join(linux_dir, "drivers/mailbox/sun55i-msgbox.c")
     if os.path.exists(msgbox_file):
         with open(msgbox_file, "r") as f:
             content = f.read()
-        has_fifo_capacity = "return count < SUN55I_FIFO_MAX;" in content
+        drained = "return count == 0;" in content
         audit_results.append({
             "invariant": "Mailbox Hardware FIFO Pacing",
-            "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (Broadcom BCM2835 pattern)",
+            "rule": "last_tx_done returns count == 0 (done once the remote drained the FIFO)",
             "file": "drivers/mailbox/sun55i-msgbox.c",
-            "status": "PASS" if has_fifo_capacity else "FAIL",
-            "details": "Hardware FIFO pipelining enabled (up to 8 kicks in flight)" if has_fifo_capacity else "Requires count == 0! Forces 1-entry blocking serialization"
+            "status": "PASS" if drained else "FAIL",
+            "details": "A message counts as sent only after the remote consumed it" if drained else "last_tx_done no longer waits for the remote to drain the FIFO"
         })
     
     # Check 3: Zero Arbitrary Sleep Hacks in Critical Benchmark Paths
@@ -531,8 +605,6 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
     regressions = []
     improvements = []
 
-    measured_p1_jitter = cur_metrics.get("p1_rpmsg_jitter_us") or 15.0
-
     for label, key, unit, higher_is_better in metric_labels:
         cur_val = cur_metrics.get(key)
         prev_val = prev_metrics.get(key)
@@ -544,7 +616,14 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
             pct = (diff / prev_val * 100) if prev_val != 0 else 0
 
             if key == "kunit_passed":
-                if cur_val < prev_val:
+                cur_total = cur_metrics.get("kunit_total")
+                prev_total = prev_metrics.get("kunit_total")
+                if cur_metrics.get("kunit_failed") or cur_val < (cur_total or 0):
+                    badge = "🔴 REGRESSION (Tests Failed or Missing!)"
+                    regressions.append(f"{label}: {cur_val}/{cur_total} passed")
+                elif cur_total != prev_total:
+                    badge = f"🟢 100% Pass (Test Set Changed: {prev_total} -> {cur_total})"
+                elif cur_val < prev_val:
                     badge = "🔴 REGRESSION (Tests Failed!)"
                     regressions.append(f"{label}: dropped from {prev_val} to {cur_val}")
                 elif cur_val > prev_val:
@@ -558,12 +637,12 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
                 delta_str = diff_str
 
                 # Calculate statistical noise floor
-                if "p3_shm_rtt" in key:
+                if higher_is_better:
+                    noise_threshold = 0.08 * prev_val  # 8% throughput/bandwidth noise floor
+                elif "p3_shm_rtt" in key:
                     noise_threshold = 1.5  # 1.5 µs noise floor on direct SRAM
                 elif "p1" in key or "p2" in key:
-                    noise_threshold = max(1.5 * measured_p1_jitter, 12.0)  # Jitter noise band
-                elif "rate" in key or "Throughput" in label:
-                    noise_threshold = 0.08 * prev_val  # 8% throughput noise floor
+                    noise_threshold = max(0.10 * prev_val, 12.0)  # 10% of an average over 1000 pings
                 else:
                     noise_threshold = max(0.05 * prev_val, 1.0)
 
@@ -651,70 +730,6 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
 
             f.write("## Comparison Against Preceding Run\n\n")
             f.write("| Metric | Previous Run | Current Run | Delta | Statistical Assessment |\n")
-            f.write("| :--- | :---: | :---: | :---: | :---: |\n")
-            for label, prev_val, cur_val, delta_str, badge in trend_summary:
-                f.write(f"| {label} | {prev_val} | {cur_val} | `{delta_str}` | {badge} |\n")
-            f.write("\n")
-
-            f.write("## Historical Runs Timeline\n\n")
-            f.write("| Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |\n")
-            f.write("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n")
-            for h in reversed(history[-20:]):
-                m = h.get("metrics", {})
-                k_p = f"{m.get('kunit_passed', 0)}/{m.get('kunit_total', 0)}"
-                p1_lat = f"{m['p1_rpmsg_rtt_us']:.2f} µs" if m.get("p1_rpmsg_rtt_us") is not None else "N/A"
-                p3_lat = f"{m['p3_shm_rtt_us']:.2f} µs" if m.get("p3_shm_rtt_us") is not None else "N/A"
-                p3_rate = f"{m['p3_shm_rate_msgs_s']:,.0f}/s" if m.get("p3_shm_rate_msgs_s") is not None else "N/A"
-                st = f"**{h.get('overall_status')}**"
-                f.write(f"| #{h.get('run_id')} | {h.get('timestamp')} | `{h.get('git_kernel')}` | `{h.get('git_cubie')}` | {st} | {k_p} | {p1_lat} | {p3_lat} | {p3_rate} |\n")
-            f.write("\n")
-        print(f"[HISTORY] Saved historical Markdown timeline -> {history_md_file}")
-    except Exception as e:
-        print(f"[WARN] Failed to write {history_md_file}: {e}")
-
-    # Print Terminal Comparison Table
-    if prev_run:
-        print("\n" + "=" * 76)
-        print("          HISTORICAL PERFORMANCE TREND & REGRESSION ANALYSIS")
-        print("=" * 76)
-        print(f"  {'Metric':<35} | {'Previous':<12} | {'Current':<12} | {'Trend / Delta'}")
-        print("  " + "-" * 35 + "-+-" + "-" * 12 + "-+-" + "-" * 12 + "-+-" + "-" * 17)
-        for label, prev_val, cur_val, delta_str, badge in trend_summary:
-            print(f"  {label:<35} | {prev_val:<12} | {cur_val:<12} | {badge} ({delta_str})")
-        print("=" * 76)
-
-    # Save JSON history (formatted list)
-    try:
-        with open(history_json_file, "w") as f:
-            json.dump(history, f, indent=2)
-        print(f"[HISTORY] Updated historical run archive ({len(history)} total runs) -> {history_json_file}")
-    except Exception as e:
-        print(f"[WARN] Failed to write {history_json_file}: {e}")
-
-    # Render History Markdown Report
-    try:
-        with open(history_md_file, "w") as f:
-            f.write("# Silicon Sweep Performance History & Regression Tracking\n\n")
-            f.write(f"- **Total Recorded Runs**: {len(history)}\n")
-            f.write(f"- **Latest Run**: Run #{run_record['run_id']} ({run_record['timestamp']})\n")
-            f.write(f"- **Kernel Commit**: `{git_kernel}` | **Firmware/Tools Commit**: `{git_cubie}`\n")
-            f.write(f"- **Latest Overall Status**: **{overall_status}**\n\n")
-
-            if regressions:
-                f.write("### ⚠️ Regressions Detected Against Previous Run\n\n")
-                for reg in regressions:
-                    f.write(f"- 🔴 **{reg}**\n")
-                f.write("\n")
-            elif improvements:
-                f.write("### 🚀 Performance Improvements Detected\n\n")
-                for imp in improvements:
-                    f.write(f"- 🟢 **{imp}**\n")
-                f.write("\n")
-            else:
-                f.write("### 🟢 Performance is Stable & Consistent\n\n")
-
-            f.write("## Comparison Against Preceding Run\n\n")
-            f.write("| Metric | Previous Run | Current Run | Delta | Trend / Status |\n")
             f.write("| :--- | :---: | :---: | :---: | :---: |\n")
             for label, prev_val, cur_val, delta_str, badge in trend_summary:
                 f.write(f"| {label} | {prev_val} | {cur_val} | `{delta_str}` | {badge} |\n")
@@ -817,26 +832,20 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p1_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
-    results.append(("Profile 1", "C++ ping_rpmsg (1000 pkts)", "PASS" if p1_cpp_pass else "FAIL"))
+    results.append(("Profile 1", "C++ ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
 
     # 1.3 Python ping_rpmsg.py
     print("\n--- 1.3 Running Python ping_rpmsg.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -d 0", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p1_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'Successful Replies\s*:\s*1000|1000', clean_out)))
-    results.append(("Profile 1", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p1_py_pass else "FAIL"))
+    results.append(("Profile 1", "Python ping_rpmsg.py (1000 pkts)", ping_exchanged(c, out)))
 
     # 1.4 C++ ping_dram
     print("\n--- 1.4 Running C++ ping_dram (1,000 pings) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testDRAMMsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
     c, out, _ = run_ssh("/usr/bin/ping_dram -n 1000 -s 512", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p1_dram_pass = (c == 0 and bool(re.search(r'Timeouts\s*:\s*0|1000', clean_out)))
-    results.append(("Profile 1", "C++ ping_dram (1000 pkts)", "PASS" if p1_dram_pass else "FAIL"))
+    results.append(("Profile 1", "C++ ping_dram (1000 pkts)", ping_exchanged(c, out, require_integrity=False)))
 
     # 1.5 Python monitor_trace.py
     print("\n--- 1.5 Running Python monitor_trace.py ---")
@@ -853,7 +862,8 @@ def main():
     # PROFILE 2
     # -------------------------------------------------------------------------
     log_banner(2, "Testing Profile 2 (On-Chip SRAM Space 1 VirtIO)", "Overlay: cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram")
-    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram")
+    p2_up = set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPingRpmsgSram")
+    results.append(("Profile 2", "Boot + remoteproc0 present", "PASS" if p2_up else "FAIL"))
 
     # 2.1 run_tests.py
     print("\n--- 2.1 Running automated test suite (run_tests.py) ---")
@@ -869,17 +879,13 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsgSram.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p2_cpp_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
-    results.append(("Profile 2", "C++ ping_rpmsg (1000 pkts)", "PASS" if p2_cpp_pass else "FAIL"))
+    results.append(("Profile 2", "C++ ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
 
     # 2.3 Python ping_rpmsg.py
     print("\n--- 2.3 Running Python ping_rpmsg.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -d 0", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p2_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'Successful Replies\s*:\s*1000|1000', clean_out)))
-    results.append(("Profile 2", "Python ping_rpmsg.py (1000 pkts)", "PASS" if p2_py_pass else "FAIL"))
+    results.append(("Profile 2", "Python ping_rpmsg.py (1000 pkts)", ping_exchanged(c, out)))
 
     # 2.4 Kernel dmesg health check
     dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 2")
@@ -889,7 +895,10 @@ def main():
     # PROFILE 3
     # -------------------------------------------------------------------------
     log_banner(3, "Testing Profile 3 (Userspace UIO Direct Mailbox & SRAM)", "Overlay: cubie-a5e-flight-stack cubie-a5e-testPing")
-    set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPing", "cmdline=uio_pdrv_genirq.of_id=generic-uio")
+    p3_up = set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPing",
+                                   "cmdline=uio_pdrv_genirq.of_id=generic-uio",
+                                   base_dtb="sun55i-a527-cubie-a5e-uio.dtb")
+    results.append(("Profile 3", "Boot + remoteproc0 present", "PASS" if p3_up else "FAIL"))
 
     # 3.1 run_tests.py
     print("\n--- 3.1 Running automated test suite (run_tests.py) ---")
@@ -905,17 +914,13 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
     c, out, _ = run_ssh("/usr/bin/ping_shm -n 1000 -d 0", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p3_shm_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)))
-    results.append(("Profile 3", "C++ ping_shm (1000 pkts)", "PASS" if p3_shm_pass else "FAIL"))
+    results.append(("Profile 3", "C++ ping_shm (1000 pkts)", ping_exchanged(c, out)))
 
     # 3.3 Python ping_uio.py
     print("\n--- 3.3 Running Python ping_uio.py (1,000 pings) ---")
     c, out, _ = run_ssh("python3 /usr/bin/ping_uio.py -n 1000 -d 0", timeout=30)
     print(out)
-    clean_out = strip_ansi(out)
-    p3_uio_py_pass = (c == 0 and bool(re.search(r'Data Integrity\s*:\s*PASS', clean_out)) and bool(re.search(r'1000|100(?:\.00)?%', clean_out)))
-    results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", "PASS" if p3_uio_py_pass else "FAIL"))
+    results.append(("Profile 3", "Python ping_uio.py (1000 pkts)", ping_exchanged(c, out)))
 
     # 3.4 Kernel dmesg health check
     dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 3")
@@ -967,7 +972,7 @@ def main():
             f.write(f"- **Co-Processor**: XuanTie E906 RISC-V\n\n")
 
             if kunit_summary and "suites" in kunit_summary:
-                f.write("## In-Kernel KUnit Driver Test Verification (67 Tests)\n\n")
+                f.write(f"## In-Kernel KUnit Driver Test Verification ({kunit_summary['total_expected']} Tests)\n\n")
                 f.write(f"- **Overall Status**: **{kunit_summary['status']}** ({kunit_summary['total_passed']}/{kunit_summary['total_expected']} tests passed, {kunit_summary['total_failed']} failed)\n\n")
                 f.write("| Subsystem / Driver | Test Suite | Executed | Passed | Failed | Skipped | Status |\n")
                 f.write("| :--- | :--- | :---: | :---: | :---: | :---: | :---: |\n")

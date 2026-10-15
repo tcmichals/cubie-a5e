@@ -63,7 +63,7 @@ The Radxa Cubie A5E bootloader (`U-Boot 2024`) merges overlays declared in `/boo
 | :--- | :--- | :--- | :--- |
 | **Profile 1: Standard DDR VirtIO RPMsg (Default)** | `dtoverlay=cubie-a5e-flight-stack` | `vdev@48000000`<br>(1 MB DDR DRAM carveout) | `testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf` |
 | **Profile 2: Pure On-Chip SRAM VirtIO** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` | `sram1@72c0000`<br>(256 KB on-chip SRAM Space 1) | `testPingRpmsgSram.elf` (VirtIO vrings & message buffers locked to on-chip SRAM) |
-| **Profile 3: Userspace UIO Direct SPSC Queue** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` | None (Mailbox owned by `generic-uio`) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
+| **Profile 3: Userspace UIO Direct SPSC Queue** | `base_dtb=sun55i-a527-cubie-a5e-uio.dtb`<br>`dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing`<br>`cmdline=uio_pdrv_genirq.of_id=generic-uio` | None (Mailbox owned by `generic-uio`; the `-uio` base tree drops the remoteproc `mboxes` so remoteproc starts in standalone mode) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
 | **Profile 4: Dual Co-Processor Concurrent Mailbox** | `dtoverlay=cubie-a5e-dual-mailbox-test` | `mailbox_test_dsp` (Ch 4/5)<br>`mailbox_test_e906` (Ch 8/9) | Concurrent multi-core stress testing (`test_dual_msgbox.py`, `testMsgbox.elf`, `dsp-testMsgbox.elf`) |
 | **Profile 5: HiFi4 DSP Mailbox Isolation** | `dtoverlay=cubie-a5e-dsp-mailbox-test` | `mailbox_test_dsp` (Ch 4/5) | Cadence HiFi4 DSP standalone mailbox testing (`dsp-testMsgbox.elf`) |
 

@@ -16,7 +16,11 @@
  * Hardware IRQ:
  *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox)
  *
+ * Needs the sun55i-a527-cubie-a5e-uio.dtb base tree, which drops the
+ * remoteproc "mboxes" (an overlay cannot delete it).
+ *
  * In /boot/config.txt:
+ *   base_dtb=sun55i-a527-cubie-a5e-uio.dtb
  *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
  *   cmdline=uio_pdrv_genirq.of_id=generic-uio
  * ============================================================================
@@ -31,6 +35,6 @@
 };
 
 &rproc {
-    /* Standalone lifecycle mode: core managed by remoteproc, IPC via UIO */
+    /* Standalone mode (no mboxes in the -uio base tree): remoteproc runs the core, IPC via UIO */
     status = "okay";
 };

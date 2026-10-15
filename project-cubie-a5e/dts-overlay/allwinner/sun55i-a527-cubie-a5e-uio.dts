@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR MIT)
+/*
+ * Radxa Cubie A5E — base device tree for Profile 3 (userspace UIO mailbox).
+ *
+ * The cubie-a5e-testPing overlay hands the message box to userspace
+ * (generic-uio), so no mailbox controller is ever registered. The SoC dtsi
+ * still gives the remoteproc node "mboxes", and the driver waits for that
+ * mailbox until it appears. Without "mboxes" the driver starts in standalone
+ * mode: it loads, starts and stops the E906, and userspace does the IPC.
+ *
+ * An overlay cannot delete a base-tree property, so this is a full board
+ * device tree. Project-only; not part of the upstream series.
+ *
+ * In /boot/config.txt:
+ *   base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
+ *   cmdline=uio_pdrv_genirq.of_id=generic-uio
+ */
+
+#include "sun55i-a527-cubie-a5e.dts"
+
+&rproc {
+	/delete-property/ mboxes;
+};

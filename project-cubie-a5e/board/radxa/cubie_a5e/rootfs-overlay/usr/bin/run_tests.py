@@ -199,7 +199,7 @@ def parse_benchmark_output(raw_output):
     if m:
         metrics["data_integrity"] = m.group(1).strip()
 
-    m = re.search(r'(?:Avg Latency|Avg RTT Latency)\s*:\s*([\d\.]+)\s*us', text)
+    m = re.search(r'(?:Avg Latency|Average Latency|Avg RTT Latency)\s*:\s*([\d\.]+)\s*us', text)
     if m:
         metrics["avg_lat_us"] = float(m.group(1))
 
@@ -211,7 +211,7 @@ def parse_benchmark_output(raw_output):
     if m:
         metrics["max_lat_us"] = float(m.group(1))
 
-    m = re.search(r'Jitter \(StdDev\)\s*:\s*([\d\.]+)\s*us', text)
+    m = re.search(r'Jitter \(Std ?Dev\)\s*:\s*([\d\.]+)\s*us', text)
     if m:
         metrics["jitter_us"] = float(m.group(1))
 
@@ -224,6 +224,55 @@ def parse_benchmark_output(raw_output):
         metrics["bandwidth"] = m.group(1).strip()
 
     return metrics
+
+def run_ping(name, cmd, timeout, expected=1000, require_integrity=True):
+    """
+    Run one ping benchmark. It passes only if it really exchanged messages:
+    exit status 0, all `expected` pings sent and answered, no timeouts, and
+    intact data where the tool checks it. A missing tool, a crash, empty
+    output or any lost message is a FAIL, logged in red with the reason.
+    """
+    tool = cmd[-1] if cmd[0] == sys.executable else cmd[0]
+    if not os.path.isfile(tool):
+        log_fail(f"{name}: {tool} not installed")
+        return {"name": name, "status": "FAIL", "details": f"{tool} not installed", "metrics": {}}
+    log_info(f"Running {name} ({expected:,} pings)...")
+    try:
+        res = subprocess.run(cmd + ["-n", str(expected)], capture_output=True, text=True, timeout=timeout)
+    except Exception as e:
+        log_fail(f"{name}: {e}")
+        return {"name": name, "status": "FAIL", "details": str(e), "metrics": {}}
+
+    metrics = parse_benchmark_output(res.stdout)
+    sent, recv = metrics.get("packets_sent"), metrics.get("packets_recv")
+    timeouts = re.search(r'(?:Timeouts|Timed Out Packets)\s*:\s*(\d+)', strip_ansi(res.stdout))
+    integrity = metrics.get("data_integrity")
+
+    reasons = []
+    if res.returncode != 0:
+        reasons.append(f"exit status {res.returncode}")
+    if sent != expected:
+        reasons.append(f"sent {sent if sent is not None else 'nothing'} of {expected}")
+    if recv != expected:
+        reasons.append(f"received {recv if recv is not None else 'nothing'} of {expected}")
+    if timeouts and int(timeouts.group(1)):
+        reasons.append(f"{timeouts.group(1)} timeouts")
+    if integrity is not None and not integrity.startswith("PASS"):
+        reasons.append(f"data integrity {integrity}")
+    elif integrity is None and require_integrity:
+        reasons.append("no data integrity result")
+    if metrics.get("avg_lat_us") is None:
+        reasons.append("no latency measured")
+
+    details = f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
+    if reasons:
+        log_fail(f"{name}: " + "; ".join(reasons))
+        err = (res.stderr or "").strip().splitlines()
+        if err:
+            log_fail(f"{name} stderr: {err[-1]}")
+        return {"name": name, "status": "FAIL", "metrics": metrics, "details": "; ".join(reasons)}
+    log_pass(f"{name}: {metrics['avg_lat_us']:.2f} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
+    return {"name": name, "status": "PASS", "metrics": metrics, "details": details}
 
 def log_header(title):
     print(f"\n{C_BOLD}{C_CYAN}{'='*74}{C_RESET}")
@@ -396,8 +445,8 @@ def test_basic():
     fw = "testBasic.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testBasic.elf", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testBasic.elf", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -463,8 +512,8 @@ def test_string_binary_trace0():
     fw = "testStringBinaryTrace0.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testStringBinaryTrace0.elf", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testStringBinaryTrace0.elf", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -521,8 +570,8 @@ def test_crash():
     fw = "testCrash.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testCrash.elf (Autopsy)", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testCrash.elf (Autopsy)", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     write_sysfs(RPROC_RECOV, "disabled")
     log_info("RemoteProc automatic recovery disabled for post-mortem analysis")
@@ -585,8 +634,8 @@ def test_ping_rpmsg():
     fw = "testPingRpmsg.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testPingRpmsg", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testPingRpmsg", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -599,30 +648,7 @@ def test_ping_rpmsg():
     sub_results = []
 
     # 4.1 Native C++ ping_rpmsg
-    bin_tool = "/usr/bin/ping_rpmsg"
-    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
-        log_info("Running native C++ ping_rpmsg benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([bin_tool, "-n", "1000", "-D", "50"],
-                                 capture_output=True, text=True, timeout=30)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
-            if success:
-                log_pass(f"C++ ping_rpmsg: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            else:
-                log_warn("C++ ping_rpmsg failed verification")
-            sub_results.append({
-                "name": "ping_rpmsg (C++ VirtIO)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_rpmsg error: {e}")
-            sub_results.append({"name": "ping_rpmsg (C++ VirtIO)", "status": "FAIL", "details": str(e), "metrics": {}})
-    else:
-        sub_results.append({"name": "ping_rpmsg (C++ VirtIO)", "status": "SKIP", "details": "binary not found", "metrics": {}})
+    sub_results.append(run_ping("ping_rpmsg (C++ VirtIO)", ["/usr/bin/ping_rpmsg", "-D", "50"], 30))
 
     # Settle / restart fw before Python ping to guarantee clean VirtIO buffer state
     stop_rproc()
@@ -631,28 +657,7 @@ def test_ping_rpmsg():
     time.sleep(1.0)
 
     # 4.2 Python ping_rpmsg.py
-    py_tool = "/usr/bin/ping_rpmsg.py"
-    if os.path.isfile(py_tool):
-        log_info("Running Python ping_rpmsg.py benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([sys.executable, py_tool, "-n", "1000", "-d", "0"],
-                                 capture_output=True, text=True, timeout=30)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
-            if success:
-                log_pass(f"Python ping_rpmsg.py: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            else:
-                log_warn("Python ping_rpmsg.py failed verification")
-            sub_results.append({
-                "name": "ping_rpmsg.py (Python VirtIO)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_rpmsg.py error: {e}")
-            sub_results.append({"name": "ping_rpmsg.py (Python VirtIO)", "status": "FAIL", "details": str(e), "metrics": {}})
+    sub_results.append(run_ping("ping_rpmsg.py (Python VirtIO)", [sys.executable, "/usr/bin/ping_rpmsg.py", "-d", "0"], 30))
 
     stop_rproc()
     return sub_results
@@ -663,8 +668,8 @@ def test_dram_msg():
     fw = "testDRAMMsg.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testDRAMMsg", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testDRAMMsg", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -672,28 +677,8 @@ def test_dram_msg():
         return [{"name": "testDRAMMsg", "status": "FAIL", "details": "start_rproc failed", "metrics": {}}]
 
     time.sleep(1.0)
-    bin_tool = "/usr/bin/ping_dram"
-    sub_results = []
-    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
-        log_info("Running C++ ping_dram benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([bin_tool, "-n", "1000", "-s", "512"],
-                                 capture_output=True, text=True, timeout=20)
-            metrics = parse_benchmark_output(res.stdout)
-            success = (res.returncode == 0 and (metrics.get("packets_recv") or 0) > 0)
-            if success:
-                log_pass(f"ping_dram: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            sub_results.append({
-                "name": "ping_dram (C++ Hybrid DDR)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_dram error: {e}")
-            sub_results.append({"name": "ping_dram (C++ Hybrid DDR)", "status": "FAIL", "details": str(e), "metrics": {}})
-    else:
-        sub_results.append({"name": "ping_dram (C++ Hybrid DDR)", "status": "SKIP", "details": "binary not found", "metrics": {}})
+    sub_results = [run_ping("ping_dram (C++ Hybrid DDR)", ["/usr/bin/ping_dram", "-s", "512"], 20,
+                            require_integrity=False)]
 
     stop_rproc()
     return sub_results
@@ -704,8 +689,8 @@ def test_ping_rpmsg_sram():
     fw = "testPingRpmsgSram.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testPingRpmsgSram", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testPingRpmsgSram", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -716,26 +701,7 @@ def test_ping_rpmsg_sram():
     sub_results = []
 
     # 6.1 Native C++ ping_rpmsg
-    bin_tool = "/usr/bin/ping_rpmsg"
-    if os.path.isfile(bin_tool) and os.access(bin_tool, os.X_OK):
-        log_info("Running native C++ ping_rpmsg (SRAM Space 1, 1,000 pings)...")
-        try:
-            res = subprocess.run([bin_tool, "-n", "1000", "-D", "0"],
-                                 capture_output=True, text=True, timeout=30)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity : PASS" in clean_out and "100.00% success" in clean_out)
-            if success:
-                log_pass(f"C++ ping_rpmsg (SRAM): {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            sub_results.append({
-                "name": "ping_rpmsg (C++ SRAM VirtIO)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_rpmsg error: {e}")
-            sub_results.append({"name": "ping_rpmsg (C++ SRAM VirtIO)", "status": "FAIL", "details": str(e), "metrics": {}})
+    sub_results.append(run_ping("ping_rpmsg (C++ SRAM VirtIO)", ["/usr/bin/ping_rpmsg", "-D", "0"], 30))
 
     # Settle / restart fw before Python ping to guarantee clean VirtIO buffer state
     stop_rproc()
@@ -744,26 +710,7 @@ def test_ping_rpmsg_sram():
     time.sleep(1.0)
 
     # 6.2 Python ping_rpmsg.py
-    py_tool = "/usr/bin/ping_rpmsg.py"
-    if os.path.isfile(py_tool):
-        log_info("Running Python ping_rpmsg.py (SRAM Space 1, 1,000 pings)...")
-        try:
-            res = subprocess.run([sys.executable, py_tool, "-n", "1000", "-d", "0"],
-                                 capture_output=True, text=True, timeout=30)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity     : PASS" in clean_out and "Successful Replies : 1000" in clean_out)
-            if success:
-                log_pass(f"Python ping_rpmsg.py (SRAM): {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            sub_results.append({
-                "name": "ping_rpmsg.py (Python SRAM VirtIO)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_rpmsg.py error: {e}")
-            sub_results.append({"name": "ping_rpmsg.py (Python SRAM VirtIO)", "status": "FAIL", "details": str(e), "metrics": {}})
+    sub_results.append(run_ping("ping_rpmsg.py (Python SRAM VirtIO)", [sys.executable, "/usr/bin/ping_rpmsg.py", "-d", "0"], 30))
 
     stop_rproc()
     return sub_results
@@ -774,8 +721,8 @@ def test_ping_uio():
     fw = "testPing.elf"
     fw_path = os.path.join(FW_DIR, fw)
     if not os.path.isfile(fw_path):
-        log_warn(f"{fw} not found in {FW_DIR}. Skipping.")
-        return [{"name": "testPing", "status": "SKIP", "details": "ELF not found", "metrics": {}}]
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testPing", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
 
     log_info(f"Loading and starting {fw}...")
     if not start_rproc(fw):
@@ -785,68 +732,10 @@ def test_ping_uio():
     time.sleep(1.0)
     sub_results = []
 
-    # 7.1 C++ ping_shm
-    shm_tool = "/usr/bin/ping_shm"
-    if os.path.isfile(shm_tool) and os.access(shm_tool, os.X_OK):
-        log_info("Running C++ ping_shm benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([shm_tool, "-n", "1000"], capture_output=True, text=True, timeout=15)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity : PASS" in clean_out)
-            if success:
-                log_pass(f"C++ ping_shm: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec, {metrics.get('bandwidth')}")
-            sub_results.append({
-                "name": "ping_shm (C++ Direct SRAM)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s, BW={metrics.get('bandwidth')}"
-            })
-        except Exception as e:
-            log_warn(f"ping_shm error: {e}")
-            sub_results.append({"name": "ping_shm (C++ Direct SRAM)", "status": "FAIL", "details": str(e), "metrics": {}})
-
-    # 7.2 C++ ping_uio
-    uio_tool = "/usr/bin/ping_uio"
-    if os.path.isfile(uio_tool) and os.access(uio_tool, os.X_OK):
-        log_info("Running C++ ping_uio benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([uio_tool, "-n", "1000"], capture_output=True, text=True, timeout=15)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity      : PASS" in clean_out)
-            if success:
-                log_pass(f"C++ ping_uio: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec")
-            sub_results.append({
-                "name": "ping_uio (C++ UIO Doorbell)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s"
-            })
-        except Exception as e:
-            log_warn(f"ping_uio error: {e}")
-            sub_results.append({"name": "ping_uio (C++ UIO Doorbell)", "status": "FAIL", "details": str(e), "metrics": {}})
-
-    # 7.3 Python ping_uio.py
-    py_uio_tool = "/usr/bin/ping_uio.py"
-    if os.path.isfile(py_uio_tool):
-        log_info("Running Python ping_uio.py benchmark (1,000 pings)...")
-        try:
-            res = subprocess.run([sys.executable, py_uio_tool, "-n", "1000"], capture_output=True, text=True, timeout=25)
-            metrics = parse_benchmark_output(res.stdout)
-            clean_out = strip_ansi(res.stdout)
-            success = (res.returncode == 0 and "Data Integrity      : PASS" in clean_out)
-            if success:
-                log_pass(f"Python ping_uio.py: {metrics.get('avg_lat_us')} us avg RTT, {metrics.get('throughput_msgs_s')} msgs/sec")
-            sub_results.append({
-                "name": "ping_uio.py (Python UIO Doorbell)",
-                "status": "PASS" if success else "FAIL",
-                "metrics": metrics,
-                "details": f"Avg={metrics.get('avg_lat_us')}us, Rate={metrics.get('throughput_msgs_s')}msgs/s"
-            })
-        except Exception as e:
-            log_warn(f"ping_uio.py error: {e}")
-            sub_results.append({"name": "ping_uio.py (Python UIO Doorbell)", "status": "FAIL", "details": str(e), "metrics": {}})
+    # 7.1 C++ ping_shm, 7.2 C++ ping_uio, 7.3 Python ping_uio.py
+    sub_results.append(run_ping("ping_shm (C++ Direct SRAM)", ["/usr/bin/ping_shm"], 15))
+    sub_results.append(run_ping("ping_uio (C++ UIO Doorbell)", ["/usr/bin/ping_uio"], 15))
+    sub_results.append(run_ping("ping_uio.py (Python UIO Doorbell)", [sys.executable, "/usr/bin/ping_uio.py"], 25))
 
     stop_rproc()
     return sub_results

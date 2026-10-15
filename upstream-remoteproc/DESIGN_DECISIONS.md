@@ -64,6 +64,15 @@ FIFO 1, which is Linux channel 9). The earlier `"rx"` channel 8 never carried rp
 it only appeared to work because both channels shared one client. This matches the vendor
 BSP, which also uses one channel.
 
+### Mailbox is optional; UIO mode uses its own base device tree (2026-10-14)
+Without an `mboxes` property the driver starts in standalone mode (load, start, stop only).
+With `mboxes` present it waits for that mailbox. The driver does not look at the message box
+node to guess whether the mailbox went to userspace (the old `generic-uio` check was removed
+in `b6d558c36fbd`). Profile 3 (`cubie-a5e-testPing`, mailbox owned by `generic-uio`) boots
+`sun55i-a527-cubie-a5e-uio.dtb`, a project-only board DTS that deletes the remoteproc
+`mboxes`, selected with `base_dtb=` in `config.txt`. A DT overlay cannot delete a base-tree
+property, so this cannot be done in `cubie-a5e-testPing.dtso`.
+
 ### Crash interrupt kept (D14)
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
 cover letter must not claim it is tested.
