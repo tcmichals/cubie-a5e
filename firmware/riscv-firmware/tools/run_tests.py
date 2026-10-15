@@ -232,7 +232,7 @@ def run_ping(name, cmd, timeout, expected=1000, require_integrity=True):
     intact data where the tool checks it. A missing tool, a crash, empty
     output or any lost message is a FAIL, logged in red with the reason.
     """
-    tool = cmd[-1] if cmd[0] == sys.executable else cmd[0]
+    tool = cmd[1] if cmd[0] == sys.executable else cmd[0]
     if not os.path.isfile(tool):
         log_fail(f"{name}: {tool} not installed")
         return {"name": name, "status": "FAIL", "details": f"{tool} not installed", "metrics": {}}
