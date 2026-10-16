@@ -50,7 +50,14 @@ The remoteproc node maps the 4-byte `remap` register and read-modify-writes bit 
 (SRAM A3_2 → MCU); bit 0 belongs to the DSP. It works on silicon. The cover letter explains
 it. Move it to a syscon or the R-CCU only if maintainers ask.
 
-### Message box: host bank clock and reset only (D12)
+### Message box: host bank clock and reset only (D12) — REOPENED 2026-10-16
+**This decision was wrong and must be redone before v3 is sent.** Each bank has its own bus clock
+and reset; with only the ARM bank's described, the RV bank stays gated and in reset, so Linux's
+doorbells to the E906 never arrived and `last_tx_done()` read a gated bank. Measured:
+[ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §6.
+Original text kept below for the record.
+
+#### Original D12 text
 The msgbox node enables only the ARM host bank's clock and reset, like the vendor DT and the
 board-tested 7.1 kernel. The other banks belong to the other processors; asserting their
 resets on unbind would break them.
@@ -97,6 +104,11 @@ drivers.
 ### Mailbox TX pacing
 `last_tx_done()` reports "remote drained" (`count == 0`) and the remoteproc client uses
 `knows_txdone = false`. See Lessons 2.1 and 3.2. Throughput work (P1) comes after v3.
+
+### E906 receive: polling by default, interrupt mode available (owner, 2026-10-16)
+The E906 polls its message box (interrupt off): a dedicated core, lowest latency, deterministic.
+The firmware also supports an interrupt mode (wake on the message box interrupt) and both modes
+are tested.
 
 ### Message box TX completion: poll or write interrupt (open, 2026-10-16)
 Not decided; v3 is on hold until it is. Today the mailbox core polls `last_tx_done()` every 1 ms.

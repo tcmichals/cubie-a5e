@@ -35,7 +35,7 @@ this page, the manual and a silicon readback win.
 | ARM | `0x03003000` | SPI 0 | Linux's bank. SPI 0 verified on silicon. **[silicon]** |
 | DSP | `0x07120000` | SPI 1 | **[vendor DT]** |
 | CPUS | `0x07094000` | SPI 181 | **[vendor DT]** |
-| RV | `0x07136000` | SPI 174 | E906 side: PLIC IRQ 25 **[unverified]** |
+| RV | `0x07136000` | SPI 174 | E906 side: PLIC IRQ 25 per the T527 reference, 48 per our firmware's IRQ dispatcher — **[unverified]**, to test |
 
 ## 2. Routing from the ARM side (Linux channel numbers)
 
@@ -98,13 +98,60 @@ jitter 7–8 µs, no 1 ms stalls **[silicon]**. With 16 messages in flight each 
 end (`stress_rpmsg`), which may or may not be the poll — not measured yet (the board kernel has
 no tracing).
 
-## 6. Clocks and resets
+## 6. Clocks and resets — every bank has its own
 
-- One bus clock and one reset for the ARM bank (`CLK_BUS_MSGBOX`, `RST_BUS_MSGBOX`). The other
-  banks are clocked and reset from their own processors' domains. **[ours]** (TODO D12)
+| Bank | Clock | Reset | Clock controller |
+|---|---|---|---|
+| ARM | `CLK_BUS_MSGBOX` | `RST_BUS_MSGBOX` | main CCU |
+| RV (E906) | `CLK_BUS_MCU_RISCV_MSGBOX` | `RST_BUS_MCU_RISCV_MSGBOX` | MCU CCU, register `0x128` (gate bit 0, reset bit 16) |
+| DSP | `CLK_BUS_MCU_DSP_MSGBOX` | `RST_BUS_MCU_DSP_MSGBOX` | MCU CCU, register `0x068` |
+| CPUS | `CLK_BUS_R_MSGBOX` | `RST_BUS_R_MSGBOX` | R CCU |
+
+**[ours: clock driver tables]**
+
+**Finding (2026-10-16) [silicon]:** our DT gives the message box only the ARM bank's clock and
+reset (decision D12). Nobody enables the others, and the kernel turns unused clocks off at boot,
+so the RV, DSP and CPUS banks are gated and held in reset: from the A55 every register of those
+banks reads 0 (MCU CCU `0x128` = 0; clock summary: `bus-riscv-msgbox` enable count 0). With
+`0x128` set to `0x00010001` by hand the RV bank answers like the ARM bank (`0x010 = 0x00020000`,
+`0x034 = 0xAA`). Consequences:
+
+- **Linux's doorbells to the E906 never arrived.** The kicks are written into the gated bank.
+  rpmsg still worked because the E906 firmware polls the vrings and never waits for a kick.
+- **`last_tx_done()` always reported "done" at once**: it reads the remote bank's count, and a
+  gated bank reads 0. The 1 ms TX-done poll never actually waited.
+- The vendor's A733 DT also lists only the ARM bank's clock (`allwinner,sun60iw2-msgbox`, two
+  banks); how the vendor keeps the remote banks clocked on the T527 is not known.
+
+D12 has to be revisited: the message box needs the remote banks' clocks and resets too (at least
+the RV bank, for the E906).
 - With the bank bound to `generic-uio`, nothing enables the clock: writes are dropped and every
   register reads 0, so no interrupt ever fires (`bus-msgbox` enable count 0). **[silicon]**
   The project-only `sun55i-msgbox-uio` driver keeps it on.
+
+## 6a. Write-IRQ status, measured step by step (2026-10-16) [silicon]
+
+Test: `firmware/riscv-firmware/apps/testMsgboxStep/` (E906 pops exactly one message per command)
+plus `msgbox_step_test.sh` on the board. Linux channel 11 (E906 bank, port 2, channel 3), RV bank
+clock enabled by hand, write-IRQ enable left off (status bits only).
+
+| Threshold field | Status set when | Measured |
+|---|---|---|
+| 0 (1 free) | count ≤ 7 | ✓ |
+| 1 (2 free) | count ≤ 6 | ✓ |
+| 2 (4 free) | count ≤ 4 | ✓ |
+| 3 (8 free) | count = 0 | ✓ |
+
+- Status = 1 exactly when free slots (8 − count) ≥ threshold, both while filling and draining.
+- **Level, not edge:** writing 1 to clear has no effect while the condition holds (it reads 1 again
+  at once); it clears once the condition is false. A driver must mask it in its handler.
+- At threshold 8 the bit was set by the E906 reading the last message (raw read 1 without a
+  clear in between) — the "receiver has read everything" event.
+- The A55 cannot pop the E906's FIFO: reading `MSG_FIFO` of the remote bank returns 0 and leaves
+  the count unchanged.
+- Writing into a full FIFO corrupts it: the count went 9 … 15, then wrapped to 0. Never write a
+  full FIFO (our driver and firmware check first).
+- Not tested yet: the interrupt line itself (SPI 174 on the A55, the E906's PLIC line).
 
 ## 7. How each user drives it
 
@@ -117,12 +164,16 @@ no tracing).
 
 ## 8. Open questions
 
-1. Does the write IRQ at threshold 8 fire exactly when the receiver's FIFO becomes empty on our
-   silicon? (Test: enable it on channel 9 with threshold 8, watch WRITE_IRQ_STATUS as the E906 reads.)
+1. ~~Does the write IRQ status at threshold 8 follow the receiver draining the FIFO?~~ Yes, §6a.
+   Still open: does the A55 actually receive it on SPI 174 once enabled?
 2. Does SPI 174 also fire for the E906's *read* interrupt if the E906 enables it? Linux would
    then see those too and must ignore them.
 3. Is the 1 ms poll the limit for 16-in-flight rpmsg throughput? Needs kernel tracing
    (`txdone_hrtimer` count).
-4. D13: we clear the read pending bit before draining, the vendor after; measure whether it
-   matters.
+4. ~~D13: clear the read pending bit before or after draining?~~ Measured 2026-10-16: our driver
+   clears it **before** draining, which the hardware ignores while the FIFO is not empty, so the
+   interrupt fires a second time: **20,000 SPI 0 interrupts for 10,000 messages** (ping and stress
+   alike). `sun6i-msgbox`, OMAP and the vendor driver all drain first, then clear ("The IRQ can be
+   cleared only once the FIFO is empty"). A message arriving after the clear sets the bit again,
+   so draining first loses nothing.
 5. `FIFO_STATUS` (`0x50`): meaning unknown.
