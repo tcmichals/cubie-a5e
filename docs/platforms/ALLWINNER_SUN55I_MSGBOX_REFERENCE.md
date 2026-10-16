@@ -120,11 +120,32 @@ banks reads 0 (MCU CCU `0x128` = 0; clock summary: `bus-riscv-msgbox` enable cou
   rpmsg still worked because the E906 firmware polls the vrings and never waits for a kick.
 - **`last_tx_done()` always reported "done" at once**: it reads the remote bank's count, and a
   gated bank reads 0. The 1 ms TX-done poll never actually waited.
-- The vendor's A733 DT also lists only the ARM bank's clock (`allwinner,sun60iw2-msgbox`, two
-  banks); how the vendor keeps the remote banks clocked on the T527 is not known.
+- **Why the vendor kernel did not hit this** (most likely, not proven for the T527):
+  - **In Allwinner's design each processor's RTOS enables its own bank.** The vendor RTOS HAL's
+    `hal_msgbox_init()` deasserts the reset and enables the clock of the bank it lives in
+    (`RST_BUS_MSGBOX1` / `CLK_BUS_MSGBOX1` on the sun8iw20 DSP), then requests that bank's
+    interrupt. Linux only ever enables the ARM bank. Our E906 firmware is bare metal and never
+    did this, so the RV bank stayed off. **[vendor: Allwinner `sunxi-hal`
+    `msgbox_amp/msgbox_amp.c`, as carried in RT-Thread; sun8iw20 (D1) copy, the T527 Tina
+    FreeRTOS source has not been obtained]** See
+    [ALLWINNER_TINA_RTOS_MSGBOX.md](ALLWINNER_TINA_RTOS_MSGBOX.md).
+  - The vendor T527 DT (`allwinner-bsp` `configs/linux-5.15/sun55iw3p1.dtsi`) also gives the
+    message box only the ARM bank's clock and reset (`CLK_MSGBOX0`, `RST_BUS_MSGBOX0`), and its
+    `e906_rproc` node only the SRAM, core and config clocks. **[vendor]**
+  - The vendor's RV message box gate (`riscv-msg`, MCU CCU `0x128` bit 0, reset bit 16) has no
+    flags, so nothing protects it from being switched off as unused. **[vendor:
+    `drivers/clk/sunxi-ng/ccu-sun55iw3-mcu.c`]**
+  - The vendor kernel boots with **`clk_ignore_unused`** (Radxa A733 image `extlinux.conf`), which
+    skips the switch-off of unused clocks, so gates the boot chain enabled stay on. The T527
+    image's command line and boot chain have not been checked. On our board even the reset bit of
+    `0x128` was 0, i.e. nothing in our boot chain ever touched it.
+  - The vendor A733 DT (`allwinner,sun60iw2-msgbox`, two banks) likewise lists one clock.
 
 D12 has to be revisited: the message box needs the remote banks' clocks and resets too (at least
-the RV bank, for the E906).
+the RV bank, for the E906). Two ways: Linux enables every bank (the 7.1 fix, 2026-10-16: the
+binding lists four clocks and resets, `arm`, `dsp`, `cpus`, `rv`), or each remote firmware
+enables its own bank as the vendor RTOS does. The Linux way does not depend on the firmware;
+the owner decides which goes into v3.
 - With the bank bound to `generic-uio`, nothing enables the clock: writes are dropped and every
   register reads 0, so no interrupt ever fires (`bus-msgbox` enable count 0). **[silicon]**
   The project-only `sun55i-msgbox-uio` driver keeps it on.
@@ -173,7 +194,7 @@ clock enabled by hand, write-IRQ enable left off (status bits only).
 4. ~~D13: clear the read pending bit before or after draining?~~ Measured 2026-10-16: our driver
    clears it **before** draining, which the hardware ignores while the FIFO is not empty, so the
    interrupt fires a second time: **20,000 SPI 0 interrupts for 10,000 messages** (ping and stress
-   alike). `sun6i-msgbox`, OMAP and the vendor driver all drain first, then clear ("The IRQ can be
-   cleared only once the FIFO is empty"). A message arriving after the clear sets the bit again,
+   alike). `sun6i-msgbox`, OMAP, the vendor Linux driver and the vendor RTOS HAL all drain first,
+   then clear ("The IRQ can be cleared only once the FIFO is empty"). Fixed on 7.1 (2026-10-16). A message arriving after the clear sets the bit again,
    so draining first loses nothing.
 5. `FIFO_STATUS` (`0x50`): meaning unknown.

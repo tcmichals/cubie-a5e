@@ -100,10 +100,10 @@ int main(void) {
         if (current_pings >= last_reported_pings + 5000) {
             last_reported_pings = current_pings;
             hal::Trace::printf("[testPingRpmsg] Processed %u RPMsg ping-pongs (RX: %u, TX: %u, "
-                               "ring errors: %u, waits host-RX-full: %u mbox-full: %u)\n",
+                               "ring errors: %u, waits host-RX-full: %u mbox-full: %u, host kicks: %u)\n",
                                current_pings, hal::Rpmsg::get_rx_count(), hal::Rpmsg::get_tx_count(),
                                hal::Rpmsg::get_ring_errors(), hal::Rpmsg::get_tx_full_waits(),
-                               hal::Rpmsg::get_mbox_full_waits());
+                               hal::Rpmsg::get_mbox_full_waits(), hal::Rpmsg::get_host_kicks());
         }
 
         idle_ticks++;

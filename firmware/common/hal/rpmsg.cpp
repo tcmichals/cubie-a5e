@@ -57,6 +57,7 @@ namespace {
     std::atomic<uint32_t> s_ring_errors{0};    // malformed ring state or message from the host
     std::atomic<uint32_t> s_tx_full_waits{0};  // reply had to wait for a free host RX buffer
     std::atomic<uint32_t> s_mbox_full_waits{0}; // doorbell had to wait for mailbox FIFO space
+    std::atomic<uint32_t> s_host_kicks{0};      // doorbells received from the host
 
     Rpmsg::EndpointEntry s_endpoints[Rpmsg::MAX_ENDPOINTS];
     size_t s_num_endpoints = 0;
@@ -158,11 +159,17 @@ namespace {
 
     /* Drain every doorbell the host queued so its mailbox sees them consumed. */
     void drain_host_doorbells() {
+        uint32_t n = 0;
         while (MsgBox::is_rx_pending(MsgBox::Channel::Channel0)) {
             (void)MsgBox::receive(MsgBox::Channel::Channel0);
+            ++n;
         }
         while (MsgBox::is_rx_pending(MsgBox::Channel::Channel1)) {
             (void)MsgBox::receive(MsgBox::Channel::Channel1);
+            ++n;
+        }
+        if (n) {
+            s_host_kicks.fetch_add(n, std::memory_order_relaxed);
         }
     }
 }
@@ -419,6 +426,10 @@ uint32_t Rpmsg::get_tx_full_waits() noexcept {
 
 uint32_t Rpmsg::get_mbox_full_waits() noexcept {
     return s_mbox_full_waits.load(std::memory_order_relaxed);
+}
+
+uint32_t Rpmsg::get_host_kicks() noexcept {
+    return s_host_kicks.load(std::memory_order_relaxed);
 }
 
 } // namespace hal

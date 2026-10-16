@@ -15,7 +15,7 @@ This document maps XuanTie E906 RISC-V Core Device Addresses (`DA`) to **Linux H
 | **`STA_ADD_REG   (CFG)`** | `0x07130204` | `0x07130204` | CFG Block (+0x204) | `devmem2 0x07130204 w` |
 | **`WORK_MODE_REG (CFG)`** | `0x07130248` | `0x07130248` | CFG Block (+0x248) | `devmem2 0x07130248 w` |
 | **`default_trap_entry`** | `0x3FFC0040` | `0x07280040` | SRAM_A3 Space 0 (+0x40) | `devmem2 0x07280040 w` |
-| **`global_resource_table`** | `0x3FFC68A4` | `0x072868A4` | SRAM_A3 Space 0 (+0x68A4) | `devmem2 0x072868A4 w` |
+| **`global_resource_table`** | `0x3FFC6874` | `0x07286874` | SRAM_A3 Space 0 (+0x6874) | `devmem2 0x07286874 w` |
 | **`main`** | `0x3FFCFE60` | `0x0728FE60` | SRAM_A3 Space 0 (+0xFE60) | `devmem2 0x0728FE60 w` |
 | **`g_trace_head`** | `0x3FFCFE88` | `0x0728FE88` | SRAM_A3 Space 0 (+0xFE88) | `devmem2 0x0728FE88 w` |
 | **`_stack_bottom`** | `0x3FFCFED0` | `0x0728FED0` | SRAM_A3 Space 0 (+0xFED0) | `devmem2 0x0728FED0 w` |

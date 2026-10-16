@@ -280,9 +280,11 @@ TEST(Rpmsg, DoorbellWaitsForFifoSpaceInsteadOfDropping) {
 }
 
 TEST(Rpmsg, AllQueuedHostDoorbellsAreDrained) {
+    uint32_t kicks = hal::Rpmsg::get_host_kicks();
     fake_msgbox::rx_pending = 6;
     hal::Rpmsg::poll();
     LONGS_EQUAL(0, fake_msgbox::rx_pending);
+    LONGS_EQUAL(kicks + 6, hal::Rpmsg::get_host_kicks());
 }
 
 TEST(Rpmsg, ReplyLongerThanABufferIsRefused) {

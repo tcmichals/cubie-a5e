@@ -54,6 +54,7 @@ public:
     static uint32_t get_ring_errors() noexcept;     // malformed ring state / host messages
     static uint32_t get_tx_full_waits() noexcept;   // replies that waited for a host RX buffer
     static uint32_t get_mbox_full_waits() noexcept; // doorbells that waited for mailbox FIFO space
+    static uint32_t get_host_kicks() noexcept;      // doorbells received from the host
 
     struct EndpointEntry {
         uint32_t addr;
