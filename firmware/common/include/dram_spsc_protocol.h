@@ -24,6 +24,23 @@
 #define DRAM_SPSC_RING_ENTRIES 16           /* 16 Slots per Ring */
 #define DRAM_SPSC_MAX_BUF_LEN  4096UL       /* 4 KB Max Payload per Slot */
 
+/* Descriptor flags */
+#define DRAM_SPSC_FLAG_READY   1U  /* tx_ring: ping posted by Linux */
+#define DRAM_SPSC_FLAG_ACK     2U  /* rx_ring: echo of the ping */
+#define DRAM_SPSC_FLAG_ERROR   3U  /* rx_ring: the E906 rejected a malformed ping */
+
+/*
+ * Rules (each index and each ring's descriptors have exactly one writer):
+ *   - A producer adds only when the ring has room: head - tail < RING_ENTRIES.
+ *     When it is full the producer waits; nothing is dropped or overwritten.
+ *   - A consumer takes only when head != tail. head - tail > RING_ENTRIES can
+ *     only come from a corrupt index and is an error.
+ *   - Descriptor and payload are written before the head that publishes them.
+ *   - tx slot i always uses dram_buf_offset i * MAX_BUF_LEN and rx slot i
+ *     (RING_ENTRIES + i) * MAX_BUF_LEN; the E906 sets them up and checks them.
+ *   - The rx echo starts with "DRAM" and then repeats the ping payload.
+ */
+
 /*
  * SPSC Ring Descriptor (Placed in SRAM C, 32 bytes, 8-byte aligned)
  */
@@ -31,7 +48,7 @@ struct __attribute__((aligned(8))) DramSpscDesc {
     uint32_t dram_buf_offset; // Byte offset into DRAM buffer pool (0x48000000 + offset)
     uint32_t payload_len;     // Actual valid payload length in bytes
     uint32_t seq;             // Monotonic sequence number
-    uint32_t flags;           // Status flags (0 = Empty, 1 = Ready, 2 = Ack)
+    uint32_t flags;           // DRAM_SPSC_FLAG_* (written by the ring's producer)
     uint64_t host_tx_ts_ns;   // Linux Host TX timestamp
     uint64_t riscv_cycles;    // RISC-V hardware mcycle timestamp
 };
@@ -46,15 +63,15 @@ struct __attribute__((aligned(8))) DramSpscControlBlock {
     volatile uint32_t dram_pool_phys;
     volatile uint32_t dram_pool_size;
 
-    // Host -> RISC-V SPSC Queue Pointers & Doorbell
-    volatile uint32_t host_head;      // Written by Linux (Producer)
-    volatile uint32_t riscv_tail;     // Written by RISC-V (Consumer)
-    volatile uint32_t host_doorbell;  // 1 = New packet ready for RISC-V
+    // Host -> RISC-V ring (tx_ring)
+    volatile uint32_t host_head;      // Written only by Linux (producer)
+    volatile uint32_t riscv_tail;     // Written only by RISC-V (consumer)
+    volatile uint32_t reserved0;      // Unused (was a doorbell flag with two writers)
 
-    // RISC-V -> Host SPSC Queue Pointers & Doorbell
-    volatile uint32_t riscv_head;     // Written by RISC-V (Producer)
-    volatile uint32_t host_tail;      // Written by Linux (Consumer)
-    volatile uint32_t riscv_doorbell; // 1 = New packet ready for Host
+    // RISC-V -> Host ring (rx_ring)
+    volatile uint32_t riscv_head;     // Written only by RISC-V (producer)
+    volatile uint32_t host_tail;      // Written only by Linux (consumer)
+    volatile uint32_t reserved1;      // Unused (was a doorbell flag with two writers)
 
     // Diagnostic Counters
     volatile uint32_t total_pings_recv;

@@ -25,6 +25,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <getopt.h>
+#include <string>
 
 #include "dram_spsc_protocol.h"
 
@@ -39,6 +40,7 @@ static void print_usage(const char *prog) {
               << "Options:\n"
               << "  -n, --count <num>     Number of messages to send (default: 10000, 0 = continuous)\n"
               << "  -s, --size <bytes>    Payload size in bytes (default: 256, max: 4096)\n"
+              << "  -w, --window <num>    Messages in flight at once, 1..16 (default: 1)\n"
               << "  -d, --delay <us>      Delay between messages in microseconds (default: 0 = max rate)\n"
               << "  -t, --timeout <ms>    Response timeout in milliseconds (default: 1000)\n"
               << "  -m, --mem-dev <path>  Memory device path (default: /dev/mem)\n"
@@ -49,6 +51,7 @@ int main(int argc, char *argv[]) {
     uint32_t count = 10000;
     uint32_t payload_size = 256;
     uint32_t delay_us = 0;
+    uint32_t window = 1;
     uint32_t timeout_ms = 1000;
     const char *mem_dev = "/dev/mem";
 
@@ -56,6 +59,7 @@ int main(int argc, char *argv[]) {
         {"count",   required_argument, 0, 'n'},
         {"size",    required_argument, 0, 's'},
         {"delay",   required_argument, 0, 'd'},
+        {"window",  required_argument, 0, 'w'},
         {"timeout", required_argument, 0, 't'},
         {"mem-dev", required_argument, 0, 'm'},
         {"help",    no_argument,       0, 'h'},
@@ -63,11 +67,12 @@ int main(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "n:s:d:t:m:h", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "n:s:d:w:t:m:h", long_options, nullptr)) != -1) {
         switch (opt) {
             case 'n': count = std::stoul(optarg); break;
             case 's': payload_size = std::stoul(optarg); break;
             case 'd': delay_us = std::stoul(optarg); break;
+            case 'w': window = std::stoul(optarg); break;
             case 't': timeout_ms = std::stoul(optarg); break;
             case 'm': mem_dev = optarg; break;
             case 'h': print_usage(argv[0]); return 0;
@@ -82,6 +87,9 @@ int main(int argc, char *argv[]) {
     if (payload_size < 4) {
         payload_size = 4;
     }
+    if (window < 1) window = 1;
+    if (window > DRAM_SPSC_RING_ENTRIES) window = DRAM_SPSC_RING_ENTRIES;
+    if (count == 0) count = UINT32_MAX;
 
     std::cout << "================================================================\n";
     std::cout << "  Allwinner T527 Hybrid SRAM SPSC / DDR DRAM Benchmark          \n";
@@ -131,109 +139,143 @@ int main(int argc, char *argv[]) {
 
     // 4. Verify initialization
     if (ctrl->magic != DRAM_SPSC_MAGIC_INIT) {
-        std::cerr << "[WARN] SPSC Magic 0x" << std::hex << ctrl->magic
-                  << " != Expected 0x" << DRAM_SPSC_MAGIC_INIT << std::dec << "\n";
-        std::cerr << "[WARN] Remote processor firmware (testDRAMMsg.elf) may not be running yet.\n";
+        std::cerr << "[FAIL] SPSC magic 0x" << std::hex << ctrl->magic
+                  << " != 0x" << DRAM_SPSC_MAGIC_INIT << std::dec << ": is testDRAMMsg.elf running?\n";
+        return 1;
     }
 
     std::cout << "[INFO] Control & DRAM regions mapped. Starting SPSC benchmark...\n\n";
 
     std::vector<double> latencies_us;
-    latencies_us.reserve(count > 0 ? count : 100000);
+    latencies_us.reserve(count < 1000000 ? count : 1000000);
 
-    // Pre-generate test pattern
-    std::vector<uint8_t> tx_pattern(payload_size);
-    for (size_t i = 0; i < payload_size; ++i) {
-        tx_pattern[i] = static_cast<uint8_t>((i & 0xFF) ^ 0xA5);
-    }
+    auto pattern = [](uint32_t seq, size_t k) -> uint8_t { return (uint8_t)(seq * 31u + k * 7u); };
 
-    uint64_t bench_start_ns = get_time_ns();
-    uint32_t seq = 0;
-    uint32_t timeouts = 0;
-    uint64_t total_payload_bytes = 0;
-
-    for (uint32_t i = 0; count == 0 || i < count; ++i) {
-        seq++;
-
-        uint32_t host_head = ctrl->host_head;
-        uint32_t tx_slot = host_head % DRAM_SPSC_RING_ENTRIES;
-
-        volatile DramSpscDesc *tx_desc = &ctrl->tx_ring[tx_slot];
-        uint32_t tx_dram_offset = tx_desc->dram_buf_offset;
-
-        // Write payload to DDR DRAM
-        volatile uint8_t *tx_buf = dram_pool + tx_dram_offset;
-        for (size_t b = 0; b < payload_size; ++b) {
-            tx_buf[b] = tx_pattern[b];
-        }
-
-        uint64_t tx_ns = get_time_ns();
-        tx_desc->seq = seq;
-        tx_desc->payload_len = payload_size;
-        tx_desc->host_tx_ts_ns = tx_ns;
-        tx_desc->flags = 1; // READY
-
-        // Commit memory writes to DRAM & SRAM
-        __sync_synchronize();
-
-        // Advance host head in SRAM and assert doorbell
-        ctrl->host_head = host_head + 1;
-        ctrl->host_doorbell = 1;
-
-        // Wait for RISC-V response
-        uint64_t timeout_deadline_ns = tx_ns + (uint64_t)timeout_ms * 1000000ULL;
-        bool received = false;
-
-        uint32_t rx_slot = ctrl->host_tail % DRAM_SPSC_RING_ENTRIES;
-        volatile DramSpscDesc *rx_desc = &ctrl->rx_ring[rx_slot];
-
-        while (get_time_ns() < timeout_deadline_ns) {
-            if (ctrl->riscv_doorbell == 1 || rx_desc->flags == 2) {
-                __sync_synchronize();
-                uint64_t rx_ns = get_time_ns();
-
-                if (rx_desc->seq == seq) {
-                    double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
-                    latencies_us.push_back(rtt_us);
-                    total_payload_bytes += payload_size * 2; // Bi-directional
-                    received = true;
-
-                    // Advance host tail and clear doorbell
-                    rx_desc->flags = 0;
-                    ctrl->host_tail = ctrl->host_tail + 1;
-                    ctrl->riscv_doorbell = 0;
-                    __sync_synchronize();
-                    break;
-                }
+    // Continue from the current ring state; both rings must be idle.
+    uint32_t head = ctrl->host_head;     // ours (tx producer)
+    uint32_t rx_tail = ctrl->host_tail;  // ours (rx consumer)
+    {
+        uint64_t deadline = get_time_ns() + (uint64_t)timeout_ms * 1000000ULL;
+        while (ctrl->riscv_tail != head || ctrl->riscv_head != rx_tail) {
+            if (get_time_ns() >= deadline) {
+                std::cerr << "[FAIL] rings not idle at start (host_head " << head << ", riscv_tail "
+                          << ctrl->riscv_tail << ", riscv_head " << ctrl->riscv_head << ", host_tail "
+                          << rx_tail << ")\n";
+                return 1;
             }
         }
+    }
 
-        if (!received) {
-            timeouts++;
-            std::cerr << "[WARN] DRAM Msg seq=" << seq << " TIMEOUT (" << timeout_ms << " ms)\n";
-            ctrl->host_doorbell = 0;
-            ctrl->riscv_doorbell = 0;
-            __sync_synchronize();
+    // Send time per message, keyed by seq: at most RING_ENTRIES are in flight
+    // and their sequence numbers are consecutive. (Ring slots are not a key:
+    // the ring index carries on from the previous run.)
+    std::vector<uint64_t> tx_ts(DRAM_SPSC_RING_ENTRIES);
+    uint64_t bench_start_ns = get_time_ns();
+    uint32_t sent = 0, received = 0, next_seq = 1, expect_seq = 1;
+    uint32_t timeouts = 0, corruptions = 0, full_waits = 0;
+    uint64_t total_payload_bytes = 0;
+    uint64_t last_progress_ns = bench_start_ns;
+    std::string why;
+
+    while (received < count && why.empty()) {
+        // Post while there is room in the window and in the ping ring
+        while (sent < count && sent - received < window) {
+            if (head - ctrl->riscv_tail >= DRAM_SPSC_RING_ENTRIES) {
+                full_waits++;  // ping ring full: the E906 has not taken the earlier ones yet
+                break;
+            }
+            uint32_t slot = head % DRAM_SPSC_RING_ENTRIES;
+            volatile DramSpscDesc *d = &ctrl->tx_ring[slot];
+            volatile uint8_t *buf = dram_pool + slot * DRAM_SPSC_MAX_BUF_LEN;
+            uint32_t seq = next_seq++;
+            for (size_t k = 0; k < payload_size; ++k) {
+                buf[k] = pattern(seq, k);
+            }
+            uint64_t ts = get_time_ns();
+            tx_ts[seq % DRAM_SPSC_RING_ENTRIES] = ts;
+            d->dram_buf_offset = slot * DRAM_SPSC_MAX_BUF_LEN;
+            d->seq = seq;
+            d->payload_len = payload_size;
+            d->host_tx_ts_ns = ts;
+            d->flags = DRAM_SPSC_FLAG_READY;
+            __sync_synchronize();  // descriptor and payload before the head
+            ctrl->host_head = ++head;
+            sent++;
+        }
+
+        // Take every reply that is ready
+        uint32_t rx_head = ctrl->riscv_head;
+        if (rx_head - rx_tail > DRAM_SPSC_RING_ENTRIES) {
+            why = "riscv_head " + std::to_string(rx_head) + " - host_tail " + std::to_string(rx_tail) +
+                  " exceeds ring size";
+            break;
+        }
+        if (rx_head == rx_tail) {
+            if (get_time_ns() - last_progress_ns > (uint64_t)timeout_ms * 1000000ULL) {
+                timeouts++;
+                std::cerr << "[FAIL] no reply for " << timeout_ms << " ms (expecting seq " << expect_seq
+                          << ", " << (sent - received) << " in flight)\n";
+                break;
+            }
+            continue;
+        }
+        __sync_synchronize();  // read the reply after riscv_head
+        while (rx_tail != rx_head) {
+            uint32_t slot = rx_tail % DRAM_SPSC_RING_ENTRIES;
+            volatile DramSpscDesc *r = &ctrl->rx_ring[slot];
+            uint64_t now = get_time_ns();
+            uint32_t seq = r->seq;
+            uint64_t sent_ts = tx_ts[expect_seq % DRAM_SPSC_RING_ENTRIES];
+
+            if (r->flags == DRAM_SPSC_FLAG_ERROR) {
+                why = "E906 rejected ping seq " + std::to_string(seq) + " as malformed";
+            } else if (r->flags != DRAM_SPSC_FLAG_ACK || seq != expect_seq || r->payload_len != payload_size ||
+                       r->dram_buf_offset != (DRAM_SPSC_RING_ENTRIES + slot) * DRAM_SPSC_MAX_BUF_LEN ||
+                       r->host_tx_ts_ns != sent_ts) {
+                why = "bad reply descriptor (seq " + std::to_string(seq) + ", expected " +
+                      std::to_string(expect_seq) + ", flags " + std::to_string(r->flags) + ", len " +
+                      std::to_string(r->payload_len) + ")";
+            } else {
+                volatile uint8_t *buf = dram_pool + r->dram_buf_offset;
+                if (buf[0] != 'D' || buf[1] != 'R' || buf[2] != 'A' || buf[3] != 'M') {
+                    why = "reply tag missing in seq " + std::to_string(seq);
+                }
+                for (size_t k = 4; why.empty() && k < payload_size; ++k) {
+                    if (buf[k] != pattern(seq, k)) {
+                        why = "payload byte " + std::to_string(k) + " wrong in seq " + std::to_string(seq);
+                    }
+                }
+            }
+            if (!why.empty()) {
+                corruptions++;
+                break;
+            }
+            latencies_us.push_back((double)(now - sent_ts) / 1000.0);
+            total_payload_bytes += payload_size * 2;
+            received++;
+            expect_seq++;
+            ctrl->host_tail = ++rx_tail;  // release the reply slot
+            last_progress_ns = now;
         }
 
         if (delay_us > 0) {
             usleep(delay_us);
         }
-
-        if (seq % 2000 == 0) {
-            std::cout << "  Progress: " << seq << " msgs sent, last RTT: "
-                      << std::fixed << std::setprecision(2) << latencies_us.back() << " us\r" << std::flush;
-        }
+    }
+    if (!why.empty()) {
+        std::cerr << "[ERROR] malformed: " << why << "\n";
     }
 
     uint64_t bench_end_ns = get_time_ns();
     double total_time_sec = (double)(bench_end_ns - bench_start_ns) / 1e9;
 
     std::cout << "\n\n==================== BENCHMARK RESULTS ====================\n";
-    std::cout << "Messages Sent  : " << seq << "\n";
-    std::cout << "Messages Recv  : " << latencies_us.size() << " ("
-              << (seq > 0 ? (double)latencies_us.size() * 100.0 / seq : 0.0) << "% success)\n";
+    std::cout << "Messages Sent  : " << sent << "\n";
+    std::cout << "Messages Recv  : " << received << " ("
+              << (sent > 0 ? (double)received * 100.0 / sent : 0.0) << "% success)\n";
+    std::cout << "Data Integrity : " << (corruptions == 0 ? "PASS (0 corrupted / mismatched packets)" : "FAIL") << "\n";
     std::cout << "Timeouts       : " << timeouts << "\n";
+    std::cout << "Window         : " << window << " (ping ring full waits: " << full_waits << ")\n";
     std::cout << "Total Duration : " << std::fixed << std::setprecision(3) << total_time_sec << " s\n";
     std::cout << "Throughput     : " << std::fixed << std::setprecision(1)
               << ((double)latencies_us.size() / total_time_sec) << " msgs/sec\n";
@@ -276,5 +318,5 @@ int main(int argc, char *argv[]) {
     munmap(dram_mapped, dram_map_size);
     munmap(sram_mapped, sram_map_size);
     close(fd);
-    return 0;
+    return (received != sent || timeouts > 0 || corruptions > 0) ? 1 : 0;
 }
