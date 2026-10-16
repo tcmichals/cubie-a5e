@@ -118,11 +118,7 @@ the same driver files as this series:
   - Non-RT PREEMPT kernel with CONFIG_DEBUG_ATOMIC_SLEEP and
     CONFIG_PROVE_LOCKING: KUnit, rpmsg ping and stress, 20 stop/start
     cycles, unbind/bind while running and a firmware crash pass with
-    no splats from these drivers. Exhausting the rpmsg TX buffers
-    triggers one "do not call blocking ops when !TASK_RUNNING" warning
-    in virtio_rpmsg_bus (get_a_tx_buf() takes a mutex inside the
-    wait_event condition); it is unrelated to this series and I will
-    report it separately.
+    no splats from these drivers.
 On next-20261015: W=1 arm64 build, dt_binding_check and dtbs_check are
 clean; checkpatch --strict reports only "does MAINTAINERS need
 updating?" on the patches that add files covered by the MAINTAINERS

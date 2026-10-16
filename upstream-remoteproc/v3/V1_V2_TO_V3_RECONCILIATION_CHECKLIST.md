@@ -72,5 +72,5 @@ Status: **FIXED** (in the code), **EXPLAINED** (answered, no code change), **OPE
 | ~~N-1~~ | done: `mboxes` described as hardware (7.1 `82b64e947b5b`, in v3 patch 3) |
 | D13 | measure IRQ clear order on the board |
 | ~~T-DRAM~~ | not tested and not asked for by reviewers; cover letter now claims only SRAM-loaded firmware (DRAM carveout lookup covered by KUnit) |
-| ~~T-RT~~ | done 2026-10-16: non-RT PREEMPT + DEBUG_ATOMIC_SLEEP + PROVE_LOCKING, all tests pass, no splats from these drivers; one rpmsg-core warning under TX-buffer exhaustion, unrelated (TODO R-RPMSG) |
+| ~~T-RT~~ | done 2026-10-16: non-RT PREEMPT + DEBUG_ATOMIC_SLEEP + PROVE_LOCKING, all tests pass, no splats from these drivers (one harmless debug warning in the rpmsg core at TX-buffer exhaustion, not reported: TODO R-RPMSG) |
 | SOB | owner reviews the series and adds his Signed-off-by (no AI sign-off) |
