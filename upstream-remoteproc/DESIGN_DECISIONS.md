@@ -124,3 +124,22 @@ The Buildroot cross compiler in `bld.a5e/host/bin` may be used on `PATH`.
 ### Fixes land on 7.1 first
 Every fix lands on `cubie-linux-7.1` and is board-tested there, then is folded into the
 matching patch on `next-sun55i-rproc-msgbox`, which the series is exported from.
+
+### Building a new revision of the series (2026-10-15)
+v2 and the first v3 drafts all sat on next-20260921 and the local and GitHub copies of the
+series branch had drifted apart. For every revision from v3 on:
+
+1. **One series branch.** `next-sun55i-rproc-msgbox` in `linux-cubie` is the only series branch;
+   the GitHub copy matches it. Keep the previous revision's tip under a name
+   (`next-sun55i-rproc-msgbox-v3draft`, `origin/v2-sun55i-rproc-msgbox`) for `git range-diff`.
+2. **Fold the tested code.** The driver, test and binding files in the series are byte-identical to
+   `cubie-linux-7.1` (check with `git diff <series> cubie-linux-7.1 -- <files>`). In shared files
+   (Kconfig, Makefile, MAINTAINERS, the SoC dtsi) only our entries and nodes are taken over.
+3. **Current base.** Rebase onto the latest linux-next tag (`git fetch --no-tags linux-next tag
+   next-YYYYMMDD`, remote `https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git`)
+   right before export.
+4. **Check on that base:** W=1 build of both drivers and KUnit suites, `dt_binding_check` for both
+   bindings, `dtbs_check` for the sun55i boards, `checkpatch.pl --strict` on the exported patches.
+5. **Export with the base recorded:** `git format-patch -v<N> --cover-letter --base=<next tag>`.
+6. **Send** only with the owner's go-ahead, to the list in TODO.md §5.6a T3, with
+   `--suppress-cc=all` and no `--in-reply-to`; `--dry-run` first.

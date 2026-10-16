@@ -35,4 +35,4 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
 - Develop and compile-check in `linux-cubie`. `bld.a5e/` and `bld.a7a/` are Buildroot
   output, for builds only: never edit or run `make` inside them (see DESIGN_DECISIONS.md).
 - Hardware facts come from silicon readbacks or the vendor BSP, not from project docs alone.
-- Commits must never include `Co-Authored-By` trailers for AI assistants or any AI metadata. All commits must strictly use `Tim Michals <tcmichals@gmail.com>`.
+- Commits never carry `Co-Authored-By` (or other) AI trailers, and an AI never adds a `Signed-off-by`: the owner adds his own after reviewing. All commits use `Tim Michals <tcmichals@gmail.com>`. Upstream kernel series disclose AI assistance in a short "Tools" section of the cover letter, as `Documentation/process/generated-content.rst` asks (decided 2026-10-15).

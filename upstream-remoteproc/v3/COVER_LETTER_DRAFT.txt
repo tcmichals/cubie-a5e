@@ -103,13 +103,28 @@ Remoteproc driver:
 
 Testing
 =======
-  - TODO: board, kernel version, PREEMPT_RT and non-RT
-    (CONFIG_DEBUG_ATOMIC_SLEEP) runs.
-  - TODO: rpmsg ping over DRAM and over SRAM space 1, start/stop
-    cycles, firmware in DRAM.
-  - TODO: KUnit results (sun55i-msgbox 22, sunxi-rproc 25).
-  - dt_binding_check, dtbs_check, checkpatch --strict and a W=1 arm64
-    build are clean.
+On a Radxa Cubie A5E (A527), Linux 7.1 based PREEMPT_RT kernel carrying
+the same driver files as this series:
+  - KUnit: sun55i-msgbox 22/22, sunxi-rproc 25/25.
+  - rpmsg ping-pong over a DRAM pool and over SRAM space 1, 1,000
+    pings each; rpmsg stress runs of 100,000 messages with 16 in flight
+    (about 11,400 msg/s from DRAM, 18,300 msg/s from SRAM); no lost,
+    duplicated or corrupted messages.
+  - Firmware running from SRAM with a payload pool in DRAM, start/stop
+    cycles, a firmware crash caught and the core stopped cleanly.
+  - TODO: firmware linked to run from DRAM (e906_ddr.ld).
+  - TODO: non-RT run with CONFIG_DEBUG_ATOMIC_SLEEP.
+On next-20261015: W=1 arm64 build, dt_binding_check and dtbs_check are
+clean. TODO: checkpatch --strict on the exported patches.
+
+Tools
+=====
+The driver, binding and KUnit code, the firmware and userspace test
+programs, the checks of the code against the v1 and v2 review comments
+and the first draft of this text were done with LLM coding assistants
+(Claude Code and Gemini) under my direction. The design decisions are
+mine, I have reviewed the series, and the tests above were run on my
+board.
 
 Tim Michals (7):
   dt-bindings: mailbox: Add Allwinner A523 message box
