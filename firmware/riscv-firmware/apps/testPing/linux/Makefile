@@ -8,10 +8,10 @@ TARGETS = ping_shm ping_uio
 
 all: $(TARGETS)
 
-ping_shm: ping_shm.cpp
+ping_shm: ping_shm.cpp shm_ping_host.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ -lm
 
-ping_uio: ping_uio.cpp
+ping_uio: ping_uio.cpp shm_ping_host.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ -lm
 
 clean:

@@ -61,6 +61,11 @@ public:
     [[nodiscard]] static bool is_tx_ready(Channel ch) noexcept;
 
     /**
+     * @brief Messages queued in the ARM host's FIFO for this channel, not yet read.
+     */
+    [[nodiscard]] static uint32_t tx_pending(Channel ch) noexcept;
+
+    /**
      * @brief Check if DSP receive FIFO has pending messages from ARM (Ch 4)
      */
     [[nodiscard]] static bool is_dsp_rx_pending(Channel ch = Channel::Channel0) noexcept;

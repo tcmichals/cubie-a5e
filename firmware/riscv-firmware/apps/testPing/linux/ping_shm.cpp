@@ -25,7 +25,7 @@
 #include <time.h>
 #include <getopt.h>
 
-#include "shm_ping_protocol.h"
+#include "shm_ping_host.hpp"
 
 static inline uint64_t get_time_ns() {
     struct timespec ts;
@@ -105,80 +105,38 @@ int main(int argc, char *argv[]) {
 
     volatile ShmPingChannel *channel = (volatile ShmPingChannel *)((uint8_t *)mapped + page_offset);
 
-    // 3. Clear doorbells
-    channel->host_doorbell = 0;
-    channel->riscv_doorbell = 0;
-    __sync_synchronize();
-
     std::cout << "[INFO] Shared memory channel mapped successfully. Starting ping-pong...\n\n";
 
     std::vector<double> latencies_us;
     latencies_us.reserve(count > 0 ? count : 100000);
 
-    uint64_t bench_start_ns = get_time_ns();
     uint32_t seq = 0;
+    uint32_t sent = 0;
     uint32_t timeouts = 0;
     uint32_t corruptions = 0;
+    std::string why;
+    if (!shm_ping::sync(channel, timeout_ms, seq, why)) {
+        std::cerr << "[FAIL] " << why << "\n";
+        return 1;
+    }
+    uint64_t bench_start_ns = shm_ping::now_ns();
 
     for (uint32_t i = 0; count == 0 || i < count; ++i) {
-        seq++;
-
-        // Prepare Ping Packet
-        channel->ping_pkt.magic = SHM_PING_MAGIC;
-        channel->ping_pkt.seq = seq;
-        size_t plen = std::min(sizeof(channel->ping_pkt.payload) - 1, payload_str.size());
-        channel->ping_pkt.payload_len = plen;
-        for (size_t k = 0; k < plen; ++k) {
-            channel->ping_pkt.payload[k] = payload_str[k];
-        }
-        channel->ping_pkt.payload[plen] = '\0';
-
-        uint64_t tx_ns = get_time_ns();
-        channel->ping_pkt.host_tx_ts_ns = tx_ns;
-
-        // Trigger Doorbell
-        __sync_synchronize();
-        channel->host_doorbell = 1;
-
-        // Poll for Pong response
-        uint64_t timeout_deadline_ns = tx_ns + (uint64_t)timeout_ms * 1000000ULL;
-        bool received = false;
-
-        while (get_time_ns() < timeout_deadline_ns) {
-            if (channel->riscv_doorbell == 1) {
-                __sync_synchronize();
-                uint64_t rx_ns = get_time_ns();
-
-                // Validate pong packet: magic, seq, and PONG prefix
-                if (channel->pong_pkt.magic == SHM_PONG_MAGIC && channel->pong_pkt.seq == seq &&
-                    memcmp((const void *)channel->pong_pkt.payload, "PONG", 4) == 0) {
-                    double rtt_us = (double)(rx_ns - tx_ns) / 1000.0;
-                    latencies_us.push_back(rtt_us);
-                    received = true;
-
-                    // Acknowledge pong
-                    channel->riscv_doorbell = 0;
-                    __sync_synchronize();
-                    break;
-                } else {
-                    corruptions++;
-                    std::cerr << "[WARN] Ping seq=" << seq << " corruption: magic=0x"
-                              << std::hex << channel->pong_pkt.magic << " seq=" << std::dec
-                              << channel->pong_pkt.seq << "\n";
-                    channel->riscv_doorbell = 0;
-                    __sync_synchronize();
-                    break;
-                }
-            }
-        }
-
-        if (!received) {
+        uint64_t tx_ns = 0, rx_ns = 0;
+        shm_ping::Outcome r = shm_ping::exchange(channel, ++seq, timeout_ms, tx_ns, rx_ns, why);
+        sent++;
+        if (r == shm_ping::Outcome::Timeout) {
+            // The slot stays busy until the E906 answers: nothing more can be sent.
             timeouts++;
-            std::cerr << "[WARN] Ping seq=" << seq << " TIMEOUT (" << timeout_ms << " ms)\n";
-            channel->host_doorbell = 0;
-            channel->riscv_doorbell = 0;
-            __sync_synchronize();
+            std::cerr << "[FAIL] " << why << " (" << timeout_ms << " ms)\n";
+            break;
         }
+        if (r == shm_ping::Outcome::Malformed) {
+            corruptions++;
+            std::cerr << "[ERROR] malformed: " << why << "\n";
+            break;
+        }
+        latencies_us.push_back((double)(rx_ns - tx_ns) / 1000.0);
 
         if (delay_us > 0) {
             usleep(delay_us);
@@ -191,13 +149,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    uint64_t bench_end_ns = get_time_ns();
+    uint64_t bench_end_ns = shm_ping::now_ns();
     double total_time_sec = (double)(bench_end_ns - bench_start_ns) / 1e9;
 
     std::cout << "\n\n==================== BENCHMARK RESULTS ====================\n";
-    std::cout << "Packets Sent   : " << seq << "\n";
+    std::cout << "Packets Sent   : " << sent << "\n";
     std::cout << "Packets Recv   : " << latencies_us.size() << " ("
-              << (seq > 0 ? (double)latencies_us.size() * 100.0 / seq : 0.0) << "% success)\n";
+              << (sent > 0 ? (double)latencies_us.size() * 100.0 / sent : 0.0) << "% success)\n";
     std::cout << "Data Integrity : " << (corruptions == 0 ? "PASS (0 corrupted / mismatched packets)" : "FAIL") << "\n";
     if (corruptions > 0) {
         std::cout << "Corrupted Pkts : " << corruptions << "\n";
@@ -247,5 +205,5 @@ int main(int argc, char *argv[]) {
 
     munmap(mapped, map_size);
     close(fd);
-    return (latencies_us.empty() || timeouts == seq || corruptions > 0) ? 1 : 0;
+    return (latencies_us.size() != sent || timeouts > 0 || corruptions > 0) ? 1 : 0;
 }

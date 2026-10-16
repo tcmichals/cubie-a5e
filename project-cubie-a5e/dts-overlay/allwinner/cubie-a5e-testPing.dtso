@@ -5,16 +5,19 @@
  * ============================================================================
  *                 RADXA CUBIE A5E — TESTPING OVERLAY
  * ============================================================================
- * Hardware Overlay for testPing firmware application:
- * Converts the Allwinner T527 hardware message box into a generic Userspace
- * I/O (UIO) device using uio_pdrv_genirq for sub-15us event-driven doorbells.
+ * Hardware Overlay for the testPing firmware (Profile 3, UIO):
+ * Hands the ARM message box bank and the ping/pong SRAM slot to userspace
+ * through the project's sun55i-msgbox-uio driver (drivers/uio/
+ * uio_sun55i_msgbox.c). That driver switches on the bus clock and releases
+ * the reset; generic-uio does neither, which left the block gated.
  *
  * Memory Maps exposed under /sys/class/uio/uio0/maps/:
- *   map0: Allwinner MSGBOX MMIO @ 0x03003000 (4 KB) - For Host Doorbell TX
- *   map1: MCU Dedicated SRAM    @ 0x072B0000 (4 KB) - For Shared Ringbuffer / Ping
+ *   map0: ARM message box bank @ 0x03003000 (4 KB): E906 doorbell FIFO + IRQ
+ *   map1: SRAM ping/pong slot  @ 0x072B0000 (4 KB): shm_ping_protocol.h
  *
  * Hardware IRQ:
- *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox)
+ *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox),
+ *   with the clock and reset also inherited from &msgbox.
  *
  * Needs the sun55i-a527-cubie-a5e-uio.dtb base tree, which drops the
  * remoteproc "mboxes" (an overlay cannot delete it).
@@ -22,12 +25,11 @@
  * In /boot/config.txt:
  *   base_dtb=sun55i-a527-cubie-a5e-uio.dtb
  *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
- *   cmdline=uio_pdrv_genirq.of_id=generic-uio
  * ============================================================================
  */
 
 &msgbox {
-    compatible = "generic-uio";
+    compatible = "allwinner,sun55i-a523-msgbox-uio";
     reg = <0x03003000 0x1000>,
           <0x072b0000 0x1000>;
     reg-names = "msgbox", "sram";

@@ -121,6 +121,12 @@ bool MsgBox::is_tx_ready(Channel ch) noexcept
     return (c <= 3) && ((ARM_MSG_STA_REG(c) & MSG_NUM_MASK) < FIFO_DEPTH_MAX);
 }
 
+uint32_t MsgBox::tx_pending(Channel ch) noexcept
+{
+    const auto c = static_cast<uint8_t>(ch);
+    return (c <= 3) ? (ARM_MSG_STA_REG(c) & MSG_NUM_MASK) : 0;
+}
+
 void MsgBox::enable_rx_irq(Channel ch, bool enable) noexcept
 {
     const auto c = static_cast<uint8_t>(ch);

@@ -19,6 +19,7 @@ import sys
 import time
 import mmap
 import ctypes
+import select
 import argparse
 import math
 from typing import List
@@ -35,7 +36,19 @@ C_CYAN    = "\033[36m"
 # Protocol Constants (shm_ping_protocol.h)
 SHM_PING_MAGIC = 0x50494E47  # "PING"
 SHM_PONG_MAGIC = 0x504F4E47  # "PONG"
+SHM_ERROR_MAGIC = 0x4552524F # "ERRO": the E906 rejected a malformed ping
 PAGE_SIZE      = 4096
+
+# ARM message box bank (UIO map 0), port 2 = the E906 link, slot 0 = its doorbell
+MSGBOX_RD_IRQ_EN     = 0x220  # READ_IRQ_ENABLE(2)
+MSGBOX_RD_IRQ_STATUS = 0x224  # READ_IRQ_STATUS(2), write 1 to clear
+MSGBOX_MSG_STATUS    = 0x260  # MSG_STATUS(2, 0): entries queued
+MSGBOX_MSG_FIFO      = 0x270  # MSG_FIFO(2, 0): a read pops one entry
+MSGBOX_RD_IRQ_BIT    = 0x1
+
+
+def pattern_byte(seq: int, i: int) -> int:
+    return (seq * 31 + i * 7) & 0xFF
 
 # CTypes layout for ShmPingChannel (MCU SRAM C)
 class ShmPingPacket(ctypes.Structure):
@@ -50,10 +63,10 @@ class ShmPingPacket(ctypes.Structure):
 
 class ShmPingChannel(ctypes.Structure):
     _fields_ = [
-        ("host_doorbell", ctypes.c_uint32),
-        ("riscv_doorbell", ctypes.c_uint32),
-        ("total_pings", ctypes.c_uint32),
-        ("total_pongs", ctypes.c_uint32),
+        ("ping_seq", ctypes.c_uint32),     # written only by Linux
+        ("pong_seq", ctypes.c_uint32),     # written only by the E906
+        ("total_pings", ctypes.c_uint32),  # E906: pings answered
+        ("errors", ctypes.c_uint32),       # E906: malformed pings rejected
         ("ping_pkt", ShmPingPacket),
         ("pong_pkt", ShmPingPacket),
     ]
@@ -102,71 +115,124 @@ def main():
 
     channel = ShmPingChannel.from_buffer(sram_mmap)
 
-    # Clear shared memory doorbells
-    channel.host_doorbell = 0
-    channel.riscv_doorbell = 0
+    # Registers are read and written as single 32-bit accesses (ctypes c_uint32);
+    # a byte-wise access to the FIFO register could pop more than one entry.
+    def reg(off: int) -> ctypes.c_uint32:
+        return ctypes.c_uint32.from_buffer(msgbox_mmap, off)
+
+    def drain_doorbells() -> None:
+        while reg(MSGBOX_MSG_STATUS).value & 0xF:
+            _ = reg(MSGBOX_MSG_FIFO).value  # the read pops the entry
+        reg(MSGBOX_RD_IRQ_STATUS).value = MSGBOX_RD_IRQ_BIT
+
+    def unmask_irq() -> None:
+        os.write(uio_fd, (1).to_bytes(4, "little"))
+
+    # The message box must be clocked and out of reset, or no doorbell can
+    # arrive. generic-uio does not switch either on. A clocked block keeps a
+    # value written to its IRQ enable register; an unclocked one reads 0.
+    reg(MSGBOX_RD_IRQ_EN).value = reg(MSGBOX_RD_IRQ_EN).value | MSGBOX_RD_IRQ_BIT
+    if not reg(MSGBOX_RD_IRQ_EN).value & MSGBOX_RD_IRQ_BIT:
+        print(f"{C_RED}[FAIL] message box not clocked or held in reset: IRQ enable at "
+              f"0x{MSGBOX_RD_IRQ_EN:x} reads back 0{C_RESET}")
+        sys.exit(1)
+    drain_doorbells()
+    ep = select.epoll()
+    ep.register(uio_fd, select.EPOLLIN)
 
     print(f"{C_GREEN}[INFO] Lite-libmetal UIO mapped. Starting benchmark...{C_RESET}\n")
 
     latencies_us: List[float] = []
-    payload_raw = args.payload.encode('utf-8')[:480]
-    plen = len(payload_raw)
+    psize = len(channel.ping_pkt.payload)
+    timeout_ns = int(args.timeout * 1_000_000)
+
+    # Continue after whatever an earlier run left: wait for the slot to be free.
+    deadline = get_time_ns() + timeout_ns
+    while channel.ping_seq != channel.pong_seq:
+        if get_time_ns() >= deadline:
+            print(f"{C_RED}[FAIL] slot busy: ping_seq {channel.ping_seq} never answered "
+                  f"(pong_seq {channel.pong_seq}); is testPing.elf running?{C_RESET}")
+            sys.exit(1)
+    seq = channel.ping_seq
 
     bench_start_ns = get_time_ns()
-    seq = 0
+    sent = 0
     timeouts = 0
     corruptions = 0
-    timeout_sec = args.timeout / 1000.0
+    irq_wakeups = 0
+    irq_missing = False
+    pong = None
 
     try:
         i = 0
         while args.count == 0 or i < args.count:
-            seq += 1
+            seq = (seq + 1) & 0xFFFFFFFF
             i += 1
+            sent += 1
 
-            # Prepare Ping Packet in SRAM using scalar ctypes structure writes
+            # Post the ping: packet first, then ping_seq announces it
             channel.ping_pkt.magic = SHM_PING_MAGIC
             channel.ping_pkt.seq = seq
+            channel.ping_pkt.riscv_cycles = 0
+            channel.ping_pkt.payload_len = psize
+            for k in range(psize):
+                channel.ping_pkt.payload[k] = pattern_byte(seq, k)
             tx_ns = get_time_ns()
             channel.ping_pkt.host_tx_ts_ns = tx_ns
-            channel.ping_pkt.riscv_cycles = 0
-            channel.ping_pkt.payload_len = plen
-            for k in range(plen):
-                channel.ping_pkt.payload[k] = payload_raw[k]
+            channel.ping_seq = seq
 
-            # Ring Doorbell
-            channel.host_doorbell = 1
-
-            # Wait for RISC-V pong response via SRAM doorbell
-            deadline_ns = tx_ns + int(timeout_sec * 1_000_000_000)
-            received = False
-            rx_ns = 0
-
-            while get_time_ns() < deadline_ns:
-                if channel.riscv_doorbell == 1:
-                    rx_ns = get_time_ns()
-                    received = True
+            # Sleep until the E906's doorbell interrupt; check pong_seq again
+            # after unmasking so a pong that arrived first is not slept through.
+            deadline = tx_ns + timeout_ns
+            answered = False
+            while True:
+                if channel.pong_seq == seq:
+                    answered = True
                     break
+                unmask_irq()
+                if channel.pong_seq == seq:
+                    answered = True
+                    break
+                now = get_time_ns()
+                if now >= deadline:
+                    break
+                if ep.poll((deadline - now) / 1e9):
+                    os.read(uio_fd, 4)
+                    irq_wakeups += 1
+                    drain_doorbells()
+                elif channel.pong_seq == seq:
+                    # The pong arrived but its doorbell interrupt never did.
+                    irq_missing = True
+                    break
+            rx_ns = get_time_ns()
 
-            if not received:
+            if irq_missing:
+                print(f"{C_RED}[FAIL] seq {seq} answered, but no doorbell interrupt in "
+                      f"{args.timeout:.0f} ms (is the message box clocked?){C_RESET}")
+                break
+
+            if not answered:
                 timeouts += 1
-                if timeouts <= 5:
-                    print(f"{C_YELLOW}[WARN] Ping seq {seq} timed out waiting for UIO doorbell!{C_RESET}")
-                channel.host_doorbell = 0
-                channel.riscv_doorbell = 0
-                continue
+                print(f"{C_RED}[FAIL] no pong for seq {seq} ({args.timeout:.0f} ms){C_RESET}")
+                break
 
-            # Middle ground check: magic, seq, and PONG prefix
-            pong_prefix = bytes(channel.pong_pkt.payload[:4])
-            if channel.pong_pkt.magic == SHM_PONG_MAGIC and channel.pong_pkt.seq == seq and pong_prefix == b"PONG":
-                rtt_us = (rx_ns - tx_ns) / 1000.0
-                latencies_us.append(rtt_us)
-            else:
+            # Check every byte of the pong
+            pong = channel.pong_pkt
+            magic = pong.magic
+            # One element at a time: the mapping is device memory, where a bulk
+            # copy (bytes(array)) can use unaligned accesses and raise SIGBUS.
+            ok = (magic == SHM_PONG_MAGIC and pong.seq == seq and pong.host_tx_ts_ns == tx_ns
+                  and [pong.payload[k] for k in range(4)] == list(b"PONG"))
+            if ok:
+                ok = all(pong.payload[k] == pattern_byte(seq, k) for k in range(4, psize))
+            if not ok:
                 corruptions += 1
-                print(f"{C_RED}[ERROR] Malformed pong: magic=0x{channel.pong_pkt.magic:08X}, seq={channel.pong_pkt.seq}{C_RESET}")
+                why = " (E906 rejected the ping)" if magic == SHM_ERROR_MAGIC else ""
+                print(f"{C_RED}[ERROR] malformed pong for seq {seq}: magic=0x{magic:08X}, "
+                      f"seq={pong.seq}{why}{C_RESET}")
+                break
 
-            # Acknowledge pong
-            channel.riscv_doorbell = 0
+            latencies_us.append((rx_ns - tx_ns) / 1000.0)
 
             if args.delay > 0:
                 time.sleep(args.delay / 1_000_000.0)
@@ -177,7 +243,9 @@ def main():
     total_time_ns = get_time_ns() - bench_start_ns
     total_time_sec = total_time_ns / 1_000_000_000.0
 
-    # Clean up
+    # Clean up: drop every ctypes view of the mappings before closing them
+    ep.close()
+    pong = None
     del channel
     msgbox_mmap.close()
     sram_mmap.close()
@@ -186,8 +254,8 @@ def main():
     # 4. Print Statistics & Latency Histogram
     num_received = len(latencies_us)
     if num_received == 0:
-        print(f"{C_RED}[ERROR] No pongs received. Remote core may not be running.{C_RESET}")
-        return
+        print(f"{C_RED}[ERROR] No pongs received.{C_RESET}")
+        sys.exit(1)
 
     latencies_us.sort()
     min_lat = latencies_us[0]
@@ -209,8 +277,9 @@ def main():
     msg_rate = num_received / total_time_sec
 
     print(f"\n{C_GREEN}{C_BOLD}====================== BENCHMARK RESULTS ======================{C_RESET}")
-    print(f"  Total Pings Sent    : {seq}")
-    print(f"  Pongs Received      : {num_received} ({100.0 * num_received / seq:.2f}%)")
+    print(f"  Total Pings Sent    : {sent}")
+    print(f"  Pongs Received      : {num_received} ({100.0 * num_received / sent:.2f}%)")
+    print(f"  IRQ Wake-ups        : {irq_wakeups}")
     print(f"  Data Integrity      : {C_GREEN if corruptions == 0 else C_RED}{'PASS (0 corrupted / mismatched packets)' if corruptions == 0 else f'FAIL ({corruptions} errors)'}{C_RESET}")
     if corruptions > 0:
         print(f"  Corrupted Packets   : {corruptions}")
@@ -228,6 +297,9 @@ def main():
     print(f"  Percentile 99% (p99): {p99:.3f} us")
     print(f"  Percentile 99.9%    : {p999:.3f} us")
     print(f"{C_GREEN}{C_BOLD}================================================================{C_RESET}\n")
+
+    if num_received != sent or timeouts or corruptions or irq_missing:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
