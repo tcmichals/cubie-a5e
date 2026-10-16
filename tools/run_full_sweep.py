@@ -462,6 +462,11 @@ def extract_key_metrics(report_bundle):
         "p3_shm_bandwidth_mb_s": None,
         "p3_uio_py_rtt_us": None,
         "p3_uio_py_rate_msgs_s": None,
+        "p1_stress_rate_msgs_s": None,
+        "p2_stress_rate_msgs_s": None,
+        "p1_dram_w16_rate_msgs_s": None,
+        "p2_rpmsg_rate_msgs_s": None,
+        "p3_uio_irq_rtt_us": None,
     }
     kunit = report_bundle.get("kunit_tests", {})
     metrics["kunit_passed"] = kunit.get("total_passed", 0)
@@ -473,16 +478,26 @@ def extract_key_metrics(report_bundle):
         for r in prof.get("results", []):
             name = r.get("name", "")
             m = r.get("metrics", {})
+            # Windowed runs ("in flight") measure throughput; their latency
+            # is queueing time and must not land in a round-trip metric.
+            windowed = "in flight" in name
             if "Profile 1" in pname:
                 if "ping_rpmsg (C++" in name:
                     metrics["p1_rpmsg_rtt_us"] = m.get("avg_lat_us")
                     metrics["p1_rpmsg_jitter_us"] = m.get("jitter_us")
                     metrics["p1_rpmsg_rate_msgs_s"] = m.get("throughput_msgs_s")
+                elif "stress_rpmsg" in name:
+                    metrics["p1_stress_rate_msgs_s"] = m.get("throughput_msgs_s")
+                elif "ping_dram" in name and windowed:
+                    metrics["p1_dram_w16_rate_msgs_s"] = m.get("throughput_msgs_s")
                 elif "ping_dram" in name:
                     metrics["p1_dram_rtt_us"] = m.get("avg_lat_us")
             elif "Profile 2" in pname:
                 if "ping_rpmsg (C++" in name:
                     metrics["p2_rpmsg_rtt_us"] = m.get("avg_lat_us")
+                    metrics["p2_rpmsg_rate_msgs_s"] = m.get("throughput_msgs_s")
+                elif "stress_rpmsg" in name:
+                    metrics["p2_stress_rate_msgs_s"] = m.get("throughput_msgs_s")
             elif "Profile 3" in pname:
                 if "ping_shm (C++" in name or "Direct SRAM" in name:
                     metrics["p3_shm_rtt_us"] = m.get("avg_lat_us")
@@ -492,6 +507,8 @@ def extract_key_metrics(report_bundle):
                             metrics["p3_shm_bandwidth_mb_s"] = float(str(m["bandwidth"]).split()[0])
                         except Exception:
                             pass
+                elif "ping_uio (C++" in name:
+                    metrics["p3_uio_irq_rtt_us"] = m.get("avg_lat_us")
                 elif "ping_uio.py" in name or "Python UIO" in name:
                     metrics["p3_uio_py_rtt_us"] = m.get("avg_lat_us")
                     metrics["p3_uio_py_rate_msgs_s"] = m.get("throughput_msgs_s")
@@ -1052,6 +1069,12 @@ def main():
         record_and_compare_history(report_bundle, args.history_json, args.history_md)
     except Exception as e:
         print(f"[WARN] Failed to update test history: {e}")
+
+    # Performance page (docs/performance/index.html, served by GitHub Pages)
+    try:
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "make_perf_page.py")], check=True)
+    except Exception as e:
+        print(f"[WARN] Failed to build the performance page: {e}")
 
     if g_serial_logger:
         g_serial_logger.stop()

@@ -579,13 +579,18 @@
       "p1_rpmsg_rtt_us": 169.674,
       "p1_rpmsg_jitter_us": 7.922,
       "p1_rpmsg_rate_msgs_s": 5861.4,
-      "p1_dram_rtt_us": 3078.623,
+      "p1_dram_rtt_us": 200.993,
       "p2_rpmsg_rtt_us": 132.963,
       "p3_shm_rtt_us": 13.478,
       "p3_shm_rate_msgs_s": 8992.0,
       "p3_shm_bandwidth_mb_s": 8.78,
       "p3_uio_py_rtt_us": 31.954,
-      "p3_uio_py_rate_msgs_s": 160.2
+      "p3_uio_py_rate_msgs_s": 160.2,
+      "p1_stress_rate_msgs_s": 11396.2,
+      "p2_stress_rate_msgs_s": 18361.0,
+      "p1_dram_w16_rate_msgs_s": 5019.4,
+      "p2_rpmsg_rate_msgs_s": 7472.3,
+      "p3_uio_irq_rtt_us": 58.05
     },
     "deltas": {
       "kunit_passed": "+0 tests",
