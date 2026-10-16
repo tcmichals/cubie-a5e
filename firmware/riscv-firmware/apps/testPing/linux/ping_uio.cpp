@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     int uio_fd = open(uio_dev.c_str(), O_RDWR | O_SYNC);
     if (uio_fd < 0) {
         std::cerr << C_RED << "[ERROR] Failed to open " << uio_dev << ": " << strerror(errno) << C_RESET << "\n";
-        std::cerr << C_YELLOW << "[HINT] Ensure 'cubie-a5e-uio.dtbo' is applied via config.txt and CONFIG_UIO is active.\n" << C_RESET;
+        std::cerr << C_YELLOW << "[HINT] Profile 3 needs base_dtb=sun55i-a527-cubie-a5e-uio.dtb and dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing in /boot/config.txt.\n" << C_RESET;
         return 1;
     }
 

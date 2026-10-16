@@ -32,3 +32,18 @@ This rule strictly governs all Linux kernel driver development, Devicetree bindi
   1. Inspect `/sys/firmware/devicetree/base/...` to confirm the active `memory-region` matches the test scope.
   2. Inspect `dmesg` to confirm the kernel bound the intended DMA pool without address mismatch warnings.
 * **Documentation:** All manual test steps, required `/boot/config.txt` overlay settings, and verification commands must be explicitly documented in `riscv-firmware/tests.md`.
+
+## 4. An Overlay Cannot Delete a Property or Node
+* `/delete-property/` and `/delete-node/` work in a normal `.dts`/`.dtsi` (they act at build time),
+  but **not in an overlay** (`.dtso` with `/plugin/`). The overlay format can only add nodes and
+  set properties; `dtc` accepts the line without a warning and leaves it out of the `.dtbo`, so
+  U-Boot never sees it.
+* To remove something from the base tree, build a separate **base DTB** (a board `.dts` that
+  `#include`s the normal one and deletes the property) and select it with `base_dtb=` in
+  `/boot/config.txt`. Use overlays only to add or change things.
+* Check an overlay by decompiling what was built:
+  `dtc -I dtb -O dts <overlay>.dtbo` — a deletion that is not in the output did not happen.
+* Example: UIO mode (Profile 3) must remove the remoteproc's `mboxes`. The single-overlay attempt
+  (`cubie-a5e-uio.dtso`) never worked and was removed on 2026-10-16; Profile 3 uses
+  `base_dtb=sun55i-a527-cubie-a5e-uio.dtb` plus the `cubie-a5e-testPing` overlay
+  (`upstream-remoteproc/DESIGN_DECISIONS.md`).

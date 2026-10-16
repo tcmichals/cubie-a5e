@@ -274,9 +274,9 @@ python3 /usr/local/bin/fast_sram_telemetry.py
 ### App 4: `testPing` (Fast Direct Shared Memory / Lite-libmetal UIO Style)
 * **Purpose**: Ultra-low-latency, zero-copy, deterministic inter-processor communication.
 * **Functionality**:
-  - Direct lock-free shared SRAM channel (`ShmPingChannel` in on-chip SRAM Space 0 `0x3FFC0000`).
+  - Shared SRAM ping/pong slot (`ShmPingChannel`, core `0x3FFF0000` / host `0x072B0000` in SRAM Space 0).
   - Dual operational modes:
-    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled via `cubie-a5e-uio` overlay in `/boot/config.txt`. Converts the hardware Mailbox (`0x03003000`) into a generic UIO device (`/dev/uio0`). Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E906 raises the ARM message box bank interrupt (GIC SPI 0) to wake the host.
+    1. **Event-Driven UIO Doorbell Mode (Recommended)**: Enabled with `base_dtb=sun55i-a527-cubie-a5e-uio.dtb` and `dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing` in `/boot/config.txt` (an overlay alone cannot remove the remoteproc's `mboxes`; see `upstream-remoteproc/DESIGN_DECISIONS.md`). The `sun55i-msgbox-uio` driver hands the message box (`0x03003000`) to userspace as `/dev/uio0` with its clock and reset on. Linux host blocks asynchronously on `select.epoll()` with **0% idle CPU burn**; XuanTie E906 raises the ARM message box bank interrupt (GIC SPI 0) to wake the host.
     2. **Direct Memory Polling Baseline**: Reads SRAM directly via kernel UIO mapping and polls on memory flags for theoretical raw bus latency measurements.
 * **Linux Companion Tools**:
   - **`ping_uio.py`**: Event-driven Python Lite-libmetal client using `select.epoll()`. Maps `map0` (Mailbox MMIO) and `map1` (MCU SRAM) directly from `/dev/uio0` (no root privileges required).
@@ -417,7 +417,8 @@ dtoverlay=cubie-a5e-flight-stack
 # ------------------------------------------------------------------------------
 # Paradigm B: Hard Real-Time Lite-libmetal UIO Doorbell (testPing / ping_uio.py)
 # ------------------------------------------------------------------------------
-# dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+# base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+# dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
 
 # Optional: Real-time CPU core isolation (removes OS jitter on CPU 7):
 extra_bootargs=isolcpus=7 nohz_full=7 rcu_nocbs=7
@@ -447,7 +448,7 @@ echo "testPing.elf" > /sys/class/remoteproc/remoteproc0/firmware
 echo start > /sys/class/remoteproc/remoteproc0/state
 
 # Mode A: Event-driven UIO Doorbell (0% idle CPU burn via epoll on /dev/uio0)
-# (Requires 'cubie-a5e-uio' overlay in /boot/config.txt)
+# (Requires base_dtb=sun55i-a527-cubie-a5e-uio.dtb and the cubie-a5e-testPing overlay)
 ping_uio.py -n 50000
 
 # Mode B: Direct Shared SRAM memory-polling baseline

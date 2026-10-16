@@ -69,8 +69,8 @@ PROFILE_INFO = {
     PROFILE_3: {
         "name": "Profile 3 (Userspace UIO Direct Mailbox)",
         "overlay_config": "dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing",
-        "test_overlays": ["cubie-a5e-testPing", "cubie-a5e-uio"],
-        "node_desc": "Hardware Mailbox bound to generic-uio (/dev/uio0)",
+        "test_overlays": ["cubie-a5e-testPing"],
+        "node_desc": "Message box bound to sun55i-msgbox-uio (/dev/uio0)",
         "compatible_tests": ["ping-uio"],
     },
     PROFILE_4: {

@@ -39,7 +39,8 @@ Rather than building multiple monolithic trees, the clean architecture separates
 +-------------------------------------------------------------------------+
   |
   +-> 1. U-Boot reads /boot/config.txt (FAT partition)
-  |      Parses: dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+  |      Parses: base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
   |
   +-> 2. Load Base DTB into RAM @ ${fdt_addr_r} (0x4fa00000)
   |      sun55i-a527-cubie-a5e.dtb (compiled with -@ symbols)
@@ -49,7 +50,7 @@ Rather than building multiple monolithic trees, the clean architecture separates
   |
   +-> 4. Apply Overlays sequentially in RAM via libfdt
   |      - load cubie-a5e-flight-stack.dtbo -> fdt apply 0x4fe00000
-  |      - load cubie-a5e-uio.dtbo          -> fdt apply 0x4fe00000
+  |      - load cubie-a5e-testPing.dtbo     -> fdt apply 0x4fe00000
   |
   +-> 5. Load Kernel Image @ ${kernel_addr_r} (0x40200000: strictly 2MB-aligned)
   |
@@ -212,23 +213,20 @@ reboot
 
 An overlay source file (`.dtso`) declares `/plugin/;` at the top. Instead of defining a complete system, it targets specific nodes in the base tree using labels (e.g. `&msgbox`) or absolute paths (`target-path = "/soc/mailbox@3003000"`).
 
-Here is the Userspace I/O overlay ([`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-uio.dtso)):
+Here is the Userspace I/O overlay used for Profile 3 ([`project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-testPing.dtso`](../../project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-testPing.dtso)):
 
 ```dts
 /dts-v1/;
 /plugin/;
 
-/*
- * cubie-a5e-uio.dtso - Convert hardware mailbox to userspace UIO device
- */
-
 &msgbox {
-    /* 1. Override the compatible string to bind generic-uio */
-    compatible = "generic-uio";
+    /* 1. Bind the project's UIO driver instead of the mailbox driver.
+     *    It keeps the message box clock and reset on (generic-uio does not). */
+    compatible = "allwinner,sun55i-a523-msgbox-uio";
 
-    /* 2. Extend reg to expose both Mailbox MMIO and Dedicated MCU SRAM C */
+    /* 2. Expose the message box registers and the SRAM ping/pong slot */
     reg = <0x03003000 0x1000>,
-          <0x07131000 0x1000>;
+          <0x072b0000 0x1000>;
     reg-names = "msgbox", "sram";
 
     /* 3. Ensure the node is enabled */
@@ -236,10 +234,46 @@ Here is the Userspace I/O overlay ([`project-cubie-a5e/dts-overlay/allwinner/cub
 };
 
 &rproc {
-    /* Place RemoteProc into standalone mode (no kernel mailbox binding) */
+    /* RemoteProc only loads, starts and stops the E906 */
     status = "okay";
 };
 ```
+
+### The Delete Trap: An Overlay Cannot Remove a Property
+
+In UIO mode the remoteproc must not use the message box, so its `mboxes` property has to go.
+The obvious move, `/delete-property/ mboxes;` inside `&rproc` in the overlay, **does nothing**:
+the overlay format can only add nodes and set properties, and `dtc` drops the deletion without a
+warning. Decompile what you built to see it:
+
+```bash
+dtc -I dtb -O dts cubie-a5e-uio.dtbo
+#   fragment@1 { __overlay__ { status = "okay"; }; };   <- no trace of the deletion
+```
+
+`/delete-property/` does work in a normal `.dts`, because it acts while the tree is being built.
+So the removal goes into a separate **base DTB**, and `config.txt` selects it with `base_dtb=`:
+
+```dts
+// sun55i-a527-cubie-a5e-uio.dts
+#include "sun55i-a527-cubie-a5e.dts"
+
+&rproc {
+	/delete-property/ mboxes;	/* mailbox is owned by userspace (UIO) */
+};
+```
+
+```ini
+base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
+```
+
+The first UIO overlay, `cubie-a5e-uio.dtso`, tried to do everything in one overlay. Because the
+deletion was dropped, the remoteproc kept waiting for its mailbox and never appeared; it also used
+`generic-uio` (message box left unclocked, so the doorbell interrupt never fired) and mapped the
+wrong SRAM page. It was removed on 2026-10-16. Rule of thumb: **overlays add or change; a base DTB
+removes.** See `upstream-remoteproc/DESIGN_DECISIONS.md` and
+`.agents/rules/devicetree-hardware-configuration.md`.
 
 ### The Missing `__symbols__` Trap (`FDT_ERR_NOTFOUND`)
 
@@ -285,7 +319,8 @@ The default [`config.txt`](file:///home/tcmichals/projects/cubie/cubie-a5e/proje
 
 # 1. Device Tree Overlays (dtoverlay)
 # Space-separated list of overlays (omitting .dtbo extension is supported)
-dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
 
 # 2. Kernel Command-Line Arguments (cmdline)
 # Optional bootargs appended to kernel command line
@@ -510,8 +545,9 @@ image boot.vfat {
     vfat {
         files = {
             "sun55i-a527-cubie-a5e.dtb",
+            "sun55i-a527-cubie-a5e-uio.dtb",
             "cubie-a5e-flight-stack.dtbo",
-            "cubie-a5e-uio.dtbo",
+            "cubie-a5e-testPing.dtbo",
             "config.txt",
             "uEnv.txt",
             "boot.scr",
@@ -579,7 +615,7 @@ When `booti` jumps to `0x40200000`, the kernel entry point (`arch/arm64/kernel/h
 
 ## 10. Live Verification on Hardware
 
-Boot the board with `dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio` in `/boot/config.txt`.
+Boot the board with `dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing` (and `base_dtb=sun55i-a527-cubie-a5e-uio.dtb`) in `/boot/config.txt`. The log below was captured with the old `cubie-a5e-uio` overlay, since removed; the overlay steps look the same.
 
 ### 1. Serial Console U-Boot Log
 During boot, U-Boot outputs the sequential merge:

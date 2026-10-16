@@ -74,6 +74,16 @@ in `b6d558c36fbd`). Profile 3 (`cubie-a5e-testPing`, mailbox owned by userspace 
 `mboxes`, selected with `base_dtb=` in `config.txt`. A DT overlay cannot delete a base-tree
 property, so this cannot be done in `cubie-a5e-testPing.dtso`.
 
+Why it is done this way, so nobody tries the single overlay again: `/delete-property/` inside an
+overlay is silently dropped by `dtc` (the overlay format can only add or set). The old
+`cubie-a5e-uio.dtso` relied on it, so the remoteproc kept waiting for a mailbox that never came
+(no `remoteproc0`); it also used `generic-uio`, which leaves the message box unclocked so the
+doorbell interrupt can never fire, and mapped the wrong SRAM page (`0x07131000`, the ping slot is
+at `0x072B0000`). It was removed on 2026-10-16. The working split: the `-uio` base DTB removes
+`mboxes` (remoteproc only loads, starts and stops the E906), and the `cubie-a5e-testPing` overlay
+binds the message box to the project-only `sun55i-msgbox-uio` driver (clock and reset on, registers
+and the SRAM ping slot as `/dev/uio0`).
+
 ### Crash interrupt kept (D14)
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
 cover letter must not claim it is tested.

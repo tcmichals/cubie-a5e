@@ -158,9 +158,9 @@ while (1) {
 We built two host test tools to highlight an essential systems design lesson:
 
 1. **`ping_shm` (Busy Polling via `/dev/mem`)**:
-   Polls `riscv_doorbell` in a tight loop. While it achieves the absolute latency floor (~1.2 µs), it **burns 100% of an entire Cortex-A55 core**, creating thermal throttling and starving other Linux tasks.
+   Polls `riscv_doorbell` in a tight loop. While it achieves the lowest latency (13.5 µs measured round trip, ping_shm, Oct 2026), it **burns 100% of an entire Cortex-A55 core**, creating thermal throttling and starving other Linux tasks.
 2. **`ping_uio` (Event-Driven via UIO + `epoll`)**:
-   Uses the `cubie-a5e-uio.dtbo` device tree overlay to wire MSGBOX Channel 0 directly to `/dev/uio0`. The userspace process sleeps in `epoll_wait()`. When RISC-V writes the doorbell token, hardware raises GIC SPI 0 (the ARM message box bank interrupt), Linux wakes `epoll`, and userspace reads the pong packet.
+   Uses the `-uio` base DTB plus the `cubie-a5e-testPing` overlay to hand the message box to `/dev/uio0` through the `sun55i-msgbox-uio` driver, which keeps its clock on (with `generic-uio` the block stayed unclocked and this interrupt never fired; fixed October 2026). Measured: 58 µs round trip. The userspace process sleeps in `epoll_wait()`. When RISC-V writes the doorbell token, hardware raises GIC SPI 0 (the ARM message box bank interrupt), Linux wakes `epoll`, and userspace reads the pong packet.
 
 ```bash
 # Event-driven: 50,000 round trips with 0% idle CPU burn

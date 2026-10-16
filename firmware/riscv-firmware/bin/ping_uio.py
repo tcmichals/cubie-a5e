@@ -93,7 +93,7 @@ def main():
     # 1. Open UIO Device Node
     if not os.path.exists(args.uio_dev):
         print(f"{C_RED}[ERROR] UIO device '{args.uio_dev}' does not exist.{C_RESET}")
-        print(f"{C_YELLOW}[HINT] Ensure 'cubie-a5e-uio.dtbo' is applied via config.txt and CONFIG_UIO is active.{C_RESET}")
+        print(f"{C_YELLOW}[HINT] Profile 3 needs base_dtb=sun55i-a527-cubie-a5e-uio.dtb and dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing in /boot/config.txt.{C_RESET}")
         sys.exit(1)
 
     try:

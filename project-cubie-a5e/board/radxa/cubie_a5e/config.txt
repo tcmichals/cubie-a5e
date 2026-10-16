@@ -12,9 +12,11 @@
 # Default: Flight stack (dedicated RISC-V UART2/SPI0, sensors, pin muxing)
 dtoverlay=cubie-a5e-flight-stack
 
-# To switch from Linux kernel VirtIO RPMsg to Lite-libmetal UIO Doorbell mode,
-# simply add 'cubie-a5e-uio' to the list:
-# dtoverlay=cubie-a5e-flight-stack cubie-a5e-uio
+# UIO mode (Profile 3: userspace owns the message box, testPing firmware).
+# Needs its own base DTB as well as the overlay: the remoteproc's "mboxes"
+# must be removed, and an overlay cannot remove a property.
+# base_dtb=sun55i-a527-cubie-a5e-uio.dtb
+# dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing
 
 # ==============================================================================
 # 2. Kernel Command-Line Arguments (cmdline)
