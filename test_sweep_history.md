@@ -1,8 +1,8 @@
 # Silicon Sweep Performance History & Regression Tracking
 
-- **Total Recorded Runs**: 10
-- **Latest Run**: Run #10 (2026-10-15 19:13:49)
-- **Kernel Commit**: `71b7756b25bb` | **Firmware/Tools Commit**: `37fe2db`
+- **Total Recorded Runs**: 11
+- **Latest Run**: Run #11 (2026-10-16 04:10:37)
+- **Kernel Commit**: `82b64e947b5b` | **Firmware/Tools Commit**: `2872b3e`
 - **Latest Overall Status**: **PASS**
 
 ## Engineering Invariants & Code Hygiene Audit
@@ -14,28 +14,27 @@
 | **Zero-Sleep Benchmark Protocol** | `ping_rpmsg: blocking write, inotify for the node, no sleeps except optional -D (default 0)` | `apps/testPingRpmsg/linux/ping_rpmsg.cpp` | **PASS** |
 | **PREEMPT_RT Hardirq Execution Bound** | `sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX` | `drivers/mailbox/sun55i-msgbox.c` | **PASS** |
 
-### 🚀 Performance Improvements Detected
-
-- 🟢 **Profile 3 Python UIO RTT: 35.58 -> 31.95 µs (-10.2%)**
+### 🟢 Performance is Statistically Invariant & Stable
 
 ## Comparison Against Preceding Run
 
 | Metric | Previous Run | Current Run | Delta | Statistical Assessment |
 | :--- | :---: | :---: | :---: | :---: |
 | KUnit In-Kernel Tests (Passed) | 47 tests | 47 tests | `+0 tests` | 🟢 Invariant (100% Pass) |
-| Profile 1 C++ Rpmsg RTT | N/A | 169.67 µs | `N/A` | ⚪ Baseline |
-| Profile 1 C++ Rpmsg Jitter | N/A | 7.92 µs | `N/A` | ⚪ Baseline |
-| Profile 1 C++ Rpmsg Rate | N/A | 5861.40 msgs/s | `N/A` | ⚪ Baseline |
-| Profile 2 C++ Rpmsg RTT | 133.69 µs | 132.96 µs | `-0.72 µs (-0.5%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Direct SRAM RTT | 13.73 µs | 13.48 µs | `-0.25 µs (-1.8%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Throughput | 8792.90 msgs/s | 8992.00 msgs/s | `+199.10 msgs/s (+2.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Bandwidth | 8.59 MB/s | 8.78 MB/s | `+0.19 MB/s (+2.2%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 Python UIO RTT | 35.58 µs | 31.95 µs | `-3.63 µs (-10.2%)` | 🚀 True Speedup (Lower Latency) |
+| Profile 1 C++ Rpmsg RTT | 169.67 µs | 167.21 µs | `-2.46 µs (-1.4%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Jitter | 7.92 µs | 8.17 µs | `+0.25 µs (+3.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Rate | 5861.40 msgs/s | 5944.60 msgs/s | `+83.20 msgs/s (+1.4%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 2 C++ Rpmsg RTT | 132.96 µs | 130.53 µs | `-2.43 µs (-1.8%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Direct SRAM RTT | 13.48 µs | 13.65 µs | `+0.17 µs (+1.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Throughput | 8992.00 msgs/s | 8823.20 msgs/s | `-168.80 msgs/s (-1.9%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Bandwidth | 8.78 MB/s | 8.62 MB/s | `-0.16 MB/s (-1.8%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 Python UIO RTT | 31.95 µs | 32.38 µs | `+0.43 µs (+1.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
 
 ## Historical Runs Timeline
 
 | Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| #11 | 2026-10-16 04:10:37 | `82b64e947b5b` | `2872b3e` | **PASS** | 47/47 | 167.21 µs | 13.65 µs | 8,823/s |
 | #10 | 2026-10-15 19:13:49 | `71b7756b25bb` | `37fe2db` | **PASS** | 47/47 | 169.67 µs | 13.48 µs | 8,992/s |
 | #9 | 2026-10-15 05:01:36 | `71b7756b25bb` | `37fe2db` | **FAIL** | 47/47 | N/A | 13.73 µs | 8,793/s |
 | #8 | 2026-10-15 04:54:39 | `39e8db786df7` | `37fe2db` | **FAIL** | 47/47 | 166.47 µs | 13.51 µs | 8,991/s |

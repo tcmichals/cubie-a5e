@@ -57,7 +57,7 @@ struct Vring {
 /* Plays Linux: owns the memory, posts messages and lends reply buffers. */
 class FakeHost {
 public:
-    FakeHost() {
+    explicit FakeHost(uint32_t num = kN) : num_(num) {
         mem_ = static_cast<uint8_t *>(mmap(nullptr, kBlock, PROT_READ | PROT_WRITE,
                                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0));
         CHECK(mem_ != MAP_FAILED);
@@ -65,10 +65,10 @@ public:
 
         rsc_ = reinterpret_cast<rpmsg_resource_table *>(mem_ + kRsc);
         rsc_->vdev.vring[0].da = da(kVring0);
-        rsc_->vdev.vring[0].num = kN;
+        rsc_->vdev.vring[0].num = num;
         rsc_->vdev.vring[0].align = VRING_ALIGN;
         rsc_->vdev.vring[1].da = da(kVring1);
-        rsc_->vdev.vring[1].num = kN;
+        rsc_->vdev.vring[1].num = num;
         rsc_->vdev.vring[1].align = VRING_ALIGN;
         rsc_->vdev.status = VIRTIO_CONFIG_S_DRIVER_OK;
 
@@ -91,7 +91,7 @@ public:
         memcpy(hdr->data, payload, len);
         tx_.desc[d].addr = da(kBufs + d * RPMSG_BUFFER_SIZE);
         tx_.desc[d].len = RPMSG_BUFFER_SIZE;
-        tx_.avail->ring[tx_.avail->idx % kN] = d;
+        tx_.avail->ring[tx_.avail->idx % num_] = d;
         tx_.avail->idx = tx_.avail->idx + 1;
     }
 
@@ -99,7 +99,7 @@ public:
     void lend(uint16_t d) {
         rx_.desc[d].addr = da(kBufs + (kN + d) * RPMSG_BUFFER_SIZE);
         rx_.desc[d].len = RPMSG_BUFFER_SIZE;
-        rx_.avail->ring[rx_.avail->idx % kN] = d;
+        rx_.avail->ring[rx_.avail->idx % num_] = d;
         rx_.avail->idx = rx_.avail->idx + 1;
     }
 
@@ -111,12 +111,13 @@ private:
     uint32_t da(size_t off) const { return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(mem_ + off)); }
     Vring layout(size_t off) {
         uint8_t *base = mem_ + off;
-        size_t avail_off = sizeof(Desc) * kN;
-        size_t used_off = (avail_off + sizeof(Avail) + VRING_ALIGN - 1) & ~(size_t)(VRING_ALIGN - 1);
+        size_t avail_off = sizeof(Desc) * num_;
+        size_t used_off = (avail_off + sizeof(uint16_t) * (3 + num_) + VRING_ALIGN - 1) & ~(size_t)(VRING_ALIGN - 1);
         return {reinterpret_cast<volatile Desc *>(base), reinterpret_cast<volatile Avail *>(base + avail_off),
                 reinterpret_cast<volatile Used *>(base + used_off)};
     }
 
+    uint32_t num_;
     uint8_t *mem_;
     rpmsg_resource_table *rsc_;
     Vring rx_, tx_;
@@ -291,3 +292,33 @@ TEST(Rpmsg, ReplyLongerThanABufferIsRefused) {
     CHECK_FALSE(hal::Rpmsg::reply(msg, big, RPMSG_BUFFER_SIZE));
     LONGS_EQUAL(0, host->rx().used->idx);
 }
+
+TEST(Rpmsg, RingSizeThatIsNotAPowerOfTwoIsRejected) {
+    FakeHost odd(12);
+    hal::Rpmsg::init(odd.rsc());
+    CHECK_FALSE(hal::Rpmsg::is_driver_ready());
+    LONGS_EQUAL(1, hal::Rpmsg::get_ring_errors());
+}
+
+TEST(Rpmsg, RingLargerThanTheDescriptorArraysIsRejected) {
+    FakeHost big(2 * kN);
+    hal::Rpmsg::init(big.rsc());
+    CHECK_FALSE(hal::Rpmsg::is_driver_ready());
+    LONGS_EQUAL(1, hal::Rpmsg::get_ring_errors());
+}
+
+TEST(Rpmsg, SmallerPowerOfTwoRingWorksAcrossWrap) {
+    FakeHost small(8);
+    hal::Rpmsg::init(small.rsc());
+    hal::Rpmsg::register_endpoint(1024, on_message);
+    CHECK_TRUE(hal::Rpmsg::is_driver_ready());
+    uint8_t byte = 0;
+    for (uint16_t i = 0; i < 20; ++i) {   // 20 > 2 * 8: wraps the ring twice
+        small.post(i % 8, &byte, 1);
+        CHECK_TRUE(hal::Rpmsg::poll());
+    }
+    LONGS_EQUAL(20, g_received.size());
+    LONGS_EQUAL(20, small.tx().used->idx);
+    LONGS_EQUAL(0, hal::Rpmsg::get_ring_errors());
+}
+

@@ -64,6 +64,7 @@ namespace {
     struct VirtQueueLayout {
         uint32_t da;
         uint32_t num;
+        uint32_t mask;      // num - 1: num is a power of two (virtio spec), so slot = idx & mask
         uint32_t align;
         volatile struct VirtioDesc  *desc;
         volatile struct VirtioAvail *avail;
@@ -96,27 +97,39 @@ namespace {
         return static_cast<uintptr_t>(da);
     }
 
-    void setup_vq(VirtQueueLayout &vq, uint32_t da, uint32_t num, uint32_t align) {
-        vq.da = da;
-        vq.num = num;
-        vq.align = align;
+    /*
+     * Map one vring. Its size must be a power of two (virtio split ring) and
+     * fit the descriptor arrays above; anything else is rejected, so ring
+     * slots can be computed with a mask instead of a division.
+     */
+    bool setup_vq(VirtQueueLayout &vq, uint32_t da, uint32_t num, uint32_t align) {
+        vq.desc = nullptr;
+        vq.avail = nullptr;
+        vq.used = nullptr;
         vq.last_avail_idx = 0;
 
         if (da == 0 || da == 0xFFFFFFFFUL) {
-            vq.desc = nullptr;
-            vq.avail = nullptr;
-            vq.used = nullptr;
-            return;
+            return false;
         }
+        if (num == 0 || num > VRING_NUM_DESCS || (num & (num - 1)) != 0 ||
+            align == 0 || (align & (align - 1)) != 0) {
+            return false;
+        }
+        vq.da = da;
+        vq.num = num;
+        vq.mask = num - 1;
+        vq.align = align;
 
         uint8_t *base = reinterpret_cast<uint8_t *>(translate_da(da));
         vq.desc = reinterpret_cast<volatile struct VirtioDesc *>(base);
 
+        // avail: flags, idx, ring[num], used_event
         size_t avail_offset = sizeof(struct VirtioDesc) * num;
         vq.avail = reinterpret_cast<volatile struct VirtioAvail *>(base + avail_offset);
 
-        size_t used_offset = (avail_offset + sizeof(struct VirtioAvail) + align - 1) & ~(align - 1);
+        size_t used_offset = (avail_offset + sizeof(uint16_t) * (3 + num) + align - 1) & ~(size_t)(align - 1);
         vq.used = reinterpret_cast<volatile struct VirtioUsed *>(base + used_offset);
+        return true;
     }
 
     /*
@@ -182,9 +195,13 @@ bool Rpmsg::is_driver_ready() noexcept {
 
         if ((status & VIRTIO_CONFIG_S_DRIVER_OK) &&
             rsc->vdev.vring[0].da != 0 && rsc->vdev.vring[1].da != 0) {
-            setup_vq(s_tx_vq, rsc->vdev.vring[0].da, rsc->vdev.vring[0].num, rsc->vdev.vring[0].align);
-            setup_vq(s_rx_vq, rsc->vdev.vring[1].da, rsc->vdev.vring[1].num, rsc->vdev.vring[1].align);
-            s_vdev_ready = true;
+            bool tx_ok = setup_vq(s_tx_vq, rsc->vdev.vring[0].da, rsc->vdev.vring[0].num, rsc->vdev.vring[0].align);
+            bool rx_ok = setup_vq(s_rx_vq, rsc->vdev.vring[1].da, rsc->vdev.vring[1].num, rsc->vdev.vring[1].align);
+            if (tx_ok && rx_ok) {
+                s_vdev_ready = true;
+            } else {
+                s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+            }
         }
     }
     return s_vdev_ready;
@@ -224,7 +241,7 @@ bool Rpmsg::announce_service(const char *name, uint32_t addr) noexcept {
     ns_msg.addr = addr;
     ns_msg.flags = 0; // RPMSG_NS_CREATE
 
-    uint16_t avail_slot = s_tx_vq.last_avail_idx % s_tx_vq.num;
+    uint16_t avail_slot = s_tx_vq.last_avail_idx & s_tx_vq.mask;
     uint16_t desc_idx = s_tx_vq.avail->ring[avail_slot];
     volatile struct VirtioDesc *desc = &s_tx_vq.desc[desc_idx];
 
@@ -239,7 +256,7 @@ bool Rpmsg::announce_service(const char *name, uint32_t addr) noexcept {
 
     s_tx_vq.last_avail_idx++;
 
-    uint16_t used_slot = s_tx_vq.used->idx % s_tx_vq.num;
+    uint16_t used_slot = s_tx_vq.used->idx & s_tx_vq.mask;
     s_tx_vq.used->ring[used_slot].id = desc_idx;
     s_tx_vq.used->ring[used_slot].len = sizeof(struct rpmsg_hdr) + sizeof(ns_msg);
     std::atomic_thread_fence(std::memory_order_release);
@@ -263,7 +280,7 @@ bool Rpmsg::poll() noexcept {
     }
 
     for (; pending > 0; --pending) {
-        uint16_t desc_idx = s_rx_vq.avail->ring[s_rx_vq.last_avail_idx % s_rx_vq.num];
+        uint16_t desc_idx = s_rx_vq.avail->ring[s_rx_vq.last_avail_idx & s_rx_vq.mask];
         if (desc_idx >= s_rx_vq.num) {
             // A descriptor index outside the ring: nothing safe to return to the host.
             s_ring_errors.fetch_add(1, std::memory_order_relaxed);
@@ -307,8 +324,8 @@ bool Rpmsg::poll() noexcept {
 
         // Return the consumed descriptor to the host
         uint16_t used_idx = s_rx_vq.used->idx;
-        s_rx_vq.used->ring[used_idx % s_rx_vq.num].id = desc_idx;
-        s_rx_vq.used->ring[used_idx % s_rx_vq.num].len = 0;
+        s_rx_vq.used->ring[used_idx & s_rx_vq.mask].id = desc_idx;
+        s_rx_vq.used->ring[used_idx & s_rx_vq.mask].len = 0;
         std::atomic_thread_fence(std::memory_order_release);
         s_rx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
         s_rx_vq.last_avail_idx++;
@@ -341,7 +358,7 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
         notify_host();
     }
 
-    uint16_t desc_idx = s_tx_vq.avail->ring[s_tx_vq.last_avail_idx % s_tx_vq.num];
+    uint16_t desc_idx = s_tx_vq.avail->ring[s_tx_vq.last_avail_idx & s_tx_vq.mask];
     if (desc_idx >= s_tx_vq.num) {
         s_ring_errors.fetch_add(1, std::memory_order_relaxed);
         return false;
@@ -373,8 +390,8 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
 
     // Add to Used Ring for Linux Host to receive
     uint16_t used_idx = s_tx_vq.used->idx;
-    s_tx_vq.used->ring[used_idx % s_tx_vq.num].id = desc_idx;
-    s_tx_vq.used->ring[used_idx % s_tx_vq.num].len = sizeof(struct rpmsg_hdr) + len;
+    s_tx_vq.used->ring[used_idx & s_tx_vq.mask].id = desc_idx;
+    s_tx_vq.used->ring[used_idx & s_tx_vq.mask].len = sizeof(struct rpmsg_hdr) + len;
     std::atomic_thread_fence(std::memory_order_release);
     s_tx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
 

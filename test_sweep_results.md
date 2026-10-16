@@ -1,6 +1,6 @@
 # Autonomous 3-Profile Silicon Sweep Results
 
-- **Timestamp**: 2026-10-15 19:13:49
+- **Timestamp**: 2026-10-16 04:10:37
 - **Target**: 192.168.3.3 (Linux 7.1 PREEMPT_RT)
 - **Co-Processor**: XuanTie E906 RISC-V
 
@@ -65,11 +65,11 @@
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
 | testCrash.elf (Autopsy) | **PASS** | N/A | 0x30000002 | N/A | N/A | Verified |
-| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 169.67 µs | 5,861.4 msgs/s | 5.55 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1347.37 µs | 11,396.2 msgs/s | 10.78 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 99.72 µs | 7,172.9 msgs/s | 896.6 KB/s | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 200.99 µs | 3,247.9 msgs/s | 3.17 MB/sec | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 3078.62 µs | 5,019.4 msgs/s | 4.90 MB/sec | PASS (0 errors) |
+| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 167.21 µs | 5,944.6 msgs/s | 5.62 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1322.11 µs | 11,580.3 msgs/s | 10.96 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 102.79 µs | 6,912.9 msgs/s | 864.1 KB/s | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 189.56 µs | 3,372.6 msgs/s | 3.29 MB/sec | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 2994.72 µs | 5,155.3 msgs/s | 5.03 MB/sec | PASS (0 errors) |
 
 ### Profile 2 (Pure On-Chip SRAM VirtIO)
 
@@ -79,17 +79,17 @@
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
-| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 132.96 µs | 7,472.3 msgs/s | 7.07 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 829.15 µs | 18,361.0 msgs/s | 17.37 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 97.42 µs | 7,330.3 msgs/s | 916.3 KB/s | PASS (0 errors) |
+| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 130.53 µs | 7,610.0 msgs/s | 7.20 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 816.15 µs | 18,749.0 msgs/s | 17.74 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 195.11 µs | 4,156.1 msgs/s | 519.5 KB/s | PASS (0 errors) |
 
 ### Profile 3 (Userspace UIO Direct Mailbox)
 
-- **Node Mapping**: Hardware Mailbox bound to generic-uio (/dev/uio0)
+- **Node Mapping**: Message box bound to sun55i-msgbox-uio (/dev/uio0)
 
 | Test / Application | Status | Packets | Avg RTT | Throughput | Bandwidth | Data Integrity |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 13.48 µs | 8,992.0 msgs/s | 8.78 MB/sec | PASS (0 errors) |
-| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 58.05 µs | 6,410.4 msgs/s | None | PASS (0 errors) |
-| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 31.95 µs | 160.2 msgs/s | None | PASS (0 errors) |
+| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 13.65 µs | 8,823.2 msgs/s | 8.62 MB/sec | PASS (0 errors) |
+| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 59.63 µs | 6,202.0 msgs/s | None | PASS (0 errors) |
+| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 32.38 µs | 160.5 msgs/s | None | PASS (0 errors) |
 
