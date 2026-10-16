@@ -151,16 +151,16 @@ int main(int argc, char *argv[]) {
 
     auto pattern = [](uint32_t seq, size_t k) -> uint8_t { return (uint8_t)(seq * 31u + k * 7u); };
 
-    // Continue from the current ring state; both rings must be idle.
-    uint32_t head = ctrl->host_head;     // ours (tx producer)
-    uint32_t rx_tail = ctrl->host_tail;  // ours (rx consumer)
+    // Continue from the current ring state using standard ipc Producer & Consumer
+    ipc::Producer<DramTxRing> tx_producer(&ctrl->tx_ring);
+    ipc::Consumer<DramRxRing> rx_consumer(&ctrl->rx_ring);
+
     {
         uint64_t deadline = get_time_ns() + (uint64_t)timeout_ms * 1000000ULL;
-        while (ctrl->riscv_tail != head || ctrl->riscv_head != rx_tail) {
+        while (tx_producer.in_flight() != 0 || rx_consumer.peek() != nullptr) {
             if (get_time_ns() >= deadline) {
-                std::cerr << "[FAIL] rings not idle at start (host_head " << head << ", riscv_tail "
-                          << ctrl->riscv_tail << ", riscv_head " << ctrl->riscv_head << ", host_tail "
-                          << rx_tail << ")\n";
+                std::cerr << "[FAIL] rings not idle at start (tx in flight: "
+                          << tx_producer.in_flight() << ")\n";
                 return 1;
             }
         }
@@ -180,37 +180,39 @@ int main(int argc, char *argv[]) {
     while (received < count && why.empty()) {
         // Post while there is room in the window and in the ping ring
         while (sent < count && sent - received < window) {
-            if (head - ctrl->riscv_tail >= DRAM_SPSC_RING_ENTRIES) {
+            volatile DramSpscDesc *d = tx_producer.reserve();
+            if (d == nullptr) {
+                if (tx_producer.corrupt()) {
+                    why = "tx_producer corrupt";
+                    break;
+                }
                 full_waits++;  // ping ring full: the E906 has not taken the earlier ones yet
                 break;
             }
-            uint32_t slot = head % DRAM_SPSC_RING_ENTRIES;
-            volatile DramSpscDesc *d = &ctrl->tx_ring[slot];
+            uint32_t slot = tx_producer.head() & DramTxRing::kMask;
             volatile uint8_t *buf = dram_pool + slot * DRAM_SPSC_MAX_BUF_LEN;
             uint32_t seq = next_seq++;
             for (size_t k = 0; k < payload_size; ++k) {
                 buf[k] = pattern(seq, k);
             }
             uint64_t ts = get_time_ns();
-            tx_ts[seq % DRAM_SPSC_RING_ENTRIES] = ts;
+            tx_ts[seq & DramTxRing::kMask] = ts;
             d->dram_buf_offset = slot * DRAM_SPSC_MAX_BUF_LEN;
             d->seq = seq;
             d->payload_len = payload_size;
             d->host_tx_ts_ns = ts;
             d->flags = DRAM_SPSC_FLAG_READY;
-            __sync_synchronize();  // descriptor and payload before the head
-            ctrl->host_head = ++head;
+            tx_producer.commit();
             sent++;
         }
 
         // Take every reply that is ready
-        uint32_t rx_head = ctrl->riscv_head;
-        if (rx_head - rx_tail > DRAM_SPSC_RING_ENTRIES) {
-            why = "riscv_head " + std::to_string(rx_head) + " - host_tail " + std::to_string(rx_tail) +
-                  " exceeds ring size";
-            break;
-        }
-        if (rx_head == rx_tail) {
+        const volatile DramSpscDesc *r = rx_consumer.peek();
+        if (r == nullptr) {
+            if (rx_consumer.corrupt()) {
+                why = "rx_consumer corrupt";
+                break;
+            }
             if (get_time_ns() - last_progress_ns > (uint64_t)timeout_ms * 1000000ULL) {
                 timeouts++;
                 std::cerr << "[FAIL] no reply for " << timeout_ms << " ms (expecting seq " << expect_seq
@@ -219,13 +221,12 @@ int main(int argc, char *argv[]) {
             }
             continue;
         }
-        __sync_synchronize();  // read the reply after riscv_head
-        while (rx_tail != rx_head) {
-            uint32_t slot = rx_tail % DRAM_SPSC_RING_ENTRIES;
-            volatile DramSpscDesc *r = &ctrl->rx_ring[slot];
+
+        while (r != nullptr) {
+            uint32_t slot = rx_consumer.tail() & DramRxRing::kMask;
             uint64_t now = get_time_ns();
             uint32_t seq = r->seq;
-            uint64_t sent_ts = tx_ts[expect_seq % DRAM_SPSC_RING_ENTRIES];
+            uint64_t sent_ts = tx_ts[expect_seq & DramTxRing::kMask];
 
             if (r->flags == DRAM_SPSC_FLAG_ERROR) {
                 why = "E906 rejected ping seq " + std::to_string(seq) + " as malformed";
@@ -254,8 +255,10 @@ int main(int argc, char *argv[]) {
             total_payload_bytes += payload_size * 2;
             received++;
             expect_seq++;
-            ctrl->host_tail = ++rx_tail;  // release the reply slot
+            rx_consumer.release();
             last_progress_ns = now;
+
+            r = rx_consumer.peek();
         }
 
         if (delay_us > 0) {

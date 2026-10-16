@@ -1,6 +1,7 @@
 #include "uart.hpp"
 #include "timer.hpp"
 #include "memory_map.h"
+#include "spsc_queue.hpp"
 #include <atomic>
 
 namespace hal {
@@ -18,50 +19,7 @@ namespace hal {
 #define UART2_LSR       (*(volatile uint32_t *)(UART2_BASE + 0x14))
 #define UART2_USR       (*(volatile uint32_t *)(UART2_BASE + 0x7C))
 
-/* Lock-Free Atomic SPSC Byte Ring Buffer for ISR -> Thread UART stream */
-template <size_t Capacity = 512>
-class AtomicByteQueue {
-public:
-    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
-
-    void clear() {
-        head_.store(0, std::memory_order_relaxed);
-        tail_.store(0, std::memory_order_relaxed);
-    }
-
-    bool push(uint8_t ch) {
-        uint32_t head = head_.load(std::memory_order_relaxed);
-        uint32_t tail = tail_.load(std::memory_order_acquire);
-        if ((head - tail) >= Capacity) {
-            return false; // Full
-        }
-        buffer_[head & (Capacity - 1)] = ch;
-        head_.store(head + 1, std::memory_order_release);
-        return true;
-    }
-
-    bool pop(uint8_t &ch) {
-        uint32_t tail = tail_.load(std::memory_order_relaxed);
-        uint32_t head = head_.load(std::memory_order_acquire);
-        if (tail == head) {
-            return false; // Empty
-        }
-        ch = buffer_[tail & (Capacity - 1)];
-        tail_.store(tail + 1, std::memory_order_release);
-        return true;
-    }
-
-    bool empty() const {
-        return head_.load(std::memory_order_relaxed) == tail_.load(std::memory_order_relaxed);
-    }
-
-private:
-    uint8_t buffer_[Capacity];
-    std::atomic<uint32_t> head_{0};
-    std::atomic<uint32_t> tail_{0};
-};
-
-static AtomicByteQueue<512> g_uart_rx_ring;
+static SpscQueue<uint8_t, 512> g_uart_rx_ring;
 static std::atomic<std::coroutine_handle<>> g_uart_rx_coroutine{nullptr};
 static std::atomic<bool> g_uart_packet_ready{false};
 

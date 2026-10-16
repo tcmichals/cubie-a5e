@@ -49,8 +49,7 @@ inline void barrier() noexcept
 
 /*
  * Copy to or from shared memory with the widest aligned access the CPU has:
- * 64-bit on aarch64, 32-bit on RV32. `bytes` must be a multiple of 8 and
- * both pointers 8-byte aligned (slot payloads are laid out that way).
+ * 64-bit on aarch64, 32-bit on RV32.
  */
 inline void copy_shared(volatile void *dst, const volatile void *src, size_t bytes) noexcept
 {
@@ -61,8 +60,17 @@ inline void copy_shared(volatile void *dst, const volatile void *src, size_t byt
 #endif
     volatile word *d = static_cast<volatile word *>(dst);
     const volatile word *s = static_cast<const volatile word *>(src);
-    for (size_t i = 0; i < bytes / sizeof(word); ++i) {
+    size_t words = bytes / sizeof(word);
+    for (size_t i = 0; i < words; ++i) {
         d[i] = s[i];
+    }
+    size_t remainder = bytes % sizeof(word);
+    if (remainder > 0) {
+        volatile uint8_t *d8 = reinterpret_cast<volatile uint8_t *>(d + words);
+        const volatile uint8_t *s8 = reinterpret_cast<const volatile uint8_t *>(s + words);
+        for (size_t i = 0; i < remainder; ++i) {
+            d8[i] = s8[i];
+        }
     }
 }
 
@@ -128,6 +136,7 @@ public:
         r_->head = ++head_;
     }
 
+    uint32_t head() const noexcept { return head_; }
     uint32_t in_flight() noexcept
     {
         tail_ = r_->tail;

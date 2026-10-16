@@ -2,6 +2,7 @@
 #define DRAM_SPSC_PROTOCOL_H
 
 #include <stdint.h>
+#include "ipc/spsc_ring.hpp"
 
 #define DRAM_SPSC_MAGIC_INIT   0x53505343UL /* "SPSC" */
 #define DRAM_SPSC_MAGIC_DATA   0x44415441UL /* "DATA" */
@@ -30,19 +31,19 @@
 #define DRAM_SPSC_FLAG_ERROR   3U  /* rx_ring: the E906 rejected a malformed ping */
 
 /*
- * Rules (each index and each ring's descriptors have exactly one writer):
- *   - A producer adds only when the ring has room: head - tail < RING_ENTRIES.
- *     When it is full the producer waits; nothing is dropped or overwritten.
- *   - A consumer takes only when head != tail. head - tail > RING_ENTRIES can
- *     only come from a corrupt index and is an error.
- *   - Descriptor and payload are written before the head that publishes them.
+ * Rules (ring mechanics are in ipc/spsc_ring.hpp):
+ *   - tx_ring: Linux produces, the E906 consumes. rx_ring: the E906
+ *     produces, Linux consumes. Nothing is dropped: a full ring makes the
+ *     producer wait.
  *   - tx slot i always uses dram_buf_offset i * MAX_BUF_LEN and rx slot i
- *     (RING_ENTRIES + i) * MAX_BUF_LEN; the E906 sets them up and checks them.
+ *     (RING_ENTRIES + i) * MAX_BUF_LEN; the E906 checks the tx offset.
  *   - The rx echo starts with "DRAM" and then repeats the ping payload.
+ *   - The E906 initialises both rings and writes magic last; Linux starts
+ *     only after it sees magic.
  */
 
 /*
- * SPSC Ring Descriptor (Placed in SRAM C, 32 bytes, 8-byte aligned)
+ * SPSC Ring Descriptor (Placed in SRAM, 32 bytes, 8-byte aligned)
  */
 struct __attribute__((aligned(8))) DramSpscDesc {
     uint32_t dram_buf_offset; // Byte offset into DRAM buffer pool (0x48000000 + offset)
@@ -53,34 +54,27 @@ struct __attribute__((aligned(8))) DramSpscDesc {
     uint64_t riscv_cycles;    // RISC-V hardware mcycle timestamp
 };
 
+using DramTxRing = ipc::SpscRing<DramSpscDesc, DRAM_SPSC_RING_ENTRIES>;
+using DramRxRing = ipc::SpscRing<DramSpscDesc, DRAM_SPSC_RING_ENTRIES>;
+
+IPC_SPSC_LAYOUT_CHECK(DramTxRing);
+IPC_SPSC_LAYOUT_CHECK(DramRxRing);
+
 /*
- * Bidirectional SPSC Queue Control Block (Placed in SRAM C @ 0x07130000)
+ * Bidirectional SPSC Queue Control Block (Placed in SRAM)
+ * Uses standard ipc::SpscRing for both Host->RISC-V (tx_ring) and RISC-V->Host (rx_ring).
  */
-struct __attribute__((aligned(8))) DramSpscControlBlock {
-    // Control block initialization signature
-    volatile uint32_t magic;
+struct __attribute__((aligned(64))) DramSpscControlBlock {
+    // Control block initialization signature & pool descriptors
+    alignas(64) volatile uint32_t magic;
     volatile uint32_t ring_size;
     volatile uint32_t dram_pool_phys;
     volatile uint32_t dram_pool_size;
 
-    // Host -> RISC-V ring (tx_ring)
-    volatile uint32_t host_head;      // Written only by Linux (producer)
-    volatile uint32_t riscv_tail;     // Written only by RISC-V (consumer)
-    volatile uint32_t reserved0;      // Unused (was a doorbell flag with two writers)
-
-    // RISC-V -> Host ring (rx_ring)
-    volatile uint32_t riscv_head;     // Written only by RISC-V (producer)
-    volatile uint32_t host_tail;      // Written only by Linux (consumer)
-    volatile uint32_t reserved1;      // Unused (was a doorbell flag with two writers)
-
-    // Diagnostic Counters
-    volatile uint32_t total_pings_recv;
-    volatile uint32_t total_pongs_sent;
-    volatile uint64_t total_bytes_transferred; // At offset 48 (aligned to 8!)
-
-    // Descriptor Rings (16 slots Host->RISC-V, 16 slots RISC-V->Host)
-    DramSpscDesc tx_ring[DRAM_SPSC_RING_ENTRIES]; // Host -> RISC-V
-    DramSpscDesc rx_ring[DRAM_SPSC_RING_ENTRIES]; // RISC-V -> Host
+    // SPSC Rings (each sits on its own 64-byte line to prevent false sharing)
+    alignas(64) DramTxRing tx_ring;
+    alignas(64) DramRxRing rx_ring;
 };
 
 #endif /* DRAM_SPSC_PROTOCOL_H */
+

@@ -9,11 +9,11 @@ CXXFLAGS ?= -O1 -g -Wall -Wextra -std=c++17
 CPPFLAGS += -I$(COMMON) -I$(COMMON)/hal -I.
 LDLIBS   += -lCppUTest -lCppUTestExt -pthread
 
-SRCS := AllTests.cpp rpmsg_test.cpp spsc_ring_test.cpp fake_msgbox.cpp $(COMMON)/hal/rpmsg.cpp
+SRCS := AllTests.cpp rpmsg_test.cpp spsc_ring_test.cpp spsc_queue_test.cpp fake_msgbox.cpp $(COMMON)/hal/rpmsg.cpp
 
 all: run
 
-host_tests: $(SRCS) fake_msgbox.hpp $(COMMON)/ipc/spsc_ring.hpp
+host_tests: $(SRCS) fake_msgbox.hpp $(COMMON)/ipc/spsc_ring.hpp $(COMMON)/hal/spsc_queue.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SRCS) -o $@ $(LDLIBS)
 
 run: host_tests
