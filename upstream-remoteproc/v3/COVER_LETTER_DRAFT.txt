@@ -9,8 +9,9 @@ core (RV32IMAFCX) next to the Cortex-A55 cluster. This series adds:
   - a driver for the sun55i message box, which the host uses to
     signal the E906 (and, through other channels, the HiFi4 DSP and
     the CPUS power-management core);
-  - a remoteproc driver that loads ELF firmware into the E906's SRAM
-    or DRAM, starts and stops the core, and runs rpmsg over virtio;
+  - a remoteproc driver that loads ELF firmware into the E906's SRAM,
+    starts and stops the core, and runs rpmsg over virtio; DRAM
+    regions are registered as carveouts for firmware and buffers;
   - DT bindings for both, the A523 DT nodes, and KUnit tests.
 
 Changes since v2:
@@ -112,7 +113,8 @@ the same driver files as this series:
     duplicated or corrupted messages.
   - Firmware running from SRAM with a payload pool in DRAM, start/stop
     cycles, a firmware crash caught and the core stopped cleanly.
-  - TODO: firmware linked to run from DRAM (e906_ddr.ld).
+    Firmware with segments loaded into DRAM has not been tested; the
+    DRAM carveout lookup is covered by a KUnit test.
   - TODO: non-RT run with CONFIG_DEBUG_ATOMIC_SLEEP.
 On next-20261015: W=1 arm64 build, dt_binding_check and dtbs_check are
 clean. TODO: checkpatch --strict on the exported patches.
