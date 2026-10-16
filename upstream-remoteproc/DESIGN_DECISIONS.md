@@ -98,6 +98,15 @@ drivers.
 `last_tx_done()` reports "remote drained" (`count == 0`) and the remoteproc client uses
 `knows_txdone = false`. See Lessons 2.1 and 3.2. Throughput work (P1) comes after v3.
 
+### Message box TX completion: poll or write interrupt (open, 2026-10-16)
+Not decided; v3 is on hold until it is. Today the mailbox core polls `last_tx_done()` every 1 ms.
+The hardware has a write interrupt with a free-slot threshold (vendor driver); threshold 8 would
+signal "receiver has read everything", the same meaning as our poll, but it is raised on the
+receiver's bank line (SPI 174 for the E906), which the v3 driver does not request. Facts, sources
+and open questions: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md)
+§5 and §8. Decide after measuring how often messages wait for the poll (kernel tracing) and
+testing the threshold-8 interrupt on the board.
+
 ### E906 D-cache is off (C1)
 The E906 runs with `mhcr.DE = 0`. Linux maps the DMA pool and carveouts uncached
 (`shared-dma-pool`, `MEMREMAP_WC`, no `dma-coherent`), so no cache maintenance is needed

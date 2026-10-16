@@ -6,6 +6,9 @@
 
 ---
 
+> Message box hardware (banks, routing, registers, interrupts, TX completion): see
+> [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
+
 ## 1. Architectural Purpose & Overview
 
 The Linux `remoteproc` (Remote Processor) and `mailbox` (Inter-Processor Communication) subsystems provide standard kernel frameworks to control heterogeneous co-processors (e.g., RISC-V, ARM Cortex-M/R, DSPs) and exchange doorbells or messages with them.

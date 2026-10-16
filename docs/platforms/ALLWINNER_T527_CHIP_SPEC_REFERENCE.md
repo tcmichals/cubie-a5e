@@ -184,6 +184,8 @@ Because the ARM Cortex-A55, XuanTie RISC-V, and Tensilica HiFi4 DSP connect to t
 
 ### 5.3 Hardware Message Box Channels (ARM bank `0x03003000`)
 
+Full reference: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
+
 The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every host channel raises the **ARM bank interrupt, GIC SPI 0** (verified on silicon). The other banks' GIC lines (vendor `sun55iw3p1.dtsi`) only signal messages pending in those processors' own banks; Linux does not request them.
 
 | Host Channels | Remote Processor | Remote Bank | Remote Bank GIC Line | Co-Processor Interrupt |

@@ -19,6 +19,7 @@ docs/
 │
 ├── platforms/                                 <-- Dedicated Hardware & Bootloader Specifications
 │   ├── CUBIE_A5E_PLATFORM_GUIDE.md            <-- Radxa Cubie A5E (Allwinner A527/T527, Mainline U-Boot, SDIO)
+│   ├── ALLWINNER_SUN55I_MSGBOX_REFERENCE.md   <-- Message box hardware: banks, routing, registers, interrupts, TX completion
 │   ├── CUBIE_A7A_PLATFORM_GUIDE.md            <-- Radxa Cubie A7A (Allwinner A733, LPDDR5 boot0, GICv3, Dual GMAC)
 │   ├── CUBIE_A7Z_PLATFORM_GUIDE.md            <-- Radxa Cubie A7Z (Allwinner A733 Zero Form Factor, Micro-HDMI)
 │   ├── CUBIE_A7A_ETHERNET_SCHEMATIC_REFERENCE.md <-- Decoded Cubie A7A V1.10 Ethernet sheet (PHY, RJ45, clock, reset, straps)
