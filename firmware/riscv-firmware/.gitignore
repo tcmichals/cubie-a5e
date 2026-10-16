@@ -15,5 +15,6 @@ bin/*.elf
 bin/*.bin
 bin/*.map
 bin/ping_*
+bin/stress_rpmsg
 bin/riscv-load
 bin/io-bridge

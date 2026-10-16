@@ -19,6 +19,7 @@ riscv-load
 boot.scr
 ping_shm
 ping_rpmsg
+stress_rpmsg
 ping_dram
 ping_uio
 riscv-firmware/bin/
