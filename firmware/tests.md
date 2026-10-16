@@ -63,7 +63,7 @@ The Radxa Cubie A5E bootloader (`U-Boot 2024`) merges overlays declared in `/boo
 | :--- | :--- | :--- | :--- |
 | **Profile 1: Standard DDR VirtIO RPMsg (Default)** | `dtoverlay=cubie-a5e-flight-stack` | `vdev@48000000`<br>(1 MB DDR DRAM carveout) | `testBasic.elf`, `testStringBinaryTrace0.elf`, `testCrash.elf`, `testPingRpmsg.elf`, `testDRAMMsg.elf` |
 | **Profile 2: Pure On-Chip SRAM VirtIO** | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-rpmsg-sram` | `sram1@72c0000`<br>(256 KB on-chip SRAM Space 1) | `testPingRpmsgSram.elf` (VirtIO vrings & message buffers locked to on-chip SRAM) |
-| **Profile 3: Userspace UIO Direct SPSC Queue** | `base_dtb=sun55i-a527-cubie-a5e-uio.dtb`<br>`dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing`<br>`cmdline=uio_pdrv_genirq.of_id=generic-uio` | None (Mailbox owned by `generic-uio`; the `-uio` base tree drops the remoteproc `mboxes` so remoteproc starts in standalone mode) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
+| **Profile 3: Userspace UIO Direct SPSC Queue** | `base_dtb=sun55i-a527-cubie-a5e-uio.dtb`<br>`dtoverlay=cubie-a5e-flight-stack cubie-a5e-testPing` | None (Mailbox owned by userspace via the `sun55i-msgbox-uio` driver; the `-uio` base tree drops the remoteproc `mboxes` so remoteproc starts in standalone mode) | `testPing.elf` (`ping_shm` / `ping_uio` user-space polling, bypassing kernel VirtIO) |
 | **Profile 4: Dual Co-Processor Concurrent Mailbox** | `dtoverlay=cubie-a5e-dual-mailbox-test` | `mailbox_test_dsp` (Ch 4/5)<br>`mailbox_test_e906` (Ch 8/9) | Concurrent multi-core stress testing (`test_dual_msgbox.py`, `testMsgbox.elf`, `dsp-testMsgbox.elf`) |
 | **Profile 5: HiFi4 DSP Mailbox Isolation** | `dtoverlay=cubie-a5e-dsp-mailbox-test` | `mailbox_test_dsp` (Ch 4/5) | Cadence HiFi4 DSP standalone mailbox testing (`dsp-testMsgbox.elf`) |
 
@@ -119,6 +119,27 @@ cat /sys/kernel/debug/remoteproc/remoteproc0/trace0
 # 6. Cleanly stop core post-test
 echo stop > /sys/class/remoteproc/remoteproc0/state
 ```
+
+## 1.3 Stress Tests, Strict Pass Rules and Host Unit Tests
+
+Every ping tool exits non-zero on any lost, late, duplicate or malformed message, and checks
+every payload byte (see `docs/buildroot/DebugLog.md`, Case Study 13).
+
+| Tool | Profile | What it does |
+| :--- | :--- | :--- |
+| `stress_rpmsg -n 100000 -w 16` | 1, 2 | Writer and reader threads, up to `-w` messages in flight (0 = unlimited). Malformed, duplicate or late messages stop the run; drops are counted separately. |
+| `ping_rpmsg -D 0` | 1, 2 | One ping at a time, no pacing (blocking write, no retry sleeps). |
+| `ping_dram -w 16` | 1 | DRAM SPSC rings with up to 16 messages in flight. |
+| `ping_shm` | 3 | Polls the SRAM ping/pong slot (sequence-numbered, one writer per field). |
+| `ping_uio` / `ping_uio.py` | 3 | Sleeps on the E906's doorbell interrupt (needs the `sun55i-msgbox-uio` driver); fails at once if the message box is not clocked. |
+
+Host unit tests for the E906 rpmsg HAL (CppUTest):
+```bash
+sudo apt install cpputest
+make -C firmware/tests/host
+```
+
+---
 
 ## 2. Hardware Memory Map for Firmware Tests
 

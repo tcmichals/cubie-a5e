@@ -46,6 +46,9 @@ stage-bin: $(APPS) host-tools
 	@if [ -f testPingRpmsg/linux/ping_rpmsg ]; then \
 		cp -v testPingRpmsg/linux/ping_rpmsg $(BIN_DIR)/; \
 	fi
+	@if [ -f testPingRpmsg/linux/stress_rpmsg ]; then \
+		cp -v testPingRpmsg/linux/stress_rpmsg $(BIN_DIR)/; \
+	fi
 	@if [ -f testPingRpmsg/linux/ping_rpmsg.py ]; then \
 		cp -v testPingRpmsg/linux/ping_rpmsg.py $(BIN_DIR)/; \
 		chmod +x $(BIN_DIR)/ping_rpmsg.py; \

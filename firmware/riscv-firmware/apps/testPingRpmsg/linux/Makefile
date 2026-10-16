@@ -2,16 +2,14 @@
 
 CXX ?= g++
 CXXFLAGS ?= -O3 -Wall -Wextra -std=c++17 -pthread
-TARGET = ping_rpmsg
+TARGETS = ping_rpmsg stress_rpmsg
 
-SRCS = ping_rpmsg.cpp
+all: $(TARGETS)
 
-all: $(TARGET)
-
-$(TARGET): $(SRCS)
+%: %.cpp
 	$(CXX) $(CXXFLAGS) -I../../../../common -I../../../../common/include $< -o $@ -lm
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGETS)
 
 .PHONY: all clean

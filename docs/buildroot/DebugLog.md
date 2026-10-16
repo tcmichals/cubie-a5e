@@ -582,3 +582,123 @@ Only CLK_USB2_MF (0x1354) is enabled so far. **The other two clocks (USB2_U2_REF
    - Remove hardcoded register pokes from pck600 patch
 3. Rebuild, flash, and verify FE1.1S hub (`1a40:0101`) + AIC8800 (`a69c:8800`) enumerate.
 
+
+---
+
+## Case Study 13: E906 IPC Under Load: Torn Ring Index, Silent Drops, and a UIO Doorbell That Never Worked
+**Date:** October 14–15, 2026  
+**Component:** `firmware/common/hal/rpmsg.cpp`, `testPing` / `testDRAMMsg` firmware and their Linux tools, `drivers/uio/uio_sun55i_msgbox.c` (project-only), test suites
+
+### 🚨 Symptoms
+All ping tests passed, but only with the pacing they had always been run with. With
+`ping_rpmsg -D 50` (50 µs between pings) Profile 1 averaged ~190 µs. With `-D 0`:
+
+| Run (10,000 pings, `-D 0`) | Avg RTT | Jitter | Result |
+|---|---|---|---|
+| 1 | 1186 µs | 750 µs | 10000/10000 |
+| 2 | 1097 µs | 773 µs | **9985/10000, integrity FAIL** |
+| 3 | 1109 µs | 770 µs | 10000/10000 |
+
+The 15–16 "corrupted" packets were PONGs with sequence numbers 9985–10000 from the
+*previous* run, and `dmesg` showed bursts of `virtio_rpmsg_bus virtio0: msg received with no
+recipient` (191 suppressed) after a run ended. In Profile 3, a new `ping_uio` that really waits
+for the doorbell interrupt slept the full 1 s timeout on every ping.
+
+### 🔍 Investigation
+1. **Who sends the extra replies?** The E906 logs its RX/TX counts to trace0. Between two 5,000-ping
+   runs it counted **67,448** pings: ~62,000 that Linux never sent. The 16-descriptor vring
+   explains the 15–16 duplicates per run.
+2. **Disassembly of the deployed `testPingRpmsg.elf`** (`Rpmsg::poll`):
+   ```text
+   lbu  s1,2(a5)     ; low byte of avail->idx
+   lbu  a5,3(a5)     ; high byte, a separate load
+   ```
+   Every vring struct was `__attribute__((packed))`, so the compiler could not assume alignment and
+   split each 16-bit ring index into two byte loads/stores.
+3. **UIO doorbell.** `/proc/interrupts` showed 0 interrupts, and every register of the ARM message
+   box bank read back 0, including a bit written a moment earlier. `bus-msgbox` had an enable count
+   of 0: `generic-uio` switches on neither the clock nor the reset, so the block was gated. The old
+   `ping_uio` also wrote its "doorbell" to offset 0x184 of the ARM bank, which is not the E906's
+   FIFO (that is in the E906 bank, 0x07136000 + 0x270, not mapped by UIO). Both sides had only ever
+   spun on SRAM; the 13.7 µs "UIO doorbell" baseline never used a doorbell.
+
+### 💡 Root Causes
+1. **Torn ring index (rpmsg).** Linux updates `avail->idx` with one 16-bit store. If that store
+   lands between the E906's two byte loads when the index crosses a multiple of 256
+   (0x01FF → 0x0200), the E906 reads 0x02FF: 255 descriptors that do not exist. The loop
+   `while (last_avail_idx != avail_idx)` then ran ~65,000 times until the 16-bit index wrapped,
+   replaying the 16 old descriptors and replying to each. The 50 µs pacing only made the window rarer.
+2. **Silent drops.** `Rpmsg::reply()` returned `false` when Linux's RX ring was full, and the ping
+   handler ignored it: the pong was lost. `MsgBox::send()` returns `false` when the FIFO is full and
+   every caller ignored that too.
+3. **Single-slot SHM protocols with two writers per flag** (`testPing`, `testDRAMMsg`): each side set
+   and cleared the same doorbell flag, a stray mailbox entry counted as a new ping, replies were
+   written without checking that the previous one had been consumed, and `ping_dram` never checked
+   the echoed payload.
+4. **Mailbox latency at `-D 0`.** The E906 drained one mailbox entry per loop pass, and Linux only
+   learns a kick was consumed by polling the FIFO on a 1 ms timer (`txpoll_period = 1`), so kicks
+   queued behind each other waited up to 1 ms.
+5. **Tests that could not fail.** `-D 50` hid (1) and (4); `ping_uio`, `ping_uio.py` and `ping_dram`
+   exited 0 on timeouts or lost data; `ping_dram` did not check integrity at all.
+6. **Orphaned test processes.** The sweep ran `run_tests.py` over SSH with a 45 s timeout. Once the
+   stress runs made it longer, the timeout dropped the SSH session but `run_tests.py` kept running
+   on the board, restarting the E906 under the sweep's own next steps; all three Profile 1 rpmsg
+   steps then failed with no output. A timed-out remote command is now reported as a FAIL and
+   killed on the board, and `run_tests.py` gets 300 s.
+
+### 🛠️ Fixes
+* **rpmsg HAL:** vring structs unpacked (layout pinned with `static_assert`), so indices are single
+  `lhu`/`sh` accesses. A host index more than the ring size ahead is rejected and counted
+  (`get_ring_errors()`). `reply()` waits for a free host buffer instead of dropping; the doorbell
+  waits for FIFO space; every queued doorbell is drained on each pass. Wait and error counters are
+  in the trace line.
+* **SHM ping (`shm_ping_protocol.h`):** one writer per field: Linux owns `ping_seq`, the E906 owns
+  `pong_seq`; a ping is posted only when `pong_seq == ping_seq`; any other sequence is malformed
+  and answered with `SHM_ERROR_MAGIC`. The mailbox is only a wake-up hint (coalesced: sent when
+  Linux's FIFO is empty).
+* **DRAM SPSC (`dram_spsc_protocol.h`):** each index has one writer; producers add only when
+  `head - tail < 16`, consumers reject `head - tail > 16`; descriptors are validated; `ping_dram`
+  checks every payload byte and can keep up to 16 messages in flight (`-w`).
+* **UIO driver:** project-only `drivers/uio/uio_sun55i_msgbox.c` holds the bus clock and reset on,
+  exposes the message box bank and the SRAM slot, and masks the level IRQ until userspace has
+  drained the FIFO. `ping_uio` and `ping_uio.py` check the clock (write/read back the IRQ enable)
+  and fail at once if the block is gated.
+* **Tools:** new `stress_rpmsg` (writer and reader threads, up to N in flight, every byte checked;
+  malformed or duplicate packets stop the run, drops are counted separately, anything arriving
+  after the last reply fails). `ping_rpmsg` uses a blocking write and inotify instead of retry and
+  settle sleeps. Every tool exits non-zero on any lost, late or malformed message.
+
+### ✅ Results (board, after the fixes)
+| Test | Before | After |
+|---|---|---|
+| `ping_rpmsg -D 0`, 10,000 pings | ~1100 µs avg, 770 µs jitter, duplicates | **167 µs avg, 7–8 µs jitter**, 0 errors |
+| `stress_rpmsg`, 200,000 msgs, window 1 / 16 / unlimited | failed at message 2,561 | **all pass**; 4,920 / 11,440 / 11,190 msgs/s |
+| `ping_shm`, 500,000 pings | single-flag protocol | **500,000/500,000**, 13.8 µs avg |
+| `ping_uio`, 100,000 pings (doorbell IRQ) | never woke (block gated) | **100,000/100,000, 100,000 IRQ wake-ups**, 59 µs avg |
+| `ping_dram`, 100,000 msgs, window 1 / 16 | payload never checked | **all pass, every byte checked**; 3,360 / 5,140 msgs/s |
+
+Full 3-profile sweep (`tools/run_full_sweep.py`) after all fixes: **25/25 rows PASS**, KUnit 47/47;
+`stress_rpmsg` 100,000 messages at 16 in flight: 11,396 msgs/s from DDR, 18,361 msgs/s from SRAM.
+
+The extra time `ping_shm` takes per ping (throughput 65k → 9k msgs/s, RTT unchanged at 13.8 µs) is
+the full 484-byte payload now written and verified in uncached SRAM on every ping.
+
+### 🧪 Unit Tests
+`firmware/tests/host/` (CppUTest, `sudo apt install cpputest`, then `make`) runs the real
+`common/hal/rpmsg.cpp` on the PC against a fake Linux host (vrings below 4 GB) and a fake MsgBox:
+index more than the ring size ahead, an exactly full ring, 16-bit wrap, oversized lengths,
+out-of-range descriptors, reply waiting for a host buffer, doorbell waiting for FIFO space,
+doorbell draining. Each fix was removed in turn to check that its test fails. Re-adding `packed`
+fails the build (`static_assert` on the structs' alignment).
+
+### 📚 Lessons
+1. Never `packed` a structure that another processor writes concurrently: on RISC-V it turns
+   word accesses into byte accesses and makes them tearable.
+2. A ring index must be sanity-checked: `avail - last > ring size` is corruption, not work.
+3. "Full" must never mean "drop": check for space first, then add; if there is none, wait.
+4. One writer per shared field. A flag set by one side and cleared by the other is a race.
+5. A doorbell carries no data; order and content live in shared memory. Coalescing a doorbell is
+   fine, losing data is not.
+6. A UIO node gets no clocks or resets from `generic-uio`; check that the block is alive.
+7. Test at full rate and with many messages in flight. A test that needs a delay to pass is
+   hiding a bug, and a tool that exits 0 after a timeout is not a test.

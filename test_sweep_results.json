@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-14 21:59:57",
+  "timestamp": "2026-10-15 19:13:49",
   "target": "root@192.168.3.3",
   "kunit_tests": {
     "status": "PASS",
@@ -58,12 +58,22 @@
     ],
     [
       "Profile 1",
+      "C++ stress_rpmsg (100k, 16 in flight)",
+      "PASS"
+    ],
+    [
+      "Profile 1",
       "Python ping_rpmsg.py (1000 pkts)",
       "PASS"
     ],
     [
       "Profile 1",
       "C++ ping_dram (1000 pkts)",
+      "PASS"
+    ],
+    [
+      "Profile 1",
+      "C++ ping_dram (100k, 16 in flight)",
       "PASS"
     ],
     [
@@ -93,6 +103,11 @@
     ],
     [
       "Profile 2",
+      "C++ stress_rpmsg (100k, 16 in flight)",
+      "PASS"
+    ],
+    [
+      "Profile 2",
       "Python ping_rpmsg.py (1000 pkts)",
       "PASS"
     ],
@@ -118,6 +133,11 @@
     ],
     [
       "Profile 3",
+      "C++ ping_uio (1000 pkts, IRQ)",
+      "PASS"
+    ],
+    [
+      "Profile 3",
       "Python ping_uio.py (1000 pkts)",
       "PASS"
     ],
@@ -129,7 +149,7 @@
   ],
   "profiles": [
     {
-      "timestamp": "1970-01-02 03:54:27",
+      "timestamp": "1970-01-03 01:07:24",
       "profile": "Profile 1 (Standard DDR VirtIO & Carveout)",
       "node_desc": "DDR DRAM Carveout / vdev@48000000",
       "results": [
@@ -159,7 +179,7 @@
           "metrics": {
             "mcause": "0x30000002",
             "registers_captured": 31,
-            "host_stability": "loadavg 0.05 0.01 0.00 2/200 443"
+            "host_stability": "loadavg 0.11 0.03 0.01 2/203 447"
           },
           "details": "mcause=0x30000002, 31 GPRs dumped, host stable"
         },
@@ -171,14 +191,31 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 193.863,
-            "min_lat_us": 185.833,
-            "max_lat_us": 221.958,
-            "jitter_us": 4.18,
-            "throughput_msgs_s": 2996.9,
-            "bandwidth": "2.84 MB/s (bi-directional)"
+            "avg_lat_us": 169.674,
+            "min_lat_us": 142.333,
+            "max_lat_us": 226.833,
+            "jitter_us": 7.922,
+            "throughput_msgs_s": 5861.4,
+            "bandwidth": "5.55 MB/s (bi-directional)"
           },
-          "details": "Avg=193.863us, Rate=2996.9msgs/s, BW=2.84 MB/s (bi-directional)"
+          "details": "Avg=169.674us, Rate=5861.4msgs/s, BW=5.55 MB/s (bi-directional)"
+        },
+        {
+          "name": "stress_rpmsg (C++ VirtIO, 16 in flight)",
+          "status": "PASS",
+          "metrics": {
+            "packets_sent": 100000,
+            "packets_recv": 100000,
+            "success_rate_pct": 100.0,
+            "data_integrity": "PASS (0 malformed / duplicate / late)",
+            "avg_lat_us": 1347.367,
+            "min_lat_us": 261.041,
+            "max_lat_us": 2512.125,
+            "jitter_us": null,
+            "throughput_msgs_s": 11396.2,
+            "bandwidth": "10.78 MB/s (bi-directional)"
+          },
+          "details": "Avg=1347.367us, Rate=11396.2msgs/s, BW=10.78 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python VirtIO)",
@@ -188,14 +225,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 126.95,
-            "min_lat_us": 101.58,
-            "max_lat_us": 228.75,
-            "jitter_us": 11.68,
-            "throughput_msgs_s": 5941.0,
-            "bandwidth": "742.6 KB/s (bidirectional)"
+            "avg_lat_us": 99.72,
+            "min_lat_us": 92.88,
+            "max_lat_us": 204.88,
+            "jitter_us": 12.67,
+            "throughput_msgs_s": 7172.9,
+            "bandwidth": "896.6 KB/s (bidirectional)"
           },
-          "details": "Avg=126.95us, Rate=5941.0msgs/s, BW=742.6 KB/s (bidirectional)"
+          "details": "Avg=99.72us, Rate=7172.9msgs/s, BW=896.6 KB/s (bidirectional)"
         },
         {
           "name": "ping_dram (C++ Hybrid DDR)",
@@ -204,20 +241,37 @@
             "packets_sent": 1000,
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
-            "data_integrity": null,
-            "avg_lat_us": 202.046,
-            "min_lat_us": 201.125,
-            "max_lat_us": 247.0,
-            "jitter_us": 2.024,
-            "throughput_msgs_s": 4500.3,
-            "bandwidth": "4.39 MB/sec (Bidirectional)"
+            "data_integrity": "PASS (0 corrupted / mismatched packets)",
+            "avg_lat_us": 200.993,
+            "min_lat_us": 199.708,
+            "max_lat_us": 240.542,
+            "jitter_us": 2.644,
+            "throughput_msgs_s": 3247.9,
+            "bandwidth": "3.17 MB/sec (Bidirectional)"
           },
-          "details": "Avg=202.046us, Rate=4500.3msgs/s, BW=4.39 MB/sec (Bidirectional)"
+          "details": "Avg=200.993us, Rate=3247.9msgs/s, BW=3.17 MB/sec (Bidirectional)"
+        },
+        {
+          "name": "ping_dram (C++ Hybrid DDR, 16 in flight)",
+          "status": "PASS",
+          "metrics": {
+            "packets_sent": 100000,
+            "packets_recv": 100000,
+            "success_rate_pct": 100.0,
+            "data_integrity": "PASS (0 corrupted / mismatched packets)",
+            "avg_lat_us": 3078.623,
+            "min_lat_us": 341.709,
+            "max_lat_us": 3154.5,
+            "jitter_us": 22.42,
+            "throughput_msgs_s": 5019.4,
+            "bandwidth": "4.90 MB/sec (Bidirectional)"
+          },
+          "details": "Avg=3078.623us, Rate=5019.4msgs/s, BW=4.90 MB/sec (Bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 03:55:17",
+      "timestamp": "1970-01-03 01:08:49",
       "profile": "Profile 2 (Pure On-Chip SRAM VirtIO)",
       "node_desc": "On-Chip SRAM Space 1 / sram1@72c0000",
       "results": [
@@ -249,14 +303,31 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 133.875,
-            "min_lat_us": 116.709,
-            "max_lat_us": 197.459,
-            "jitter_us": 8.767,
-            "throughput_msgs_s": 7428.3,
-            "bandwidth": "7.03 MB/s (bi-directional)"
+            "avg_lat_us": 132.963,
+            "min_lat_us": 112.459,
+            "max_lat_us": 269.834,
+            "jitter_us": 10.208,
+            "throughput_msgs_s": 7472.3,
+            "bandwidth": "7.07 MB/s (bi-directional)"
           },
-          "details": "Avg=133.875us, Rate=7428.3msgs/s, BW=7.03 MB/s (bi-directional)"
+          "details": "Avg=132.963us, Rate=7472.3msgs/s, BW=7.07 MB/s (bi-directional)"
+        },
+        {
+          "name": "stress_rpmsg (C++ SRAM VirtIO, 16 in flight)",
+          "status": "PASS",
+          "metrics": {
+            "packets_sent": 100000,
+            "packets_recv": 100000,
+            "success_rate_pct": 100.0,
+            "data_integrity": "PASS (0 malformed / duplicate / late)",
+            "avg_lat_us": 829.154,
+            "min_lat_us": 145.125,
+            "max_lat_us": 2145.375,
+            "jitter_us": null,
+            "throughput_msgs_s": 18361.0,
+            "bandwidth": "17.37 MB/s (bi-directional)"
+          },
+          "details": "Avg=829.154us, Rate=18361.0msgs/s, BW=17.37 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python SRAM VirtIO)",
@@ -266,19 +337,19 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 100.57,
-            "min_lat_us": 92.83,
-            "max_lat_us": 178.92,
-            "jitter_us": 10.48,
-            "throughput_msgs_s": 7076.5,
-            "bandwidth": "884.6 KB/s (bidirectional)"
+            "avg_lat_us": 97.42,
+            "min_lat_us": 92.42,
+            "max_lat_us": 161.88,
+            "jitter_us": 7.36,
+            "throughput_msgs_s": 7330.3,
+            "bandwidth": "916.3 KB/s (bidirectional)"
           },
-          "details": "Avg=100.57us, Rate=7076.5msgs/s, BW=884.6 KB/s (bidirectional)"
+          "details": "Avg=97.42us, Rate=7330.3msgs/s, BW=916.3 KB/s (bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 03:55:53",
+      "timestamp": "1970-01-03 01:09:40",
       "profile": "Profile 3 (Userspace UIO Direct Mailbox)",
       "node_desc": "Hardware Mailbox bound to generic-uio (/dev/uio0)",
       "results": [
@@ -290,14 +361,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 13.915,
-            "min_lat_us": 13.459,
-            "max_lat_us": 32.292,
-            "jitter_us": 1.007,
-            "throughput_msgs_s": 65382.8,
-            "bandwidth": "63.85 MB/sec (Bidirectional)"
+            "avg_lat_us": 13.478,
+            "min_lat_us": 13.125,
+            "max_lat_us": 13.916,
+            "jitter_us": 0.191,
+            "throughput_msgs_s": 8992.0,
+            "bandwidth": "8.78 MB/sec (Bidirectional)"
           },
-          "details": "Avg=13.915us, Rate=65382.8msgs/s, BW=63.85 MB/sec (Bidirectional)"
+          "details": "Avg=13.478us, Rate=8992.0msgs/s, BW=8.78 MB/sec (Bidirectional)"
         },
         {
           "name": "ping_uio (C++ UIO Doorbell)",
@@ -307,14 +378,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 13.828,
-            "min_lat_us": 13.084,
-            "max_lat_us": 32.5,
-            "jitter_us": 1.159,
-            "throughput_msgs_s": 63305.0,
+            "avg_lat_us": 58.05,
+            "min_lat_us": 13.917,
+            "max_lat_us": 95.5,
+            "jitter_us": 8.086,
+            "throughput_msgs_s": 6410.4,
             "bandwidth": null
           },
-          "details": "Avg=13.828us, Rate=63305.0msgs/s, BW=None"
+          "details": "Avg=58.05us, Rate=6410.4msgs/s, BW=None"
         },
         {
           "name": "ping_uio.py (Python UIO Doorbell)",
@@ -324,14 +395,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 178.374,
-            "min_lat_us": 172.042,
-            "max_lat_us": 253.0,
-            "jitter_us": 9.372,
-            "throughput_msgs_s": 4564.2,
+            "avg_lat_us": 31.954,
+            "min_lat_us": 29.5,
+            "max_lat_us": 84.916,
+            "jitter_us": 3.368,
+            "throughput_msgs_s": 160.2,
             "bandwidth": null
           },
-          "details": "Avg=178.374us, Rate=4564.2msgs/s, BW=None"
+          "details": "Avg=31.954us, Rate=160.2msgs/s, BW=None"
         }
       ]
     }

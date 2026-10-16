@@ -134,7 +134,7 @@ def log_banner(stage_num: int, title: str, subtitle: str = ""):
         print(f"  {subtitle}")
     print("=" * 76 + "\033[0m")
 
-def run_ssh(cmd, timeout=30):
+def run_ssh(cmd, timeout=30, report_timeout=True):
     ssh_cmd = []
     env = os.environ.copy()
 
@@ -160,8 +160,17 @@ def run_ssh(cmd, timeout=30):
     try:
         res = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout, env=env)
         return res.returncode, res.stdout.strip(), res.stderr.strip()
-    except subprocess.TimeoutExpired:
-        return 1, "", "timeout"
+    except subprocess.TimeoutExpired as e:
+        # Dropping the SSH session does not stop the command on the board. Kill
+        # it there, or it keeps running and collides with the next test step.
+        tools = [os.path.basename(t) for t in cmd.split() if t.startswith("/usr/bin/")]
+        if report_timeout:
+            print(f"  \033[91m[FAIL] timed out after {timeout} s on the target: {cmd}\033[0m")
+        if tools and not cmd.startswith("cat "):
+            run_ssh(f"for p in $(ps | grep '[{tools[0][0]}]{tools[0][1:]}' | awk '{{print $1}}'); do kill $p; done",
+                    timeout=10)
+        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        return 1, out.strip(), "timeout"
 
 def report_remoteproc_presence():
     """An SSH-reachable board without remoteproc0 is a probe failure, not a boot failure."""
@@ -179,7 +188,7 @@ def wait_for_target(max_attempts=30):
     print("  Waiting for target board to come online...", end="", flush=True)
     for i in range(max_attempts):
         time.sleep(2)
-        code, out, _ = run_ssh("true", timeout=5)
+        code, out, _ = run_ssh("true", timeout=5, report_timeout=False)  # expected while rebooting
         if code == 0:
             print(" ONLINE!")
             time.sleep(2)
@@ -532,10 +541,12 @@ def audit_engineering_invariants():
     if os.path.exists(ping_rpmsg_file):
         with open(ping_rpmsg_file, "r") as f:
             content = f.read()
-        has_sleep_hacks = "usleep(" in content or "sleep(" in content or "msleep(" in content
+        # Only the optional -D pacing may sleep, and it must default to 0
+        has_sleep_hacks = ("uint32_t delay_us = 0;" not in content
+                           or content.count("usleep(") != 1 or "usleep(delay_us)" not in content)
         audit_results.append({
             "invariant": "Zero-Sleep Benchmark Protocol",
-            "rule": "ping_rpmsg uses synchronous poll()/select() with zero arbitrary sleep delays",
+            "rule": "ping_rpmsg: blocking write, inotify for the node, no sleeps except optional -D (default 0)",
             "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
             "status": "PASS" if not has_sleep_hacks else "FAIL",
             "details": "Pure event-driven epoll/read loop with zero sleep overhead" if not has_sleep_hacks else "Found arbitrary sleep() calls masking sync issues!"
@@ -820,7 +831,7 @@ def main():
 
     # 1.1 run_tests.py
     print("\n--- 1.1 Running automated test suite (run_tests.py) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=45)
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=300)
     print(out)
     results.append(("Profile 1", "run_tests.py (Complete Suite)", "PASS" if c == 0 else "FAIL"))
     prof1_data = parse_target_json_report()
@@ -830,9 +841,14 @@ def main():
     # 1.2 C++ ping_rpmsg
     print("\n--- 1.2 Running C++ ping_rpmsg (1,000 pings) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
-    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
     results.append(("Profile 1", "C++ ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
+
+    print("\n--- 1.2b Running C++ stress_rpmsg (100,000 msgs, 16 in flight) ---")
+    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
+    print(out)
+    results.append(("Profile 1", "C++ stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
 
     # 1.3 Python ping_rpmsg.py
     print("\n--- 1.3 Running Python ping_rpmsg.py (1,000 pings) ---")
@@ -845,7 +861,10 @@ def main():
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testDRAMMsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
     c, out, _ = run_ssh("/usr/bin/ping_dram -n 1000 -s 512", timeout=30)
     print(out)
-    results.append(("Profile 1", "C++ ping_dram (1000 pkts)", ping_exchanged(c, out, require_integrity=False)))
+    results.append(("Profile 1", "C++ ping_dram (1000 pkts)", ping_exchanged(c, out)))
+    c, out, _ = run_ssh("/usr/bin/ping_dram -n 100000 -s 512 -w 16", timeout=60)
+    print(out)
+    results.append(("Profile 1", "C++ ping_dram (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
 
     # 1.5 Python monitor_trace.py
     print("\n--- 1.5 Running Python monitor_trace.py ---")
@@ -867,7 +886,7 @@ def main():
 
     # 2.1 run_tests.py
     print("\n--- 2.1 Running automated test suite (run_tests.py) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=45)
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=300)
     print(out)
     results.append(("Profile 2", "run_tests.py (SRAM VirtIO)", "PASS" if c == 0 else "FAIL"))
     prof2_data = parse_target_json_report()
@@ -877,9 +896,14 @@ def main():
     # 2.2 C++ ping_rpmsg
     print("\n--- 2.2 Running C++ ping_rpmsg (1,000 pings) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsgSram.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
-    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 50", timeout=30)
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
     results.append(("Profile 2", "C++ ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
+
+    print("\n--- 2.2b Running C++ stress_rpmsg (100,000 msgs, 16 in flight) ---")
+    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
+    print(out)
+    results.append(("Profile 2", "C++ stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
 
     # 2.3 Python ping_rpmsg.py
     print("\n--- 2.3 Running Python ping_rpmsg.py (1,000 pings) ---")
@@ -896,13 +920,12 @@ def main():
     # -------------------------------------------------------------------------
     log_banner(3, "Testing Profile 3 (Userspace UIO Direct Mailbox & SRAM)", "Overlay: cubie-a5e-flight-stack cubie-a5e-testPing")
     p3_up = set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-testPing",
-                                   "cmdline=uio_pdrv_genirq.of_id=generic-uio",
                                    base_dtb="sun55i-a527-cubie-a5e-uio.dtb")
     results.append(("Profile 3", "Boot + remoteproc0 present", "PASS" if p3_up else "FAIL"))
 
     # 3.1 run_tests.py
     print("\n--- 3.1 Running automated test suite (run_tests.py) ---")
-    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=30)
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=300)
     print(out)
     results.append(("Profile 3", "run_tests.py (UIO Suite)", "PASS" if c == 0 else "FAIL"))
     prof3_data = parse_target_json_report()
@@ -915,6 +938,12 @@ def main():
     c, out, _ = run_ssh("/usr/bin/ping_shm -n 1000 -d 0", timeout=30)
     print(out)
     results.append(("Profile 3", "C++ ping_shm (1000 pkts)", ping_exchanged(c, out)))
+
+    # 3.2b C++ ping_uio (doorbell interrupt path)
+    print("\n--- 3.2b Running C++ ping_uio (1,000 pings, doorbell IRQ) ---")
+    c, out, _ = run_ssh("/usr/bin/ping_uio -n 1000", timeout=30)
+    print(out)
+    results.append(("Profile 3", "C++ ping_uio (1000 pkts, IRQ)", ping_exchanged(c, out)))
 
     # 3.3 Python ping_uio.py
     print("\n--- 3.3 Running Python ping_uio.py (1,000 pings) ---")

@@ -648,7 +648,9 @@ def test_ping_rpmsg():
     sub_results = []
 
     # 4.1 Native C++ ping_rpmsg
-    sub_results.append(run_ping("ping_rpmsg (C++ VirtIO)", ["/usr/bin/ping_rpmsg", "-D", "50"], 30))
+    sub_results.append(run_ping("ping_rpmsg (C++ VirtIO)", ["/usr/bin/ping_rpmsg", "-D", "0"], 30))
+    sub_results.append(run_ping("stress_rpmsg (C++ VirtIO, 16 in flight)",
+                                ["/usr/bin/stress_rpmsg", "-w", "16"], 120, expected=100000))
 
     # Settle / restart fw before Python ping to guarantee clean VirtIO buffer state
     stop_rproc()
@@ -677,8 +679,11 @@ def test_dram_msg():
         return [{"name": "testDRAMMsg", "status": "FAIL", "details": "start_rproc failed", "metrics": {}}]
 
     time.sleep(1.0)
-    sub_results = [run_ping("ping_dram (C++ Hybrid DDR)", ["/usr/bin/ping_dram", "-s", "512"], 20,
-                            require_integrity=False)]
+    sub_results = [
+        run_ping("ping_dram (C++ Hybrid DDR)", ["/usr/bin/ping_dram", "-s", "512"], 20),
+        run_ping("ping_dram (C++ Hybrid DDR, 16 in flight)", ["/usr/bin/ping_dram", "-s", "512", "-w", "16"],
+                 60, expected=100000),
+    ]
 
     stop_rproc()
     return sub_results
@@ -702,6 +707,8 @@ def test_ping_rpmsg_sram():
 
     # 6.1 Native C++ ping_rpmsg
     sub_results.append(run_ping("ping_rpmsg (C++ SRAM VirtIO)", ["/usr/bin/ping_rpmsg", "-D", "0"], 30))
+    sub_results.append(run_ping("stress_rpmsg (C++ SRAM VirtIO, 16 in flight)",
+                                ["/usr/bin/stress_rpmsg", "-w", "16"], 120, expected=100000))
 
     # Settle / restart fw before Python ping to guarantee clean VirtIO buffer state
     stop_rproc()

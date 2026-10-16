@@ -23,6 +23,8 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/poll.h>
+#include <sys/inotify.h>
+#include <string>
 #include <time.h>
 #include <getopt.h>
 
@@ -52,13 +54,37 @@ static inline uint64_t get_time_ns() {
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
+/* Wait for a device node to appear (inotify, no sleeping). */
+static bool wait_for_node(const std::string &path, int timeout_ms) {
+    if (access(path.c_str(), F_OK) == 0) {
+        return true;
+    }
+    int in = inotify_init1(IN_CLOEXEC);
+    if (in < 0) {
+        return false;
+    }
+    inotify_add_watch(in, path.substr(0, path.rfind('/')).c_str(), IN_CREATE | IN_ATTRIB);
+    uint64_t deadline = get_time_ns() + (uint64_t)timeout_ms * 1000000ULL;
+    bool found = access(path.c_str(), F_OK) == 0;
+    while (!found && get_time_ns() < deadline) {
+        struct pollfd p = {in, POLLIN, 0};
+        if (poll(&p, 1, (int)((deadline - get_time_ns()) / 1000000ULL) + 1) > 0) {
+            char ev[4096];
+            (void)!read(in, ev, sizeof(ev));
+        }
+        found = access(path.c_str(), F_OK) == 0;
+    }
+    close(in);
+    return found;
+}
+
 static void print_usage(const char *prog) {
     std::cout << "Usage: " << prog << " [options]\n"
               << "Options:\n"
               << "  -d, --dev <path>      RPMsg character device (default: /dev/rpmsg0 or /dev/rpmsg_ctrl0)\n"
               << "  -n, --count <num>     Number of pings to send (default: 1000, 0 = continuous)\n"
               << "  -s, --size <bytes>    Payload size in bytes (default: 496 for 512B buffer, 16..496)\n"
-              << "  -D, --delay <us>      Delay between pings in microseconds (default: 1000)\n"
+              << "  -D, --delay <us>      Delay between pings in microseconds (default: 0)\n"
               << "  -p, --payload <str>   Custom payload string\n"
               << "  -t, --timeout <ms>    Pong timeout in milliseconds (default: 1000)\n"
               << "  -h, --help            Show this help message\n";
@@ -67,7 +93,7 @@ static void print_usage(const char *prog) {
 int main(int argc, char *argv[]) {
     uint32_t count = 1000;
     uint32_t payload_size = 496; // Default: 496 bytes (512-byte buffer length on wire/DDR)
-    uint32_t delay_us = 1000;
+    uint32_t delay_us = 0;
     uint32_t timeout_ms = 1000;
     std::string payload_str = "Ping from Linux RPMsg Host";
     std::string dev_path = "";
@@ -156,7 +182,10 @@ int main(int argc, char *argv[]) {
 
         // Open newly created endpoint
         dev_path = "/dev/rpmsg0";
-        usleep(50000); // 50ms settling delay for devtmpfs node creation
+        if (!wait_for_node(dev_path, 2000)) {
+            std::cerr << "[ERROR] " << dev_path << " did not appear after creating the endpoint\n";
+            return 1;
+        }
     }
 
     fd = open(dev_path.c_str(), O_RDWR);
@@ -202,21 +231,12 @@ int main(int argc, char *argv[]) {
             memset(tx_buf.data() + 16 + copy_len, 'X', text_max - copy_len);
         }
 
-        // Send RPMsg Ping (with retry on temporary buffer exhaustion)
-        ssize_t bytes_written = -1;
-        int write_retries = 0;
-        while (write_retries < 2000) {
+        // Send the ping. The fd is blocking: with every TX buffer in use the
+        // kernel waits for one to be returned, nothing is dropped.
+        ssize_t bytes_written;
+        do {
             bytes_written = write(fd, tx_buf.data(), payload_size);
-            if (bytes_written >= 0) {
-                break;
-            }
-            if (errno == EAGAIN || errno == ENOMEM || errno == ENOBUFS || errno == EINTR) {
-                usleep(50);
-                write_retries++;
-                continue;
-            }
-            break;
-        }
+        } while (bytes_written < 0 && errno == EINTR);
         if (bytes_written < 0) {
             std::cerr << "[ERROR] write() failed on seq=" << seq << ": " << strerror(errno) << "\n";
             break;
