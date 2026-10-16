@@ -49,7 +49,10 @@ namespace {
             pong_buf[3] = 'G';
         }
 
-        hal::Rpmsg::reply(msg, pong_buf, resp_len);
+        if (!hal::Rpmsg::reply(msg, pong_buf, resp_len)) {
+            hal::Trace::printf("[testPingRpmsg] ERROR: reply failed (ring errors: %u)\n",
+                               hal::Rpmsg::get_ring_errors());
+        }
     }
 }
 
@@ -96,8 +99,11 @@ int main(void) {
         uint32_t current_pings = g_ping_count.load(std::memory_order_relaxed);
         if (current_pings >= last_reported_pings + 5000) {
             last_reported_pings = current_pings;
-            hal::Trace::printf("[testPingRpmsg] Processed %u RPMsg ping-pongs (RX: %u, TX: %u)\n",
-                               current_pings, hal::Rpmsg::get_rx_count(), hal::Rpmsg::get_tx_count());
+            hal::Trace::printf("[testPingRpmsg] Processed %u RPMsg ping-pongs (RX: %u, TX: %u, "
+                               "ring errors: %u, waits host-RX-full: %u mbox-full: %u)\n",
+                               current_pings, hal::Rpmsg::get_rx_count(), hal::Rpmsg::get_tx_count(),
+                               hal::Rpmsg::get_ring_errors(), hal::Rpmsg::get_tx_full_waits(),
+                               hal::Rpmsg::get_mbox_full_waits());
         }
 
         idle_ticks++;

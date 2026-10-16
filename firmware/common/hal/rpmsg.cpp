@@ -1,35 +1,51 @@
 #include "rpmsg.hpp"
 #include "msgbox.hpp"
 #include <string.h>
+#include <stddef.h>
 
 namespace hal {
 
 /*
  * VirtIO Ring Internal Descriptors
+ *
+ * Not packed: the virtio layout is naturally aligned, and packing made the
+ * compiler split every 16-bit ring index into two byte accesses. Linux updates
+ * an index with one 16-bit store, so a byte-wise read could combine old and new
+ * halves (e.g. 0x01FF -> 0x0200 read as 0x02FF) and the RX loop then replayed
+ * ~65k stale descriptors. Aligned fields give single-copy-atomic accesses.
  */
 struct VirtioDesc {
     uint64_t addr;
     uint32_t len;
     uint16_t flags;
     uint16_t next;
-} __attribute__((packed));
+};
 
 struct VirtioAvail {
     uint16_t flags;
     uint16_t idx;
     uint16_t ring[VRING_NUM_DESCS];
-} __attribute__((packed));
+};
 
 struct VirtioUsedElem {
     uint32_t id;
     uint32_t len;
-} __attribute__((packed));
+};
 
 struct VirtioUsed {
     uint16_t flags;
     uint16_t idx;
     struct VirtioUsedElem ring[VRING_NUM_DESCS];
-} __attribute__((packed));
+};
+
+static_assert(sizeof(VirtioDesc) == 16, "virtio desc layout");
+static_assert(offsetof(VirtioAvail, idx) == 2 && offsetof(VirtioAvail, ring) == 4, "virtio avail layout");
+static_assert(sizeof(VirtioUsedElem) == 8, "virtio used elem layout");
+static_assert(offsetof(VirtioUsed, idx) == 2 && offsetof(VirtioUsed, ring) == 4, "virtio used layout");
+// Natural alignment is what keeps the indices single accesses: packing would
+// keep every offset above but drop these to 1 and bring back byte-wise access.
+static_assert(alignof(VirtioAvail) == 2 && alignof(VirtioUsed) == 4 && alignof(VirtioDesc) == 8,
+              "vring structs must not be packed");
 
 namespace {
     const struct rpmsg_resource_table *s_rsc = nullptr;
@@ -38,6 +54,9 @@ namespace {
 
     std::atomic<uint32_t> s_rx_count{0};
     std::atomic<uint32_t> s_tx_count{0};
+    std::atomic<uint32_t> s_ring_errors{0};    // malformed ring state or message from the host
+    std::atomic<uint32_t> s_tx_full_waits{0};  // reply had to wait for a free host RX buffer
+    std::atomic<uint32_t> s_mbox_full_waits{0}; // doorbell had to wait for mailbox FIFO space
 
     Rpmsg::EndpointEntry s_endpoints[Rpmsg::MAX_ENDPOINTS];
     size_t s_num_endpoints = 0;
@@ -99,6 +118,40 @@ namespace {
         size_t used_offset = (avail_offset + sizeof(struct VirtioAvail) + align - 1) & ~(align - 1);
         vq.used = reinterpret_cast<volatile struct VirtioUsed *>(base + used_offset);
     }
+
+    /*
+     * Number of buffers the host made available that we have not consumed.
+     * More than the ring size can only come from a corrupt index: report it
+     * and process nothing rather than walk stale descriptors.
+     */
+    bool avail_pending(const VirtQueueLayout &vq, uint16_t &pending) {
+        uint16_t avail_idx = vq.avail->idx;
+        std::atomic_thread_fence(std::memory_order_acquire);
+        pending = static_cast<uint16_t>(avail_idx - vq.last_avail_idx);
+        if (pending > vq.num) {
+            s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+            pending = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /* Ring the host's doorbell; if its FIFO is full, wait for space instead of dropping. */
+    void notify_host() {
+        while (!MsgBox::send(MsgBox::Channel::Channel1, 0)) {
+            s_mbox_full_waits.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    /* Drain every doorbell the host queued so its mailbox sees them consumed. */
+    void drain_host_doorbells() {
+        while (MsgBox::is_rx_pending(MsgBox::Channel::Channel0)) {
+            (void)MsgBox::receive(MsgBox::Channel::Channel0);
+        }
+        while (MsgBox::is_rx_pending(MsgBox::Channel::Channel1)) {
+            (void)MsgBox::receive(MsgBox::Channel::Channel1);
+        }
+    }
 }
 
 void Rpmsg::init(const struct rpmsg_resource_table *rsc) noexcept {
@@ -108,6 +161,9 @@ void Rpmsg::init(const struct rpmsg_resource_table *rsc) noexcept {
     s_ns_announced = false;
     s_rx_count.store(0, std::memory_order_relaxed);
     s_tx_count.store(0, std::memory_order_relaxed);
+    s_ring_errors.store(0, std::memory_order_relaxed);
+    s_tx_full_waits.store(0, std::memory_order_relaxed);
+    s_mbox_full_waits.store(0, std::memory_order_relaxed);
     s_num_endpoints = 0;
 
     for (size_t i = 0; i < MAX_ENDPOINTS; ++i) {
@@ -154,7 +210,8 @@ bool Rpmsg::register_endpoint(uint32_t addr, EndpointCallback cb, void *user_dat
 
 bool Rpmsg::announce_service(const char *name, uint32_t addr) noexcept {
     if (!is_driver_ready() || s_tx_vq.avail == nullptr) return false;
-    if (s_tx_vq.last_avail_idx == s_tx_vq.avail->idx) return false;
+    uint16_t free_bufs = 0;
+    if (!avail_pending(s_tx_vq, free_bufs) || free_bufs == 0) return false;
 
     struct rpmsg_ns_msg {
         char name[32];
@@ -188,7 +245,7 @@ bool Rpmsg::announce_service(const char *name, uint32_t addr) noexcept {
     std::atomic_thread_fence(std::memory_order_release);
     s_tx_vq.used->idx++;
 
-    MsgBox::send(MsgBox::Channel::Channel1, 0);
+    notify_host();
     s_ns_announced = true;
     return true;
 }
@@ -198,28 +255,36 @@ bool Rpmsg::poll() noexcept {
         return false;
     }
 
-    if (MsgBox::is_rx_pending(MsgBox::Channel::Channel0)) {
-        (void)MsgBox::receive(MsgBox::Channel::Channel0);
-    }
-    if (MsgBox::is_rx_pending(MsgBox::Channel::Channel1)) {
-        (void)MsgBox::receive(MsgBox::Channel::Channel1);
-    }
+    drain_host_doorbells();
 
-    std::atomic_thread_fence(std::memory_order_acquire);
-    uint16_t avail_idx = s_rx_vq.avail->idx;
-
-    if (s_rx_vq.last_avail_idx == avail_idx) {
-        return false; // No new packets
+    uint16_t pending = 0;
+    if (!avail_pending(s_rx_vq, pending) || pending == 0) {
+        return false;
     }
 
-    bool processed = false;
-    while (s_rx_vq.last_avail_idx != avail_idx) {
+    for (; pending > 0; --pending) {
         uint16_t desc_idx = s_rx_vq.avail->ring[s_rx_vq.last_avail_idx % s_rx_vq.num];
+        if (desc_idx >= s_rx_vq.num) {
+            // A descriptor index outside the ring: nothing safe to return to the host.
+            s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
         volatile struct VirtioDesc *desc = &s_rx_vq.desc[desc_idx];
+        uint32_t buf_len = desc->len;
+        uint32_t buf_da = static_cast<uint32_t>(desc->addr);
 
-        if (desc->addr != 0 && desc->len >= sizeof(struct rpmsg_hdr)) {
-            volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(static_cast<uint32_t>(desc->addr)));
+        volatile struct rpmsg_hdr *hdr = nullptr;
+        if (buf_da != 0 && buf_len >= sizeof(struct rpmsg_hdr)) {
+            hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(buf_da));
+            if (hdr->len > buf_len - sizeof(struct rpmsg_hdr)) {
+                hdr = nullptr;
+            }
+        }
 
+        if (hdr == nullptr) {
+            // Malformed buffer: count it, deliver nothing, give the buffer back.
+            s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+        } else {
             RpmsgMessage msg;
             msg.src = hdr->src;
             msg.dst = hdr->dst;
@@ -228,7 +293,6 @@ bool Rpmsg::poll() noexcept {
             msg.desc_idx = desc_idx;
 
             s_rx_count.fetch_add(1, std::memory_order_relaxed);
-            processed = true;
 
             // Dispatch to registered endpoint callback
             for (size_t i = 0; i < s_num_endpoints; ++i) {
@@ -239,42 +303,57 @@ bool Rpmsg::poll() noexcept {
                     break;
                 }
             }
-
-            // Return consumed RX descriptor to Host
-            uint16_t used_slot = s_rx_vq.used->idx % s_rx_vq.num;
-            s_rx_vq.used->ring[used_slot].id = desc_idx;
-            s_rx_vq.used->ring[used_slot].len = 0;
-            std::atomic_thread_fence(std::memory_order_release);
-            s_rx_vq.used->idx++;
         }
 
+        // Return the consumed descriptor to the host
+        uint16_t used_idx = s_rx_vq.used->idx;
+        s_rx_vq.used->ring[used_idx % s_rx_vq.num].id = desc_idx;
+        s_rx_vq.used->ring[used_idx % s_rx_vq.num].len = 0;
+        std::atomic_thread_fence(std::memory_order_release);
+        s_rx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
         s_rx_vq.last_avail_idx++;
     }
 
-    if (processed) {
-        // Kick Linux Host on Channel 1 so Host reclaims transmit buffer
-        MsgBox::send(MsgBox::Channel::Channel1, 0);
-    }
-
-    return processed;
+    // Tell the host its transmit buffers are back
+    notify_host();
+    return true;
 }
 
 bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t len) noexcept {
     if (!s_vdev_ready || s_tx_vq.avail == nullptr) {
         return false;
     }
-
-    // Allocate an available transmit buffer from Host RX queue (vring[0])
-    if (s_tx_vq.last_avail_idx == s_tx_vq.avail->idx) {
-        return false; // Host RX pool exhausted
+    if (len > RPMSG_BUFFER_SIZE - sizeof(struct rpmsg_hdr)) {
+        return false;
     }
 
-    uint16_t avail_slot = s_tx_vq.last_avail_idx % s_tx_vq.num;
-    uint16_t desc_idx = s_tx_vq.avail->ring[avail_slot];
-    volatile struct VirtioDesc *desc = &s_tx_vq.desc[desc_idx];
-    if (desc->addr == 0) return false;
+    // Take a free buffer from the host RX ring (vring[0]). If none is free the
+    // host has not processed earlier replies yet: ring its doorbell and wait.
+    uint16_t free_bufs = 0;
+    for (;;) {
+        if (!avail_pending(s_tx_vq, free_bufs)) {
+            return false;
+        }
+        if (free_bufs > 0) {
+            break;
+        }
+        s_tx_full_waits.fetch_add(1, std::memory_order_relaxed);
+        notify_host();
+    }
 
-    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(static_cast<uint32_t>(desc->addr)));
+    uint16_t desc_idx = s_tx_vq.avail->ring[s_tx_vq.last_avail_idx % s_tx_vq.num];
+    if (desc_idx >= s_tx_vq.num) {
+        s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    volatile struct VirtioDesc *desc = &s_tx_vq.desc[desc_idx];
+    uint32_t buf_da = static_cast<uint32_t>(desc->addr);
+    if (buf_da == 0 || desc->len < sizeof(struct rpmsg_hdr) + len) {
+        s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    volatile struct rpmsg_hdr *hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(buf_da));
 
     hdr->dst = incoming.src;
     hdr->src = incoming.dst;
@@ -293,14 +372,13 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
     s_tx_vq.last_avail_idx++;
 
     // Add to Used Ring for Linux Host to receive
-    uint16_t used_slot = s_tx_vq.used->idx % s_tx_vq.num;
-    s_tx_vq.used->ring[used_slot].id = desc_idx;
-    s_tx_vq.used->ring[used_slot].len = sizeof(struct rpmsg_hdr) + len;
+    uint16_t used_idx = s_tx_vq.used->idx;
+    s_tx_vq.used->ring[used_idx % s_tx_vq.num].id = desc_idx;
+    s_tx_vq.used->ring[used_idx % s_tx_vq.num].len = sizeof(struct rpmsg_hdr) + len;
     std::atomic_thread_fence(std::memory_order_release);
-    s_tx_vq.used->idx++;
+    s_tx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
 
-    // Kick Linux host on Channel 1 (Linux rx channel)
-    MsgBox::send(MsgBox::Channel::Channel1, 0);
+    notify_host();
 
     s_tx_count.fetch_add(1, std::memory_order_relaxed);
     return true;
@@ -312,6 +390,18 @@ uint32_t Rpmsg::get_rx_count() noexcept {
 
 uint32_t Rpmsg::get_tx_count() noexcept {
     return s_tx_count.load(std::memory_order_relaxed);
+}
+
+uint32_t Rpmsg::get_ring_errors() noexcept {
+    return s_ring_errors.load(std::memory_order_relaxed);
+}
+
+uint32_t Rpmsg::get_tx_full_waits() noexcept {
+    return s_tx_full_waits.load(std::memory_order_relaxed);
+}
+
+uint32_t Rpmsg::get_mbox_full_waits() noexcept {
+    return s_mbox_full_waits.load(std::memory_order_relaxed);
 }
 
 } // namespace hal
