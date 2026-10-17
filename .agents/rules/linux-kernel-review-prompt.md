@@ -299,14 +299,15 @@ These are not caught by automated tools — they are upstream maintainer style r
 
 1. **Mailbox TX completion (`last_tx_done`)** — owner decision, DESIGN_DECISIONS.md
    "Message box TX completion" (2026-10-16); do not flag it as a bug:
-   - For the sun55i msgbox a kick is a doorbell (data is in the vrings), so `last_tx_done()`
-     returns `true` while the receiver's FIFO has room (`count < 8`).
-   - The device tree selects the mode: no property = timer poll while the FIFO is full;
-     `allwinner,tx-done-irq` = write interrupt enabled only when the FIFO is full and disabled
-     in its handler. Precedent: `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
-   - **Check instead:** the write interrupt is never left enabled while the FIFO has room (it is
-     level: status = free slots ≥ threshold), the handler disables it before signalling, and a
-     full FIFO is never written (writing a full FIFO corrupts the count, reference §6a).
+   - For the sun55i msgbox a kick is a doorbell (data is in the vrings): it is done once the
+     receiver's FIFO accepted it and has room for the next one.
+   - The device tree selects the mode: no property = timer (`txdone_poll`, `last_tx_done()` =
+     `count < 8`); `allwinner,tx-done-irq` = `txdone_irq`, the write interrupt armed after every
+     send and disabled in its handler (OMAP model, manual §2.12.4.1 / §6.1.5.1). Precedent:
+     `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
+   - **Check instead:** the latched write status is cleared before arming, the handler disables
+     the (level) interrupt and acks it before calling `mbox_chan_txdone()` outside the lock, and
+     a full FIFO is never written (writing a full FIFO corrupts the count, reference §6a).
 2. **RemoteProc Address Translation Fall-through:**
    - In `da_to_va()`, if an address matches an Address Translation Table (ATT) entry (`sunxi_rproc_da_to_sys() == 0`), the address is definitively an ATT-governed core address.
    - If that translated system address does not fall within any mapped hardware window (SRAM, DRAM carveout), it MUST return `NULL` immediately.

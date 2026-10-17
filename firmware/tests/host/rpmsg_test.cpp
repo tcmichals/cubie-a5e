@@ -269,6 +269,28 @@ TEST(Rpmsg, ReplyWaitsForAHostBufferInsteadOfDropping) {
     LONGS_EQUAL(3, hal::Rpmsg::get_tx_full_waits());
 }
 
+TEST(Rpmsg, ReplyDrainsHostDoorbellsWhileWaitingForABuffer) {
+    // While the E906 waits for a host buffer, Linux keeps returning buffers
+    // and kicking. Those kicks must be drained during the wait, or the
+    // E906's FIFO fills and Linux's mailbox queue overflows.
+    int doorbells = 0;
+    fake_msgbox::on_send = [&] {
+        if (++doorbells <= 3) {
+            fake_msgbox::rx_pending += 4;         // the host kicks back while we wait
+        }
+        if (doorbells == 3) {
+            host->lend(0);
+        }
+    };
+    g_echo = true;
+    const char ping[] = "busy host";
+    host->post(0, ping, sizeof(ping));
+
+    CHECK_TRUE(hal::Rpmsg::poll());
+    CHECK_TRUE(g_reply_ok);
+    LONGS_EQUAL(0, fake_msgbox::rx_pending);      // nothing left queued
+}
+
 TEST(Rpmsg, DoorbellWaitsForFifoSpaceInsteadOfDropping) {
     fake_msgbox::full_sends_left = 5;             // FIFO full for five attempts
     uint8_t byte = 0;

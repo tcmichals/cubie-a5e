@@ -6,7 +6,11 @@ Target: Radxa Cubie A5E (Allwinner A527 / T527)
 Executes an end-to-end multi-profile test loop across live Radxa Cubie A5E hardware
 for the XuanTie E906 RISC-V real-time co-processor without manual intervention:
   1. Profile 1 (DDR VirtIO): run_tests.py, C++ ping_rpmsg, Python ping_rpmsg.py,
-     C++ ping_dram, Python monitor_trace.py
+     C++ ping_dram, Python monitor_trace.py, testFreeRTOS (tick, IRQ-driven rpmsg),
+     message box clock/reset check across unbind/bind, TX-completion benchmark (timer)
+  1T. Message box TX completion, ISR mode (overlay cubie-a5e-msgbox-txirq, reboot):
+     the same benchmark plus a deterministic write-IRQ test; side-by-side timer vs ISR
+     latency, jitter, throughput and interrupt counts in the report
   2. Profile 2 (On-Chip SRAM Space 1 VirtIO): config.txt switch, reboot, run_tests.py,
      C++ ping_rpmsg, Python ping_rpmsg.py
   3. Profile 3 (Userspace UIO Direct Mailbox): config.txt switch, reboot, run_tests.py,
@@ -172,6 +176,27 @@ def run_ssh(cmd, timeout=30, report_timeout=True):
         out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
         return 1, out.strip(), "timeout"
 
+def push_file(local, remote, timeout=30):
+    """Copy a file to the target with the same login as run_ssh (legacy scp: no sftp-server)."""
+    cmd = []
+    env = os.environ.copy()
+    if TARGET_PASSWORD:
+        cmd.extend(["sshpass", "-e"])
+        env["SSHPASS"] = str(TARGET_PASSWORD)
+    cmd.extend(["scp", "-O", "-q",
+                "-o", "ConnectTimeout=5",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "LogLevel=ERROR",
+                "-P", str(TARGET_PORT)])
+    if TARGET_KEY:
+        cmd.extend(["-i", TARGET_KEY])
+    cmd.extend([local, f"{TARGET_USER}@{TARGET_IP}:{remote}"])
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
 def report_remoteproc_presence():
     """An SSH-reachable board without remoteproc0 is a probe failure, not a boot failure."""
     code, _, _ = run_ssh("test -e /sys/class/remoteproc/remoteproc0/state", timeout=5)
@@ -255,6 +280,149 @@ def ping_exchanged(code, out, expected=1000, require_integrity=True):
         print(f"  \033[91m[FAIL] {r}\033[0m")
     return "FAIL" if reasons else "PASS"
 
+def parse_latency(out):
+    """Latency/throughput numbers printed by ping_rpmsg and stress_rpmsg."""
+    text = strip_ansi(out)
+    def num(label):
+        m = re.search(label + r'\s*:\s*([0-9.]+)', text)
+        return float(m.group(1)) if m else None
+    return {
+        "recv": num(r'Packets Recv'),
+        "avg_us": num(r'Avg Latency'),
+        "min_us": num(r'Min Latency'),
+        "max_us": num(r'Max Latency'),
+        "jitter_us": num(r'Jitter \(StdDev\)'),
+        "p99_us": num(r'99th Percentile'),
+        "msgs_s": num(r'Throughput'),
+    }
+
+def mailbox_irq_counts():
+    """{line name: count summed over CPUs} for the message box lines in /proc/interrupts."""
+    _, out, _ = run_ssh("grep mailbox /proc/interrupts", timeout=10)
+    counts = {}
+    for line in out.splitlines():
+        f = line.split()
+        nums = [int(x) for x in f[1:] if x.isdigit()]
+        if f:
+            counts[f[-1]] = sum(nums)
+    return counts
+
+SWEEP_DMESG_LOG = "/tmp/sweep_dmesg.log"
+
+def dmesg_drain():
+    """
+    Move the kernel log into SWEEP_DMESG_LOG (BusyBox `dmesg -c`) and return the
+    new lines. Counting a message by diffing `dmesg | grep -c` saturates once the
+    ring buffer is full; draining gives exact counts, and the saved log keeps
+    everything for check_kernel_dmesg_health().
+    """
+    _, out, _ = run_ssh(f"dmesg -c | tee -a {SWEEP_DMESG_LOG}", timeout=20)
+    return out
+
+def mbox_queue_overflows(new_lines):
+    return sum(1 for line in new_lines.splitlines() if "MBOX_TX_QUEUE_LEN" in line)
+
+MSGBOX_TX_BENCH = [
+    # (key, label, firmware, command, expected messages)
+    ("ping", "ping_rpmsg 10k, -D 0", "testPingRpmsg.elf", "/usr/bin/ping_rpmsg -n 10000 -D 0", 10000),
+    ("stress", "stress_rpmsg 100k, 16 in flight", "testPingRpmsg.elf", "/usr/bin/stress_rpmsg -n 100000 -w 16", 100000),
+    ("freertos", "FreeRTOS ping_rpmsg 2k (ISR wake)", "testFreeRTOS.elf", "/usr/bin/ping_rpmsg -n 2000 -D 0", 2000),
+]
+
+def run_msgbox_tx_bench(mode, results):
+    """
+    Message box TX completion benchmark for one mode ("timer" or "isr"):
+    checks which TX-done lines the driver holds, then runs MSGBOX_TX_BENCH and
+    records latency, jitter, throughput, interrupts per message and core queue
+    overflows. Returns {key: metrics}.
+    """
+    prof = "Profile 1" if mode == "timer" else "Profile 1T"
+    tag = "timer" if mode == "timer" else "ISR"
+    out = {}
+
+    lines = mailbox_irq_counts()
+    if mode == "timer":
+        bad = [n for n in lines if "-tx" in n]
+        ok = "3003000.mailbox" in lines and not bad
+        why = f"TX-done lines requested in timer mode: {bad}" if bad else "RX line (SPI 0) missing"
+    else:
+        # Only the E906 bank's line is requested, and only while channel 9 is in use
+        ok = "3003000.mailbox-tx3" in lines and not any(n in lines for n in ("3003000.mailbox-tx1", "3003000.mailbox-tx2"))
+        why = f"expected only mailbox-tx3 besides SPI 0, got {sorted(lines)}"
+    if not ok:
+        print(f"  \033[91m[FAIL] {why}\033[0m")
+    results.append((prof, f"Msgbox {tag}: lines held ({', '.join(sorted(lines)) or 'none'})", "PASS" if ok else "FAIL"))
+
+    for key, label, fw, cmd, expected in MSGBOX_TX_BENCH:
+        print(f"\n--- Msgbox {tag}: {label} ({fw}) ---")
+        run_ssh(f'echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "{fw}" > /sys/class/remoteproc/remoteproc0/firmware; '
+                f'echo "start" > /sys/class/remoteproc/remoteproc0/state; for i in $(seq 1 80); do [ -e /dev/rpmsg0 ] && break; sleep 0.1; done; sleep 0.5')
+        dmesg_drain()
+        irq0 = mailbox_irq_counts()
+        c, o, _ = run_ssh(cmd, timeout=180)
+        print(o)
+        irq1, new_log = mailbox_irq_counts(), dmesg_drain()
+        m = parse_latency(o)
+        rx = irq1.get("3003000.mailbox", 0) - irq0.get("3003000.mailbox", 0)
+        m["rx_irqs"] = rx
+        m["rx_irqs_per_msg"] = round(rx / expected, 3)
+        m["tx_irqs"] = irq1.get("3003000.mailbox-tx3", 0) - irq0.get("3003000.mailbox-tx3", 0)
+        m["queue_overflows"] = mbox_queue_overflows(new_log)
+        status = ping_exchanged(c, o, expected=expected)
+        if m["queue_overflows"]:
+            print(f"  \033[91m[FAIL] {m['queue_overflows']} MBOX_TX_QUEUE_LEN overflows\033[0m")
+            status = "FAIL"
+        m["status"] = status
+        out[key] = m
+        results.append((prof, f"Msgbox {tag}: {label}", status))
+    return out
+
+MSGBOX_WRIRQ_TEST = r"""
+R=/sys/class/remoteproc/remoteproc0
+WEN=0x07136230; WST=0x07136234; CNT=0x0713626C; FIFO=0x0713627C; THR=0x0713628C; BLK=0x072B0000
+tx3() { grep mailbox-tx3 /proc/interrupts | awk '{s=0; for(i=2;i<=9;i++) s+=$i; print s+0}'; }
+pop() { devmem $((BLK+0x0c)) 32 3; s=$(( $(devmem $((BLK+0x04)) 32) + 1 )); devmem $((BLK+0x04)) 32 $s
+	for i in $(seq 1 100); do [ $(( $(devmem $((BLK+0x08)) 32) )) -eq $s ] && break; usleep 1000; done; }
+echo stop > $R/state 2>/dev/null; echo testMsgboxStep.elf > $R/firmware; echo start > $R/state
+for i in $(seq 1 100); do [ "$(devmem $BLK 32)" = "0x53544550" ] && break; usleep 10000; done
+[ "$(devmem $BLK 32)" = "0x53544550" ] || { echo "RESULT nofw"; exit 1; }
+devmem $WEN 32 $(( $(devmem $WEN 32) & ~0x80 ))
+while [ $(( $(devmem $CNT 32) )) -gt 0 ]; do pop; done
+devmem $THR 32 0
+for i in 1 2 3 4 5 6 7 8; do devmem $FIFO 32 $((0xA0+i)); done
+devmem $WST 32 0x80
+c0=$(tx3); devmem $WEN 32 $(( $(devmem $WEN 32) | 0x80 )); usleep 20000; c1=$(tx3)
+pop; usleep 20000; c2=$(tx3); wen=$(( $(devmem $WEN 32) & 0x80 ))
+devmem $WEN 32 $(( $(devmem $WEN 32) & ~0x80 ))
+while [ $(( $(devmem $CNT 32) )) -gt 0 ]; do pop; done
+echo "RESULT $c0 $c1 $c2 $wen"
+"""
+
+def run_msgbox_wrirq_test(results):
+    """
+    ISR mode: E906 bank write IRQ (channel 11, port 2 p=3; E906 runs testMsgboxStep).
+    FIFO full + enable set -> no interrupt; E906 pops one -> exactly one interrupt on
+    SPI 205 and the driver's handler clears the enable.
+    """
+    print("\n--- Msgbox ISR: write IRQ fires when a full FIFO frees a slot (testMsgboxStep) ---")
+    c, out, _ = run_ssh(MSGBOX_WRIRQ_TEST, timeout=60)
+    m = re.search(r'RESULT (\d+) (\d+) (\d+) (\d+)', out)
+    reasons = []
+    if not m:
+        reasons.append(f"test did not run: {out.strip()[-200:]}")
+    else:
+        c0, c1, c2, wen = map(int, m.groups())
+        print(f"  tx3 interrupts: before {c0}, armed while full {c1}, after pop {c2}; enable after handler: {wen}")
+        if c1 != c0:
+            reasons.append("interrupt fired while the FIFO was still full")
+        if c2 != c0 + 1:
+            reasons.append(f"expected exactly 1 interrupt after the pop, got {c2 - c0}")
+        if wen:
+            reasons.append("handler did not clear the write-IRQ enable")
+    for r in reasons:
+        print(f"  \033[91m[FAIL] {r}\033[0m")
+    results.append(("Profile 1T", "Msgbox ISR: write IRQ on SPI 205 (full -> pop -> 1 IRQ)", "FAIL" if reasons else "PASS"))
+
 def parse_target_json_report():
     c, out, _ = run_ssh("cat /tmp/remoteproc_test_results.json", timeout=10)
     if c == 0 and out:
@@ -269,14 +437,16 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
     if allowed_patterns is None:
         allowed_patterns = []
 
-    c, out, _ = run_ssh("dmesg -l err,crit,alert,emerg 2>/dev/null || dmesg | grep -iE 'call trace|kernel panic|oops|bug:|cut here' | tail -n 30", timeout=10)
+    # BusyBox dmesg has no -l, so the fallback grep is what runs on the board
+    # Includes the lines dmesg_drain() moved into SWEEP_DMESG_LOG during this boot
+    c, out, _ = run_ssh(f"(cat {SWEEP_DMESG_LOG} 2>/dev/null; dmesg) | grep -iE 'call trace|kernel panic|oops|bug:|cut here|MBOX_TX_QUEUE_LEN|failed to send mailbox kick' | tail -n 30", timeout=10)
     if c == 0 and out.strip():
         lines = [line.strip() for line in out.strip().splitlines() if line.strip()]
         filtered = []
         for line in lines:
             if any(pattern in line for pattern in allowed_patterns):
                 continue
-            if re.search(r'(?:call trace|kernel panic|oops|bug:|cut here|null pointer dereference|remoteproc.*failed)', line, re.IGNORECASE):
+            if re.search(r'(?:call trace|kernel panic|oops|bug:|cut here|null pointer dereference|remoteproc.*failed|MBOX_TX_QUEUE_LEN|failed to send mailbox kick)', line, re.IGNORECASE):
                 filtered.append(line)
 
         if filtered:
@@ -539,20 +709,21 @@ def audit_engineering_invariants():
             "details": "TX completion decided by the controller's last_tx_done()" if controller_paces else "Client reports txdone itself; contradicts Lesson 3.2"
         })
     
-    # Check 2: Mailbox TX Pacing (count == 0, UPSTREAM_LESSONS_LEARNED 3.2 / 2.1)
+    # Check 2: Mailbox TX completion (DESIGN_DECISIONS.md "Message box TX completion", 2026-10-16)
     msgbox_file = os.path.join(linux_dir, "drivers/mailbox/sun55i-msgbox.c")
     if os.path.exists(msgbox_file):
         with open(msgbox_file, "r") as f:
             content = f.read()
-        drained = "return count == 0;" in content
+        m = re.search(r'static bool sun55i_msgbox_last_tx_done\(.*?\n}\n', content, re.S)
+        has_room = bool(m and re.search(r'count\s*<\s*SUN55I_FIFO_MAX', m.group(0)))
         audit_results.append({
-            "invariant": "Mailbox Hardware FIFO Pacing",
-            "rule": "last_tx_done returns count == 0 (done once the remote drained the FIFO)",
+            "invariant": "Mailbox TX Completion",
+            "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (FIFO has room); DT selects timer or ISR when full",
             "file": "drivers/mailbox/sun55i-msgbox.c",
-            "status": "PASS" if drained else "FAIL",
-            "details": "A message counts as sent only after the remote consumed it" if drained else "last_tx_done no longer waits for the remote to drain the FIFO"
+            "status": "PASS" if has_room else "FAIL",
+            "details": "A kick is done once the FIFO accepted it" if has_room else "last_tx_done does not return count < SUN55I_FIFO_MAX (DESIGN_DECISIONS: TX completion)"
         })
-    
+
     # Check 3: Zero Arbitrary Sleep Hacks in Critical Benchmark Paths
     ping_rpmsg_file = os.path.join(base_dir, "firmware/riscv-firmware/apps/testPingRpmsg/linux/ping_rpmsg.cpp")
     if os.path.exists(ping_rpmsg_file):
@@ -825,7 +996,7 @@ def main():
 
     print("========================================================================")
     print("  Autonomous 3-Profile Silicon Sweep (Radxa Cubie A5E)")
-    print("  Co-Processor: XuanTie E906 RISC-V (RV32IMAFDC + Double FPU)")
+    print("  Co-Processor: XuanTie E906 RISC-V (RV32IMAFCX, single-precision FPU)")
     print(f"  Target: {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} (Linux 7.1 PREEMPT_RT)")
     if args.serial:
         print(f"  Serial Console: {args.serial} @ {args.serial_baud} baud -> {args.serial_log}")
@@ -890,9 +1061,68 @@ def main():
     print(out)
     results.append(("Profile 1", "Python monitor_trace.py", "PASS" if c == 0 else "FAIL"))
 
-    # 1.6 Kernel dmesg health check
+    # 1.6 FreeRTOS on the E906: tick, interrupt-driven rpmsg (CLIC line 17)
+    print("\n--- 1.6 Running testFreeRTOS (FreeRTOS v11, interrupt-driven rpmsg) ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testFreeRTOS.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
+    c, trace, _ = run_ssh("tr -d '\\000' < /sys/kernel/debug/remoteproc/remoteproc0/trace0", timeout=10)
+    trace = strip_ansi(trace)
+    ticks = re.search(r'FreeRTOS Tick Count:\s*(\d+)', trace)
+    boot_reasons = []
+    if c != 0 or not trace.strip():
+        boot_reasons.append("no trace0 output")
+    if "FATAL" in trace:
+        boot_reasons.append("firmware reported FATAL: " + trace[trace.index("FATAL"):].splitlines()[0])
+    if not ticks or int(ticks.group(1)) == 0:
+        boot_reasons.append("scheduler tick not running (Tick Count 0 or missing)")
+    if "Announcing rpmsg-ping-channel" not in trace:
+        boot_reasons.append("rpmsg channel never announced (doorbell interrupt did not wake the task)")
+    for r in boot_reasons:
+        print(f"  \033[91m[FAIL] {r}\033[0m")
+    results.append(("Profile 1", "testFreeRTOS boot (tick + IRQ wake)", "FAIL" if boot_reasons else "PASS"))
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
+    print(out)
+    results.append(("Profile 1", "FreeRTOS ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
+    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
+    print(out)
+    results.append(("Profile 1", "FreeRTOS stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
+
+    # 1.7 Message box bank clocks/resets across unbind/bind
+    print("\n--- 1.7 Message box clock/reset check (tools/msgbox_clock_reset_check.sh) ---")
+    chk = os.path.join(os.path.dirname(os.path.abspath(__file__)), "msgbox_clock_reset_check.sh")
+    if push_file(chk, "/root/msgbox_clock_reset_check.sh"):
+        c, out, _ = run_ssh("sh /root/msgbox_clock_reset_check.sh", timeout=90)
+        print(out)
+        results.append(("Profile 1", "Msgbox clocks/resets (unbind -> bind)", "PASS" if c == 0 else "FAIL"))
+    else:
+        print("  \033[91m[FAIL] could not copy msgbox_clock_reset_check.sh to the target\033[0m")
+        results.append(("Profile 1", "Msgbox clocks/resets (unbind -> bind)", "FAIL"))
+
+    # 1.8 Message box TX completion benchmark, timer mode (no allwinner,tx-done-irq)
+    msgbox_tx_modes = {"timer": run_msgbox_tx_bench("timer", results)}
+
+    # 1.9 Kernel dmesg health check
     dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 1", allowed_patterns=["testCrash"])
     results.append(("Profile 1", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
+
+    # -------------------------------------------------------------------------
+    # PROFILE 1T: message box TX completion by write interrupt
+    # -------------------------------------------------------------------------
+    log_banner(1, "Profile 1T: message box TX done by write IRQ", "Overlay: cubie-a5e-flight-stack cubie-a5e-msgbox-txirq")
+    p1t_up = set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-msgbox-txirq")
+    results.append(("Profile 1T", "Boot + remoteproc0 present", "PASS" if p1t_up else "FAIL"))
+    msgbox_tx_modes["isr"] = run_msgbox_tx_bench("isr", results)
+    run_msgbox_wrirq_test(results)
+    dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 1T", allowed_patterns=["Controller can't run the TX ticker"])
+    results.append(("Profile 1T", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
+
+    print("\n  Message box TX completion: timer vs ISR")
+    print(f"  {'Benchmark':<36} {'mode':<6} {'avg us':>8} {'max us':>8} {'jitter':>8} {'p99 us':>8} {'msgs/s':>10} {'RX/msg':>7} {'TX IRQ':>7} {'ovf':>5}")
+    for key, label, _, _, _ in MSGBOX_TX_BENCH:
+        for mode in ("timer", "isr"):
+            m = msgbox_tx_modes.get(mode, {}).get(key, {})
+            f = lambda v: "-" if v is None else (f"{v:.1f}" if isinstance(v, float) else str(v))
+            print(f"  {label:<36} {mode:<6} {f(m.get('avg_us')):>8} {f(m.get('max_us')):>8} {f(m.get('jitter_us')):>8} "
+                  f"{f(m.get('p99_us')):>8} {f(m.get('msgs_s')):>10} {f(m.get('rx_irqs_per_msg')):>7} {f(m.get('tx_irqs')):>7} {f(m.get('queue_overflows')):>5}")
 
     # -------------------------------------------------------------------------
     # PROFILE 2
@@ -1001,6 +1231,7 @@ def main():
         "target": f"{TARGET_USER}@{TARGET_IP}",
         "kunit_tests": kunit_summary,
         "sweep_summary": results,
+        "msgbox_tx_modes": msgbox_tx_modes,
         "profiles": aggregated_profile_data
     }
     try:
@@ -1043,6 +1274,21 @@ def main():
             f.write("| :--- | :--- | :---: |\n")
             for prof, test, status in results:
                 f.write(f"| {prof} | {test} | **{status}** |\n")
+
+            f.write("\n## Message Box TX Completion: Timer vs ISR\n\n")
+            f.write("Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay "
+                    "`cubie-a5e-msgbox-txirq` (`allwinner,tx-done-irq`), E906 bank write IRQ on SPI 205, "
+                    "enabled only while the FIFO is full. RX/msg = SPI 0 interrupts per message.\n\n")
+            f.write("| Benchmark | Mode | Status | Avg (µs) | Max (µs) | Jitter (µs) | p99 (µs) | msgs/s | RX IRQ/msg | TX IRQs | Queue overflows |\n")
+            f.write("| :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+            fmt = lambda v: "-" if v is None else (f"{v:,.1f}" if isinstance(v, float) else str(v))
+            for key, label, _, _, _ in MSGBOX_TX_BENCH:
+                for mode in ("timer", "isr"):
+                    m = msgbox_tx_modes.get(mode, {}).get(key, {})
+                    f.write(f"| {label} | {mode} | **{m.get('status', 'NOT RUN')}** | {fmt(m.get('avg_us'))} | {fmt(m.get('max_us'))} | "
+                            f"{fmt(m.get('jitter_us'))} | {fmt(m.get('p99_us'))} | {fmt(m.get('msgs_s'))} | "
+                            f"{fmt(m.get('rx_irqs_per_msg'))} | {fmt(m.get('tx_irqs'))} | {fmt(m.get('queue_overflows'))} |\n")
+            f.write("\n")
 
             if aggregated_profile_data:
                 f.write("\n## Detailed Quantitative Metrics per Profile\n\n")

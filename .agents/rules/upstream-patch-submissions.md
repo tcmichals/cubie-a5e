@@ -49,9 +49,10 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 > `configs/linux-5.15/sun55iw3p1.dtsi`.
 
 1. **Mailbox TX completion** (DESIGN_DECISIONS.md, "Message box TX completion", 2026-10-16):
-   - Controller: `last_tx_done(chan)` returns `true` while the receiver's FIFO has room (`count < 8`).
-   - Device tree selects the mode: no property = timer (`txpoll_period` 1 ms while the FIFO is full);
-     `allwinner,tx-done-irq` = write interrupt enabled only when the FIFO is full, disabled in the handler.
+   - A kick is done once the receiver's FIFO accepted it and has room; `send_data()` never writes a full FIFO.
+   - Device tree selects the mode: no property = timer (`txdone_poll`, `last_tx_done()` = `count < 8`,
+     1 ms while full); `allwinner,tx-done-irq` = `txdone_irq`, write interrupt armed after every send
+     and disabled in the handler (OMAP model, manual §2.12.4.1 / §6.1.5.1).
      Precedent: `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
    - Client (remoteproc): `cl.knows_txdone = false`, `cl.tx_block = false`; never call `mbox_client_txdone()`.
 2. **SMP Concurrency**:

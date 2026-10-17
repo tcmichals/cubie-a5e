@@ -397,7 +397,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every `interrupts` and `interrupt-names` uses positional `items:` with `minItems`.
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
-- [ ] Mailbox `last_tx_done()` returns `count < 8` (FIFO has room); timer or ISR (`allwinner,tx-done-irq`) when full, write IRQ enabled only while full (DESIGN_DECISIONS.md).
+- [ ] Mailbox TX: timer mode `last_tx_done()` = `count < 8`; ISR mode (`allwinner,tx-done-irq`) `txdone_irq`, write IRQ armed after every send (OMAP model); never write a full FIFO (DESIGN_DECISIONS.md).
 - [ ] RemoteProc kick uses `cl.knows_txdone = false`, `tx_block = false`, immutable per-vring payloads; never calls `mbox_client_txdone()`.
 - [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.
 - [ ] Teardown: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()` (probe error path: free mailbox → cancel work).

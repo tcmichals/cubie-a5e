@@ -353,6 +353,8 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
 
     // Take a free buffer from the host RX ring (vring[0]). If none is free the
     // host has not processed earlier replies yet: ring its doorbell and wait.
+    // Keep draining the host's doorbells meanwhile: it kicks for every buffer
+    // it returns, and if they pile up in our FIFO its mailbox queue overflows.
     uint16_t free_bufs = 0;
     for (;;) {
         if (!avail_pending(s_tx_vq, free_bufs)) {
@@ -363,6 +365,7 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
         }
         s_tx_full_waits.fetch_add(1, std::memory_order_relaxed);
         notify_host();
+        drain_host_doorbells();
     }
 
     uint16_t desc_idx = s_tx_vq.avail->ring[s_tx_vq.last_avail_idx & s_tx_vq.mask];

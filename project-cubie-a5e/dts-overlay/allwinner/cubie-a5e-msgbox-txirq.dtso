@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Message box TX done by write interrupt instead of polling (DESIGN_DECISIONS.md,
+ * "Message box TX completion"): the write interrupt is armed after every send,
+ * so no kick ever waits for the poll timer. For the flight stack.
+ *
+ * In /boot/config.txt:
+ *   dtoverlay=cubie-a5e-flight-stack cubie-a5e-msgbox-txirq
+ */
+/dts-v1/;
+/plugin/;
+
+&msgbox {
+	allwinner,tx-done-irq;
+};

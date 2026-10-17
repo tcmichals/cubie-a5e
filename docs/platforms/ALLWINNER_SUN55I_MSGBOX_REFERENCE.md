@@ -103,7 +103,7 @@ There is no interrupt named "message read". The options:
 |---|---|---|
 | Poll the receiver's `MSG_STATUS` until 0 | receiver has read everything | **[ours, v2 / v3 draft]**: `last_tx_done()` returned `count == 0`, mailbox core polls every **1 ms**. Replaced 2026-10-16 (next row). Upstream `sun6i-msgbox` (older Allwinner) polls every 5 ms with the same idea (receiver's IRQ status). |
 | Poll the receiver's `MSG_STATUS` until `< 8` | FIFO has room for the next message | **[vendor default]**: poll every **5 ms**. **[ours, 7.1, 2026-10-16]**: poll every 1 ms; owner decision, DESIGN_DECISIONS "Message box TX completion" |
-| Write IRQ, threshold 1 | FIFO has room for the next message (*not* "read") | **[vendor]**, optional: `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ`, no default (off), see §5a. **[ours, 7.1]**: `allwinner,tx-done-irq`, enabled only while the FIFO is full. **Works on silicon on SPI 205 (§6b)** once the DT names the right line. |
+| Write IRQ, threshold 1 | FIFO has room for the next message (*not* "read") | **[vendor]**, optional: `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ`, no default (off), see §5a. **[ours, 7.1]**: `allwinner,tx-done-irq`: armed after every send (OMAP model, manual §2.12.4.1), one TX interrupt per kick. **Works on silicon on SPI 205 (§6b)** once the DT names the right line. |
 | Write IRQ, threshold 8 | all 8 slots free = receiver has read everything — the same meaning as our poll | nobody yet. Behaviour on our silicon **[unverified]** |
 
 The poll only delays a message that is queued behind one the receiver has not read yet; an idle
@@ -148,7 +148,7 @@ the T527 (`allwinner,sun55iw3-msgbox`) and the A733 (`allwinner,sun60iw2-msgbox`
 |---|---|---|---|---|
 | Done when | `count < 8` | write IRQ (1 slot free) | `count < 8` | `count < 8`, or write IRQ when full |
 | Timer | 5 ms | none | 1 ms | 1 ms, kept |
-| Write IRQ enabled | never | once, at startup | never | only while the FIFO is full |
+| Write IRQ enabled | never | once, at startup | never | after every send (first version: only while full) |
 | Lines requested | all banks | all banks | SPI 0 | SPI 0 + remote banks |
 
 ## 6. Clocks and resets — every bank has its own
@@ -297,7 +297,7 @@ firmware, which leaves kicks in the FIFO; it must be rebuilt into the image.
 | User | Interrupts | TX completion | RX |
 |---|---|---|---|
 | Linux `sun55i-msgbox` (v3 series as of 2026-10-15) | ARM bank only (SPI 0) | poll `count == 0`, 1 ms | clear pending, then drain ≤ 8 under the lock |
-| Linux `sun55i-msgbox` (7.1, 2026-10-17, uncommitted) | SPI 0; + SPI 181 / 174 / 205 with `allwinner,tx-done-irq` | poll `count < 8`, 1 ms; write IRQ while full (optional, board-tested) | drain ≤ 8, then clear pending |
+| Linux `sun55i-msgbox` (7.1, 2026-10-17, uncommitted) | SPI 0; + the write-IRQ line of each bank in use (SPI 205 for the E906) with `allwinner,tx-done-irq` | timer: poll `count < 8`, 1 ms; ISR: write IRQ armed after every send (OMAP model) | drain ≤ 8, then clear pending |
 | Vendor `sunxi-msgbox` | all four bank lines (vendor DT numbers: wrong for the remote banks) | poll 5 ms, or write IRQ threshold 1 | drain until empty (10 ms time limit), then clear pending |
 | E906 firmware HAL | none (polls) | doorbell waits for FIFO space | drains every queued doorbell each pass |
 | UIO profile (`sun55i-msgbox-uio`) | ARM bank (SPI 0) to userspace | E906 sends a doorbell only when Linux's FIFO is empty | userspace drains, clears pending, unmasks |

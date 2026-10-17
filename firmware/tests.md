@@ -139,6 +139,38 @@ sudo apt install cpputest
 make -C firmware/tests/host
 ```
 
+## 1.4 Message Box: Clocks, Interrupts and TX Completion (2026-10-17)
+
+Facts and measurements: `docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md` §6, §6a, §6b;
+engineering log `docs/buildroot/DebugLog.md` Case Study 14; decision in DESIGN_DECISIONS.md
+"Message box TX completion".
+
+| Mode | `/boot/config.txt` | How a kick completes |
+| :--- | :--- | :--- |
+| Timer (default) | `dtoverlay=cubie-a5e-flight-stack` | `last_tx_done()` = FIFO has room; 1 ms poll while full |
+| ISR | `dtoverlay=cubie-a5e-flight-stack cubie-a5e-msgbox-txirq` | E906 bank write IRQ (SPI 205) armed after every send (OMAP model) |
+
+| Check | Command | Pass |
+| :--- | :--- | :--- |
+| Bank clocks/resets across unbind → bind | `tools/msgbox_clock_reset_check.sh` (copy to the board) | `RESULT: PASS` |
+| Write-IRQ line of each bank | `apps/testMsgboxStep/msgbox_wrirq_map.sh` | DSP → SPI 181, CPUS → SPI 174, RV → SPI 205 |
+| Write IRQ fires only when a full FIFO frees a slot | `apps/testMsgboxStep/msgbox_txirq_test.sh` (ISR mode, E906 runs `testMsgboxStep`) | 0 IRQs while full, 1 after the pop, enable cleared |
+| One RX interrupt per message | `ping_rpmsg -n 10000 -D 0`, diff `3003000.mailbox` in `/proc/interrupts` | exactly 10,000 |
+| No kick lost to the core queue | `stress_rpmsg -n 100000 -w 16`, count `MBOX_TX_QUEUE_LEN` in `dmesg` | 0 |
+| FreeRTOS wakes on the doorbell IRQ (CLIC line 17) | load `testFreeRTOS.elf`, `ping_rpmsg -n 2000 -D 0` | 2000/2000 |
+| UIO mailbox (Profile 3, `sun55i-msgbox-uio` enables all four banks) | `ping_uio -n 1000`, `python3 ping_uio.py -n 1000 -d 0` | 1000/1000 each |
+
+`tools/run_full_sweep.py` runs all of these: Profile 1 (timer) and Profile 1T (ISR, overlay +
+reboot) run the same benchmark and the report gets a timer-vs-ISR table (avg, max, jitter, p99,
+msgs/s, RX IRQs per message, TX IRQs, queue overflows). Overflows are counted by draining
+`dmesg` (a plain `grep -c` saturates at ~1,600 lines, the log buffer size).
+
+Measured 2026-10-17 before the ISR rework and the firmware drain fix: ping 10k 169 µs (timer) /
+172 µs (ISR), jitter ~7.5 µs, 0 overflows; stress 100k ×16 overflowed the 20-slot queue
+≥ 1,598 times (timer) / 46 (ISR, first version). Fixes: ISR mode arms the write IRQ after every
+send; the E906 drains host doorbells while `reply()` waits for a host buffer
+(host test `ReplyDrainsHostDoorbellsWhileWaitingForABuffer`). To be re-measured.
+
 ---
 
 ## 2. Hardware Memory Map for Firmware Tests

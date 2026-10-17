@@ -110,18 +110,31 @@ are tested.
 Replaces "Mailbox TX pacing" (`count == 0`, poll) and the open "poll or write interrupt" item.
 The system builder chooses, per board, in the device tree:
 
-- **Common to both modes:** `last_tx_done()` returns `true` while the receiver's FIFO has room
-  (`count < 8`), so a kick goes out at once whenever there is space. A kick is a doorbell; the
-  data is in the vrings (Case Study 13, lesson 5), so "accepted by the FIFO" is done.
-- **Timer (property absent, default; e.g. servers):** when the FIFO is full the mailbox core
-  re-checks every `txpoll_period` (1 ms). No TX interrupts.
-- **ISR (`allwinner,tx-done-irq`; e.g. the flight controller):** the write interrupt
-  (threshold field 0 = one free slot) is enabled **only when the FIFO is full** (count 8) and
-  disabled in the handler when it fires (count 8 → 7, the receiver read one). The handler then
-  lets the next kick go at once. No timer wait in a burst, so low latency and low jitter. The
-  write interrupt is level (status = free slots ≥ threshold, measured §6a), which is why it must
-  stay off whenever the FIFO is not full. It is raised on the receiver's bank line (SPI 174 for
-  the E906 bank).
+- **Common to both modes:** a kick is done once the receiver's FIFO accepted it and has room for
+  the next one. A kick is a doorbell; the data is in the vrings (Case Study 13, lesson 5).
+  `send_data()` never writes a full FIFO (it returns `-EBUSY`; a write to a full FIFO corrupts the
+  count, reference §6a).
+- **Timer (property absent, default; e.g. servers):** controller `txdone_poll`; `last_tx_done()`
+  returns `true` while `count < 8`, and a full FIFO is re-checked every `txpoll_period` (1 ms).
+  No TX interrupts.
+- **ISR (`allwinner,tx-done-irq`; e.g. the flight controller), revised 2026-10-17 to the OMAP
+  model:** controller `txdone_irq`, no polling. `send_data()` arms the write interrupt (threshold
+  field 0 = one free slot) **after every send**, clearing its latched status first. The interrupt
+  is level (status = free slots ≥ threshold, §6a), so it fires at once if the FIFO still has room,
+  or when the receiver reads a message; the handler disables and acks it, then calls
+  `mbox_chan_txdone()`, and the core writes the next queued kick from there. One TX interrupt per
+  kick, no timer in the path. This is the transmit flow in the manuals (T527 V0.94 §2.12.4.1,
+  A733 V1.00 §6.1.5.1, Figure 6-2) and what `omap-mailbox` does (`omap_mbox_chan_send()` enables
+  the "not full" TX interrupt after every send). The E906 bank's write interrupt reaches the A55
+  on **SPI 205** (manual Table 2-15, measured; the vendor DT's SPI 174 is the CPUS bank). The line
+  is requested only while a channel to that bank is started.
+- **Why not "only when full" (the first ISR version, 2026-10-16):** the mailbox core sends one
+  message at a time and needs a completion for each. With the interrupt armed only when full,
+  completion in the normal case still came from the poll timer, a thread wake-up per kick on
+  PREEMPT_RT, and a 16-in-flight `stress_rpmsg` overflowed the 20-slot core queue (46 times; timer
+  mode ≥ 1,598, 2026-10-17). Ethernet-style "stop at the high-water mark" batching does not map
+  onto the mailbox core without another per-kick completion path (client `knows_txdone`, rejected
+  in v2, or deferred work, also a thread wake-up on RT).
 - **Precedent for a DT property that selects the TX mode:** `ti,mbox-send-noirq` in
   `Documentation/devicetree/bindings/mailbox/ti,omap-mailbox.yaml` (read with
   `of_property_read_bool()` in `omap-mailbox.c`). OMAP also uses a "FIFO not full" TX interrupt.
