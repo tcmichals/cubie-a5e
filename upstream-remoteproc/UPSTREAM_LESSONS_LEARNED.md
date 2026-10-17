@@ -405,7 +405,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`old-kernels/linux-aw2501/.git/modules/bsp`), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
-- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote bank lines only with `allwinner,tx-done-irq` (the write IRQ is raised in the receiver's bank). Board test pending: msgbox reference §8 Q1/Q2.
+- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`. Board-tested 2026-10-17 (msgbox reference §6b).
 - [ ] `memory-region` / `memory-region-names` listed positionally (Lesson 1.5); no driver logic keyed on region names.
 - [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).
 - [ ] Nothing in the series contradicts [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) without the owner's sign-off.

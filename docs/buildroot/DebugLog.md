@@ -707,7 +707,7 @@ fails the build (`static_assert` on the structs' alignment).
 
 ## Case Study 14: Message Box TX Completion: Gated Banks, Double Interrupts, and a TX-Done ISR Nobody Ships
 **Date:** October 16–17, 2026  
-**Component:** `drivers/mailbox/sun55i-msgbox.c` (linux-cubie `cubie-linux-7.1`, uncommitted), msgbox binding and `sun55i-a523.dtsi`, overlay `cubie-a5e-msgbox-txirq.dtso`, vendor `sunxi-msgbox.c`  
+**Component:** `drivers/mailbox/sun55i-msgbox.c` (linux-cubie `cubie-linux-7.1`, uncommitted), msgbox binding and `sun55i-a523.dtsi` (interrupt lines corrected), overlay `cubie-a5e-msgbox-txirq.dtso`, vendor `sunxi-msgbox.c`  
 **Reference:** [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §5, §5a, §6, §6a, §8, §9
 
 ### 🚨 Symptoms
@@ -765,21 +765,33 @@ Board 192.168.3.3, kernel from the 2026-10-17 `bld.a5e` build; details in refere
 |---|---|
 | Remote banks clocked (MCU CCU `0x128`) | `0x00010001` — the 4-bank clocks/resets work |
 | KUnit at boot | msgbox 26/26, rproc 25/25 |
-| Timer mode, `ping_rpmsg -n 10000 -D 0`, current firmware | 10000/10000, **171 µs avg, 10.9 µs jitter**, 0 queue overflows |
 | SPI 0 interrupts per message (D13 fix) | **exactly 1** (10,000 for 10,000) |
-| Write IRQ of the E906 bank reaches the A55 (SPI 174)? | **No** — FIFO full → pop with status and enable set: 0 interrupts |
-| Any remote bank interrupt (read or write; DSP, CPUS, RV) reaches the A55? | **No** — 0 counts on SPI 1/181/174, no GIC line pending (IDs 32–319) |
+| Timer mode, `ping_rpmsg -n 10000 -D 0`, current firmware | 10000/10000, **171 µs avg, 10.9 µs jitter**, 0 queue overflows |
+| Write IRQ lines to the A55 (GIC pending registers) | DSP **SPI 181**, CPUS **SPI 174**, RV **SPI 205** — the vendor DT (SPI 1 / 181 / 174) is wrong |
+| TX FIFO full → E906 pops one → write IRQ on SPI 205 | **yes**; through the driver's handler too (enable cleared, 0 spurious) |
+| ISR mode (corrected DTB + `cubie-a5e-msgbox-txirq`), current firmware | 10000/10000, **166 µs avg, 6.3 µs jitter, 241 µs max**, 0 overflows, 0 TX IRQs (FIFO never full) |
+
+**How we got there (and a wrong turn).** A first round pulsed the remote banks' *read*
+interrupts and watched SPI 174 (the vendor DT's line for the RV bank) for its write IRQ; nothing
+arrived, and we concluded no remote bank can interrupt the A55. The T527 User Manual (V0.94,
+now cloned from Allwinner's GitLab) lists the A55's lines: `DSP_MSGBOX_CPUX` GIC 213,
+`CPUS_MSGBOX_CPUX` GIC 206, `RISCV_MSGBOX_CPUX` GIC 237. Enabling each bank's write IRQ and reading
+the GIC pending registers confirmed exactly those lines. A bank's read IRQ goes to its owner; its
+write IRQ goes to the sender.
 
 Also found: the board's rootfs ships the **2026-10-12** `testPingRpmsg.elf`, from before the
-Case Study 13 drain fix. With it the E906 leaves kicks in its FIFO (count stuck at 8), every kick
-waits for the 1 ms poll (786 µs avg, 1,598 `MBOX_TX_QUEUE_LEN` overflows, 7 SPI 0 interrupts per
-message). Before the D12 fix the RV bank was gated, so those kicks were silently dropped and this
-never showed. The image needs the current firmware.
+Case Study 13 drain fix. With it the E906 leaves kicks in its FIFO (count stuck at 8): 786 µs
+avg and 1,598 `MBOX_TX_QUEUE_LEN` overflows in timer mode, 1,451 µs in ISR mode (21 TX IRQs; the
+E906 rarely drains). Before the D12 fix the RV bank was gated, so those kicks were silently
+dropped and this never showed. The image needs the current firmware.
 
-**Conclusion:** TX completion from the A55 can only be polled. The `allwinner,tx-done-irq` (ISR)
-mode cannot work on this SoC: a message box bank interrupts only its owner. The Tina RTOS HAL
-agrees: it defines the write-IRQ registers and never uses them. Owner decision needed on dropping
-the ISR mode from the driver, binding and overlay.
+**Fix (7.1, uncommitted):** `sun55i-a523.dtsi` and the binding example now list
+`interrupts = <0>, <181>, <174>, <205>` (arm, dsp, cpus, rv), and the binding describes entries
+1–3 as the remote banks' write interrupts for the host. The corrected DTB is on the board (old one
+in `/root/sun55i-a527-cubie-a5e.dtb.orig`); `config.txt` is back to timer mode.
+
+**Driver follow-up:** the write status is latched, so enabling the IRQ while a stale status is set
+fires once at once. Clearing the status right before enabling would avoid that spurious wake-up.
 
 ### 📚 Lessons
 1. Each message box bank is its own clock domain; an unclocked bank reads 0 and drops writes, and
@@ -787,7 +799,9 @@ the ISR mode from the driver, binding and overlay.
 2. A level pending bit tied to "FIFO not empty" can only be cleared after the drain.
 3. Vendor source is a reference, not proof: an option that no shipped config enables has not been
    tested by anyone. Check the defconfigs, then measure.
-4. An interrupt listed in a vendor DT is not proof it reaches that CPU. Assert the source and
-   read the GIC pending registers before building on it.
-5. Check which firmware the rootfs actually ships (size in `dmesg` vs the build) before reading
+4. A vendor DT's interrupt numbers are not proof: here they were wrong for three of four banks.
+   Check the manual's interrupt table, assert the source, and read the GIC pending registers.
+5. Test the event you actually depend on (here the *write* IRQ), not a neighbouring one: the read
+   IRQ of a remote bank goes to its owner and says nothing about the sender's line.
+6. Check which firmware the rootfs actually ships (size in `dmesg` vs the build) before reading
    anything into a benchmark.

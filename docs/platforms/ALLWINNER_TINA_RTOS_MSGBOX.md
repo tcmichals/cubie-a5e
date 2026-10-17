@@ -36,9 +36,10 @@ The DSP uses its own bank, `IRQ_MSGBOX = 3`, `RST_BUS_DSP_MSG` / `CLK_BUS_DSP_MS
 `msgbox_amp.c` defines `MSGBOX_WR_IRQ_EN_REG()` / `MSGBOX_WR_IRQ_STA_REG()` (`0x30` / `0x34`) but
 **never calls them**. The only interrupt it requests is `IRQ_MSGBOX` for its own bank's *read*
 interrupt. TX completion on the RTOS side is a busy-wait on the receiver's `MSG_STATUS` (next
-sections). This matches the silicon: a bank's interrupt only reaches its owner
-([reference §6b](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md)), so a sender cannot be interrupted by the
-receiver's bank.
+sections). The hardware could interrupt the sender: each bank's write IRQ has a line to each
+sending core (to the A55: DSP SPI 181, CPUS SPI 174, RV SPI 205, measured; T527 manual
+Table 2-15), see [reference §1, §6b](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md). Tina simply does not
+use it.
 
 ## Driver variants
 
