@@ -702,3 +702,76 @@ fails the build (`static_assert` on the structs' alignment).
 6. A UIO node gets no clocks or resets from `generic-uio`; check that the block is alive.
 7. Test at full rate and with many messages in flight. A test that needs a delay to pass is
    hiding a bug, and a tool that exits 0 after a timeout is not a test.
+
+---
+
+## Case Study 14: Message Box TX Completion: Gated Banks, Double Interrupts, and a TX-Done ISR Nobody Ships
+**Date:** October 16–17, 2026 (in progress)  
+**Component:** `drivers/mailbox/sun55i-msgbox.c` (linux-cubie `cubie-linux-7.1`, uncommitted), msgbox binding and `sun55i-a523.dtsi`, overlay `cubie-a5e-msgbox-txirq.dtso`, vendor `sunxi-msgbox.c`  
+**Reference:** [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §5, §5a, §6, §6a, §8, §9
+
+### 🚨 Symptoms
+v3 was put on hold (owner, 2026-10-16) until message box TX completion is decided and documented.
+While measuring it:
+- Every received message raised **two** SPI 0 interrupts: 20,000 for 10,000 messages.
+- With the RV bank clocked, the v3 policy (`last_tx_done()` = `count == 0`, 1 ms poll) took
+  `ping_rpmsg -n 10000 -D 0` from ~200 µs to ~990 µs RTT, and the 20-slot core queue overflowed
+  (`MBOX_TX_QUEUE_LEN`, kick `-ENOBUFS`).
+
+### 🔍 Investigation
+1. **The remote banks were never clocked.** The DT gave the message box only the ARM bank's clock
+   and reset (D12). From the A55 every RV bank register read 0 (MCU CCU `0x128` = 0). Linux's kicks
+   were written into a gated bank, and `last_tx_done()` read a count of 0, so the poll never
+   waited. rpmsg only worked because the E906 polls the vrings. Setting `0x128 = 0x00010001` by hand
+   brought the bank to life (reference §6).
+2. **Read pending cleared before the drain.** The driver cleared READ_IRQ_STATUS, then drained. The
+   hardware ignores the clear while the FIFO is not empty, so the line fired again after every
+   drain. `sun6i-msgbox`, OMAP, the vendor Linux driver and the vendor RTOS HAL all drain first.
+3. **Write IRQ measured step by step** (`testMsgboxStep`, reference §6a): status is set exactly when
+   free slots ≥ threshold, it is **level** (write-1-to-clear is ignored while the condition holds),
+   and writing a full FIFO corrupts the count (9 … 15, then wraps to 0).
+4. **Vendor source re-read (2026-10-17, reference §5a, §9).** One vendor driver serves the T527 and
+   the A733. TX done is a **5 ms timer** with `count < 8` unless
+   `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ` is set; no vendor defconfig sets it (or even
+   `CONFIG_AW_MSGBOX`), and Radxa's shipped A733 kernel does not build the driver. In the ISR
+   variant the write IRQ is enabled only in `startup()` and never re-enabled after its handler
+   disables it, so as we read it the channel would stall. The vendor ISR has no known silicon run
+   on either SoC. The A733 has the same block with two banks (ARM `0x03004000`, CPUS `0x07094000`,
+   SPI 0 / 211); its E902 is the CPUS core.
+
+### 💡 Root Causes
+1. D12 described one clock and reset for a block whose banks each have their own.
+2. Pending cleared before the FIFO was empty (D13).
+3. `count == 0` treats a doorbell like a payload: every queued kick waited for the receiver to
+   empty the FIFO and for the next 1 ms poll tick. A kick is a doorbell; the data is in the vrings
+   (Case Study 13, lesson 5), so "accepted by the FIFO" is done.
+
+### 🛠️ Fixes (7.1, uncommitted, compile-checked in the 2026-10-17 `bld.a5e` image)
+* **Clocks/resets:** binding and dtsi list all four banks (`arm`, `dsp`, `cpus`, `rv`);
+  the driver uses `devm_clk_bulk_get_all_enabled()` and a shared reset array.
+* **RX:** drain (≤ 8) first, then clear pending, in the ISR, `startup()` and `shutdown()`.
+* **TX completion (owner decision, DESIGN_DECISIONS "Message box TX completion"):**
+  `last_tx_done()` returns `count < 8`; `send_data()` refuses a full FIFO (`-EBUSY`).
+  Default: the 1 ms poll only waits while the FIFO is full. With `allwinner,tx-done-irq`
+  (overlay `cubie-a5e-msgbox-txirq`): threshold 0 (one free slot), the write IRQ is enabled only
+  while the FIFO is full, and its handler (one per remote bank line) masks it, acks it and calls
+  `mbox_chan_txdone()`. Precedent for a DT property choosing the TX mode: `ti,mbox-send-noirq`.
+* **KUnit** extended for the TX paths (`sun55i_msgbox_test.c`).
+
+### ⏳ Still to verify on the board
+1. Does the A55 receive the write IRQ on **SPI 174** at all (`3003000.mailbox-tx3` count rises
+   during `ping_rpmsg -n 10000 -D 0`)? Not yet shown on silicon by us or the vendor.
+2. With the E906 in interrupt mode, does its own read interrupt also land on SPI 174? Our handler
+   returns `IRQ_NONE` for it; a level line that keeps firing would be disabled by the kernel.
+3. RTT and `stress_rpmsg` throughput, timer vs ISR, against the ~200 µs baseline.
+4. One SPI 0 interrupt per message after the D13 fix.
+
+Board access (2026-10-17): the A5E at 192.168.3.3 was re-flashed and no longer accepts our SSH
+key, so none of the above has been run yet.
+
+### 📚 Lessons
+1. Each message box bank is its own clock domain; an unclocked bank reads 0 and drops writes, and
+   a status read from it looks like "done".
+2. A level pending bit tied to "FIFO not empty" can only be cleared after the drain.
+3. Vendor source is a reference, not proof: an option that no shipped config enables has not been
+   tested by anyone. Check the defconfigs, then measure.

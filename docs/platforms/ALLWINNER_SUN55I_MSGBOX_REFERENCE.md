@@ -64,7 +64,7 @@ Offsets from the bank base; `OFF(n) = 0x100 * n`. **[vendor] [ours]**
 | `0x50 + OFF(n) + 4p` | FIFO_STATUS | | defined by both drivers, used by neither |
 | `0x60 + OFF(n) + 4p` | MSG_STATUS | `[3:0]` | number of messages in the FIFO (0–8) |
 | `0x70 + OFF(n) + 4p` | MSG_FIFO | 32 | write = send (into the receiver's bank), read = pop |
-| `0x80 + OFF(n) + 4p` | WRITE_IRQ_THRESHOLD | `[1:0]` | write IRQ fires when **free** slots reach: `0` = 1, `1` = 2, `2` = 4, `3` = 8 **[vendor]**. Not defined in our driver. |
+| `0x80 + OFF(n) + 4p` | WRITE_IRQ_THRESHOLD | `[1:0]` | write IRQ fires when **free** slots reach: `0` = 1, `1` = 2, `2` = 4, `3` = 8 **[vendor] [silicon §6a]**. Our 7.1 driver writes `0` (`WR_IRQ_THR_ONE_FREE`) in `allwinner,tx-done-irq` mode. **[ours]** |
 
 ## 4. Interrupts
 
@@ -73,7 +73,8 @@ Offsets from the bank base; `OFF(n) = 0x100 * n`. **[vendor] [ours]**
 - **Write interrupt:** its enable, status and threshold live in the **receiver's** bank too, so
   for messages Linux sends to the E906 it is raised on the **RV bank's line (SPI 174)**, not on
   SPI 0. The vendor driver requests all four bank interrupts for this reason. **[vendor]**
-  Our driver requests only SPI 0. **[ours]**
+  Our 7.1 driver requests SPI 0, plus the three remote bank lines (SPI 1, 181, 174) only when
+  the DT has `allwinner,tx-done-irq`. **[ours]**
 - Vendor comment on the write interrupt: *"triggered if the empty level in FIFO reaches the write
   IRQ threshold. It means that there is empty space in FIFO."* **[vendor]**
 - Both are level interrupts (`IRQ_TYPE_LEVEL_HIGH`). The vendor enables the write interrupt only
@@ -81,6 +82,8 @@ Offsets from the bank base; `OFF(n) = 0x100 * n`. **[vendor] [ours]**
   re-enable it. As we read it, after the first TX-done interrupt it stays off, so later sends
   would never be reported done — possibly why the option is off by default. **[vendor, our
   reading, not tested]** An interrupt-driven TX-done would have to enable it on every send.
+  Re-read 2026-10-17 (§5a): `sunxi_msgbox_send_data()` only checks for a full FIFO and writes;
+  the only `WRITE_IRQ_ENABLE` set is in `sunxi_msgbox_startup()`.
 
 ## 5. "Was my message read?" — TX completion
 
@@ -88,8 +91,9 @@ There is no interrupt named "message read". The options:
 
 | Method | Meaning | Who uses it |
 |---|---|---|
-| Poll the receiver's `MSG_STATUS` until 0 | receiver has read everything | **[ours]**: `last_tx_done()` returns `count == 0`, mailbox core polls every **1 ms** (`txpoll_period = 1`). Upstream `sun6i-msgbox` (older Allwinner) polls every 5 ms with the same idea (receiver's IRQ status). |
-| Write IRQ, threshold 1 | FIFO has room for the next message (*not* "read") | **[vendor]**, optional: `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ`, no default (off); otherwise the vendor polls every **5 ms** |
+| Poll the receiver's `MSG_STATUS` until 0 | receiver has read everything | **[ours, v2 / v3 draft]**: `last_tx_done()` returned `count == 0`, mailbox core polls every **1 ms**. Replaced 2026-10-16 (next row). Upstream `sun6i-msgbox` (older Allwinner) polls every 5 ms with the same idea (receiver's IRQ status). |
+| Poll the receiver's `MSG_STATUS` until `< 8` | FIFO has room for the next message | **[vendor default]**: poll every **5 ms**. **[ours, 7.1, 2026-10-16]**: poll every 1 ms; owner decision, DESIGN_DECISIONS "Message box TX completion" |
+| Write IRQ, threshold 1 | FIFO has room for the next message (*not* "read") | **[vendor]**, optional: `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ`, no default (off), see §5a. **[ours, 7.1]**: `allwinner,tx-done-irq`, enabled only while the FIFO is full, on top of the 1 ms poll. Interrupt line not yet seen firing on silicon. |
 | Write IRQ, threshold 8 | all 8 slots free = receiver has read everything — the same meaning as our poll | nobody yet. Behaviour on our silicon **[unverified]** |
 
 The poll only delays a message that is queued behind one the receiver has not read yet; an idle
@@ -97,6 +101,45 @@ channel sends at once. Measured after the 2026-10-15 firmware fix: one message a
 jitter 7–8 µs, no 1 ms stalls **[silicon]**. With 16 messages in flight each takes ~1.3 ms end to
 end (`stress_rpmsg`), which may or may not be the poll — not measured yet (the board kernel has
 no tracing).
+
+### 5a. Vendor TX completion, read from source (2026-10-17) [vendor]
+
+Source: `old-kernels/linux-aw2501/.git/modules/bsp` (Radxa `allwinner-bsp`, branch
+`cubie-aiot-v1.4.6`, commit `2045a3ca2a01`), `drivers/msgbox/sunxi-msgbox.c`. One driver serves
+the T527 (`allwinner,sun55iw3-msgbox`) and the A733 (`allwinner,sun60iw2-msgbox`, §9).
+
+```c
+#if IS_ENABLED(CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ)
+	chip->controller.txdone_irq	= true;
+#else
+	chip->controller.txdone_irq	= false;
+	chip->controller.txdone_poll	= true;
+	chip->controller.txpoll_period	= 5;
+#endif
+```
+
+- **Default (option off): timer.** The mailbox core polls `last_tx_done()` every **5 ms**; done
+  means `count < 8` ("the FIFO is not full"). No TX interrupt.
+- **Option on: ISR only**, no timer (`last_tx_done = NULL`). The write IRQ (threshold 1) is
+  enabled once in `startup()`; `sunxi_msgbox_write_handler()` disables it, calls
+  `mbox_chan_txdone()`, then clears the pending bit. Nothing re-enables it (§4), so as we read it
+  the channel stalls on the first message that has to wait for TX done.
+- `send_data()` refuses a full FIFO (`-EBUSY`, "FIFO is full"), like ours.
+- The handler serves every bank line and always returns `IRQ_HANDLED`, so a line it does not
+  own (open question 2) would never trip the kernel's spurious-interrupt check. Ours returns
+  `IRQ_NONE` when no enabled write bit is pending.
+- **Nobody ships the option on.** No vendor defconfig sets `CONFIG_AW_MAILBOX_SUPPORT_TXDONE_IRQ`
+  or even `CONFIG_AW_MSGBOX` (`configs/linux-{5.15,6.1,6.6}/sun55iw3p1_*`, `sun60iw2p1_*`).
+  Radxa's shipped A733 kernel has `# CONFIG_AW_MSGBOX is not set`
+  (`vendor-a733-reference/boot_configs/config-5.15.147-21-a733`). The vendor ISR path has no
+  known silicon run on either SoC.
+
+| | Vendor default | Vendor ISR option | Ours, 7.1 timer | Ours, 7.1 `allwinner,tx-done-irq` |
+|---|---|---|---|---|
+| Done when | `count < 8` | write IRQ (1 slot free) | `count < 8` | `count < 8`, or write IRQ when full |
+| Timer | 5 ms | none | 1 ms | 1 ms, kept |
+| Write IRQ enabled | never | once, at startup | never | only while the FIFO is full |
+| Lines requested | all banks | all banks | SPI 0 | SPI 0 + remote banks |
 
 ## 6. Clocks and resets — every bank has its own
 
@@ -178,7 +221,8 @@ clock enabled by hand, write-IRQ enable left off (status bits only).
 
 | User | Interrupts | TX completion | RX |
 |---|---|---|---|
-| Linux `sun55i-msgbox` (v3 series) | ARM bank only (SPI 0) | poll `count == 0`, 1 ms | clear pending, then drain ≤ 8 under the lock |
+| Linux `sun55i-msgbox` (v3 series as of 2026-10-15) | ARM bank only (SPI 0) | poll `count == 0`, 1 ms | clear pending, then drain ≤ 8 under the lock |
+| Linux `sun55i-msgbox` (7.1, 2026-10-16, uncommitted) | SPI 0; + remote bank lines with `allwinner,tx-done-irq` | poll `count < 8`, 1 ms; write IRQ while full (optional) | drain ≤ 8, then clear pending |
 | Vendor `sunxi-msgbox` | all four bank lines | poll 5 ms, or write IRQ threshold 1 | drain until empty (10 ms time limit), then clear pending |
 | E906 firmware HAL | none (polls) | doorbell waits for FIFO space | drains every queued doorbell each pass |
 | UIO profile (`sun55i-msgbox-uio`) | ARM bank (SPI 0) to userspace | E906 sends a doorbell only when Linux's FIFO is empty | userspace drains, clears pending, unmasks |
@@ -186,9 +230,15 @@ clock enabled by hand, write-IRQ enable left off (status bits only).
 ## 8. Open questions
 
 1. ~~Does the write IRQ status at threshold 8 follow the receiver draining the FIFO?~~ Yes, §6a.
-   Still open: does the A55 actually receive it on SPI 174 once enabled?
+   Still open: does the A55 actually receive it on SPI 174 once enabled? The vendor source does
+   not settle it: its ISR path is compiled out in every shipped config (§5a). Test: board with
+   `dtoverlay=cubie-a5e-flight-stack cubie-a5e-msgbox-txirq`, `ping_rpmsg -n 10000 -D 0`, the
+   `3003000.mailbox-tx3` count in `/proc/interrupts` must rise.
 2. Does SPI 174 also fire for the E906's *read* interrupt if the E906 enables it? Linux would
-   then see those too and must ignore them.
+   then see those too and must ignore them. Our 7.1 TX handler returns `IRQ_NONE` for them, so a
+   level line that keeps firing would be disabled by the kernel ("nobody cared") and TX done would
+   stop. The vendor handler always returns `IRQ_HANDLED` (§5a). Test with the E906 firmware in
+   interrupt mode.
 3. Is the 1 ms poll the limit for 16-in-flight rpmsg throughput? Needs kernel tracing
    (`txdone_hrtimer` count).
 4. ~~D13: clear the read pending bit before or after draining?~~ Measured 2026-10-16: our driver
@@ -198,3 +248,31 @@ clock enabled by hand, write-IRQ enable left off (status bits only).
    then clear ("The IRQ can be cleared only once the FIFO is empty"). Fixed on 7.1 (2026-10-16). A message arriving after the clear sets the bit again,
    so draining first loses nothing.
 5. `FIFO_STATUS` (`0x50`): meaning unknown.
+
+## 9. A733 (sun60i, Cubie A7A): same block, two banks (2026-10-17) [vendor]
+
+Same message box IP and register map as above (FIFO depth 8, 4 channels per pair, the same read
+and write IRQ registers and threshold field), driven by the same vendor driver. The wiring differs:
+
+| | T527 / A523 (A5E) | A733 (A7A) |
+|---|---|---|
+| Vendor compatible | `allwinner,sun55iw3-msgbox` | `allwinner,sun60iw2-msgbox` (hardware data shared with `sun55iw5`) |
+| Banks | 4: ARM `0x03003000`, DSP `0x07120000`, CPUS `0x07094000`, RV `0x07136000` | 2: ARM `0x03004000`, CPUS `0x07094000` |
+| Linux channels | 12 | 4 |
+| Bank interrupts | SPI 0, 1, 181, 174 | SPI 0, 211 |
+| Coprocessor on the other end | E906 (RV bank) | E902, which is the CPUS core (it runs `scp.fex`), so the CPUS bank |
+| Clocks in vendor DT | one (`CLK_MSGBOX0`) | one (`CLK_MSGBOX0`) |
+| Vendor DT status | enabled | `status = "disabled"` |
+
+Sources: vendor `configs/linux-5.15/sun55iw3p1.dtsi` and `sun60iw2p1.dtsi`, `sun55iw5_hwdata`
+in `sunxi-msgbox.c`; Radxa's shipped A733 kernel does not build the driver (§5a).
+
+For our tree:
+- On the A733, TX done for messages to the E902 would come on **SPI 211** (CPUS bank line).
+- `sun55i-msgbox.c` has the 4-bank T527 routing table built in. The A733 needs its own compatible
+  and per-SoC data (2 banks, 4 channels, its own clock/reset list), in line with the "A733
+  placeholders stay" decision.
+- The current `sun60i-a733-cubie-a7a.dts` node is an untested stub: 2 `reg` entries without
+  `reg-names`, only SPI 211 (missing SPI 0, the ARM bank line where Linux receives), no
+  `clock-names`/`reset-names`, and a `sun6i-a31-msgbox` fallback. It must be redone from the
+  vendor dtsi before use.
