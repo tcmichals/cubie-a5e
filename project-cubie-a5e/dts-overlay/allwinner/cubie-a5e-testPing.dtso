@@ -8,8 +8,9 @@
  * Hardware Overlay for the testPing firmware (Profile 3, UIO):
  * Hands the ARM message box bank and the ping/pong SRAM slot to userspace
  * through the project's sun55i-msgbox-uio driver (drivers/uio/
- * uio_sun55i_msgbox.c). That driver switches on the bus clock and releases
- * the reset; generic-uio does neither, which left the block gated.
+ * uio_sun55i_msgbox.c). That driver switches on the bus clocks and releases
+ * the resets of all four banks; generic-uio does neither, which left the
+ * block gated.
  *
  * Memory Maps exposed under /sys/class/uio/uio0/maps/:
  *   map0: ARM message box bank @ 0x03003000 (4 KB): E906 doorbell FIFO + IRQ
@@ -17,7 +18,7 @@
  *
  * Hardware IRQ:
  *   GIC SPI 0 (ARM message box bank; first entry inherited from &msgbox),
- *   with the clock and reset also inherited from &msgbox.
+ *   with the four bank clocks and resets also inherited from &msgbox.
  *
  * Needs the sun55i-a527-cubie-a5e-uio.dtb base tree, which drops the
  * remoteproc "mboxes" (an overlay cannot delete it).

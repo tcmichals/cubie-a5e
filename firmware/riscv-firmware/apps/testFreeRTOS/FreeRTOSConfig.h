@@ -6,7 +6,9 @@
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configUSE_TICKLESS_IDLE                 0
-#define configCPU_CLOCK_HZ                      ( 200000000UL )
+/* The RISC-V port derives the tick from this: it is the mtime rate (24 MHz
+ * oscillator, measured against mcycle), not the 200 MHz core clock. */
+#define configCPU_CLOCK_HZ                      ( 24000000UL )
 #define configTICK_RATE_HZ                      ( ( TickType_t ) 1000 )
 #define configMAX_PRIORITIES                    ( 5 )
 #define configMINIMAL_STACK_SIZE                ( ( uint16_t ) 256 )
@@ -43,8 +45,9 @@
 #define configSUPPORT_DYNAMIC_ALLOCATION        1
 
 /* RISC-V specific definitions */
-#define configMTIME_BASE_ADDRESS                ( 0x07090000UL )
-#define configMTIMECMP_BASE_ADDRESS             ( 0x07090008UL )
+/* E906 CLINT (measured: 0x07090000 does not count) */
+#define configMTIME_BASE_ADDRESS                ( 0xE000BFF8UL )
+#define configMTIMECMP_BASE_ADDRESS             ( 0xE0004000UL )
 #define configISR_STACK_SIZE_WORDS              ( 256 )
 
 /* Set to 1 to enable assertions */

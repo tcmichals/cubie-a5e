@@ -5,7 +5,8 @@
  * 1. FreeRTOS v11 Kernel running on E906 @ 200 MHz with M-mode preemptive scheduler.
  * 2. Side-by-side task context switch benchmark (10,000 switches).
  * 3. AbstractX lock-free hal::SpscQueue integration inside FreeRTOS tasks.
- * 4. Linux RemoteProc VirtIO RPMsg ("rpmsg-ping-channel") with MSGBOX ISR wakeup.
+ * 4. Linux RemoteProc VirtIO RPMsg ("rpmsg-ping-channel") with MSGBOX ISR wakeup
+ *    (CLIC line 17; the E906 has a T-Head CLIC at 0xE0800000, not a PLIC).
  * 5. Full CTF 1.8 / barectf trace hooks emitting 64B TLPs to SRAM C ring buffer.
  * 6. Live FreeRTOS task CPU runtime statistics and stack high-water mark reporting.
  */
@@ -35,6 +36,17 @@ extern "C" void freertos_risc_v_trap_handler(void);
 static TaskHandle_t g_task_a_handle = nullptr;
 static TaskHandle_t g_task_b_handle = nullptr;
 static TaskHandle_t g_rpmsg_task_handle = nullptr;
+
+// XuanTie E906 CLIC (T527): base 0xE0800000, per-interrupt control words at
+// +0x1000 + 4 * id (byte 0 IP, byte 1 IE, byte 2 ATTR, byte 3 CTL).
+// Line 7 = core timer, line 17 = message box (measured on the board: the
+// message box doorbell sets IP of line 17; there is no PLIC at 0x10000000).
+static constexpr uint32_t CLIC_IRQ_MTIMER = 7;
+static constexpr uint32_t CLIC_IRQ_MSGBOX = 17;
+
+static inline void clic_enable(uint32_t irq) {
+    *reinterpret_cast<volatile uint8_t*>(0xE0801000U + 4U * irq + 1U) = 1;
+}
 
 // AbstractX SPSC Queue test instance
 static hal::SpscQueue<uint32_t, 64> g_spsc_queue;
@@ -188,24 +200,21 @@ void vApplicationMallocFailedHook(void) {
     while (1) { __asm__ volatile("wfi"); }
 }
 
-// External PLIC interrupt dispatcher called from FreeRTOS portASM.S
+// External interrupt dispatcher called from portASM_e906.S with the masked
+// mcause (interrupt bit + CLIC id). The message box line is level triggered
+// and stays asserted until the FIFO is empty, so mask it here and let the
+// worker task drain, clear and unmask.
 void freertos_risc_v_application_interrupt_handler(uint32_t mcause) {
-    (void)mcause;
-    volatile uint32_t &plic_reg = *reinterpret_cast<volatile uint32_t*>(0x10000000 + 0x200004);
-    uint32_t irq = plic_reg;
-
-    while (irq != 0) {
-        if (irq == 48) { // Allwinner T527 MSGBOX Doorbell (PLIC IRQ 48 / 25)
-            hal::MsgBox::clear_irq_status(hal::MsgBox::Channel::Channel1);
-            if (g_rpmsg_task_handle != nullptr) {
-                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                vTaskNotifyGiveFromISR(g_rpmsg_task_handle, &xHigherPriorityTaskWoken);
-                portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-            }
+    if ((mcause & 0xFFFU) == CLIC_IRQ_MSGBOX) {
+        hal::MsgBox::enable_rx_irq(hal::MsgBox::Channel::Channel1, false);
+        if (g_rpmsg_task_handle != nullptr) {
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            vTaskNotifyGiveFromISR(g_rpmsg_task_handle, &xHigherPriorityTaskWoken);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
-        plic_reg = irq; // Signal completion to hardware
-        irq = plic_reg;
+        return;
     }
+    hal::Trace::printf("[testFreeRTOS] unexpected interrupt: mcause=0x%08x\n", mcause);
 }
 
 void freertos_risc_v_application_exception_handler(uint32_t mcause) {
@@ -230,9 +239,10 @@ static void log_task_runtime_stats(void) {
     hal::Trace::puts("  --------------------------------------------------------------\n");
 
     for (UBaseType_t i = 0; i < num_tasks; ++i) {
-        float cpu_pct = (total_runtime > 0)
-            ? (float)status_array[i].ulRunTimeCounter * 100.0f / (float)total_runtime
-            : 0.0f;
+        // Tenths of a percent; Trace::printf has no '-' flag, keep to %s/%u
+        uint32_t cpu_permille = (total_runtime > 0)
+            ? (uint32_t)((uint64_t)status_array[i].ulRunTimeCounter * 1000ULL / total_runtime)
+            : 0;
         const char *st_str = "UNK ";
         switch (status_array[i].eCurrentState) {
             case eRunning:   st_str = "RUN "; break;
@@ -242,14 +252,15 @@ static void log_task_runtime_stats(void) {
             case eDeleted:   st_str = "DEL "; break;
             default: break;
         }
-        hal::Trace::printf("  %-15s | #%u | %s  | %5u words | %13u | %5.1f%%\n",
+        hal::Trace::printf("  %s | #%u | %s  | %5u words | %13u | %u.%u%%\n",
                            status_array[i].pcTaskName,
                            (uint32_t)status_array[i].xTaskNumber,
                            st_str,
                            (uint32_t)status_array[i].usStackHighWaterMark,
                            (uint32_t)status_array[i].ulRunTimeCounter,
-                           cpu_pct);
+                           cpu_permille / 10, cpu_permille % 10);
     }
+    hal::Trace::printf("  FreeRTOS Tick Count: %u\n", (uint32_t)xTaskGetTickCount());
     hal::Trace::printf("  FreeRTOS Heap Free : %u bytes | Total Runtime: %u cycles\n",
                        (uint32_t)xPortGetFreeHeapSize(), total_runtime);
     hal::Trace::printf("  SRAM CTF Trace Ring: %p (Head: %u, Cap: %u)\n",
@@ -277,7 +288,7 @@ static void handle_rpmsg_ping(const hal::RpmsgMessage &msg, void *user_data) {
 }
 
 // ----------------------------------------------------------------------------
-// FreeRTOS RPMsg Worker Task (Event-Driven via MSGBOX PLIC ISR)
+// FreeRTOS RPMsg Worker Task (woken by the message box interrupt, CLIC line 17)
 // ----------------------------------------------------------------------------
 static void rpmsg_worker_task(void *pvParameters) {
     (void)pvParameters;
@@ -290,6 +301,7 @@ static void rpmsg_worker_task(void *pvParameters) {
     while (1) {
         // Wait for MSGBOX Doorbell interrupt notification from ISR
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        hal::Rpmsg::enable_rx_kick(false);
 
         if (hal::Rpmsg::is_driver_ready()) {
             if (!announced) {
@@ -300,6 +312,12 @@ static void rpmsg_worker_task(void *pvParameters) {
 
             hal::Rpmsg::poll();
         }
+
+        // poll() drained the doorbell FIFO; enable kicks so host will wake us
+        // when a new message arrives, then unmask the interrupt before waiting.
+        hal::MsgBox::clear_irq_status(hal::MsgBox::Channel::Channel1);
+        hal::Rpmsg::enable_rx_kick(true);
+        hal::MsgBox::enable_rx_irq(hal::MsgBox::Channel::Channel1, true);
 
         uint32_t current_pings = g_rpmsg_ping_count.load(std::memory_order_relaxed);
         if (current_pings >= last_logged_pings + 5000) {
@@ -313,6 +331,7 @@ static void rpmsg_worker_task(void *pvParameters) {
 // Benchmark Tasks (10,000 Consecutive Context Switches)
 // ----------------------------------------------------------------------------
 static constexpr uint32_t BENCHMARK_ROUNDS = 10000;
+static constexpr uint32_t BENCH_STACK_WORDS = 512;
 
 static void task_b_entry(void *pvParameters) {
     (void)pvParameters;
@@ -355,9 +374,9 @@ static void task_a_entry(void *pvParameters) {
     hal::Trace::printf("  Cycles Per Switch  : %u cycles\n", cycles_per_switch);
     hal::Trace::printf("  Time Per Switch    : %u ns\n", ns_per_switch);
     hal::Trace::printf("  Task A Stack Left  : %u words (%u bytes used)\n",
-                       (uint32_t)stack_a, (uint32_t)(configMINIMAL_STACK_SIZE - stack_a) * 4);
+                       (uint32_t)stack_a, (uint32_t)(BENCH_STACK_WORDS - stack_a) * 4);
     hal::Trace::printf("  Task B Stack Left  : %u words (%u bytes used)\n",
-                       (uint32_t)stack_b, (uint32_t)(configMINIMAL_STACK_SIZE - stack_b) * 4);
+                       (uint32_t)stack_b, (uint32_t)(BENCH_STACK_WORDS - stack_b) * 4);
     hal::Trace::printf("  FreeRTOS Heap Free : %u bytes\n", (uint32_t)xPortGetFreeHeapSize());
     hal::Trace::puts("================================================================\n");
 
@@ -409,14 +428,20 @@ int main(void) {
 
     // Install FreeRTOS RISC-V trap handler
     uintptr_t trap_handler_addr = reinterpret_cast<uintptr_t>(freertos_risc_v_trap_handler);
-    __asm__ volatile("csrw mtvec, %0" :: "r"(trap_handler_addr));
+    // Keep mtvec.MODE = 3 (CLIC, non-vectored): every trap enters the handler
+    __asm__ volatile("csrw mtvec, %0" :: "r"(trap_handler_addr | 0x3U));
 
     // Enable Hardware Mailbox Channel 1 interrupt
     hal::MsgBox::enable_rx_irq(hal::MsgBox::Channel::Channel1, true);
 
+    // CLIC: enable the core timer (FreeRTOS tick) and the message box line.
+    // FreeRTOS only sets mie, which the E906 ignores in CLIC mode.
+    clic_enable(CLIC_IRQ_MTIMER);
+    clic_enable(CLIC_IRQ_MSGBOX);
+
     // Create Benchmark Tasks (Stack: 512 words = 2048 bytes each)
-    xTaskCreate(task_a_entry, "bench_a", 512, nullptr, tskIDLE_PRIORITY + 2, &g_task_a_handle);
-    xTaskCreate(task_b_entry, "bench_b", 512, nullptr, tskIDLE_PRIORITY + 2, &g_task_b_handle);
+    xTaskCreate(task_a_entry, "bench_a", BENCH_STACK_WORDS, nullptr, tskIDLE_PRIORITY + 2, &g_task_a_handle);
+    xTaskCreate(task_b_entry, "bench_b", BENCH_STACK_WORDS, nullptr, tskIDLE_PRIORITY + 2, &g_task_b_handle);
 
     // Create RPMsg Worker Task (Stack: 1024 words = 4096 bytes)
     xTaskCreate(rpmsg_worker_task, "rpmsg_rx", 1024, nullptr, tskIDLE_PRIORITY + 3, &g_rpmsg_task_handle);

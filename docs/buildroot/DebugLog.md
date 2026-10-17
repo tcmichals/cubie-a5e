@@ -825,3 +825,78 @@ read interrupt, and Linux's doorbells went into the gated bank.
    IRQ of a remote bank goes to its owner and says nothing about the sender's line.
 6. Check which firmware the rootfs actually ships (size in `dmesg` vs the build) before reading
    anything into a benchmark.
+
+---
+
+## Case Study 15 — VirtIO Doorbell Queue Overflow (`MBOX_TX_QUEUE_LEN`) Under Multi-Worker Stress & Resolution via VirtIO Kick Suppression (`VRING_USED_F_NO_NOTIFY`)
+
+### 🔍 Context & Problem Statement
+* **Date:** 2026-10-17
+* **Platform:** Radxa Cubie A5E (Allwinner T527 / A523, XuanTie E906 @ 200 MHz, Linux 7.1.0 PREEMPT_RT)
+* **Symptom:**
+  Running `stress_rpmsg -n 100000 -w 16` (16 concurrent worker threads in userspace) triggered exactly **1,598 warnings** in `dmesg`:
+  ```
+  sun55i-msgbox 3003000.mailbox: Try increasing MBOX_TX_QUEUE_LEN
+  ```
+  Despite the warnings, zero packets were dropped (100,000/100,000 delivered with PASS data integrity) because VirtIO data travels through the shared memory vring, not the mailbox doorbell. However, the warnings signaled that Linux's 20-entry software mailbox queue (`MBOX_TX_QUEUE_LEN = 20`) was overflowing under bursty parallel workloads.
+
+### 🔬 Root Cause Analysis
+
+1. **Linux Mailbox Core Architecture (`drivers/mailbox/mailbox.c`):**
+   * The Linux mailbox subsystem only allows **one active message (`chan->active_req`)** at a time per mailbox channel.
+   * When `mbox_send_message()` is called while an active request is pending, additional messages are appended to a fixed software FIFO (`chan->msg_data`) of size `MBOX_TX_QUEUE_LEN = 20`.
+   * If more than 20 requests pile up before `tx_tick()` runs, `add_to_rbuf()` returns `-ENOBUFS` and prints `"Try increasing MBOX_TX_QUEUE_LEN"`.
+
+2. **Dual Kick Sources in Bidirectional RPMsg:**
+   * Kicks originate from **two separate virtqueues** on the Linux host:
+     * `vrp->svq` (`vring[1]` / `s_rx_vq` in firmware): Linux kicks E906 whenever user space transmits a message.
+     * `vrp->rvq` (`vring[0]` / `s_tx_vq` in firmware): In `virtio_rpmsg_bus.c:752` (`rpmsg_recv_done`), every time Linux finishes consuming a reply from E906, it puts the empty buffer back into `vrp->rvq` and calls `virtqueue_kick(vrp->rvq)`.
+   * With 16 parallel threads running `write()` / `read()` loops, 16 concurrent sends combined with 16 replenishment kicks flooded Linux's mailbox queue with up to 32 requests in under a microsecond.
+
+3. **Missing VirtIO Kick Suppression in Firmware:**
+   * Under standard VirtIO (`drivers/virtio/virtio_ring.c:816`):
+     ```c
+     needs_kick = !(vq->split.vring.used->flags & VRING_USED_F_NO_NOTIFY);
+     ```
+   * The firmware previously left `used->flags = 0` on both vrings. Because `flags` was always 0, Linux assumed the remote processor required a hardware doorbell for every single buffer added to either ring.
+   * In reality, when E906 is running a continuous polling loop (`while(1) { hal::Rpmsg::poll(); }`), it is already scanning `avail->idx` continuously in shared memory. Every doorbell sent by Linux during active polling is redundant.
+
+### 🛠️ Solution & Implementation
+
+1. **Bidirectional Kick Suppression in `hal::Rpmsg` (`firmware/common/hal/rpmsg.cpp`):**
+   * **Host RX / Remote TX (`s_tx_vq` / `vring[0]`):**
+     * Initialized with `s_tx_vq.used->flags = VRING_USED_F_NO_NOTIFY;`.
+     * E906 consumes reply buffers by reading shared memory. It only clears `s_tx_vq.used->flags = 0` if `avail_pending()` indicates that reply buffers are exhausted, ensuring Linux only kicks when replenishing an empty ring.
+   * **Host TX / Remote RX (`s_rx_vq` / `vring[1]`):**
+     * Initialized with `s_rx_vq.used->flags = VRING_USED_F_NO_NOTIFY;` by default.
+     * Continuous polling applications (`testPingRpmsg`, `testPingRpmsgSram`) never sleep and maintain suppression continuously, completely eliminating mailbox kick traffic from Linux.
+   * **Interrupt-Driven Support (`testFreeRTOS`):**
+     * Added `hal::Rpmsg::enable_rx_kick(bool)` API.
+     * `testFreeRTOS`'s worker task explicitly unsuppresses kicks (`enable_rx_kick(true)`) immediately before sleeping on `ulTaskNotifyTake`, and suppresses them (`enable_rx_kick(false)`) upon ISR wake-up.
+
+2. **Mailbox Doorbell Draining:**
+   * Drained incoming doorbells in a tight `while` loop across both Channel 0 and Channel 1 to ensure the hardware 8-slot FIFO is completely emptied on each poll cycle.
+
+3. **AbstractX Parity:**
+   * Replicated the identical kick suppression and doorbell draining architecture to `AbstractX/targets/allwinner_e906/src/rpmsg.cpp` across both `Rpmsg` (Linux VirtIO) and `RpmsgLiteMetal` (Bare-Metal / UIO).
+
+### ✅ Verification & Silicon Results (2026-10-17)
+
+| Benchmark / Test | Configuration | Pre-Fix Overflows | Post-Fix Overflows | Data Integrity | Post-Fix Avg RTT | Post-Fix Max RTT |
+|---|---|---|---|---|---|---|
+| `stress_rpmsg 100k -w 16` | Profile 1 (DDR VirtIO, Timer Mode) | 1,598 | **0** | **PASS** (100k/100k) | 1,410.6 µs | 1,496.9 µs |
+| `stress_rpmsg 100k -w 16` | Profile 1T (DDR VirtIO, ISR Mode) | 1,598 | **0** | **PASS** (100k/100k) | 1,410.5 µs | 1,507.3 µs |
+| `stress_rpmsg 100k -w 16` | Profile 2 (On-Chip SRAM Space 1) | 1,598 | **0** | **PASS** (100k/100k) | 1,355.6 µs | 1,487.0 µs |
+| `FreeRTOS ping_rpmsg 2k` | Profile 1 / 1T (CLIC line 17 ISR wake) | 0 | **0** | **PASS** (2k/2k) | 185.9 µs | 242.9 µs |
+
+* **Host Test Suites:**
+  * `cubie-a5e`: 26/26 unit tests passed (166,180 checks, 0 errors).
+  * `AbstractX`: 37/37 unit tests passed in `build_host` (100% pass), cross-compiled cleanly in `build_e906`.
+* **Trace Buffer Audit:**
+  * Remoteproc debugfs trace0 confirmed only **1 initial host doorbell** was required during 100,000 message transfers under full kick suppression.
+
+### 📚 Lessons
+1. In high-concurrency VirtIO stress tests (window size $\ge$ mailbox queue depth), lack of kick suppression will overflow Linux's 20-entry `MBOX_TX_QUEUE_LEN` even if the remote core processes every message.
+2. In bidirectional RPMsg, replenishment of empty buffers on the RX ring (`vrp->rvq`) kicks just as frequently as sending on the TX ring (`vrp->svq`); both virtqueues must implement kick suppression.
+3. Polling coprocessor engines should keep `VRING_USED_F_NO_NOTIFY = 1` active continuously, whereas interrupt-driven RTOS tasks should explicitly unsuppress kicks prior to blocking on an ISR notification.
+

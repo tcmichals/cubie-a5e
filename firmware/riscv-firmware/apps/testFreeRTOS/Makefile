@@ -6,6 +6,7 @@ $(info FreeRTOS-Kernel submodule missing. Initializing git submodules...)
 $(shell cd ../../.. && git submodule update --init --recursive)
 endif
 
+DEFINES += -DCONFIG_RPROC_RPMSG
 APP_SRCS_CPP = main.cpp
 
 APP_SRCS_C = \
@@ -17,7 +18,7 @@ APP_SRCS_C = \
     $(FREERTOS_DIR)/portable/GCC/RISC-V/port.c
 
 APP_SRCS_S = \
-    $(FREERTOS_DIR)/portable/GCC/RISC-V/portASM.S
+    portASM_e906.S
 
 INCLUDES += -I. -I$(FREERTOS_DIR)/include \
             -I$(FREERTOS_DIR)/portable/GCC/RISC-V \

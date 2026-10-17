@@ -48,6 +48,8 @@ static_assert(alignof(VirtioAvail) == 2 && alignof(VirtioUsed) == 4 && alignof(V
               "vring structs must not be packed");
 
 namespace {
+    constexpr uint16_t VRING_USED_F_NO_NOTIFY = 1;
+
     const struct rpmsg_resource_table *s_rsc = nullptr;
     bool s_vdev_ready = false;
     bool s_ns_announced = false;
@@ -205,6 +207,9 @@ bool Rpmsg::is_driver_ready() noexcept {
             bool tx_ok = setup_vq(s_tx_vq, rsc->vdev.vring[0].da, rsc->vdev.vring[0].num, rsc->vdev.vring[0].align);
             bool rx_ok = setup_vq(s_rx_vq, rsc->vdev.vring[1].da, rsc->vdev.vring[1].num, rsc->vdev.vring[1].align);
             if (tx_ok && rx_ok) {
+                s_tx_vq.used->flags = VRING_USED_F_NO_NOTIFY;
+                s_rx_vq.used->flags = VRING_USED_F_NO_NOTIFY;
+                std::atomic_thread_fence(std::memory_order_release);
                 s_vdev_ready = true;
             } else {
                 s_ring_errors.fetch_add(1, std::memory_order_relaxed);
@@ -282,65 +287,88 @@ bool Rpmsg::poll() noexcept {
     drain_host_doorbells();
 
     uint16_t pending = 0;
-    if (!avail_pending(s_rx_vq, pending) || pending == 0) {
+    if (!avail_pending(s_rx_vq, pending)) {
+        s_rx_vq.used->flags = 0;
+        return false;
+    }
+    if (pending == 0) {
         return false;
     }
 
-    for (; pending > 0; --pending) {
-        uint16_t desc_idx = s_rx_vq.avail->ring[s_rx_vq.last_avail_idx & s_rx_vq.mask];
-        if (desc_idx >= s_rx_vq.num) {
-            // A descriptor index outside the ring: nothing safe to return to the host.
-            s_ring_errors.fetch_add(1, std::memory_order_relaxed);
-            return false;
-        }
-        volatile struct VirtioDesc *desc = &s_rx_vq.desc[desc_idx];
-        uint32_t buf_len = desc->len;
-        uint32_t buf_da = static_cast<uint32_t>(desc->addr);
+    // Tell the host we are actively draining: suppress redundant mailbox kicks
+    s_rx_vq.used->flags = VRING_USED_F_NO_NOTIFY;
+    std::atomic_thread_fence(std::memory_order_seq_cst);
 
-        volatile struct rpmsg_hdr *hdr = nullptr;
-        if (buf_da != 0 && buf_len >= sizeof(struct rpmsg_hdr)) {
-            hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(buf_da));
-            if (hdr->len > buf_len - sizeof(struct rpmsg_hdr)) {
-                hdr = nullptr;
+    for (;;) {
+        for (; pending > 0; --pending) {
+            uint16_t desc_idx = s_rx_vq.avail->ring[s_rx_vq.last_avail_idx & s_rx_vq.mask];
+            if (desc_idx >= s_rx_vq.num) {
+                // A descriptor index outside the ring: nothing safe to return to the host.
+                s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+                s_rx_vq.used->flags = 0;
+                return false;
             }
-        }
+            volatile struct VirtioDesc *desc = &s_rx_vq.desc[desc_idx];
+            uint32_t buf_len = desc->len;
+            uint32_t buf_da = static_cast<uint32_t>(desc->addr);
 
-        if (hdr == nullptr) {
-            // Malformed buffer: count it, deliver nothing, give the buffer back.
-            s_ring_errors.fetch_add(1, std::memory_order_relaxed);
-        } else {
-            RpmsgMessage msg;
-            msg.src = hdr->src;
-            msg.dst = hdr->dst;
-            msg.len = hdr->len;
-            msg.data = const_cast<const uint8_t *>(hdr->data);
-            msg.desc_idx = desc_idx;
-
-            s_rx_count.fetch_add(1, std::memory_order_relaxed);
-
-            // Dispatch to registered endpoint callback
-            for (size_t i = 0; i < s_num_endpoints; ++i) {
-                if (s_endpoints[i].addr == msg.dst || s_endpoints[i].addr == 0) {
-                    if (s_endpoints[i].cb) {
-                        s_endpoints[i].cb(msg, s_endpoints[i].user_data);
-                    }
-                    break;
+            volatile struct rpmsg_hdr *hdr = nullptr;
+            if (buf_da != 0 && buf_len >= sizeof(struct rpmsg_hdr)) {
+                hdr = reinterpret_cast<volatile struct rpmsg_hdr *>(translate_da(buf_da));
+                if (hdr->len > buf_len - sizeof(struct rpmsg_hdr)) {
+                    hdr = nullptr;
                 }
             }
+
+            if (hdr == nullptr) {
+                // Malformed buffer: count it, deliver nothing, give the buffer back.
+                s_ring_errors.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                RpmsgMessage msg;
+                msg.src = hdr->src;
+                msg.dst = hdr->dst;
+                msg.len = hdr->len;
+                msg.data = const_cast<const uint8_t *>(hdr->data);
+                msg.desc_idx = desc_idx;
+
+                s_rx_count.fetch_add(1, std::memory_order_relaxed);
+
+                // Dispatch to registered endpoint callback
+                for (size_t i = 0; i < s_num_endpoints; ++i) {
+                    if (s_endpoints[i].addr == msg.dst || s_endpoints[i].addr == 0) {
+                        if (s_endpoints[i].cb) {
+                            s_endpoints[i].cb(msg, s_endpoints[i].user_data);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Return the consumed descriptor to the host
+            uint16_t used_idx = s_rx_vq.used->idx;
+            s_rx_vq.used->ring[used_idx & s_rx_vq.mask].id = desc_idx;
+            s_rx_vq.used->ring[used_idx & s_rx_vq.mask].len = 0;
+            std::atomic_thread_fence(std::memory_order_release);
+            s_rx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
+            s_rx_vq.last_avail_idx++;
         }
 
-        // Return the consumed descriptor to the host
-        uint16_t used_idx = s_rx_vq.used->idx;
-        s_rx_vq.used->ring[used_idx & s_rx_vq.mask].id = desc_idx;
-        s_rx_vq.used->ring[used_idx & s_rx_vq.mask].len = 0;
-        std::atomic_thread_fence(std::memory_order_release);
-        s_rx_vq.used->idx = static_cast<uint16_t>(used_idx + 1);
-        s_rx_vq.last_avail_idx++;
+        // Re-check: did more buffers arrive while we were processing?
+        if (!avail_pending(s_rx_vq, pending) || pending == 0) {
+            break;
+        }
     }
 
     // Tell the host its transmit buffers are back
     notify_host();
     return true;
+}
+
+void Rpmsg::enable_rx_kick(bool enable) noexcept {
+    if (s_rx_vq.used) {
+        s_rx_vq.used->flags = enable ? 0 : VRING_USED_F_NO_NOTIFY;
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
 }
 
 bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t len) noexcept {
@@ -363,10 +391,14 @@ bool Rpmsg::reply(const RpmsgMessage &incoming, const void *payload, uint16_t le
         if (free_bufs > 0) {
             break;
         }
+        // Free buffers exhausted: clear NO_NOTIFY so host kicks when buffers are returned
+        s_tx_vq.used->flags = 0;
+        std::atomic_thread_fence(std::memory_order_seq_cst);
         s_tx_full_waits.fetch_add(1, std::memory_order_relaxed);
         notify_host();
         drain_host_doorbells();
     }
+    s_tx_vq.used->flags = VRING_USED_F_NO_NOTIFY;
 
     uint16_t desc_idx = s_tx_vq.avail->ring[s_tx_vq.last_avail_idx & s_tx_vq.mask];
     if (desc_idx >= s_tx_vq.num) {

@@ -346,3 +346,27 @@ TEST(Rpmsg, SmallerPowerOfTwoRingWorksAcrossWrap) {
     LONGS_EQUAL(0, hal::Rpmsg::get_ring_errors());
 }
 
+TEST(Rpmsg, KickSuppressionFlagIsSetDuringProcessingAndClearedWhenIdle) {
+    static FakeHost *s_host = host;
+    static uint16_t flag_during_callback = 0xFFFF;
+    s_host = host;
+    flag_during_callback = 0xFFFF;
+
+    hal::Rpmsg::register_endpoint(1024, [](const hal::RpmsgMessage &, void *) {
+        flag_during_callback = s_host->tx().used->flags;
+    });
+
+    uint8_t byte = 42;
+    host->post(0, &byte, 1);
+    LONGS_EQUAL(1, host->tx().used->flags); // Default in polling mode is suppressed (NO_NOTIFY)
+    hal::Rpmsg::enable_rx_kick(true);
+    LONGS_EQUAL(0, host->tx().used->flags); // Explicitly unsuppressed for sleep
+    CHECK_TRUE(hal::Rpmsg::poll());
+    // Inside callback, host kick suppression flag was set:
+    LONGS_EQUAL(1, flag_during_callback);
+    // Explicitly unsuppress when preparing to sleep
+    hal::Rpmsg::enable_rx_kick(true);
+    LONGS_EQUAL(0, host->tx().used->flags);
+}
+
+

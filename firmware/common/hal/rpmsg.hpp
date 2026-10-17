@@ -45,6 +45,9 @@ public:
     // Poll for incoming RPMsg packets and dispatch to registered callbacks
     static bool poll() noexcept;
 
+    // Enable or suppress host kicks on incoming virtqueue (VRING_USED_F_NO_NOTIFY)
+    static void enable_rx_kick(bool enable) noexcept;
+
     // Reply to an incoming RPMsg packet (Echo / Pong)
     static bool reply(const RpmsgMessage &incoming, const void *payload, uint16_t len) noexcept;
 

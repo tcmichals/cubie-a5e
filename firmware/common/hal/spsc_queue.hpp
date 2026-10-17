@@ -14,13 +14,39 @@ namespace hal {
  * Designed for intra-core and RTOS task/ISR communication (FreeRTOS, coroutines, drivers).
  * Utilizes standard C++ std::atomic with acquire/release memory semantics.
  *
- * Performance features:
- *  - Power-of-two capacity: single-cycle bitwise masking without division.
- *  - Shadow pointer caching: producer caches tail, consumer caches head to eliminate
- *    redundant atomic loads when the queue is neither full nor empty.
- *  - No cache-line padding: both ends run on one core (task <-> task or
- *    ISR -> task), so there is no false sharing to avoid and padding would
- *    only cost SRAM. Cross-core links use ipc::SpscRing instead.
+ * ============================================================================
+ * AbstractX Architectural Model: Performance & Concurrency Principles
+ * ============================================================================
+ *
+ * 1. ZERO-MUTEX / ZERO-CRITICAL-SECTION DESIGN:
+ *    - SPSC queues are strictly point-to-point (one writer thread, one reader thread).
+ *    - Never wrap this queue in global mutexes or disable interrupts (`taskENTER_CRITICAL`).
+ *    - To handle Multiple Producers (MPSC):
+ *      Use the "AbstractX Dispatcher / Serializer" pattern: each worker task maintains
+ *      its own private, lock-free SPSC queue feeding a central Router/Gateway task.
+ *      This completely eliminates lock contention, priority inversion, and deadlocks.
+ *
+ * 2. EVENT-DRIVEN DOORBELL / WAKE-UP PIPELINE:
+ *    - Decouple the Data Plane from the Signaling Plane:
+ *        * Data Plane: Carried lock-free inside this SPSC queue (or ipc::SpscRing).
+ *        * Signal Plane: Light "doorbell kick" via Hardware MsgBox or Task Notification.
+ *    - In FreeRTOS:
+ *        * Consumer sleeps on zero-overhead Direct Task Notifications:
+ *            ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // 0% CPU burn
+ *        * Producer or MsgBox PLIC ISR wakes consumer without OS locks:
+ *            vTaskNotifyGiveFromISR(consumer_task_handle, &xHigherPriorityTaskWoken);
+ *        * Consumer wakes up and drains all available items in a tight loop:
+ *            while (queue.pop(item)) { process(item); }
+ *
+ * 3. HARDWARE & CACHE EFFICIENCY:
+ *    - Power-of-two capacity: single-cycle bitwise masking (`head & (Capacity - 1)`).
+ *    - Monotonic 32-bit wrap-around: arithmetic naturally wraps cleanly at 2^32.
+ *    - Shadow pointer caching: producer caches tail, consumer caches head to eliminate
+ *      redundant atomic bus loads when the queue is neither full nor empty.
+ *    - No cache-line padding: both ends run on one core (task <-> task or ISR -> task),
+ *      so there is no inter-core false sharing to avoid and padding would waste SRAM.
+ *      (Cross-core links between Linux ARM64 and RV32 use ipc::SpscRing instead).
+ * ============================================================================
  */
 template <typename T, size_t Capacity>
 class SpscQueue {
