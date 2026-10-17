@@ -794,6 +794,25 @@ in `/root/sun55i-a527-cubie-a5e.dtb.orig`); `config.txt` is back to timer mode.
 **Driver follow-up:** the write status is latched, so enabling the IRQ while a stale status is set
 fires once at once. Clearing the status right before enabling would avoid that spurious wake-up.
 
+### ✅ Full image with the refined driver (2026-10-17, Buildroot `bld.a5e` build #5)
+Kernel, DTBs and all E906 firmware rebuilt and installed (previous files in
+`/root/backup-pre-deploy-20261017/` on the board). Driver changes since the first board run: the
+latched write status is cleared before enabling, a remote bank's line is requested only while a
+channel to it is started, and `shutdown()` releases it only if `startup()` got it.
+
+| Check | Result |
+|---|---|
+| KUnit at boot (new code) | msgbox 26/26, rproc 25/25 |
+| Timer mode, shipped `testPingRpmsg.elf` (now current) | 10000/10000, 171.1 µs avg, 7.6 µs jitter, 0 queue overflows, 1 SPI 0 IRQ per message |
+| Clocks/resets across unbind → bind | PASS |
+| ISR mode: lines held | only SPI 205 (`mailbox-tx3`) while the remoteproc holds channel 9; freed on unbind, requested again on bind (SPI 181/174 no longer grabbed) |
+| ISR mode, current firmware | 10000/10000, 171.8 µs avg, 7.0 µs jitter, 0 overflows, 0 TX IRQs needed |
+| ISR mode, stale 10-12 firmware (burst) | 10000/10000, 7 TX-done IRQs through the driver, no warnings |
+| `testFreeRTOS` (worker blocks on the msgbox ISR, CLIC line 17, no timeout) | 2000/2000, 200.9 µs avg, 8.4 µs jitter — line 17 fires on every doorbell now that the RV bank is clocked |
+
+Our FreeRTOS port could not have worked before the D12 fix: its worker only wakes on the RV bank's
+read interrupt, and Linux's doorbells went into the gated bank.
+
 ### 📚 Lessons
 1. Each message box bank is its own clock domain; an unclocked bank reads 0 and drops writes, and
    a status read from it looks like "done".
