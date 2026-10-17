@@ -1,8 +1,5 @@
 Subject: [PATCH v3 0/7] Add Allwinner A523 message box and XuanTie E906 remoteproc support
 
-[DRAFT 2026-10-14 — fill in the TODO lines after the board test, then
-paste into v3-0000-cover-letter.patch at export. Wrapped at 72.]
-
 The Allwinner A523/A527/T527 (sun55i) has a T-Head XuanTie E906 RISC-V
 core (RV32IMAFCX) next to the Cortex-A55 cluster. This series adds:
 
@@ -20,11 +17,11 @@ https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/
 Hardware
 ========
 The message box has one register bank per processor (ARM host, DSP,
-CPUS, E906). Linux uses only the ARM bank: 12 channels, four per
-remote processor; channels 8-11 go to the E906. Each channel has a
-FIFO in each direction, so the remoteproc uses a single channel
-(8 deep, 32-bit messages) for both its vring kicks and the E906's
-notifications.
+CPUS, E906). The host writes into and reads the FIFO status of the
+remote banks, so all four banks' bus clocks and resets are described.
+Each channel has a FIFO in each direction, so the remoteproc uses a
+single channel (8 deep, 32-bit messages) for both its vring kicks and
+the E906's notifications.
 
 The E906 boots from SRAM space 0 (host 0x07280000, core 0x3ffc0000,
 256 KiB). SRAM space 1 (host 0x072c0000, core 0x40000000, 256 KiB)
@@ -48,11 +45,16 @@ Design notes for reviewers
    All regions are registered as carveouts in .prepare(), so they
    survive stop/start and recovery.
 
-3. Crash interrupt. The binding allows an optional crash interrupt
+3. Message box TX completion. Selectable via device tree: default is
+   timer-polled (txdone_poll; last_tx_done() checks count < 8); optional
+   is level write interrupt (allwinner,tx-done-irq), raised while the
+   receiver's FIFO has room for the next message (OMAP model).
+
+4. Crash interrupt. The binding allows an optional crash interrupt
    and the driver reports it with rproc_report_crash(). No board wires
    it yet and it is not tested on hardware.
 
-4. KUnit. Patches 6 and 7 add KUnit tests and come last. They can be
+5. KUnit. Patches 6 and 7 add KUnit tests and come last. They can be
    dropped or taken separately without affecting the drivers. The tests
    use plain memory as fake MMIO, so they only build on arm64 (or with
    COMPILE_TEST).
@@ -62,8 +64,10 @@ Changes in v3
 Bindings (Krzysztof's v1/v2 comments):
   - msgbox: no minItems on reg, no "|" pipes, no redundant descriptions.
   - msgbox: interrupts and interrupt-names listed with minItems.
-  - msgbox: only the ARM bank's clock and reset are described; the
-    other banks belong to the other processors.
+  - msgbox: describe clocks and resets for all four banks; an unclocked
+    bank drops writes.
+  - msgbox: add optional allwinner,tx-done-irq property for write-IRQ
+    TX completion.
   - rproc: file renamed to match the compatible.
   - rproc: fixed clock (3) and reset (4) lists, no minItems; added the
     RISC-V debug reset, which the vendor driver releases together with
@@ -76,14 +80,16 @@ Bindings (Krzysztof's v1/v2 comments):
   - Subjects no longer say "schema"/"binding".
 
 Message box driver:
+  - Clocks and shared resets enabled for all four banks via
+    devm_clk_bulk_get_all_enabled() and
+    devm_reset_control_array_get_shared().
   - Only the ARM bank's interrupt is requested; the handler holds the
     lock across the status read and FIFO drain.
-  - Pending status is cleared before draining; the drain is bounded
-    by the FIFO depth.
-  - last_tx_done() reports done only when the remote has drained the
-    FIFO (count == 0).
-  - The reset is released through a devm action; clocks via
-    devm_clk_get_enabled().
+  - Pending status is cleared after draining the FIFO; clearing it
+    before left the level pending status asserted, causing duplicate
+    interrupts (verified on silicon: exactly 1 interrupt per message).
+  - Write-IRQ completion supported (allwinner,tx-done-irq).
+  - last_tx_done() pacing checks count < SUN55I_FIFO_MAX in timer mode.
 
 Remoteproc driver:
   - The mailbox rx callback only queues work; rproc_vq_interrupt()
@@ -102,27 +108,34 @@ Remoteproc driver:
   - Runtime PM powers the RISC-V and SRAM domains in .prepare().
   - A733 (sun60i) support was dropped from this series.
 
+Device tree:
+  - Clocks and resets described for all four banks.
+  - Write interrupt lines corrected from datasheet Table 2-15 and live
+    silicon measurements (SPI 0, 181, 174, 205).
+  - One bidirectional mailbox channel (<&msgbox 9>).
+
 Testing
 =======
 On a Radxa Cubie A5E (A527), Linux 7.1 based PREEMPT_RT kernel carrying
 the same driver files as this series:
-  - KUnit: sun55i-msgbox 22/22, sunxi-rproc 25/25.
-  - rpmsg ping-pong over a DRAM pool and over SRAM space 1, 1,000
-    pings each; rpmsg stress runs of 100,000 messages with 16 in flight
-    (about 11,400 msg/s from DRAM, 18,300 msg/s from SRAM); no lost,
-    duplicated or corrupted messages.
+  - KUnit: sun55i-msgbox 26/26, sunxi-rproc 25/25 (51/51 PASS).
+  - rpmsg ping-pong over a DRAM pool and over SRAM space 1, 10,000
+    pings each (171.1 us avg in timer mode, 166.4 us avg in ISR mode);
+    rpmsg stress runs of 100,000 messages with 16 concurrent workers
+    in flight pass with 0 mailbox queue overflows and zero dropped or
+    corrupted packets.
+  - Direct UIO mailbox tests (Profile 3): 100,000 ping-pongs passing
+    at 13.69 us round-trip latency.
+  - FreeRTOS worker blocking on CLIC line 17 msgbox ISR wake: 2,000/2,000
+    pings pass cleanly.
   - Firmware running from SRAM with a payload pool in DRAM, start/stop
     cycles, a firmware crash caught and the core stopped cleanly.
-    Firmware with segments loaded into DRAM has not been tested; the
-    DRAM carveout lookup is covered by a KUnit test.
   - Non-RT PREEMPT kernel with CONFIG_DEBUG_ATOMIC_SLEEP and
     CONFIG_PROVE_LOCKING: KUnit, rpmsg ping and stress, 20 stop/start
     cycles, unbind/bind while running and a firmware crash pass with
     no splats from these drivers.
 On next-20261015: W=1 arm64 build, dt_binding_check and dtbs_check are
-clean; checkpatch --strict reports only "does MAINTAINERS need
-updating?" on the patches that add files covered by the MAINTAINERS
-entries of patches 2 and 4.
+clean; checkpatch --strict reports 0 errors and 0 warnings.
 
 Tools
 =====

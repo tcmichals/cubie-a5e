@@ -1,139 +1,178 @@
-From 91fc06ec9ee4893b9f024244c01841dd8e0e4b1e Mon Sep 17 00:00:00 2001
+From 5507249f81cedecc89e5c05db434ae91fc2b36a7 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Tue, 13 Oct 2026 12:20:22 -0500
-Subject: [PATCH v3 0/7] remoteproc: sunxi: Add Allwinner XuanTie E906 RemoteProc and Message Box support
+Date: Sat, 17 Oct 2026 15:29:52 -0500
+Subject: [PATCH v3 0/7] Add Allwinner A523 message box and XuanTie E906 remoteproc support
 
-This patch series (v3) introduces mainline Linux support for the Alibaba
-T-Head XuanTie E906 (RV32IMAFCX @ 200 MHz) RISC-V auxiliary co-processor
-integrated into Allwinner A523, A527, and T527 (sun55i) SoCs.
+The Allwinner A523/A527/T527 (sun55i) has a T-Head XuanTie E906 RISC-V
+core (RV32IMAFCX) next to the Cortex-A55 cluster. This series adds:
 
-The series adds a standalone 4-port hardware Message Box driver, the
-XuanTie RemoteProc driver, the associated Devicetree binding schemas,
-in-kernel KUnit unit test suites, and DT node enablement.
+  - a driver for the sun55i message box, which the host uses to
+    signal the E906 (and, through other channels, the HiFi4 DSP and
+    the CPUS power-management core);
+  - a remoteproc driver that loads ELF firmware into the E906's SRAM,
+    starts and stops the core, and runs rpmsg over virtio; DRAM
+    regions are registered as carveouts for firmware and buffers;
+  - DT bindings for both, the A523 DT nodes, and KUnit tests.
 
-v2 submission for reference:
+Changes since v2:
 https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/
 
-Hardware Architecture & Memory Map
-==================================
-Allwinner sun55i SoCs integrate an octa-core ARM Cortex-A55 cluster
-alongside an auxiliary XuanTie E906 RISC-V co-processor. The co-processor
-boots from on-chip dedicated SRAM Space 0 (Host PA 0x07280000 / Core DA
-0x3FFC0000, 256 KB), can access secondary switchable SRAM Space 1 (Host PA
-0x072C0000 / Core DA 0x40000000, 256 KB), and interacts with external DDR
-DRAM across the SoC internal AXI bus.
+Hardware
+========
+The message box has one register bank per processor (ARM host, DSP,
+CPUS, E906). The host writes into and reads the FIFO status of the
+remote banks, so all four banks' bus clocks and resets are described.
+Each channel has a FIFO in each direction, so the remoteproc uses a
+single channel (8 deep, 32-bit messages) for both its vring kicks and
+the E906's notifications.
 
-Inter-processor communication (IPC) is coordinated via a 4-port hardware
-Message Box controller (CPUX_MSGBOX at 0x03003000). The mailbox acts as a
-star crossbar connecting four processors on the silicon die:
-  - Port 0: ARM Cortex-A55 host cluster
-  - Port 1: Cadence Tensilica HiFi4 Audio DSP
-  - Port 2: Power Management Unit (CPUS)
-  - Port 3: XuanTie E906 RISC-V co-processor
+The E906 boots from SRAM space 0 (host 0x07280000, core 0x3ffc0000,
+256 KiB). SRAM space 1 (host 0x072c0000, core 0x40000000, 256 KiB)
+becomes visible to the E906 when bit 1 of 0x07010364 is set. Core
+addresses from 0x40040000 up map DRAM 1:1.
 
-The Cortex-A55 exposes 12 logical channels (4 per remote processor),
-where Channels 8..11 route directly to the XuanTie E906.
+Design notes for reviewers
+==========================
+1. Remap register. 0x07010364 is a PRCM register shared with the DSP:
+   bit 1 hands SRAM A3_2 to the MCU subsystem (needed for SRAM space
+   1), bit 0 belongs to the DSP. The remoteproc node maps this one
+   4-byte register ("remap") and read-modify-writes bit 1 only. That
+   is safe while no other Linux driver writes the register, which is
+   the case today. If you prefer a syscon or the R-CCU to own it, I
+   will move it.
 
-Major Changes from v2 to v3
-===========================
+2. Memory regions. memory-region is a listed, positional set: index 0
+   is a shared-dma-pool for vrings and buffers (the core binds it to
+   the virtio device when there is no vdev0buffer carveout), then an
+   optional DRAM region for firmware and an optional trace buffer.
+   All regions are registered as carveouts in .prepare(), so they
+   survive stop/start and recovery.
 
-1. RemoteProc Lifecycle, Teardown Order, and Synchronization:
-   - Fixed sleep-in-atomic bug: disable_irq() calls synchronize_irq(),
-     which invokes might_sleep(). Replaced spinlock serialization in
-     .stop() with an atomic bit flag (SUNXI_RPROC_CRASH_IRQ_ARMED) via
-     test_and_clear_bit() to safely synchronize interrupt handling
-     without sleeping under spinlocks.
-   - Enforced safe teardown ordering in remove(): rproc_del() is
-     invoked FIRST to unregister virtio devices and suppress any
-     outgoing kicks/callbacks, followed by freeing mailbox channels
-     and cancelling work queues.
-   - Carveout lifecycle: DT carveouts are now registered in the
-     .prepare() callback (sunxi_rproc_prepare()) rather than probe().
-     In the remoteproc core, rproc_shutdown() and recovery paths call
-     rproc_resource_cleanup(), which frees all carveouts. Registering
-     in .prepare() ensures carveout regions persist across stop/restart
-     and recovery cycles.
-   - Memory mapping robustness: Checked devm_memremap() return values
-     with IS_ERR() rather than NULL. Enforced exact strcmp() matching
-     for "dram" and "trace" reserved memory regions to prevent substring
-     collisions.
-   - Dropped unverified A733 / sun60i code and KUnit tests.
+3. Message box TX completion. Selectable via device tree: default is
+   timer-polled (txdone_poll; last_tx_done() checks count < 8); optional
+   is level write interrupt (allwinner,tx-done-irq), raised while the
+   receiver's FIFO has room for the next message (OMAP model).
 
-2. Hardware Message Box Controller & Mailbox Contracts:
-   - Interrupt handling: Clamped interrupt request to index 0 (ARM
-     host port), preventing the driver from binding foreign DSP and
-     RISC-V interrupts whose hardware status registers were not
-     serviced by the ARM handler.
-   - Per-bank clock and reset gating: Enabled clocks and resets across
-     all 4 hardware banks (CCU, MCU CCU DSP, R_CCU, and MCU CCU RISC-V)
-     to guarantee crossbar interconnect availability during peer
-     transactions.
-   - Teardown safety: Simplified controller lifecycle to pure devm
-     management via devm_mbox_controller_register() and
-     devm_clk_get_enabled().
-   - Dropped unverified A733 / sun60i code and KUnit tests.
+4. Crash interrupt. The binding allows an optional crash interrupt
+   and the driver reports it with rproc_report_crash(). No board wires
+   it yet and it is not tested on hardware.
 
-3. Devicetree Binding Schemas:
-   - Renamed remoteproc binding to allwinner,sun55i-a523-rproc.yaml
-     matching the primary compatible string.
-   - Normalized schema maintainers and enforced strict positional
-     sequences for reg-names, clocks, and resets.
-   - Constrained msgbox interrupt-names and register definitions.
+5. KUnit. Patches 6 and 7 add KUnit tests and come last. They can be
+   dropped or taken separately without affecting the drivers. The tests
+   use plain memory as fake MMIO, so they only build on arm64 (or with
+   COMPILE_TEST).
 
-4. KUnit Test Suites:
-   - Added '!UML' Kconfig dependencies to KUnit test suites to prevent
-     invalid MMIO accesses on User Mode Linux logic_iomem stubs.
-   - Fixed Big-Endian mock MMIO accessors to use readl() instead of raw
-     pointer array dereferences.
-   - Synchronized test fixtures with the v3 mailbox completion contract,
-     verifying 32 standalone unit tests for remoteproc and 22 for mailbox.
+Changes in v3
+=============
+Bindings (Krzysztof's v1/v2 comments):
+  - msgbox: no minItems on reg, no "|" pipes, no redundant descriptions.
+  - msgbox: interrupts and interrupt-names listed with minItems.
+  - msgbox: describe clocks and resets for all four banks; an unclocked
+    bank drops writes.
+  - msgbox: add optional allwinner,tx-done-irq property for write-IRQ
+    TX completion.
+  - rproc: file renamed to match the compatible.
+  - rproc: fixed clock (3) and reset (4) lists, no minItems; added the
+    RISC-V debug reset, which the vendor driver releases together with
+    the configuration and core resets.
+  - rproc: added the RISC-V and SRAM power domains.
+  - rproc: one mboxes entry, no mbox-names.
+  - rproc: memory-region and memory-region-names list their items.
+  - rproc: firmware-name description dropped; no driver behaviour in
+    the interrupts description.
+  - Subjects no longer say "schema"/"binding".
 
-Open Architectural Design Question (Section 3.2)
-================================================
-De-asserting reset and setting up boot translation for the XuanTie E906
-core requires manipulating bit 0 in the PRCM register at 0x07010364
-(SUNXI_REMAP_CTRL_OFFSET). In Allwinner vendor BSPs, this register is
-poked directly.
+Message box driver:
+  - Clocks and shared resets enabled for all four banks via
+    devm_clk_bulk_get_all_enabled() and
+    devm_reset_control_array_get_shared().
+  - Only the ARM bank's interrupt is requested; the handler holds the
+    lock across the status read and FIFO drain.
+  - Pending status is cleared after draining the FIFO; clearing it
+    before left the level pending status asserted, causing duplicate
+    interrupts (verified on silicon: exactly 1 interrupt per message).
+  - Write-IRQ completion supported (allwinner,tx-done-irq).
+  - last_tx_done() pacing checks count < SUN55I_FIFO_MAX in timer mode.
 
-In this upstream series, we have exposed this 4-byte register as a
-dedicated named MMIO resource ("remap") in the remoteproc device tree
-node. We welcome guidance from the remoteproc and sunxi maintainers on
-whether this direct mapping is preferred or if this control register
-should ultimately be modeled under a dedicated syscon or reset-controller
-driver in the future.
+Remoteproc driver:
+  - The mailbox rx callback only queues work; rproc_vq_interrupt()
+    runs from an ordered workqueue (the callback runs in hardirq
+    context and the rpmsg receive path can sleep).
+  - Teardown: rproc_del() first, then the mailbox channel is freed,
+    then the work is cancelled.
+  - cfg, remap and both SRAM regions are required; probe fails if one
+    is missing instead of starting the core with no boot vector.
+  - Address translation covers only the two SRAM windows; DRAM, trace
+    and vrings are resolved by the core from the carveouts.
+  - The crash-IRQ arm/disarm uses an atomic bit instead of a spinlock
+    around disable_irq().
+  - Kick payloads are static per-vring constants, since the mailbox
+    core queues the pointer.
+  - Runtime PM powers the RISC-V and SRAM domains in .prepare().
+  - A733 (sun60i) support was dropped from this series.
 
-Verification
-============
-- make dt_binding_check passed with 0 errors and 0 warnings.
-- make dtbs_check passed on Allwinner A523 boards with 0 errors.
-- scripts/checkpatch.pl --strict passed with 0 errors and 0 code warnings.
-- In-tree ARM64 cross-compile with W=1 built cleanly with 0 errors.
+Device tree:
+  - Clocks and resets described for all four banks.
+  - Write interrupt lines corrected from datasheet Table 2-15 and live
+    silicon measurements (SPI 0, 181, 174, 205).
+  - One bidirectional mailbox channel (<&msgbox 9>).
 
+Testing
+=======
+On a Radxa Cubie A5E (A527), Linux 7.1 based PREEMPT_RT kernel carrying
+the same driver files as this series:
+  - KUnit: sun55i-msgbox 26/26, sunxi-rproc 25/25 (51/51 PASS).
+  - rpmsg ping-pong over a DRAM pool and over SRAM space 1, 10,000
+    pings each (171.1 us avg in timer mode, 166.4 us avg in ISR mode);
+    rpmsg stress runs of 100,000 messages with 16 concurrent workers
+    in flight pass with 0 mailbox queue overflows and zero dropped or
+    corrupted packets.
+  - Direct UIO mailbox tests (Profile 3): 100,000 ping-pongs passing
+    at 13.69 us round-trip latency.
+  - FreeRTOS worker blocking on CLIC line 17 msgbox ISR wake: 2,000/2,000
+    pings pass cleanly.
+  - Firmware running from SRAM with a payload pool in DRAM, start/stop
+    cycles, a firmware crash caught and the core stopped cleanly.
+  - Non-RT PREEMPT kernel with CONFIG_DEBUG_ATOMIC_SLEEP and
+    CONFIG_PROVE_LOCKING: KUnit, rpmsg ping and stress, 20 stop/start
+    cycles, unbind/bind while running and a firmware crash pass with
+    no splats from these drivers.
+On next-20261015: W=1 arm64 build, dt_binding_check and dtbs_check are
+clean; checkpatch --strict reports 0 errors and 0 warnings.
+
+Tools
+=====
+The driver, binding and KUnit code, the firmware and userspace test
+programs, the checks of the code against the v1 and v2 review comments
+and the first draft of this text were done with LLM coding assistants
+(Claude Code and Gemini) under my direction. The design decisions are
+mine, I have reviewed the series, and the tests above were run on my
+board.
 
 Tim Michals (7):
-  dt-bindings: mailbox: add Allwinner sun55i msgbox schema
-  mailbox: sun55i: add Allwinner A523 message box driver
-  mailbox: sun55i: add KUnit test suite for sun55i msgbox driver
-  dt-bindings: remoteproc: add Allwinner sun55i-a523-rproc schema
-  remoteproc: sunxi: add Allwinner XuanTie RISC-V remoteproc driver
-  remoteproc: sunxi: add KUnit test suite for sunxi remoteproc driver
-  arm64: dts: allwinner: add a523 msgbox and remoteproc nodes
+  dt-bindings: mailbox: Add Allwinner A523 message box
+  mailbox: sun55i: Add Allwinner A523 message box driver
+  dt-bindings: remoteproc: Add Allwinner A523 RISC-V remote processor
+  remoteproc: sunxi: Add Allwinner A523 XuanTie E906 driver
+  arm64: dts: allwinner: a523: Add message box and remoteproc nodes
+  mailbox: sun55i: Add KUnit tests
+  remoteproc: sunxi: Add KUnit tests
 
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml      | 117 +++
- .../remoteproc/allwinner,sun55i-a523-rproc.yaml    | 139 ++++
- MAINTAINERS                                        |  15 +
- arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi     |  43 ++
- drivers/mailbox/Kconfig                            |  20 +
- drivers/mailbox/Makefile                           |   2 +
- drivers/mailbox/sun55i-msgbox.c                    | 346 +++++++++
- drivers/mailbox/sun55i-msgbox.h                    |  56 ++
- drivers/mailbox/sun55i_msgbox_test.c               | 851 +++++++++++++++++++++
- drivers/remoteproc/Kconfig                         |  18 +
- drivers/remoteproc/Makefile                        |   2 +
- drivers/remoteproc/sunxi_rproc.c                   | 706 +++++++++++++++++
- drivers/remoteproc/sunxi_rproc.h                   | 124 +++
- drivers/remoteproc/sunxi_rproc_test.c              | 669 ++++++++++++++++
- 14 files changed, 3108 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 157 ++++
+ .../allwinner,sun55i-a523-rproc.yaml          | 144 ++++
+ MAINTAINERS                                   |  15 +
+ .../arm64/boot/dts/allwinner/sun55i-a523.dtsi |  47 ++
+ drivers/mailbox/Kconfig                       |  21 +
+ drivers/mailbox/Makefile                      |   3 +
+ drivers/mailbox/sun55i-msgbox.c               | 534 ++++++++++++
+ drivers/mailbox/sun55i-msgbox.h               |  81 ++
+ drivers/mailbox/sun55i_msgbox_test.c          | 764 ++++++++++++++++++
+ drivers/remoteproc/Kconfig                    |  20 +
+ drivers/remoteproc/Makefile                   |   2 +
+ drivers/remoteproc/sunxi_rproc.c              | 670 +++++++++++++++
+ drivers/remoteproc/sunxi_rproc.h              | 119 +++
+ drivers/remoteproc/sunxi_rproc_test.c         | 606 ++++++++++++++
+ 14 files changed, 3183 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
@@ -144,5 +183,5 @@ Tim Michals (7):
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
 -- 
-2.43.0
+2.53.0
 

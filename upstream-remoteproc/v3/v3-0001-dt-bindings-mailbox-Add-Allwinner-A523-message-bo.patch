@@ -1,29 +1,32 @@
-From 37bd6c3df802ecbd3d8c63c5a35d83b0ecf2af5e Mon Sep 17 00:00:00 2001
+From a88d749a0aea924e2f6c1e4db0eb8d51198f874c Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Fri, 25 Sep 2026 14:26:55 -0500
-Subject: [PATCH v3 1/7] dt-bindings: mailbox: add Allwinner sun55i msgbox
- schema
+Date: Thu, 15 Oct 2026 19:46:20 -0500
+Subject: [PATCH v3 1/7] dt-bindings: mailbox: Add Allwinner A523 message box
 
-Add Device Tree binding schema for the Allwinner 4-port hardware
-Message Box controller found on sun55i (A523, A527, T527) and
-sun60i (A733) SoCs.
+The Allwinner A523, A527 and T527 (sun55i) message box connects the
+Cortex-A55 host with the HiFi4 DSP, the CPUS power management core and
+the XuanTie E906 RISC-V core. Each processor has its own register bank.
+A sender writes a message into the receiving processor's bank, and a
+channel has an 8-entry FIFO in each direction.
 
-The message box connects the ARM Cortex-A55 host cluster to the
-HiFi4 Audio DSP, Power Management Unit (CPUS), and XuanTie RISC-V
-co-processor across 12 logical channels with 8-entry hardware FIFOs.
-
-Signed-off-by: Tim Michals <tcmichals@gmail.com>
+The host bank has 12 channels, four for each remote processor. The
+binding lists all four banks, since the host writes to and reads the
+FIFO status of the remote banks, and lists the bank interrupts in the
+same order. Each bank has its own bus clock and reset, and an unclocked
+bank drops writes, so all four are described. Add optional
+allwinner,tx-done-irq property to select write-IRQ based TX completion
+instead of polling.
 ---
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 117 ++++++++++++++++++
- 1 file changed, 117 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 157 ++++++++++++++++++
+ 1 file changed, 157 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 
 diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 new file mode 100644
-index 000000000000..7ae8e8d9795a
+index 000000000000..16f9dbd5e720
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,157 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -42,7 +45,10 @@ index 000000000000..7ae8e8d9795a
 +  own register bank holding 8-entry receive FIFOs for messages from the
 +  other three, and a sender writes into the receiver's bank. The host side
 +  therefore uses all four banks and exposes 12 channels, 4 per remote
-+  processor.
++  processor. Each bank has its own bus clock and reset, and an unclocked
++  bank drops writes, so the host needs all four. A bank's read interrupt
++  goes to the processor that owns it; its write interrupt, raised while the
++  FIFO has room, goes to the sender on a separate line.
 +
 +properties:
 +  compatible:
@@ -64,25 +70,39 @@ index 000000000000..7ae8e8d9795a
 +
 +  clocks:
 +    items:
-+      - description: Bus clock of the Cortex-A55 host bank
-+      - description: Bus clock of the HiFi4 DSP bank
-+      - description: Bus clock of the CPUS bank
-+      - description: Bus clock of the XuanTie RISC-V bank
++      - description: Cortex-A55 host bank bus clock
++      - description: HiFi4 DSP bank bus clock
++      - description: CPUS bank bus clock
++      - description: XuanTie RISC-V bank bus clock
++
++  clock-names:
++    items:
++      - const: arm
++      - const: dsp
++      - const: cpus
++      - const: rv
 +
 +  resets:
 +    items:
-+      - description: Reset of the Cortex-A55 host bank
-+      - description: Reset of the HiFi4 DSP bank
-+      - description: Reset of the CPUS bank
-+      - description: Reset of the XuanTie RISC-V bank
++      - description: Cortex-A55 host bank reset
++      - description: HiFi4 DSP bank reset
++      - description: CPUS bank reset
++      - description: XuanTie RISC-V bank reset
++
++  reset-names:
++    items:
++      - const: arm
++      - const: dsp
++      - const: cpus
++      - const: rv
 +
 +  interrupts:
 +    minItems: 1
 +    items:
-+      - description: Cortex-A55 host bank interrupt
-+      - description: HiFi4 DSP bank interrupt
-+      - description: CPUS bank interrupt
-+      - description: XuanTie RISC-V bank interrupt
++      - description: Cortex-A55 bank read interrupt, messages for the host
++      - description: HiFi4 DSP bank write interrupt for the host
++      - description: CPUS bank write interrupt for the host
++      - description: XuanTie RISC-V bank write interrupt for the host
 +
 +  interrupt-names:
 +    minItems: 1
@@ -91,6 +111,15 @@ index 000000000000..7ae8e8d9795a
 +      - const: dsp
 +      - const: cpus
 +      - const: rv
++
++  allwinner,tx-done-irq:
++    type: boolean
++    description:
++      Signal TX done with the write interrupt of the receiver's bank instead
++      of polling. A message is done once the receiver's FIFO has room for the
++      next one either way; the write interrupt is raised while the FIFO has
++      room. Without this property a full FIFO is polled. Needs the interrupts
++      of the remote banks.
 +
 +  '#mbox-cells':
 +    const: 1
@@ -103,9 +132,21 @@ index 000000000000..7ae8e8d9795a
 +  - reg
 +  - reg-names
 +  - clocks
++  - clock-names
 +  - resets
++  - reset-names
 +  - interrupts
 +  - '#mbox-cells'
++
++if:
++  required:
++    - allwinner,tx-done-irq
++then:
++  properties:
++    interrupts:
++      minItems: 4
++    interrupt-names:
++      minItems: 4
 +
 +additionalProperties: false
 +
@@ -130,17 +171,19 @@ index 000000000000..7ae8e8d9795a
 +                 <&mcu_ccu CLK_BUS_MCU_DSP_MSGBOX>,
 +                 <&r_ccu CLK_BUS_R_MSGBOX>,
 +                 <&mcu_ccu CLK_BUS_MCU_RISCV_MSGBOX>;
++        clock-names = "arm", "dsp", "cpus", "rv";
 +        resets = <&ccu RST_BUS_MSGBOX>,
 +                 <&mcu_ccu RST_BUS_MCU_DSP_MSGBOX>,
 +                 <&r_ccu RST_BUS_R_MSGBOX>,
 +                 <&mcu_ccu RST_BUS_MCU_RISCV_MSGBOX>;
++        reset-names = "arm", "dsp", "cpus", "rv";
 +        interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
-+                     <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>,
 +                     <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,
-+                     <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
++                     <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>,
++                     <GIC_SPI 205 IRQ_TYPE_LEVEL_HIGH>;
 +        interrupt-names = "arm", "dsp", "cpus", "rv";
 +        #mbox-cells = <1>;
 +    };
 -- 
-2.43.0
+2.53.0
 

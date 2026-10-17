@@ -1,30 +1,31 @@
-From 657f6759a6cca82e8cf0b64de236c15fbd7c452c Mon Sep 17 00:00:00 2001
+From 9225b86d1a3e720115373fd909941da789a1abcf Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Fri, 25 Sep 2026 14:26:55 -0500
-Subject: [PATCH v3 4/7] dt-bindings: remoteproc: add Allwinner
- sun55i-a523-rproc schema
+Date: Thu, 15 Oct 2026 19:46:20 -0500
+Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
+ remote processor
 
-Add Device Tree binding schema for the Allwinner XuanTie E906 RISC-V
-remote processor subsystem integrated into Allwinner A523, A527, and
-T527 (sun55i) SoCs.
+The Allwinner A523, A527 and T527 (sun55i) contain a T-Head XuanTie E906
+RISC-V core. It runs from a dedicated 256 KiB SRAM and can use a second
+256 KiB SRAM, which a bit in a PRCM remap register switches to it. Its
+reset vector is set in its configuration block.
 
-The binding defines the memory resources (configuration registers,
-SRAM Space 0, SRAM Space 1, and remap controller), clocks, resets,
-reserved memory regions, and hardware mailbox channels.
-
-Signed-off-by: Tim Michals <tcmichals@gmail.com>
+Describe the configuration block, both SRAMs and the remap register,
+the bus, core and SRAM clocks, the configuration, core, SRAM and debug
+resets, the RISC-V and SRAM power domains, one message box channel, the
+reserved memory regions (a pool for virtio, DRAM for firmware, a trace
+buffer) and an optional crash interrupt.
 ---
- .../allwinner,sun55i-a523-rproc.yaml          | 139 ++++++++++++++++++
+ .../allwinner,sun55i-a523-rproc.yaml          | 144 ++++++++++++++++++
  MAINTAINERS                                   |   8 +
- 2 files changed, 147 insertions(+)
+ 2 files changed, 152 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 
 diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 new file mode 100644
-index 000000000000..9ab41cb0bb89
+index 000000000000..3f704dd2ea68
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,144 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -63,42 +64,36 @@ index 000000000000..9ab41cb0bb89
 +      - const: remap
 +
 +  clocks:
-+    minItems: 2
 +    items:
 +      - description: Configuration block bus clock
 +      - description: RISC-V core clock
 +      - description: MCU public SRAM bus clock
 +
 +  clock-names:
-+    minItems: 2
 +    items:
 +      - const: bus
 +      - const: core
 +      - const: sram
 +
 +  resets:
-+    minItems: 2
 +    items:
 +      - description: Configuration block reset
 +      - description: RISC-V core reset
 +      - description: MCU public SRAM reset
++      - description: RISC-V debug module reset
 +
 +  reset-names:
-+    minItems: 2
 +    items:
 +      - const: cfg
 +      - const: core
 +      - const: sram
++      - const: debug
 +
 +  mboxes:
-+    items:
-+      - description: Receive channel, RISC-V core to host
-+      - description: Transmit channel, host to RISC-V core
-+
-+  mbox-names:
-+    items:
-+      - const: rx
-+      - const: tx
++    description:
++      Message box channel to the RISC-V core. Each channel has a FIFO in
++      each direction, so it carries notifications both ways.
++    maxItems: 1
 +
 +  firmware-name:
 +    maxItems: 1
@@ -125,9 +120,15 @@ index 000000000000..9ab41cb0bb89
 +    items:
 +      - const: crash
 +
-+dependencies:
-+  mboxes: [mbox-names]
-+  mbox-names: [mboxes]
++  power-domains:
++    items:
++      - description: RISC-V core power domain
++      - description: SRAM power domain
++
++  power-domain-names:
++    items:
++      - const: riscv
++      - const: sram
 +
 +required:
 +  - compatible
@@ -137,12 +138,15 @@ index 000000000000..9ab41cb0bb89
 +  - clock-names
 +  - resets
 +  - reset-names
++  - power-domains
++  - power-domain-names
 +
 +additionalProperties: false
 +
 +examples:
 +  - |
 +    #include <dt-bindings/clock/sun55i-a523-mcu-ccu.h>
++    #include <dt-bindings/power/allwinner,sun55i-a523-ppu.h>
 +    #include <dt-bindings/reset/sun55i-a523-mcu-ccu.h>
 +
 +    remoteproc@7130000 {
@@ -158,17 +162,19 @@ index 000000000000..9ab41cb0bb89
 +        clock-names = "bus", "core", "sram";
 +        resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
 +                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
-+                 <&mcu_ccu RST_BUS_MCU_PUBSRAM>;
-+        reset-names = "cfg", "core", "sram";
-+        mboxes = <&msgbox 8>, <&msgbox 9>;
-+        mbox-names = "rx", "tx";
++                 <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
++                 <&mcu_ccu RST_BUS_MCU_RISCV_DEBUG>;
++        reset-names = "cfg", "core", "sram", "debug";
++        power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
++        power-domain-names = "riscv", "sram";
++        mboxes = <&msgbox 9>;
 +        firmware-name = "riscv-firmware.elf";
 +    };
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 0c4c7d923989..e6db1141b0e7 100644
+index 1d52e051db89..474a278507a4 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -941,6 +941,14 @@ L:	linux-media@vger.kernel.org
+@@ -960,6 +960,14 @@ L:	linux-media@vger.kernel.org
  S:	Maintained
  F:	drivers/staging/media/sunxi/cedrus/
  
@@ -184,5 +190,5 @@ index 0c4c7d923989..e6db1141b0e7 100644
  M:	Richard Henderson <richard.henderson@linaro.org>
  M:	Matt Turner <mattst88@gmail.com>
 -- 
-2.43.0
+2.53.0
 
