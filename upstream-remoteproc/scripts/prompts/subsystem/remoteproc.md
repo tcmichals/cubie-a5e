@@ -35,7 +35,7 @@ This guide defines correctness invariants for Linux kernel drivers in `drivers/r
 ## Invariant 5: Mailbox payloads in `txdone_poll` must outlive `mbox_send_message()`
 - **Core Function to Load**: `drivers/mailbox/mailbox.c` (`mbox_send_message()`, `txdone_hrtimer()`, `mbox_controller_unregister()`).
 - **Rationale**: With `txdone_poll = true`, the mailbox controller stores the message pointer passed to `mbox_send_message()` and dereferences it until transmission is confirmed. The payload must reside in stable storage (struct member, static table, or heap), never a stack-local variable. Furthermore, `mbox_controller_unregister()` invokes `shutdown()` for all channels; the ISR must not process channels whose RX interrupt is masked.
-- **REPORT as bug**: Any driver passing stack pointers to `mbox_send_message()`, or checking FIFO capacity (`count < FIFO_MAX`) instead of full drain (`count == 0`) in `last_tx_done()`.
+- **REPORT as bug**: Any driver passing stack pointers to `mbox_send_message()`. Do **not** report `last_tx_done()` returning `count < FIFO_MAX`: for the sun55i msgbox that is the owner's decision (a kick is a doorbell; DESIGN_DECISIONS.md "Message box TX completion", 2026-10-16). Report instead a write to a full FIFO, or a level write IRQ left enabled while the FIFO has room.
 
 ---
 

@@ -144,7 +144,10 @@ The owner's design decisions (what we deliberately keep even when a review disag
 
 ## 2. Mailbox Subsystem Rules (Jassi Brar & Sashiko AI)
 
-### Lesson 2.1: `last_tx_done()` Policy Is a Decision — v3 Uses "Remote Drained" (`count == 0`)
+### Lesson 2.1: `last_tx_done()` Policy Is a Decision — now `count < 8` (was "Remote Drained", `count == 0`)
+> **Superseded (owner, 2026-10-16):** `last_tx_done()` now returns `count < 8` (FIFO has room),
+> and the device tree selects timer or ISR TX completion. See DESIGN_DECISIONS.md, "Message box
+> TX completion". The text below is kept as history.
 > **Status (2026-10-13):** This is a design choice, not a framework rule. The v3 driver follows
 > Sashiko's v2 comment and upstream `sun6i-msgbox` (`count == 0`, poll). The Allwinner vendor BSP
 > (`drivers/msgbox/sunxi-msgbox.c`) instead treats "FIFO not full" as done with a 5 ms poll, or uses
@@ -281,7 +284,7 @@ The owner's design decisions (what we deliberately keep even when a review disag
   2. The client sets `cl.knows_txdone = false` and `cl.tx_block = false`, and never calls `mbox_client_txdone()`.
   3. Payloads must outlive `mbox_send_message()` because the core queues the pointer: use immutable `static const u32` values, one per vring (no shared writable `kick_msg`).
   4. The Allwinner vendor BSP uses the same client settings (`knows_txdone` unset, `tx_block = false`).
-* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller (write-IRQ `txdone_irq`, or a different `last_tx_done` policy), measured on the board — not `knows_txdone = true` in the client.
+* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller, not `knows_txdone = true` in the client. Done 2026-10-16 (DESIGN_DECISIONS "Message box TX completion"): `last_tx_done()` = `count < 8`, optional write IRQ while full.
 
 ---
 
@@ -381,7 +384,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 * 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
   1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
   2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
-  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` pacing (v3 decision: `count == 0`), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` (decision 2026-10-16: `count < 8`, DT selects timer or ISR when full), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
   4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
   5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
 * 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.
@@ -394,7 +397,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every `interrupts` and `interrupt-names` uses positional `items:` with `minItems`.
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
-- [ ] Mailbox `last_tx_done()` checks `count == 0` (remote drain confirmation, mirroring sibling `sun6i-msgbox`).
+- [ ] Mailbox `last_tx_done()` returns `count < 8` (FIFO has room); timer or ISR (`allwinner,tx-done-irq`) when full, write IRQ enabled only while full (DESIGN_DECISIONS.md).
 - [ ] RemoteProc kick uses `cl.knows_txdone = false`, `tx_block = false`, immutable per-vring payloads; never calls `mbox_client_txdone()`.
 - [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.
 - [ ] Teardown: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()` (probe error path: free mailbox → cancel work).
@@ -402,7 +405,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`old-kernels/linux-aw2501/.git/modules/bsp`), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
-- [ ] Mailbox driver only requests the ARM host port interrupt that Linux services.
+- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote bank lines only with `allwinner,tx-done-irq` (the write IRQ is raised in the receiver's bank). Board test pending: msgbox reference §8 Q1/Q2.
 - [ ] `memory-region` / `memory-region-names` listed positionally (Lesson 1.5); no driver logic keyed on region names.
 - [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).
 - [ ] Nothing in the series contradicts [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) without the owner's sign-off.

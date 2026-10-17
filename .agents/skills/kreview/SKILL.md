@@ -10,7 +10,7 @@ When this skill is activated (via `/kreview` or by asking to review a commit/ser
 Before starting the review, consult the detailed references:
 - **Peer Driver Benchmarks**: [references/peer_drivers.md](references/peer_drivers.md)
 - **Kernel Lore Submission Traps**: [references/lore_guidelines.md](references/lore_guidelines.md)
-- **Project Design Decisions**: [upstream-remoteproc/DESIGN_DECISIONS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/DESIGN_DECISIONS.md)
+- **Project Design Decisions**: [upstream-remoteproc/DESIGN_DECISIONS.md](../../../upstream-remoteproc/DESIGN_DECISIONS.md)
 
 ---
 
@@ -34,8 +34,8 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
 
 ### Tier 2: Kernel Memory, Concurrency & Hardware Invariants (C Code)
 1. **FIFO & Controller Pacing**:
-   - For mailbox drivers: does `last_tx_done()` check `count == 0`?
-   - **FAIL** if `< FIFO_MAX` is used when clients expect full delivery.
+   - For the sun55i msgbox, `last_tx_done()` returns `count < FIFO_MAX` (owner decision 2026-10-16, DESIGN_DECISIONS "Message box TX completion": a kick is a doorbell). Do not flag it.
+   - **FAIL** if a full FIFO can be written (it corrupts the count), or a level write IRQ is left enabled while the FIFO has room.
 2. **Atomic Context & Workqueue Deferral**:
    - Mailbox `rx_callback` runs in atomic/hardirq context.
    - **FAIL** if `rproc_vq_interrupt()` or any sleeping function is invoked directly in `rx_callback`. It must be deferred to an ordered workqueue (`queue_work(priv->workqueue, &priv->vq_work)`).
@@ -73,7 +73,7 @@ Directly cross-reference the driver logic against upstream reference implementat
 
 ### Tier 6: Adversarial False-Positive Filtering & Lore Grounding
 Before reporting any finding:
-1. **Cross-reference against [DESIGN_DECISIONS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/DESIGN_DECISIONS.md)**: Do not report deliberate project decisions as defects (e.g. keeping DRAM firmware, sharing PRCM remap bit 1, keeping A733 placeholders).
+1. **Cross-reference against [DESIGN_DECISIONS.md](../../../upstream-remoteproc/DESIGN_DECISIONS.md)**: Do not report deliberate project decisions as defects (e.g. keeping DRAM firmware, sharing PRCM remap bit 1, keeping A733 placeholders).
 2. **Formulate a hypothesis to DISPROVE the bug**: Inspect real kernel base code (`linux-next`) to verify if the core framework already protects against the scenario (e.g. SRCU protection in `remoteproc_virtio.c`).
 3. **Lore Search (Optional)**: If evaluating novel maintainer feedback, check `lore.kernel.org` patterns for subsystem maintainers (Bjorn Andersson, Mathieu Poirier, Jassi Brar, Krzysztof Kozlowski).
 

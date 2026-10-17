@@ -61,9 +61,11 @@ STAGE2_CHECKS = [
 STAGE3_CHECKS = [
     {
         "id": "MAILBOX_FIFO_PACING",
-        "desc": "last_tx_done() must check remote FIFO drain (count == 0) rather than capacity headroom",
+        # Decision 2026-10-16 (DESIGN_DECISIONS.md "Message box TX completion"): a kick is a
+        # doorbell, so TX is done while the receiver's FIFO has room (count < 8).
+        "desc": "last_tx_done() must report done while the receiver's FIFO has room (count < SUN55I_FIFO_MAX), not wait for a full drain",
         "pattern": r"(bool\s+[a-zA-Z0-9_]+last_tx_done\s*\([^)]*\)\s*\{[\s\S]*?\})",
-        "forbidden": [r"count\s*<\s*SUN55I_FIFO_MAX"],
+        "forbidden": [r"count\s*==\s*0"],
     },
     {
         "id": "RPROC_DOORBELL_PASS_CASE_ACK",
@@ -138,14 +140,14 @@ def analyze_source_code(filepath, content):
         match = re.search(r"sun55i_msgbox_last_tx_done\([^)]*\)\s*\{([\s\S]*?)\}", code_no_comments)
         if match:
             body = match.group(1)
-            if "count < SUN55I_FIFO_MAX" in body:
+            if "SUN55I_FIFO_MAX" not in body:
                 findings.append({
                     "stage": 3,
                     "severity": "High",
                     "id": "M2",
                     "file": filepath,
-                    "title": "FIFO Capacity Pacing Violation (checking count < FIFO_MAX)",
-                    "desc": "last_tx_done() must verify the remote processor drained the message (count == 0). Returning true when messages remain in FIFO falsely signals transmission completion."
+                    "title": "TX completion does not follow the decided policy (count < FIFO_MAX)",
+                    "desc": "last_tx_done() must return true while the receiver's FIFO has room (count < SUN55I_FIFO_MAX); a kick is a doorbell (DESIGN_DECISIONS.md, 'Message box TX completion', 2026-10-16)."
                 })
 
     if basename == "sunxi_rproc.c":
@@ -365,7 +367,7 @@ def get_file_content(args, rel_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Sashiko-Grade Multi-Stage Adversarial Review Tool")
-    parser.add_argument("--repo", default="/home/tcmichals/ssdData/projects/home/CubieA5E/linux-cubie", help="Path to linux kernel repo")
+    parser.add_argument("--repo", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../linux-cubie"), help="Path to linux kernel repo")
     parser.add_argument("--git-ref", default=None, help="Git branch/tag/commit to audit (e.g. origin/v2-sun55i-rproc-msgbox or HEAD)")
     parser.add_argument("--output", default=None, help="Output markdown path")
     args = parser.parse_args()

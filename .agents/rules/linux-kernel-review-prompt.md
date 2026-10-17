@@ -170,7 +170,7 @@ In `da_to_va()` or any address translation function:
 1. Run `make dt_binding_check` — does it pass with zero errors?
 2. Do all examples in the YAML compile without errors under `dtc`?
 3. Are all examples syntactically complete (matching `{` and `}`, valid property syntax)?
-4. Are `memory-region-names` values constrained to an `enum:` list in the schema?
+4. Are `memory-region` / `memory-region-names` listed positionally with `items:` and `- const:` names (never `enum:`; UPSTREAM_LESSONS_LEARNED.md Lessons 1.1 and 1.5)?
 5. Does the schema enforce that at least one SRAM region (`r_sram` or `r_sram1`) is required?
 6. Are there `status: true` or other inherited-base-schema properties redeclared unnecessarily?
 7. Are unused includes (`#include <dt-bindings/...>`) present in examples?
@@ -276,7 +276,7 @@ These are not caught by automated tools — they are upstream maintainer style r
 2. **State Flag Concurrency Across Process and Interrupt Context:**
    - Are boolean flags like `crash_irq_enabled` checked and modified locklessly?
    - If `stop()` or `remove()` executes `if (priv->crash_irq_enabled) disable_irq()` concurrently with the ISR doing the same, both can call `disable_irq_nosync()`. This increments the IRQ disable depth to 2, causing the IRQ to be permanently masked when `start()` only calls `enable_irq()` once.
-   - **Rule:** Any state transition between enabled/disabled MUST be protected by a dedicated spinlock (`priv->lock`).
+   - **Rule:** Make the enabled/disabled transition atomic with `test_and_clear_bit()` / `test_and_set_bit()` on a flags word, so exactly one path calls `disable_irq*()`. Do **not** hold a spinlock around `disable_irq()`: it calls `synchronize_irq()` and sleeps (UPSTREAM_LESSONS_LEARNED.md Lesson 3.1b; the sunxi driver uses `SUNXI_RPROC_CRASH_IRQ_ARMED`).
 3. **Interrupt Handler Teardown Synchronization:**
    - Does `remove()` call `devm_free_irq()` or `synchronize_irq()` BEFORE freeing or deleting data structures (like `rproc` or `priv`) accessed by the ISR?
    - **Rule:** Never rely solely on devres to free interrupts at the very end of remove. Explicitly free or synchronize IRQs before unregistering core frameworks.
@@ -297,11 +297,16 @@ These are not caught by automated tools — they are upstream maintainer style r
 
 ## CHECK GROUP 20: Subsystem API Semantic Contracts
 
-1. **Mailbox Pacing (`last_tx_done`):**
-   - In the Linux mailbox framework, what does `last_tx_done()` mean?
-   - It does NOT mean "is there space in the FIFO to queue another message".
-   - It means **"has the previously transmitted message been consumed by the remote core?"**
-   - **Rule:** For a hardware message FIFO, `last_tx_done()` must return `true` only when the channel FIFO is completely drained (`count == 0`), not when `count < FIFO_MAX`.
+1. **Mailbox TX completion (`last_tx_done`)** — owner decision, DESIGN_DECISIONS.md
+   "Message box TX completion" (2026-10-16); do not flag it as a bug:
+   - For the sun55i msgbox a kick is a doorbell (data is in the vrings), so `last_tx_done()`
+     returns `true` while the receiver's FIFO has room (`count < 8`).
+   - The device tree selects the mode: no property = timer poll while the FIFO is full;
+     `allwinner,tx-done-irq` = write interrupt enabled only when the FIFO is full and disabled
+     in its handler. Precedent: `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
+   - **Check instead:** the write interrupt is never left enabled while the FIFO has room (it is
+     level: status = free slots ≥ threshold), the handler disables it before signalling, and a
+     full FIFO is never written (writing a full FIFO corrupts the count, reference §6a).
 2. **RemoteProc Address Translation Fall-through:**
    - In `da_to_va()`, if an address matches an Address Translation Table (ATT) entry (`sunxi_rproc_da_to_sys() == 0`), the address is definitively an ATT-governed core address.
    - If that translated system address does not fall within any mapped hardware window (SRAM, DRAM carveout), it MUST return `NULL` immediately.

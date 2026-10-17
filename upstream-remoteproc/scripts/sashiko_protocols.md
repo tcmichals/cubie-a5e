@@ -101,11 +101,11 @@ The official prompt templates live in `sashiko-dev/sashiko` under `third_party/p
 * **Source**: `third_party/prompts/kernel/subsystem/dt-bindings.md`
 * **Invariants**:
   1. **Mailbox Pacing & RemoteProc Kick Contracts** (ONE consistent model - the two halves must be reviewed together):
-     * Controller: `txdone_poll = true`, `last_tx_done()` returns true only when the *remote* FIFO is drained (`count == 0`).
+     * Controller: `txdone_poll = true`, `last_tx_done()` returns true while the receiver's FIFO has room (`count < 8`); with `allwinner,tx-done-irq` the write IRQ also signals TX done, enabled only while the FIFO is full (DESIGN_DECISIONS.md "Message box TX completion", 2026-10-16). Check: the level write IRQ is never left enabled while the FIFO has room, and a full FIFO is never written.
      * Client: `cl.knows_txdone = false`; the client NEVER calls `mbox_client_txdone()`.
      * **Consequence (object lifetime)**: with this model a send issued while a previous request is still active is *queued by pointer* and read later from the poll timer. Therefore the `mssg` argument of `mbox_send_message()` MUST point to storage that outlives the call (static/const table or a struct member that is not rewritten while queued). A pointer to a stack local is a use-after-return. The "controller copies it synchronously" argument is only valid for an EMPTY queue and is NOT an acceptable justification.
      * If the model is ever changed (e.g. back to `knows_txdone = true`), re-run the whole item; do not patch one half.
-  2. **Queue/flush ordering parity**: when an ISR uses "clear pending BEFORE drain", every other path touching the same FIFO (`startup()`, `shutdown()`, flush helpers) must use the same order.
+  2. **Queue/flush ordering parity**: the read pending bit only clears once the FIFO is empty (measured 2026-10-16, msgbox reference §8 Q4), so the ISR drains first, then clears; every other path touching the same FIFO (`startup()`, `shutdown()`, flush helpers) must use the same order. Clearing before the drain raises a second interrupt per message.
   3. **Cache-attribute uniqueness**: a physical range must have exactly one mapping attribute. Check `of_reserved_mem_device_init()` (DMA pool, WC) against every `devm_memremap(MEMREMAP_WB)` / `devm_ioremap_wc()` of the same `memory-region` entry; verify against the actual DT, not just the C.
   4. **Device Tree Binding Schemas**:
      * NEVER use `enum` in `reg-names`, `clock-names`, or `reset-names`. Hardware registers have fixed addresses; always use positional `items:` lists with `- const:`.

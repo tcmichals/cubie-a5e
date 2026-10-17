@@ -1,6 +1,6 @@
 # RISC-V Embedded C++ & ETL Container Rules
 
-This rule strictly governs all C++ development targeting the **XuanTie E907 RISC-V co-processor** (`riscv-firmware/`):
+This rule strictly governs all C++ development targeting the **XuanTie E906 RISC-V co-processor** (Cubie A5E; the A7A's E902 follows the same rules) (`riscv-firmware/`):
 
 ---
 

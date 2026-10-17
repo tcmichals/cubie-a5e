@@ -706,7 +706,7 @@ fails the build (`static_assert` on the structs' alignment).
 ---
 
 ## Case Study 14: Message Box TX Completion: Gated Banks, Double Interrupts, and a TX-Done ISR Nobody Ships
-**Date:** October 16–17, 2026 (in progress)  
+**Date:** October 16–17, 2026  
 **Component:** `drivers/mailbox/sun55i-msgbox.c` (linux-cubie `cubie-linux-7.1`, uncommitted), msgbox binding and `sun55i-a523.dtsi`, overlay `cubie-a5e-msgbox-txirq.dtso`, vendor `sunxi-msgbox.c`  
 **Reference:** [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §5, §5a, §6, §6a, §8, §9
 
@@ -758,16 +758,28 @@ While measuring it:
   `mbox_chan_txdone()`. Precedent for a DT property choosing the TX mode: `ti,mbox-send-noirq`.
 * **KUnit** extended for the TX paths (`sun55i_msgbox_test.c`).
 
-### ⏳ Still to verify on the board
-1. Does the A55 receive the write IRQ on **SPI 174** at all (`3003000.mailbox-tx3` count rises
-   during `ping_rpmsg -n 10000 -D 0`)? Not yet shown on silicon by us or the vendor.
-2. With the E906 in interrupt mode, does its own read interrupt also land on SPI 174? Our handler
-   returns `IRQ_NONE` for it; a level line that keeps firing would be disabled by the kernel.
-3. RTT and `stress_rpmsg` throughput, timer vs ISR, against the ~200 µs baseline.
-4. One SPI 0 interrupt per message after the D13 fix.
+### ✅ Results on the board (2026-10-17)
+Board 192.168.3.3, kernel from the 2026-10-17 `bld.a5e` build; details in reference §6b.
 
-Board access (2026-10-17): the A5E at 192.168.3.3 was re-flashed and no longer accepts our SSH
-key, so none of the above has been run yet.
+| Check | Result |
+|---|---|
+| Remote banks clocked (MCU CCU `0x128`) | `0x00010001` — the 4-bank clocks/resets work |
+| KUnit at boot | msgbox 26/26, rproc 25/25 |
+| Timer mode, `ping_rpmsg -n 10000 -D 0`, current firmware | 10000/10000, **171 µs avg, 10.9 µs jitter**, 0 queue overflows |
+| SPI 0 interrupts per message (D13 fix) | **exactly 1** (10,000 for 10,000) |
+| Write IRQ of the E906 bank reaches the A55 (SPI 174)? | **No** — FIFO full → pop with status and enable set: 0 interrupts |
+| Any remote bank interrupt (read or write; DSP, CPUS, RV) reaches the A55? | **No** — 0 counts on SPI 1/181/174, no GIC line pending (IDs 32–319) |
+
+Also found: the board's rootfs ships the **2026-10-12** `testPingRpmsg.elf`, from before the
+Case Study 13 drain fix. With it the E906 leaves kicks in its FIFO (count stuck at 8), every kick
+waits for the 1 ms poll (786 µs avg, 1,598 `MBOX_TX_QUEUE_LEN` overflows, 7 SPI 0 interrupts per
+message). Before the D12 fix the RV bank was gated, so those kicks were silently dropped and this
+never showed. The image needs the current firmware.
+
+**Conclusion:** TX completion from the A55 can only be polled. The `allwinner,tx-done-irq` (ISR)
+mode cannot work on this SoC: a message box bank interrupts only its owner. The Tina RTOS HAL
+agrees: it defines the write-IRQ registers and never uses them. Owner decision needed on dropping
+the ISR mode from the driver, binding and overlay.
 
 ### 📚 Lessons
 1. Each message box bank is its own clock domain; an unclocked bank reads 0 and drops writes, and
@@ -775,3 +787,7 @@ key, so none of the above has been run yet.
 2. A level pending bit tied to "FIFO not empty" can only be cleared after the drain.
 3. Vendor source is a reference, not proof: an option that no shipped config enables has not been
    tested by anyone. Check the defconfigs, then measure.
+4. An interrupt listed in a vendor DT is not proof it reaches that CPU. Assert the source and
+   read the GIC pending registers before building on it.
+5. Check which firmware the rootfs actually ships (size in `dmesg` vs the build) before reading
+   anything into a benchmark.

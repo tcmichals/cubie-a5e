@@ -90,11 +90,13 @@ RPROC_C="${LINUX_DIR}/drivers/remoteproc/sunxi_rproc.c"
 
 # Check 2.1: FIFO last_tx_done condition
 if [ -f "$MSGBOX_C" ]; then
-    if grep -q "return count < SUN55I_FIFO_MAX" "$MSGBOX_C"; then
-        echo -e "${RED}  FAIL: sun55i-msgbox.c last_tx_done allows partial FIFO! Must be 'count == 0'.${NC}"
-        ERRORS=$((ERRORS + 1))
+    # Decision 2026-10-16 (DESIGN_DECISIONS.md "Message box TX completion"):
+    # done = FIFO has room (count < 8), and send_data() must refuse a full FIFO.
+    if grep -q "< SUN55I_FIFO_MAX" "$MSGBOX_C" && grep -q ">= SUN55I_FIFO_MAX" "$MSGBOX_C"; then
+        echo -e "${GREEN}  PASS: sun55i-msgbox.c last_tx_done uses count < 8 and send_data refuses a full FIFO.${NC}"
     else
-        echo -e "${GREEN}  PASS: sun55i-msgbox.c last_tx_done checks full drain (count == 0).${NC}"
+        echo -e "${RED}  FAIL: sun55i-msgbox.c must use 'count < SUN55I_FIFO_MAX' for TX done and refuse a full FIFO ('>= SUN55I_FIFO_MAX').${NC}"
+        ERRORS=$((ERRORS + 1))
     fi
 
     # Check 2.2: Hardirq spinlock

@@ -11,15 +11,17 @@ This rule strictly governs all Linux kernel driver development, Devicetree bindi
   - In consumer nodes (`&rproc`): referenced via `memory-region = <&...>`.
 * **Standard Kernel API Usage:** Drivers must parse memory regions dynamically using:
   - `of_count_phandle_with_args(np, "memory-region", NULL)`
-  - `of_parse_phandle(np, "memory-region", index)`
-  - `of_reserved_mem_lookup(rm_np)`
-  - `rproc_of_resm_mem_entry_init(dev, index, size, base, name)`
+  - `of_reserved_mem_device_init(dev)` for `memory-region[0]`, the DMA pool (vrings, vdev buffers)
+  - `of_parse_phandle(np, "memory-region", index)` + `of_reserved_mem_lookup(rm_np)` for the rest
+  - `rproc_mem_entry_init()` + `rproc_add_carveout()` in `.prepare()`, so the remoteproc core resolves
+    DRAM, trace and vrings from the carveouts (decisions D7, D10 in DESIGN_DECISIONS.md)
+  - Not `rproc_of_resm_mem_entry_init()`: that is the `vdev0buffer` node-name style D10 rejects.
 
 ---
 
 ## 2. Devicetree YAML Schema to Driver Parity
 * **1-to-1 Schema Parity:** Every property, name list, and optional feature declared in an upstream YAML binding schema (`Documentation/devicetree/bindings/...`) MUST have an active, working implementation in the corresponding C driver.
-* **No Phantom Bindings:** If the YAML schema defines `memory-region-names` (e.g., `"vram"`, `"dram"`, `"trace"`) or `interrupt-names` (`"crash"`), the driver MUST explicitly query and handle those names with `of_property_read_string_index()`. Never submit a driver that relies on generic fallback stubs while the YAML schema promises named region parsing.
+* **No Phantom Bindings:** Every name list in the schema must be used by the driver. For `memory-region-names` (`"vram"`, `"dram"`, `"trace"`) the driver reads each name with `of_property_read_string_index()` and uses it **only as the carveout label**; behaviour follows the position (index 0 = DMA pool), never a name comparison (UPSTREAM_LESSONS_LEARNED.md Lesson 3.1e). `interrupt-names` (`"crash"`) is looked up by name (`platform_get_irq_byname_optional()`).
 
 ---
 

@@ -22,7 +22,7 @@ This reference document establishes the architectural benchmarks for the **Allwi
 | Feature | Allwinner `sun55i-msgbox.c` | Allwinner Legacy `sun6i-msgbox.c` | ARM MHU `arm_mhu.c` | BCM2835 `bcm2835-mailbox.c` | Upstream Rule / Rationale |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Topology** | 4-port, 12-channel full mesh crossbar | 2-port, 8-channel point-to-point | Multi-channel point-to-point | Single FIFO doorbells | Sun55i links 4 heterogeneous cores (ARM, DSP, CPUS, RISC-V); each sender writes to receiver's bank. |
-| **Pacing (`last_tx_done`)**| `count == 0` (remote drained) | `count == 0` | Hardware ACK | FIFO empty bit | Returning true on `count < FIFO_MAX` causes backpressure overflow under heavy RPMsg traffic. |
+| **Pacing (`last_tx_done`)**| `count < 8` (FIFO has room), 1 ms poll; A55 cannot get a TX interrupt (msgbox reference §6b) | remote IRQ status, 5 ms poll | Hardware ACK | FIFO empty bit | Owner decision 2026-10-16. `count == 0` with a 1 ms poll overflowed the 20-slot core queue in bursts. |
 | **Pending Clear Timing** | Clear before FIFO drain | Clear before FIFO drain | Auto-cleared by hardware | Auto-cleared by hardware | Clears TOCTOU race: messages arriving during drain re-assert IRQ pending instead of being blackholed. |
 | **Drain Loop Cap** | `for (i = 0; i < FIFO_MAX; i++)` | Bounded drain loop | Single word | Single word | Unbounded loops in hardirq top-half can cause CPU soft-lockups if remote processor spams FIFO. |
 | **Clocks & Resets** | Host bank only (`CLK_BUS_MSGBOX`) | Single SoC clock/reset | AMBA bus clocks | Bus clocks | Linux must not claim or reset coprocessor hardware banks on unbind. |

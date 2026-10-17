@@ -52,7 +52,7 @@ This guide documents recurring review feedback, rejection traps, and maintainer 
 - When a mailbox controller uses `txdone_poll = true`:
   - Returning `true` signals to the mailbox framework that the message was consumed by the remote core.
   - If `last_tx_done` returns `true` as soon as `count < FIFO_MAX`, the framework immediately dispatches the next queued message, overflowing the remote processor's FIFO.
-  - **Rule**: `last_tx_done` must return `true` only when `count == 0` (remote core has completely drained the FIFO).
+  - **Superseded for the sun55i msgbox (owner, 2026-10-16):** a kick is a doorbell (the data is in the vrings), so `last_tx_done` returns `true` while the FIFO has room (`count < FIFO_MAX`) and the driver never writes a full FIFO. See DESIGN_DECISIONS.md "Message box TX completion".
 
 ### B. Asynchronous Payload Storage
 - In polling mode, `mbox_send_message(chan, data)` takes a pointer to the data. If transmission is delayed, the framework holds that pointer and dereferences it later from a timer.

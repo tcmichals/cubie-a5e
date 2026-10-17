@@ -31,11 +31,11 @@ Code that "works on my hardware" is not acceptable — code must be provably cor
 ## 2. Kernel Object Lifecycle — Strict Ordering
 
 - **`INIT_WORK` / `INIT_LIST_HEAD` / `mutex_init` before any code path that could reach the corresponding `cancel_work_sync` / `list_del` / `mutex_destroy`.** Error paths in `probe()` that call cleanup helpers MUST NOT run before initialization.
-- **Teardown order in `remove()` is the exact reverse of `probe()`.** Specifically for remoteproc/mailbox drivers:
-  1. `rproc_del()` — stops the remote core and all VirtIO traffic
-  2. `cancel_work_sync()` — drains workqueue after IRQ source is dead
-  3. Free channels, unmap memory, release clocks/resets
-- **Never `cancel_work_sync()` before stopping the hardware interrupt source.** A live interrupt re-queuing work between `cancel_work_sync()` return and `kfree()` is a use-after-free.
+- **Teardown order in `remove()` is the exact reverse of `probe()`.** For the remoteproc client with a mailbox (UPSTREAM_LESSONS_LEARNED.md Lesson 3.1, `upstream-patch-submissions.md` §3.4):
+  1. `rproc_del()` — stops the remote core and removes the VirtIO devices, which may still kick, so the tx channel must still exist
+  2. `mbox_free_channel()` — after it returns no rx callback can run or re-queue work
+  3. `cancel_work_sync()` — drains the work item last; then reserved memory, clocks and resets
+- **Never `cancel_work_sync()` before stopping the source that queues the work** (for the remoteproc client: the mailbox rx callback, stopped by `mbox_free_channel()`). A live interrupt re-queuing work between `cancel_work_sync()` return and `kfree()` is a use-after-free.
 
 ---
 
@@ -141,7 +141,7 @@ fail and requiring a manual recovery.
 
 ```bash
 # ALWAYS do this first — before any edit, git add, or git commit in linux-cubie:
-cd /home/tcmichals/ssdData/projects/home/CubieA5E/linux-cubie
+cd /home/tcmichals/projects/cubie/linux-cubie
 git pull --rebase origin cubie-linux-7.1
 ```
 

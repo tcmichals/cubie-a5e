@@ -48,10 +48,12 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 > `drivers/remoteproc/sunxi_rproc_e906_boot.c`, `drivers/msgbox/sunxi-msgbox.c`,
 > `configs/linux-5.15/sun55iw3p1.dtsi`.
 
-1. **Mailbox Pacing (decision for v3)**:
-   - Controller: `txdone_poll = true`; `last_tx_done(chan)` returns `true` when the remote FIFO is empty (`count == 0`). Same policy as upstream `sun6i-msgbox`.
+1. **Mailbox TX completion** (DESIGN_DECISIONS.md, "Message box TX completion", 2026-10-16):
+   - Controller: `last_tx_done(chan)` returns `true` while the receiver's FIFO has room (`count < 8`).
+   - Device tree selects the mode: no property = timer (`txpoll_period` 1 ms while the FIFO is full);
+     `allwinner,tx-done-irq` = write interrupt enabled only when the FIFO is full, disabled in the handler.
+     Precedent: `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
    - Client (remoteproc): `cl.knows_txdone = false`, `cl.tx_block = false`; never call `mbox_client_txdone()`.
-   - Known cost: back-to-back kicks wait for a poll tick. The vendor BSP instead treats "FIFO not full" as done (5 ms poll) or uses the msgbox write IRQ (`txdone_irq`). Changing this is a deliberate post-v3 decision with a benchmark, not a review-driven flip.
 2. **SMP Concurrency**:
    - MMIO status reads and FIFO drain operations in the msgbox ISR are enclosed in `spin_lock_irqsave(&mbox->lock, flags)`, and `startup()`/`shutdown()` change the IRQ-enable bit under the same lock.
 3. **Mailbox rx callbacks are atomic**:

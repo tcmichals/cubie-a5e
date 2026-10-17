@@ -11,11 +11,34 @@ are in [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](ALLWINNER_SUN55I_MSGBOX_REFERENCE.
 |---|---|---|
 | Allwinner `sunxi-hal`, `hal/source/msgbox/` | RT-Thread `bsp/allwinner/libraries/sunxi-hal` (RT-Thread master, read 2026-10-16) | read |
 | Platforms in that copy | `msgbox-sun8iw20.h` (D1 / T113: ARM, DSP, RISC-V banks), `msgbox-sun50iw11.h` (older IP) | read |
-| T527 (sun55iw3) Tina FreeRTOS for the E906 | Tina SDK (`rtos/lichee/rtos-hal/...`), distributed by Radxa/Allwinner as a large archive | **not obtained**: the 5 GB download in `../tina/` is incomplete |
+| T527 (sun55iw3) Tina RTOS HAL for the E906 | `https://gitlab.com/tina5.0_aiot/product/tina/rtos-hal.git` `cc63790c369b` and `.../product/rtos-components.git` `190e301e2ef6` (2026-07-15), cloned to `~/projects/cubie/tina-source/` | **read 2026-10-17**: `hal/source/msgbox/msgbox_amp/msgbox_amp.c`, `platform/msgbox-sun55iw3.h` |
 
-Everything below is from the sun8iw20 copy. The message box block is the same IP as on the
-T527 (same register map: read IRQ `0x20/0x24`, write IRQ `0x30/0x34`, per-channel status and FIFO),
-but T527-specific names and IRQ numbers must still be checked in the T527 Tina source.
+The sections below were first written from the sun8iw20 copy and are now checked against the
+T527 tree; differences are marked **[T527]**.
+
+## T527 (sun55iw3) platform data [T527]
+
+`platform/msgbox-sun55iw3.h`: banks ARM `0x03003000` (0), DSP `0x07120000` (1), CPUS
+`0x07094000` (2), RISCV `0x07136000` (3) — the same as ours. On the E906 (`CONFIG_ARCH_RISCV`):
+
+| | Value |
+|---|---|
+| Own bank | `MSGBOX_RISCV` |
+| Interrupt | `IRQ_MSGBOX = MAKE_IRQn(17, 0)` (the E906's own controller; the numeric value depends on the build's `MAKE_IRQn` variant) |
+| Reset / clock | `RST_BUS_MCU_RV_MSG` / `CLK_BUS_MCU_RISCV_MSG` (MCU CCU) |
+
+The DSP uses its own bank, `IRQ_MSGBOX = 3`, `RST_BUS_DSP_MSG` / `CLK_BUS_DSP_MSG`.
+`msgbox_amp` is the driver that matches the T527 (`DRIVERS_MSGBOX_AMP`); the Kconfig also has
+`msgbox_sx` and a "soft" `msgbox_irq` variant (raises GIC pending bits directly), neither for this IP.
+
+## Write (TX FIFO) interrupt: not used [T527]
+
+`msgbox_amp.c` defines `MSGBOX_WR_IRQ_EN_REG()` / `MSGBOX_WR_IRQ_STA_REG()` (`0x30` / `0x34`) but
+**never calls them**. The only interrupt it requests is `IRQ_MSGBOX` for its own bank's *read*
+interrupt. TX completion on the RTOS side is a busy-wait on the receiver's `MSG_STATUS` (next
+sections). This matches the silicon: a bank's interrupt only reaches its owner
+([reference §6b](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md)), so a sender cannot be interrupted by the
+receiver's bank.
 
 ## Driver variants
 
@@ -65,10 +88,13 @@ Other details:
 ## Send — busy-wait on a full FIFO
 
 `msgbox_channel_send_data()` spins while the remote's `MSG_STATUS` equals 8 (full), then writes
-the FIFO. No write interrupt, no timeout, nothing dropped. Our E906 firmware does the same
+the FIFO. No write interrupt. **[T527]** The spin is bounded: after `MAX_MSGBOX_TRY_SEND_CNT`
+(10,000,000) reads it logs "message queue is full for a long time!!!" and returns `-1`, dropping
+that word (the sun8iw20 copy read earlier had no limit). Our E906 firmware waits without a limit
 (`notify_host()` waits for space and counts the waits).
 
 ## Open
 
-- Obtain the T527 Tina RTOS source and confirm: the E906 bank clock/reset names, the PLIC
-  interrupt number of the RV bank (25 or 48, unverified), and whether its HAL matches `msgbox_amp`.
+- ~~Obtain the T527 Tina RTOS source~~ done 2026-10-17 (see the T527 sections above).
+- The numeric E906 interrupt for `MAKE_IRQn(17, 0)` (25 or 48 were the old guesses): needs the
+  Tina `rtos` repo's E906 config for `MAKE_IRQn`, not cloned yet.

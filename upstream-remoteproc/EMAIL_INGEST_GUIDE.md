@@ -1,6 +1,6 @@
 # Lore Review Ingest Pipeline & Comments.md Generation Guide
 
-This guide documents the exact architecture, scripts, and workflows used to pull review emails from `lore.kernel.org` public-inbox archives, store them as raw `.eml` artifacts, and generate verified [COMMENTS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/v2/COMMENTS.md) matrices.
+This guide documents the exact architecture, scripts, and workflows used to pull review emails from `lore.kernel.org` public-inbox archives, store them as raw `.eml` artifacts, and generate verified [COMMENTS.md](v2/COMMENTS.md) matrices.
 
 ---
 
@@ -47,7 +47,7 @@ upstream-remoteproc/
 
 ## 3. How `fetch_lore_reviews.py` Works
 
-The ingest script is located at [scripts/fetch_lore_reviews.py](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/scripts/fetch_lore_reviews.py). Its execution flow is:
+The ingest script is located at [scripts/fetch_lore_reviews.py](scripts/fetch_lore_reviews.py). Its execution flow is:
 
 1. **Target Identification**:
    - Takes `--version` (e.g., `v1`, `v2`, `v3`) and the Message-ID (`--msgid`) of the cover letter or first patch in the series.
@@ -67,7 +67,7 @@ The ingest script is located at [scripts/fetch_lore_reviews.py](file:///home/tcm
 
 ## 4. How `COMMENTS.md` is Generated & Structured
 
-For each patch series version, [COMMENTS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/v2/COMMENTS.md) is constructed from the extracted `.eml` files according to strict review integrity rules:
+For each patch series version, [COMMENTS.md](v2/COMMENTS.md) is constructed from the extracted `.eml` files according to strict review integrity rules:
 
 ### Integrity Rule 1: Verbatim Quote Preservation
 Reviewer comments must **never be paraphrased, softened, or hallucinated**. Maintainer quotes (from human reviewers and bot reviewers) are transcribed verbatim into blockquotes (`> ...` or code fences).
@@ -90,7 +90,7 @@ Every issue raised is tagged with a resolution status and a concrete explanation
 
 ## 5. Verification Audit of Existing Ingests
 
-Both [v1/COMMENTS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/v1/COMMENTS.md) and [v2/COMMENTS.md](file:///home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc/v2/COMMENTS.md) were audited against the raw `.eml` archives:
+Both [v1/COMMENTS.md](v1/COMMENTS.md) and [v2/COMMENTS.md](v2/COMMENTS.md) were audited against the raw `.eml` archives:
 
 ### RFC v1 Review Archive (11 Emails Captured)
 - **Cover Thread**: `20260922034711.190253-1-tcmichals@gmail.com`
@@ -132,7 +132,7 @@ Locate the Message-ID of your v3 cover letter (e.g., from your sent email header
 
 ### Step 2: Run the Ingest Script
 ```bash
-cd /home/tcmichals/ssdData/projects/home/CubieA5E/cubie-a5e/upstream-remoteproc
+cd /home/tcmichals/projects/cubie/cubie-a5e/upstream-remoteproc
 python3 scripts/fetch_lore_reviews.py --version v3 --msgid <v3-cover-letter-message-id>
 ```
 

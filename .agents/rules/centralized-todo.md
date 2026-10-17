@@ -10,7 +10,7 @@ This rule strictly governs all task management, feature roadmaps, and progress t
 * **Strict Ban on Nested / Secondary TODO Files:**
   * ❌ NEVER create or recreate `TODO.md` in any subdirectory (e.g. `riscv-firmware/TODO.md`, `docs/platforms/*_TODO.md`).
   * ❌ NEVER create fragmented board-specific files (e.g. `TODO_A5E.md`, `TODO_A7A.md`).
-  * ❌ All tasks across all co-processors (E907, E902, HiFi4 DSP), video/camera encoding (VPU/Cedrus), NPU (Vivante/Etnaviv), kernel drivers, USB, and Ethernet must be kept together in root `TODO.md`.
+  * ❌ All tasks across all co-processors (E906, E902, HiFi4 DSP), video/camera encoding (VPU/Cedrus), NPU (Vivante/Etnaviv), kernel drivers, USB, and Ethernet must be kept together in root `TODO.md`.
 
 ---
 
@@ -21,7 +21,7 @@ Within root `TODO.md`, maintain clear, segregated parts for each hardware target
   * Verified Silicon Milestones
   * Camera & Video Encoding (VPU / Cedrus)
   * NPU Acceleration (Vivante VIP9000 / Etnaviv / Teflon)
-  * XuanTie E907 Advanced RemoteProc & IPC (Restart after crash, Suspend/Resume, SRAM VirtIO, Multi-channel stress, HiFi4 DSP)
+  * XuanTie E906 Advanced RemoteProc & IPC (Restart after crash, Suspend/Resume, SRAM VirtIO, Multi-channel stress, HiFi4 DSP)
   * Upstream Linux Kernel Submission
 * **Part II: Radxa Cubie A7A (Allwinner A733)**:
   * Hardware Bring-Up & Current Status

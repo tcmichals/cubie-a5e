@@ -101,23 +101,36 @@ Both KUnit patches stay, but every test must exercise driver behaviour (see
 and the cover letter says they can be dropped or taken separately without affecting the
 drivers.
 
-### Mailbox TX pacing
-`last_tx_done()` reports "remote drained" (`count == 0`) and the remoteproc client uses
-`knows_txdone = false`. See Lessons 2.1 and 3.2. Throughput work (P1) comes after v3.
-
 ### E906 receive: polling by default, interrupt mode available (owner, 2026-10-16)
 The E906 polls its message box (interrupt off): a dedicated core, lowest latency, deterministic.
 The firmware also supports an interrupt mode (wake on the message box interrupt) and both modes
 are tested.
 
-### Message box TX completion: poll or write interrupt (open, 2026-10-16)
-Not decided; v3 is on hold until it is. Today the mailbox core polls `last_tx_done()` every 1 ms.
-The hardware has a write interrupt with a free-slot threshold (vendor driver); threshold 8 would
-signal "receiver has read everything", the same meaning as our poll, but it is raised on the
-receiver's bank line (SPI 174 for the E906), which the v3 driver does not request. Facts, sources
-and open questions: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md)
-§5 and §8. Decide after measuring how often messages wait for the poll (kernel tracing) and
-testing the threshold-8 interrupt on the board.
+### Message box TX completion: the device tree selects timer or ISR (owner, 2026-10-16)
+Replaces "Mailbox TX pacing" (`count == 0`, poll) and the open "poll or write interrupt" item.
+The system builder chooses, per board, in the device tree:
+
+- **Common to both modes:** `last_tx_done()` returns `true` while the receiver's FIFO has room
+  (`count < 8`), so a kick goes out at once whenever there is space. A kick is a doorbell; the
+  data is in the vrings (Case Study 13, lesson 5), so "accepted by the FIFO" is done.
+- **Timer (property absent, default; e.g. servers):** when the FIFO is full the mailbox core
+  re-checks every `txpoll_period` (1 ms). No TX interrupts.
+- **ISR (`allwinner,tx-done-irq`; e.g. the flight controller):** the write interrupt
+  (threshold field 0 = one free slot) is enabled **only when the FIFO is full** (count 8) and
+  disabled in the handler when it fires (count 8 → 7, the receiver read one). The handler then
+  lets the next kick go at once. No timer wait in a burst, so low latency and low jitter. The
+  write interrupt is level (status = free slots ≥ threshold, measured §6a), which is why it must
+  stay off whenever the FIFO is not full. It is raised on the receiver's bank line (SPI 174 for
+  the E906 bank).
+- **Precedent for a DT property that selects the TX mode:** `ti,mbox-send-noirq` in
+  `Documentation/devicetree/bindings/mailbox/ti,omap-mailbox.yaml` (read with
+  `of_property_read_bool()` in `omap-mailbox.c`). OMAP also uses a "FIFO not full" TX interrupt.
+- The remoteproc client is unchanged: `knows_txdone = false`, `tx_block = false`.
+
+Why: with `count == 0` and the 1 ms poll, a burst left every kick waiting for the timer:
+`ping_rpmsg -n 10000 -D 0` went from ~200 µs to ~990 µs RTT and the 20-slot core queue
+overflowed (`MBOX_TX_QUEUE_LEN`, kick `-ENOBUFS`) once the RV bank was clocked (D12). Facts:
+[ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §5, §6a.
 
 ### E906 D-cache is off (C1)
 The E906 runs with `mhcr.DE = 0`. Linux maps the DMA pool and carveouts uncached
