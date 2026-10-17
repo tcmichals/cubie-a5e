@@ -770,6 +770,7 @@ Board 192.168.3.3, kernel from the 2026-10-17 `bld.a5e` build; details in refere
 | Write IRQ lines to the A55 (GIC pending registers) | DSP **SPI 181**, CPUS **SPI 174**, RV **SPI 205** — the vendor DT (SPI 1 / 181 / 174) is wrong |
 | TX FIFO full → E906 pops one → write IRQ on SPI 205 | **yes**; through the driver's handler too (enable cleared, 0 spurious) |
 | ISR mode (corrected DTB + `cubie-a5e-msgbox-txirq`), current firmware | 10000/10000, **166 µs avg, 6.3 µs jitter, 241 µs max**, 0 overflows, 0 TX IRQs (FIFO never full) |
+| Clocks/resets across unbind → bind (`tools/msgbox_clock_reset_check.sh`) | **PASS**: all 4 banks gated + in reset after unbind, all 4 back after bind; rpmsg 10000/10000, 1 SPI 0 IRQ per message afterwards |
 
 **How we got there (and a wrong turn).** A first round pulsed the remote banks' *read*
 interrupts and watched SPI 174 (the vendor DT's line for the RV bank) for its write IRQ; nothing

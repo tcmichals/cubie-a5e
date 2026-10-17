@@ -160,7 +160,16 @@ the T527 (`allwinner,sun55iw3-msgbox`) and the A733 (`allwinner,sun60iw2-msgbox`
 | DSP | `CLK_BUS_MCU_DSP_MSGBOX` | `RST_BUS_MCU_DSP_MSGBOX` | MCU CCU, register `0x068` |
 | CPUS | `CLK_BUS_R_MSGBOX` | `RST_BUS_R_MSGBOX` | R CCU |
 
-**[ours: clock driver tables]**
+**[ours: clock driver tables]** Gate = bit 0, reset (1 = deasserted) = bit 16 of each bank's BGR
+register: ARM `0x0200171C`, DSP `0x07102068`, CPUS `0x0701017C`, RV `0x07102128`.
+
+**Board check (2026-10-17) [silicon]**, `tools/msgbox_clock_reset_check.sh`: bound, all four BGR
+registers read `0x00010001`, each bank answers (register `0x010` reads `0x00020000`) and
+`clk_summary` shows one user per bank clock. After unbinding the remoteproc and the message box all
+four read `0x00000000` (gate off, reset asserted), every bank reads 0 and the enable counts are 0.
+Binding again restores all four (fw_devlink re-probes the remoteproc on its own) and rpmsg runs
+10000/10000 with exactly one SPI 0 interrupt per message. The write-IRQ threshold registers cannot
+be written from the A55, not even in the ARM ports of the remote banks.
 
 **Finding (2026-10-16) [silicon]:** our DT gives the message box only the ARM bank's clock and
 reset (decision D12). Nobody enables the others, and the kernel turns unused clocks off at boot,
