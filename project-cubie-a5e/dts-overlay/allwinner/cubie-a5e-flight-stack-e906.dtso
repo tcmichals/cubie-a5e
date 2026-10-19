@@ -20,6 +20,29 @@
  *  - Result: 0% bus contention, 0 register resets, and exclusive bare-metal
  *    control by the XuanTie E906 co-processor.
  *
+ * Physical 40-Pin Header Layout Mapping & Wire Colors:
+ * 
+ *                  3.3V Power [ 1] [ 2] 5V Power (Red Wire -> GPS VCC)
+ *   (Blue Wire)  I2C1-SDA PB5 [ 3] [ 4] 5V Power
+ * (Orange Wire)  I2C1-SCL PB4 [ 5] [ 6] GND      (Black Wire -> GPS GND)
+ *               SPI2-CLK  PI7 [ 7] [ 8] UART0-TX (PB9 - Linux Serial Console)
+ *                         GND [ 9] [10] UART0-RX (PB10 - Linux Serial Console)
+ *               GPIO/PWM  PI9 [11] [12] SPI1-CS0 (PI2 / Alternate)
+ *               GPIO/PWM PI10 [13] [14] GND
+ *               S-UART0-TX PL12[15][16] UART3-TX (PI11 - A5E TX -> GPS RX Yellow Wire)
+ *                  3.3V Power [17] [18] GPIO/PWM (PI14)
+ *   [Dual-SPI]  SPI1-MOSI PB13[19] [20] GND
+ *   [Dual-SPI]  SPI1-MISO PB14[21] [22] FPGA Frame Ready ISR (PL13)
+ *   [Dual-SPI]  SPI1-CLK  PB12[23] [24] SPI1-CS0 (PB11 - FPGA Chip Select)
+ *                         GND [25] [26] UART4-TX / IMU-CS1 (PI0)
+ *               I2C2-SDA PI16 [27] [28] I2C2-SCK (PI15)
+ *      IMU DRDY (PI8 / EINT8) [29] [30] GND
+ * (GPS TX Green Wire) UART3-RX[31] [32] UART4-RX (PI1)
+ *               SPI2-CS0  PI6 [33] [34] GND
+ *               GPIO     PI13 [35] [36] SPI1-CLK (PI3)
+ *               GPADC2        [37] [38] SPI1-MISO (PI5)
+ *                         GND [39] [40] SPI1-MOSI (PI4)
+ *
  * Hardware Resource Partitioning:
  *  - XuanTie E906 Dedicated:
  *      * RemoteProc & RPMsg VDev pool (vdev@48000000)
@@ -28,6 +51,8 @@
  *      * Mailbox / Doorbell IPC (&msgbox)
  *      * High-Speed Dual-SPI Bus (SPI1: PB11-PB14 @ Pins 24, 23, 19, 21) -> generic-uio
  *      * Navigation Serial Bus (UART3: PI11/PI12 @ Pins 16 & 31) -> generic-uio
+ *          - Pin 16 (A5E TX) -> GPS RX (Yellow Wire)
+ *          - Pin 31 (A5E RX) <- GPS TX (Green Wire)
  *      * I2C Flight Bus (I2C1: PB4/PB5 @ Pins 3 & 5, puck provides pull-ups) -> generic-uio
  *      * IMU Data Ready Interrupt (PI8 / PI-EINT8 @ Pin 29)
  *  - Linux Host (ARM Cortex-A55):

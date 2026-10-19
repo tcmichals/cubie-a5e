@@ -10,13 +10,35 @@
  * Configuration for Linux Host (ARM Cortex-A55) control of 40-pin header peripherals.
  * Verified against Radxa Cubie A5E Schematic v1.2 (2025-01-13) & A527 PINOUT V0.92.
  *
+ * Physical 40-Pin Header Layout Mapping & Wire Colors:
+ * 
+ *                  3.3V Power [ 1] [ 2] 5V Power (Red Wire -> GPS VCC)
+ *   (Blue Wire)  I2C1-SDA PB5 [ 3] [ 4] 5V Power
+ * (Orange Wire)  I2C1-SCL PB4 [ 5] [ 6] GND      (Black Wire -> GPS GND)
+ *               SPI2-CLK  PI7 [ 7] [ 8] UART0-TX (PB9 - Linux Serial Console)
+ *                         GND [ 9] [10] UART0-RX (PB10 - Linux Serial Console)
+ *               GPIO/PWM  PI9 [11] [12] SPI1-CS0 (PI2 / Alternate)
+ *               GPIO/PWM PI10 [13] [14] GND
+ *               S-UART0-TX PL12[15][16] UART3-TX (PI11 - A5E TX -> GPS RX Yellow Wire)
+ *                  3.3V Power [17] [18] GPIO/PWM (PI14)
+ *   [Dual-SPI]  SPI1-MOSI PB13[19] [20] GND
+ *   [Dual-SPI]  SPI1-MISO PB14[21] [22] FPGA Frame Ready ISR (PL13)
+ *   [Dual-SPI]  SPI1-CLK  PB12[23] [24] SPI1-CS0 (PB11 - FPGA Chip Select)
+ *                         GND [25] [26] UART4-TX / IMU-CS1 (PI0)
+ *               I2C2-SDA PI16 [27] [28] I2C2-SCK (PI15)
+ *      IMU DRDY (PI8 / EINT8) [29] [30] GND
+ * (GPS TX Green Wire) UART3-RX[31] [32] UART4-RX (PI1)
+ *               SPI2-CS0  PI6 [33] [34] GND
+ *               GPIO     PI13 [35] [36] SPI1-CLK (PI3)
+ *               GPADC2        [37] [38] SPI1-MISO (PI5)
+ *                         GND [39] [40] SPI1-MOSI (PI4)
+ *
  * Header Pin Mapping:
- *  - Pins 3 & 5   : I2C1 (PB5=SDA, PB4=SCL) -> Linux /dev/i2c-1
- *                   *Note: No on-board pull-ups on Pins 3 & 5. 2.2k-4.7k external
- *                    pull-ups required for discrete breakout boards.
+ *  - Pins 3 & 5   : I2C1 (PB5=SDA, PB4=SCL) -> Linux /dev/i2c-1 (puck provides pull-ups)
  *  - Pins 8 & 10  : UART0 (PB9=TX, PB10=RX) -> Linux Serial Console /dev/ttyS0
  *  - Pins 16 & 31 : UART3 (PI11=TX, PI12=RX) -> GPS Serial Port /dev/ttyAS3 (serial3 alias)
- *                   *Pin 16 connects to GPS RX; Pin 31 connects to GPS TX (9600 baud default).
+ *                   *Pin 16 (A5E TX) -> GPS RX (Yellow Wire)
+ *                   *Pin 31 (A5E RX) <- GPS TX (Green Wire)
  *  - Pins 26 & 32 : UART4 (PI0=TX, PI1=RX) -> Auxiliary Serial Port /dev/ttyAS4 (serial4 alias)
  *  - Pins 24,23,19,21: SPI1 (PB11=CS0, PB12=CLK, PB13=MOSI/IO0, PB14=MISO/IO1)
  *                   *Dual-SPI / Single-SPI bus -> /dev/spidev1.0
