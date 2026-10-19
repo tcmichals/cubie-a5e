@@ -67,10 +67,17 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 ## 🚀 Quick Start: Building the OS
 
 ### 1. One-Time Machine Setup
-Clone the repository and run the setup script to initialize the workspace and toolchains:
+Clone the repository recursively (including FreeRTOS kernel submodule) and run the setup script to initialize the workspace and toolchains:
 ```bash
-git clone git@github.com:tcmichals/cubie-a5e.git
+git clone --recursive git@github.com:tcmichals/cubie-a5e.git
 cd cubie-a5e
+
+# Or if already cloned:
+git submodule update --init --recursive
+
+# When pulling updates:
+git pull --recurse-submodules
+
 ./tools/setup_workspace.sh
 ```
 

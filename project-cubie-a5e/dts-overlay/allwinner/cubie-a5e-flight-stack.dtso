@@ -48,9 +48,10 @@
     status = "okay";
 };
 
-/* UART2: Dedicated RISC-V Serial Port (Pins 11 and 13 - Disabled in Linux) */
+/* UART2: High-Speed Navigation Serial Port for GPS (Pins 11 and 13) */
 &uart2 {
-    status = "disabled";
+    status = "okay";
+    pinctrl-names = "default";
 };
 
 /* SPI0: Dedicated RISC-V High-Speed Dual/Single Bus (Pins 19, 21, 23, 24, 26 - Disabled in Linux) */
