@@ -9,12 +9,12 @@ Hardware bring-up and seeding tool for u-blox NEO-M8N GPS and I2C Compass
 connected to the Radxa Cubie A5E 40-pin header.
 
 Hardware Pinout (40-Pin Header):
-  Pin 1 (or 2/4) : 3.3V Power / 5V -> GPS VCC
-  Pin 6, 14       : GND             -> GPS GND
-  Pin 3           : I2C1-SDA (TWI1) -> GPS/Compass SDA
-  Pin 5           : I2C1-SCL (TWI1) -> GPS/Compass SCL
-  Pin 11          : UART2-TX (PB0)  -> GPS RX
-  Pin 13          : UART2-RX (PB1)  -> GPS TX
+  Pin 2 (or 4)    : 5V Power (Red)  -> GPS VCC (5V)
+  Pin 6, 14       : GND (Black)     -> GPS GND
+  Pin 3           : I2C1-SDA (Blue) -> GPS/Compass SDA
+  Pin 5           : I2C1-SCL (Orange)-> GPS/Compass SCL
+  Pin 11          : UART2-TX (PB0)  -> GPS RX (Yellow)
+  Pin 13          : UART2-RX (PB1)  -> GPS TX (Green)
 
 Features:
   1. Serial NMEA/UBX Reader & Parser (9600 baud factory default, or 38400/115200).
