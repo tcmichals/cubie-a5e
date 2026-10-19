@@ -29,7 +29,7 @@
  *                         GND [ 9] [10] UART0-RX (PB10 - Linux Serial Console)
  *               GPIO/PWM  PI9 [11] [12] SPI1-CS0 (PI2 / Alternate)
  *               GPIO/PWM PI10 [13] [14] GND
- *               S-UART0-TX PL12[15][16] UART3-TX (PI11 - A5E TX -> GPS RX Yellow Wire)
+ *             S-UART0-TX PL12 [15] [16] UART3-TX (PI11 - A5E TX -> GPS RX Yellow Wire)
  *                  3.3V Power [17] [18] GPIO/PWM (PI14)
  *   [Dual-SPI]  SPI1-MOSI PB13[19] [20] GND
  *   [Dual-SPI]  SPI1-MISO PB14[21] [22] FPGA Frame Ready ISR (PL13)
@@ -37,11 +37,29 @@
  *                         GND [25] [26] UART4-TX / IMU-CS1 (PI0)
  *               I2C2-SDA PI16 [27] [28] I2C2-SCK (PI15)
  *      IMU DRDY (PI8 / EINT8) [29] [30] GND
- * (GPS TX Green Wire) UART3-RX[31] [32] UART4-RX (PI1)
+ * (GPS TX Green) UART3-RX PI12[31] [32] UART4-RX (PI1)
  *               SPI2-CS0  PI6 [33] [34] GND
  *               GPIO     PI13 [35] [36] SPI1-CLK (PI3)
  *               GPADC2        [37] [38] SPI1-MISO (PI5)
  *                         GND [39] [40] SPI1-MOSI (PI4)
+ *
+ * Wiring Guide for u-blox NEO-M8N GPS + Compass Puck:
+ *  - Pin 2  : 5V Power (5V_VCC)     <--- Red Wire   (GPS VCC)
+ *  - Pin 6  : Ground (GND)          <--- Black Wire (GPS GND)
+ *  - Pin 3  : I2C1-SDA (PB5 / TWI1) <--- Blue Wire  (Compass / DDC SDA)
+ *  - Pin 5  : I2C1-SCL (PB4 / TWI1) <--- Orange Wire(Compass / DDC SCL)
+ *  - Pin 16 : UART3-TX (PI11)       ---> Yellow Wire(GPS RX - Commands to GPS)
+ *  - Pin 31 : UART3-RX (PI12)       <--- Green Wire (GPS TX - NMEA data from GPS)
+ *
+ * CRITICAL WIRING & PINMUX RULES:
+ *  1. Serial Crossover:
+ *     - GPS Green Wire is GPS TX -> connects to A5E RX (Pin 31 / PI12).
+ *     - GPS Yellow Wire is GPS RX -> connects to A5E TX (Pin 16 / PI11).
+ *     - Schematics prove PB0/PB1 (UART2) are NC on PCB; Pins 11 & 13 connect to
+ *       PI9/PI10 without UART hardware. UART3 on Pins 16 & 31 is the navigation port.
+ *  2. I2C Pull-Up Resistors:
+ *     - Pins 3 & 5 (PB5/PB4) have NO internal pull-ups in pinctrl (`bias-pull-up`
+ *       is intentionally omitted) because the GPS puck integrates 2.2kΩ-4.7kΩ pull-ups.
  *
  * Hardware Resource Partitioning:
  *  - XuanTie E906 Dedicated:
@@ -101,6 +119,9 @@
 };
 
 &{/} {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    ranges;
     cubie-flight-stack-version = "1.6-e906";
 
     /* PL7: 3.3V Power Switch for AIC8800 Wi-Fi/BT */
@@ -167,21 +188,25 @@
     i2c1_pb_pins: i2c1-pb-pins {
         pins = "PB4", "PB5";
         function = "i2c1";
+        allwinner,pinmux = <2>;
     };
 
     uart3_pi_pins: uart3-pi-pins {
         pins = "PI11", "PI12";
         function = "uart3";
+        allwinner,pinmux = <2>;
     };
 
     uart4_pi_pins: uart4-pi-pins {
         pins = "PI0", "PI1";
         function = "uart4";
+        allwinner,pinmux = <3>;
     };
 
     spi1_pb_pins: spi1-pb-pins {
         pins = "PB11", "PB12", "PB13", "PB14";
         function = "spi1";
+        allwinner,pinmux = <4>;
     };
 };
 

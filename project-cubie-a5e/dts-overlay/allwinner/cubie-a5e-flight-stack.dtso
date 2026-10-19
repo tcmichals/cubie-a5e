@@ -5,41 +5,55 @@
  * ============================================================================
  *                    RADXA CUBIE A5E — FLIGHT STACK OVERLAY
  * ============================================================================
- * Hardware Resource Partitioning:
- *  - RISC-V Co-Processor (XuanTie E906 Dedicated):
- *      * UART2 (Serial Console / CRSF / Telemetry) on Pins 11 & 13 (PB0/PB1)
- *      * SPI0 (Dual-SPI for FPGA @ CS0, Single-SPI for IMU @ CS1) on Pins 19, 21, 23, 24, 26 (Port C)
- *      * FPGA Frame Ready ISR (GPIO Input) on Pin 22
- *      * IMU Data Ready (DRDY) ISR (GPIO Input) on Pin 29
- *  - Linux Host (ARM Cortex-A55):
- *      * UART0 (Debug Console Terminal) on Pins 8 & 10 (PB9/PB10)
- *      * SPI1 (General Purpose Expansion SPI) on Pins 35, 38, 40, 12
- *      * SPI2 (General Purpose Expansion SPI) on Pins 7, 15, 16, 18
- *      * I2C1 (Expansion I2C) on Pins 3 & 5
- *      * I2C3 (Compass / Barometer) on Pins 27 & 28
+ * Verified against Radxa Cubie A5E Schematic v1.2 & Allwinner A527 PINOUT V0.92.
  *
- * Physical 40-Pin Header Layout Mapping (Verified against Radxa Cubie A5E Schematic v1.2):
+ * Physical 40-Pin Header Layout Mapping & Wire Colors:
  * 
- *                  3.3V Power [ 1] [ 2] 5V Power (Input/Output)
- *            I2C1-SDA (PB5)   [ 3] [ 4] 5V Power (Input/Output)
- *            I2C1-SCL (PB4)   [ 5] [ 6] GND
- *            SPI2-CLK (PI7)   [ 7] [ 8] UART0-TX (PB9 - Linux Serial Console)
+ *                  3.3V Power [ 1] [ 2] 5V Power (Red Wire -> GPS VCC)
+ *   (Blue Wire)  I2C1-SDA PB5 [ 3] [ 4] 5V Power
+ * (Orange Wire)  I2C1-SCL PB4 [ 5] [ 6] GND      (Black Wire -> GPS GND)
+ *               SPI2-CLK  PI7 [ 7] [ 8] UART0-TX (PB9 - Linux Serial Console)
  *                         GND [ 9] [10] UART0-RX (PB10 - Linux Serial Console)
- *            GPIO/PWM (PI9)   [11] [12] SPI1-CS0 (PI2 / Alternate)
- *            GPIO/PWM (PI10)  [13] [14] GND
- *            S-UART0-TX(PL12) [15] [16] UART3-TX (PI11 - GPS Serial RX)
+ *               GPIO/PWM  PI9 [11] [12] SPI1-CS0 (PI2 / Alternate)
+ *               GPIO/PWM PI10 [13] [14] GND
+ *             S-UART0-TX PL12 [15] [16] UART3-TX (PI11 - A5E TX -> GPS RX Yellow Wire)
  *                  3.3V Power [17] [18] GPIO/PWM (PI14)
- *   [Dual-SPI] SPI1-MOSI(PB13)[19] [20] GND
- *   [Dual-SPI] SPI1-MISO(PB14)[21] [22] FPGA Frame Ready ISR (PL13)
- *   [Dual-SPI] SPI1-CLK (PB12)[23] [24] SPI1-CS0 (PB11 - FPGA Chip Select)
+ *   [Dual-SPI]  SPI1-MOSI PB13[19] [20] GND
+ *   [Dual-SPI]  SPI1-MISO PB14[21] [22] FPGA Frame Ready ISR (PL13)
+ *   [Dual-SPI]  SPI1-CLK  PB12[23] [24] SPI1-CS0 (PB11 - FPGA Chip Select)
  *                         GND [25] [26] UART4-TX / IMU-CS1 (PI0)
- *            I2C2-SDA (PI16)  [27] [28] I2C2-SCK (PI15)
- *            IMU DRDY (PI8)   [29] [30] GND
- *            UART3-RX (PI12)  [31] [32] UART4-RX (PI1)
- *            SPI2-CS0 (PI6)   [33] [34] GND
- *            GPIO     (PI13)  [35] [36] SPI1-CLK (PI3)
- *            GPADC2           [37] [38] SPI1-MISO (PI5)
+ *               I2C2-SDA PI16 [27] [28] I2C2-SCK (PI15)
+ *      IMU DRDY (PI8 / EINT8) [29] [30] GND
+ * (GPS TX Green) UART3-RX PI12[31] [32] UART4-RX (PI1)
+ *               SPI2-CS0  PI6 [33] [34] GND
+ *               GPIO     PI13 [35] [36] SPI1-CLK (PI3)
+ *               GPADC2        [37] [38] SPI1-MISO (PI5)
  *                         GND [39] [40] SPI1-MOSI (PI4)
+ *
+ * Wiring Guide for u-blox NEO-M8N GPS + Compass Puck:
+ *  - Pin 2  : 5V Power (5V_VCC)     <--- Red Wire   (GPS VCC)
+ *  - Pin 6  : Ground (GND)          <--- Black Wire (GPS GND)
+ *  - Pin 3  : I2C1-SDA (PB5 / TWI1) <--- Blue Wire  (Compass / DDC SDA)
+ *  - Pin 5  : I2C1-SCL (PB4 / TWI1) <--- Orange Wire(Compass / DDC SCL)
+ *  - Pin 16 : UART3-TX (PI11)       ---> Yellow Wire(GPS RX - Commands to GPS)
+ *  - Pin 31 : UART3-RX (PI12)       <--- Green Wire (GPS TX - NMEA data from GPS)
+ *
+ * CRITICAL WIRING & PINMUX RULES:
+ *  1. Serial Crossover:
+ *     - GPS Green Wire is GPS TX -> connects to A5E RX (Pin 31 / PI12).
+ *     - GPS Yellow Wire is GPS RX -> connects to A5E TX (Pin 16 / PI11).
+ *     - Schematics prove PB0/PB1 (UART2) are NC on PCB; Pins 11 & 13 connect to
+ *       PI9/PI10 without UART hardware. UART3 on Pins 16 & 31 is the navigation port.
+ *  2. I2C Pull-Up Resistors:
+ *     - Pins 3 & 5 (PB5/PB4) have NO internal pull-ups in pinctrl (`bias-pull-up`
+ *       is intentionally omitted) because the GPS puck integrates 2.2kΩ-4.7kΩ pull-ups.
+ *  3. Linux Device Mapping:
+ *     - Pins 3 & 5   : I2C1 (PB5=SDA, PB4=SCL) -> Linux /dev/i2c-1
+ *     - Pins 8 & 10  : UART0 (PB9=TX, PB10=RX) -> Linux Serial Console /dev/ttyS0
+ *     - Pins 16 & 31 : UART3 (PI11=TX, PI12=RX) -> GPS Serial Port /dev/ttyAS3 (serial3 alias)
+ *     - Pins 26 & 32 : UART4 (PI0=TX, PI1=RX) -> Auxiliary Serial Port /dev/ttyAS4 (serial4 alias)
+ *     - Pins 24,23,19,21: SPI1 (PB11=CS0, PB12=CLK, PB13=MOSI/IO0, PB14=MISO/IO1) -> /dev/spidev1.0
+ *     - Pin 29       : IMU DRDY Interrupt (PI8 / PI-EINT8)
  * ============================================================================
  */
 
@@ -149,22 +163,25 @@
     i2c1_pb_pins: i2c1-pb-pins {
         pins = "PB4", "PB5";
         function = "i2c1";
-        bias-pull-up;
+        allwinner,pinmux = <2>;
     };
 
     uart3_pi_pins: uart3-pi-pins {
         pins = "PI11", "PI12";
         function = "uart3";
+        allwinner,pinmux = <2>;
     };
 
     uart4_pi_pins: uart4-pi-pins {
         pins = "PI0", "PI1";
         function = "uart4";
+        allwinner,pinmux = <3>;
     };
 
     spi1_pb_pins: spi1-pb-pins {
         pins = "PB11", "PB12", "PB13", "PB14";
         function = "spi1";
+        allwinner,pinmux = <4>;
     };
 };
 
