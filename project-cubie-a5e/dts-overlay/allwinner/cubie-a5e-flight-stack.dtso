@@ -18,28 +18,28 @@
  *      * I2C1 (Expansion I2C) on Pins 3 & 5
  *      * I2C3 (Compass / Barometer) on Pins 27 & 28
  *
- * Physical 40-Pin Header Layout Mapping:
+ * Physical 40-Pin Header Layout Mapping (Verified against Radxa Cubie A5E Schematic v1.2):
  * 
  *                  3.3V Power [ 1] [ 2] 5V Power (Input/Output)
- *            I2C1-SDA (TWI1)  [ 3] [ 4] 5V Power (Input/Output)
- *            I2C1-SCL (TWI1)  [ 5] [ 6] GND
- *            SPI2-CLK         [ 7] [ 8] UART0-TX (Linux Serial Console)
- *                         GND [ 9] [10] UART0-RX (Linux Serial Console)
- *   [RISC-V] UART2-TX (PB0)   [11] [12] SPI1-CS0 (Linux Expansion)
- *   [RISC-V] UART2-RX (PB1)   [13] [14] GND
- *            SPI2-CS0         [15] [16] SPI2-MOSI
- *                  3.3V Power [17] [18] SPI2-MISO
- *   [RISC-V] SPI0-MOSI / IO0  [19] [20] GND
- *   [RISC-V] SPI0-MISO / IO1  [21] [22] FPGA Frame Ready ISR (GPIO)   [RISC-V]
- *   [RISC-V] SPI0-CLK         [23] [24] SPI0-CS0 (FPGA Dual-SPI)      [RISC-V]
- *                         GND [25] [26] SPI0-CS1 (IMU Single-SPI)     [RISC-V]
- *            I2C3-SDA (TWI3)  [27] [28] I2C3-SCL (TWI3) (Sensors/Compass)
- *   [RISC-V] IMU DRDY ISR     [29] [30] GND
- *                        GPIO [31] [32] GPIO/PWM
- *                        GPIO [33] [34] GND
- *            SPI1-MISO (Exp)  [35] [36] GPIO
- *                        GPIO [37] [38] SPI1-MOSI (Exp)
- *                         GND [39] [40] SPI1-CLK  (Exp)
+ *            I2C1-SDA (PB5)   [ 3] [ 4] 5V Power (Input/Output)
+ *            I2C1-SCL (PB4)   [ 5] [ 6] GND
+ *            SPI2-CLK (PI7)   [ 7] [ 8] UART0-TX (PB9 - Linux Serial Console)
+ *                         GND [ 9] [10] UART0-RX (PB10 - Linux Serial Console)
+ *            GPIO/PWM (PI9)   [11] [12] SPI1-CS0 (PI2 / Alternate)
+ *            GPIO/PWM (PI10)  [13] [14] GND
+ *            S-UART0-TX(PL12) [15] [16] UART3-TX (PI11 - GPS Serial RX)
+ *                  3.3V Power [17] [18] GPIO/PWM (PI14)
+ *   [Dual-SPI] SPI1-MOSI(PB13)[19] [20] GND
+ *   [Dual-SPI] SPI1-MISO(PB14)[21] [22] FPGA Frame Ready ISR (PL13)
+ *   [Dual-SPI] SPI1-CLK (PB12)[23] [24] SPI1-CS0 (PB11 - FPGA Chip Select)
+ *                         GND [25] [26] UART4-TX / IMU-CS1 (PI0)
+ *            I2C2-SDA (PI16)  [27] [28] I2C2-SCK (PI15)
+ *            IMU DRDY (PI8)   [29] [30] GND
+ *            UART3-RX (PI12)  [31] [32] UART4-RX (PI1)
+ *            SPI2-CS0 (PI6)   [33] [34] GND
+ *            GPIO     (PI13)  [35] [36] SPI1-CLK (PI3)
+ *            GPADC2           [37] [38] SPI1-MISO (PI5)
+ *                         GND [39] [40] SPI1-MOSI (PI4)
  * ============================================================================
  */
 
@@ -48,13 +48,21 @@
     status = "okay";
 };
 
-/* UART2: High-Speed Navigation Serial Port for GPS (Pins 11 and 13) */
-&uart2 {
-    status = "okay";
+/* UART3: High-Speed Navigation Serial Port for GPS (Pins 16 and 31) */
+&uart3 {
     pinctrl-names = "default";
+    pinctrl-0 = <&uart3_pi_pins>;
+    status = "okay";
 };
 
-/* SPI0: Dedicated RISC-V High-Speed Dual/Single Bus (Pins 19, 21, 23, 24, 26 - Disabled in Linux) */
+/* UART4: Alternate Serial Port (Pins 26 and 32) */
+&uart4 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&uart4_pi_pins>;
+    status = "okay";
+};
+
+/* SPI0: Port C unrouted on 40-pin header - Disabled in Linux */
 &spi0 {
     status = "disabled";
 };
@@ -63,7 +71,10 @@
     ethernet0 = "/soc/ethernet@4500000";
     ethernet1 = "/soc/ethernet@4510000";
     serial0 = "/soc/serial@2500000";
-    serial2 = "/soc/serial@2500800";
+    serial3 = "/soc/serial@2500c00";
+    serial4 = "/soc/serial@2501000";
+    i2c1 = "/soc/i2c@2502400";
+    spi1 = "/soc/spi@4026000";
     mmc0 = "/soc/mmc@4020000";
     mmc1 = "/soc/mmc@4021000";
 };
@@ -72,7 +83,7 @@
     #address-cells = <2>;
     #size-cells = <2>;
     ranges;
-    cubie-flight-stack-version = "1.4";
+    cubie-flight-stack-version = "1.5";
 
     /* PL7 (Bank 0, Pin 7, Active High): Hardware 3.3V Power Switch for AIC8800 Wi-Fi/BT */
     reg_3v3_wifi: 3v3-wifi {
@@ -133,24 +144,44 @@
     regulator-always-on;
 };
 
+/* Pinmux Controller Configurations for 40-Pin Header */
+&pio {
+    i2c1_pb_pins: i2c1-pb-pins {
+        pins = "PB4", "PB5";
+        function = "i2c1";
+        bias-pull-up;
+    };
+
+    uart3_pi_pins: uart3-pi-pins {
+        pins = "PI11", "PI12";
+        function = "uart3";
+    };
+
+    uart4_pi_pins: uart4-pi-pins {
+        pins = "PI0", "PI1";
+        function = "uart4";
+    };
+
+    spi1_pb_pins: spi1-pb-pins {
+        pins = "PB11", "PB12", "PB13", "PB14";
+        function = "spi1";
+    };
+};
+
 /* I2C1: General Expansion Bus (Enabled on physical pins 3 and 5) */
 &i2c1 {
-    status = "okay";
     pinctrl-names = "default";
+    pinctrl-0 = <&i2c1_pb_pins>;
+    status = "okay";
 };
 
-/* I2C3: Barometer, Compass, and Flight Sensors (Enabled on physical pins 27 and 28) */
-&i2c3 {
-    status = "okay";
-    pinctrl-names = "default";
-};
-
-/* SPI1: Linux General Purpose SPI Link (Enabled on physical pins 35, 38, 40, 12) */
+/* SPI1: High-Speed Dual-SPI / Single-SPI Bus (Enabled on physical pins 24, 23, 19, 21) */
 &spi1 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&spi1_pb_pins>;
     status = "okay";
     #address-cells = <1>;
     #size-cells = <0>;
-    pinctrl-names = "default";
     num-cs = <1>;
     
     /* User-space SPIDEV node (/dev/spidev1.0) */
@@ -158,23 +189,6 @@
         compatible = "rohm,dh2228fv";
         reg = <0>;
         spi-max-frequency = <25000000>;
-        status = "okay";
-    };
-};
-
-/* SPI2: General-Purpose SPI Expansion (Enabled on physical pins 7, 15, 16, 18) */
-&spi2 {
-    status = "okay";
-    #address-cells = <1>;
-    #size-cells = <0>;
-    pinctrl-names = "default";
-    num-cs = <1>;
-    
-    /* User-space SPIDEV node (/dev/spidev2.0) */
-    spidev2@0 {
-        compatible = "rohm,dh2228fv";
-        reg = <0>;
-        spi-max-frequency = <10000000>;
         status = "okay";
     };
 };

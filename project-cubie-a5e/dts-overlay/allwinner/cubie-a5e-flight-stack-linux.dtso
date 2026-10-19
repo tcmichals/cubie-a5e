@@ -1,0 +1,168 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *         RADXA CUBIE A5E — FLIGHT STACK OVERLAY (LINUX HOST PROFILE)
+ * ============================================================================
+ * Configuration for Linux Host (ARM Cortex-A55) control of 40-pin header peripherals.
+ * Verified against Radxa Cubie A5E Schematic v1.2 (2025-01-13) & A527 PINOUT V0.92.
+ *
+ * Header Pin Mapping:
+ *  - Pins 3 & 5   : I2C1 (PB5=SDA, PB4=SCL) -> Linux /dev/i2c-1
+ *                   *Note: No on-board pull-ups on Pins 3 & 5. 2.2k-4.7k external
+ *                    pull-ups required for discrete breakout boards.
+ *  - Pins 8 & 10  : UART0 (PB9=TX, PB10=RX) -> Linux Serial Console /dev/ttyS0
+ *  - Pins 16 & 31 : UART3 (PI11=TX, PI12=RX) -> GPS Serial Port /dev/ttyAS3 (serial3 alias)
+ *                   *Pin 16 connects to GPS RX; Pin 31 connects to GPS TX (9600 baud default).
+ *  - Pins 26 & 32 : UART4 (PI0=TX, PI1=RX) -> Auxiliary Serial Port /dev/ttyAS4 (serial4 alias)
+ *  - Pins 24,23,19,21: SPI1 (PB11=CS0, PB12=CLK, PB13=MOSI/IO0, PB14=MISO/IO1)
+ *                   *Dual-SPI / Single-SPI bus -> /dev/spidev1.0
+ *  - Pin 29       : IMU DRDY Interrupt (PI8 / PI-EINT8)
+ *  - M.2 M-Key    : PCIe 2.0 x1 slot (J28: PH11, PH12, PH19, PL7) - No 40-pin conflicts.
+ * ============================================================================
+ */
+
+/* UART0: Debug Console Terminal for Linux Host (Pins 8 and 10) */
+&uart0 {
+    status = "okay";
+};
+
+/* UART3: High-Speed Navigation Serial Port for GPS (Pins 16 and 31) */
+&uart3 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&uart3_pi_pins>;
+    status = "okay";
+};
+
+/* UART4: Auxiliary Serial Port (Pins 26 and 32) */
+&uart4 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&uart4_pi_pins>;
+    status = "okay";
+};
+
+/* SPI0: Port C unrouted on 40-pin header - Disabled in Linux */
+&spi0 {
+    status = "disabled";
+};
+
+&{/aliases} {
+    ethernet0 = "/soc/ethernet@4500000";
+    ethernet1 = "/soc/ethernet@4510000";
+    serial0 = "/soc/serial@2500000";
+    serial3 = "/soc/serial@2500c00";
+    serial4 = "/soc/serial@2501000";
+    i2c1 = "/soc/i2c@2502400";
+    spi1 = "/soc/spi@4026000";
+    mmc0 = "/soc/mmc@4020000";
+    mmc1 = "/soc/mmc@4021000";
+};
+
+&{/} {
+    cubie-flight-stack-version = "1.6-linux";
+
+    /* PL7 (Bank 0, Pin 7, Active High): Hardware 3.3V Power Switch for AIC8800 Wi-Fi/BT */
+    reg_3v3_wifi: 3v3-wifi {
+        compatible = "regulator-fixed";
+        regulator-name = "3v3-wifi";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        gpio = <&r_pio 0 7 0>;
+        enable-active-high;
+        regulator-always-on;
+    };
+
+    /* PM1 (Bank 1, Pin 1, Active High): Hardware Enable / WL_REG_ON */
+    reg_wifi_en: wifi-en {
+        compatible = "regulator-fixed";
+        regulator-name = "wifi-en";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        gpio = <&r_pio 1 1 0>;
+        enable-active-high;
+        regulator-always-on;
+        startup-delay-us = <100000>;
+    };
+};
+
+/* Configure Port C and Port K IO rail to 3.3V for 40-pin header peripherals */
+&reg_cldo1 {
+    regulator-min-microvolt = <3300000>;
+    regulator-max-microvolt = <3300000>;
+    regulator-always-on;
+};
+
+&reg_bldo1 {
+    regulator-always-on;
+};
+
+/* Pinmux Controller Configurations for 40-Pin Header */
+&pio {
+    i2c1_pb_pins: i2c1-pb-pins {
+        pins = "PB4", "PB5";
+        function = "i2c1";
+        bias-pull-up;
+    };
+
+    uart3_pi_pins: uart3-pi-pins {
+        pins = "PI11", "PI12";
+        function = "uart3";
+    };
+
+    uart4_pi_pins: uart4-pi-pins {
+        pins = "PI0", "PI1";
+        function = "uart4";
+    };
+
+    spi1_pb_pins: spi1-pb-pins {
+        pins = "PB11", "PB12", "PB13", "PB14";
+        function = "spi1";
+    };
+};
+
+/* I2C1: General Expansion Bus (Pins 3 & 5: PB5=SDA, PB4=SCL) */
+&i2c1 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&i2c1_pb_pins>;
+    status = "okay";
+};
+
+/* SPI1: High-Speed Dual-SPI / Single-SPI Bus (Pins 24, 23, 19, 21: PB11-PB14) */
+&spi1 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&spi1_pb_pins>;
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+    num-cs = <1>;
+
+    /* User-space SPIDEV node (/dev/spidev1.0) */
+    spidev1@0 {
+        compatible = "rohm,dh2228fv";
+        reg = <0>;
+        spi-max-frequency = <25000000>;
+        status = "okay";
+    };
+};
+
+&mmc1 {
+    /* Enumerate the onboard AIC8800 SDIO WLAN device on MMC host 1 */
+    #address-cells = <1>;
+    #size-cells = <0>;
+    bus-width = <4>;
+    max-frequency = <25000000>;
+    non-removable;
+    keep-power-in-suspend;
+    pinctrl-names = "default";
+    pinctrl-0 = <&mmc1_pins>;
+    vmmc-supply = <&reg_3v3_wifi>;
+    vqmmc-supply = <&reg_bldo1>;
+    status = "okay";
+
+    wifi: wifi@1 {
+        reg = <1>;
+        compatible = "aic,aic8800";
+        status = "okay";
+    };
+};

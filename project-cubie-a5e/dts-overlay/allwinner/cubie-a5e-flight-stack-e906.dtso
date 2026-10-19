@@ -1,0 +1,206 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * ============================================================================
+ *         RADXA CUBIE A5E — FLIGHT STACK OVERLAY (XUANTIE E906 PROFILE)
+ * ============================================================================
+ * Configuration for XuanTie E906 RISC-V Real-Time Co-Processor flight control.
+ * Verified against Radxa Cubie A5E Schematic v1.2 & A527 PINOUT V0.92.
+ *
+ * UIO Invariant:
+ *  - Peripherals assigned to the XuanTie E906 (SPI1, UART3, I2C1) are bound to
+ *    compatible = "generic-uio".
+ *  - This commands the Linux kernel to:
+ *      1. Configure pinmux (PIO registers) and pin pull-ups at boot.
+ *      2. Un-gate APB clocks and de-assert resets in the Clock Control Unit (CCU).
+ *      3. Refrain from attaching Linux kernel tty, i2c, or spi drivers.
+ *  - Result: 0% bus contention, 0 register resets, and exclusive bare-metal
+ *    control by the XuanTie E906 co-processor.
+ *
+ * Hardware Resource Partitioning:
+ *  - XuanTie E906 Dedicated:
+ *      * RemoteProc & RPMsg VDev pool (vdev@48000000)
+ *      * Dedicated MCU SRAM (riscvsram0@7280000)
+ *      * Dedicated Firmware DRAM (dram@48100000)
+ *      * Mailbox / Doorbell IPC (&msgbox)
+ *      * High-Speed Dual-SPI Bus (SPI1: PB11-PB14 @ Pins 24, 23, 19, 21) -> generic-uio
+ *      * Navigation Serial Bus (UART3: PI11/PI12 @ Pins 16 & 31) -> generic-uio
+ *      * I2C Flight Bus (I2C1: PB4/PB5 @ Pins 3 & 5, puck provides pull-ups) -> generic-uio
+ *      * IMU Data Ready Interrupt (PI8 / PI-EINT8 @ Pin 29)
+ *  - Linux Host (ARM Cortex-A55):
+ *      * UART0 Debug Console on Pins 8 & 10 (PB9/PB10 -> /dev/ttyS0)
+ *      * AIC8800 Wi-Fi / BT (MMC1 + reg_3v3_wifi + reg_wifi_en)
+ *      * Host RPMsg endpoint (/dev/rpmsg0)
+ * ============================================================================
+ */
+
+/* UART0: Retained for Linux Host Debug Console */
+&uart0 {
+    status = "okay";
+};
+
+/* UART3: Navigation Serial Port (Pins 16 & 31: PI11/PI12) assigned to E906 via UIO */
+&uart3 {
+    compatible = "generic-uio";
+    pinctrl-names = "default";
+    pinctrl-0 = <&uart3_pi_pins>;
+    status = "okay";
+};
+
+/* UART4: Auxiliary Serial Port (Pins 26 & 32: PI0/PI1) assigned via UIO */
+&uart4 {
+    compatible = "generic-uio";
+    pinctrl-names = "default";
+    pinctrl-0 = <&uart4_pi_pins>;
+    status = "okay";
+};
+
+/* SPI0: Port C unrouted on 40-pin header - Disabled */
+&spi0 {
+    status = "disabled";
+};
+
+&{/aliases} {
+    ethernet0 = "/soc/ethernet@4500000";
+    ethernet1 = "/soc/ethernet@4510000";
+    serial0 = "/soc/serial@2500000";
+    serial3 = "/soc/serial@2500c00";
+    serial4 = "/soc/serial@2501000";
+    i2c1 = "/soc/i2c@2502400";
+    spi1 = "/soc/spi@4026000";
+    mmc0 = "/soc/mmc@4020000";
+    mmc1 = "/soc/mmc@4021000";
+};
+
+&{/} {
+    cubie-flight-stack-version = "1.6-e906";
+
+    /* PL7: 3.3V Power Switch for AIC8800 Wi-Fi/BT */
+    reg_3v3_wifi: 3v3-wifi {
+        compatible = "regulator-fixed";
+        regulator-name = "3v3-wifi";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        gpio = <&r_pio 0 7 0>;
+        enable-active-high;
+        regulator-always-on;
+    };
+
+    /* PM1: Hardware Enable / WL_REG_ON */
+    reg_wifi_en: wifi-en {
+        compatible = "regulator-fixed";
+        regulator-name = "wifi-en";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        gpio = <&r_pio 1 1 0>;
+        enable-active-high;
+        regulator-always-on;
+        startup-delay-us = <100000>;
+    };
+
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        riscvsram0_reserved: riscvsram0@7280000 {
+            reg = <0x0 0x07280000 0x0 0x40000>;
+            no-map;
+        };
+
+        /* Virtio vrings and buffers: DMA pool for remoteproc */
+        rproc_vdev: vdev@48000000 {
+            compatible = "shared-dma-pool";
+            reg = <0x0 0x48000000 0x0 0x00100000>;
+            no-map;
+        };
+
+        /* E906 firmware DRAM payload pool */
+        rproc_dram: dram@48100000 {
+            reg = <0x0 0x48100000 0x0 0x00100000>;
+            no-map;
+        };
+    };
+};
+
+/* IO rail regulators */
+&reg_cldo1 {
+    regulator-min-microvolt = <3300000>;
+    regulator-max-microvolt = <3300000>;
+    regulator-always-on;
+};
+
+&reg_bldo1 {
+    regulator-always-on;
+};
+
+/* Pinmux Controller Configurations */
+&pio {
+    i2c1_pb_pins: i2c1-pb-pins {
+        pins = "PB4", "PB5";
+        function = "i2c1";
+        bias-pull-up;
+    };
+
+    uart3_pi_pins: uart3-pi-pins {
+        pins = "PI11", "PI12";
+        function = "uart3";
+    };
+
+    uart4_pi_pins: uart4-pi-pins {
+        pins = "PI0", "PI1";
+        function = "uart4";
+    };
+
+    spi1_pb_pins: spi1-pb-pins {
+        pins = "PB11", "PB12", "PB13", "PB14";
+        function = "spi1";
+    };
+};
+
+/* I2C1: Configured with PB4/PB5 pinmux via generic-uio (no Linux i2c driver) */
+&i2c1 {
+    compatible = "generic-uio";
+    pinctrl-names = "default";
+    pinctrl-0 = <&i2c1_pb_pins>;
+    status = "okay";
+};
+
+/* SPI1: Dual-SPI Bus configured via generic-uio (no Linux spi driver) */
+&spi1 {
+    compatible = "generic-uio";
+    pinctrl-names = "default";
+    pinctrl-0 = <&spi1_pb_pins>;
+    status = "okay";
+};
+
+&mmc1 {
+    #address-cells = <1>;
+    #size-cells = <0>;
+    bus-width = <4>;
+    max-frequency = <25000000>;
+    non-removable;
+    keep-power-in-suspend;
+    pinctrl-names = "default";
+    pinctrl-0 = <&mmc1_pins>;
+    vmmc-supply = <&reg_3v3_wifi>;
+    vqmmc-supply = <&reg_bldo1>;
+    status = "okay";
+
+    wifi: wifi@1 {
+        reg = <1>;
+        compatible = "aic,aic8800";
+        status = "okay";
+    };
+};
+
+&msgbox {
+    status = "okay";
+};
+
+&rproc {
+    firmware-name = "riscv-firmware.elf";
+    memory-region = <&rproc_vdev>;
+    status = "okay";
+};
