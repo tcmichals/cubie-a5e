@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR MIT)
+// @impl [SPEC-E906-ARCH-02] [SPEC-E906-IPC-04] [SPEC-GPS-01] targets/allwinner_e906/SPECIFICATION.md
 /dts-v1/;
 /plugin/;
 
@@ -140,7 +142,6 @@
     i2c1_pb_pins: i2c1-pb-pins {
         pins = "PB4", "PB5";
         function = "i2c1";
-        bias-pull-up;
     };
 
     uart3_pi_pins: uart3-pi-pins {
