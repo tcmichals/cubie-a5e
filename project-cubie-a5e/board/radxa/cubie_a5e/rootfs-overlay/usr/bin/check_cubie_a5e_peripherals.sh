@@ -25,7 +25,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 echo -e "${BOLD}================================================================${NC}"
-echo -e "${BOLD}   Radxa Cubie A5E Hardware & Peripheral Health Checker${NC}"
+echo -e "${BOLD}   Radxa Cubie A5E / A7A Hardware & Peripheral Health Checker${NC}"
 echo -e "${BOLD}================================================================${NC}"
 echo -e "Hostname       : $(hostname)"
 echo -e "Kernel         : $(uname -r)"

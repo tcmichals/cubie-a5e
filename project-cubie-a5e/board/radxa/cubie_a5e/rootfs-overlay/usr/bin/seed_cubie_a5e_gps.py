@@ -241,14 +241,26 @@ def probe_i2c_bus(bus_num: int, mock: bool = False) -> Dict[str, Any]:
 
     return results
 
+def get_board_model() -> str:
+    """Read the device tree model string if running on real silicon."""
+    for path in ["/proc/device-tree/model", "/sys/firmware/devicetree/base/model"]:
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    return f.read().decode("ascii", errors="ignore").strip("\x00 \t\n")
+            except Exception:
+                pass
+    return "Host SITL / Generic Linux"
+
 # -----------------------------------------------------------------------------
 # Main Bring-Up & Seeding Routine
 # -----------------------------------------------------------------------------
 def run_seed_and_verify(serial_dev: Optional[str], baud: int, i2c_bus: Optional[int], 
                         configure_5hz: bool, stream_tlp: bool, mock: bool, max_samples: int = 10):
     print("=================================================================")
-    print(" Radxa Cubie A5E u-blox NEO-M8N GPS & Compass Bring-Up Seeder")
+    print(" AbstractX u-blox NEO-M8N GPS & Compass Seeder (A5E / A7A)")
     print("=================================================================")
+    print(f"Platform      : {get_board_model()}")
     print(f"Mode          : {'MOCK SIMULATION' if mock else 'REAL SILICON'}")
     print(f"Serial Port   : {serial_dev or 'Disabled'} @ {baud} baud")
     print(f"I2C Bus       : Bus {i2c_bus} (Pins 3 & 5)" if i2c_bus is not None else "I2C: Disabled")
