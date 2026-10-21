@@ -97,5 +97,6 @@ that word (the sun8iw20 copy read earlier had no limit). Our E906 firmware waits
 ## Open
 
 - ~~Obtain the T527 Tina RTOS source~~ done 2026-10-17 (see the T527 sections above).
-- The numeric E906 interrupt for `MAKE_IRQn(17, 0)` (25 or 48 were the old guesses): needs the
-  Tina `rtos` repo's E906 config for `MAKE_IRQn`, not cloned yet.
+- ~~The numeric E906 interrupt for `MAKE_IRQn(17, 0)`~~ done: it is T-Head CLIC line 17 (`mcause`
+  id 17), proven on silicon by `testFreeRTOS` (`CLIC_IRQ_MSGBOX = 17`, ISR wake in the sweep) and
+  listed as `RISCV_MSGBOX_RISCV` in the T527 manual, Table 2-16. 25 and 48 were wrong guesses.

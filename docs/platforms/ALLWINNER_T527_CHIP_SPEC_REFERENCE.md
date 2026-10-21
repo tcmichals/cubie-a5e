@@ -103,10 +103,9 @@ The interconnection and sharing of memory between the main system bus (ARM Corte
 
 * **Register Name**: `REMAP_CTRL_REG`
 * **Register Offset**: `0x0364`
-* **Physical Base Address**:
-  * **T527 / `sun60iw1`**: `0x07140000` (`dsp_ccu`) $\rightarrow$ **`0x07140364`**
-  * **A527 / `sun55iw3`**: `0x07010000` (`r_ccu` / `PRCM`) $\rightarrow$ **`0x07010364`**
-* **Devicetree Resource Name**: `"remap"` or `"sram-for-cpux"`
+* **Physical Base Address**: A523 / A527 / T527 (`sun55iw3`, one die): `0x07010000` (`PRCM`)
+  $\rightarrow$ **`0x07010364`** (silicon-verified; used by the remoteproc driver and DT)
+* **Devicetree Resource Name**: `"remap"` (binding `allwinner,sun55i-a523-rproc.yaml`)
 
 ```
   31                                             2   1   0

@@ -118,7 +118,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 
 * **Mailbox Controller (`0x03003000` / `0x40030000`):**
   * **Channel 0 (RISC-V -> Linux):** Written by RISC-V after pushing 128-byte packets to shared SRAM C. Asserts the ARM bank interrupt, GIC SPI 0, on the ARM Cortex-A55 (SPI 147 is `csi3`). Message box facts: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../../../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
-  * **Channel 1 (Linux -> RISC-V):** Written by Linux after dispatching PCIe TLPs. Asserts PLIC IRQ 25 on XuanTie E906.
+  * **Channel 1 (Linux -> RISC-V):** Written by Linux after dispatching PCIe TLPs. Asserts CLIC line 17 on the XuanTie E906.
 * **Memory Fences:**
   * Every queue update executes an explicit RISC-V memory barrier:
     ```cpp
@@ -135,5 +135,5 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 | **IRQ 8** | `UART0` | TX Empty / RX Available | Debug console I/O |
 | **IRQ 10** | `UART2` | Receiver Timeout (RTO) / TX FIFO Empty | Harvests DMA packet / wakes serial coroutine |
 | **IRQ 15** | `SPI0` | Transfer Complete (`TC_INT`) | Deasserts CS / wakes SPI awaiter |
-| **IRQ 25** | `MSGBOX` | Message Received (Channel 1) | Wakes IPC command task |
+| **CLIC 17** | `MSGBOX` | Message Received (Channel 1) | Wakes IPC command task |
 | **PIO IRQ** | `Main PIO` | Edge on Pin 22 (FPGA Ready) or Pin 29 (IMU DRDY) | Triggers instant SPI burst |

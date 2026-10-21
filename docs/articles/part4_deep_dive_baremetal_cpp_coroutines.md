@@ -201,7 +201,7 @@ In hard real-time systems, polling `while (!poll())` wastes 100% of the CPU and 
 2. XuanTie E906 Core is FREE to service other tasks or sleep in low-power wfi.
    │
    │ Linux Host sends packet and writes MSGBOX Channel 1...
-   │ Hardware triggers PLIC IRQ 25 (MSGBOX Interrupt)
+   │ Hardware triggers CLIC line 17 (MSGBOX Interrupt)
    ▼
 3. MSGBOX Top-Half ISR (fc_msgbox_doorbell_isr) fires in < 100 ns:
    ├─► Clears hardware MSGBOX interrupt flag

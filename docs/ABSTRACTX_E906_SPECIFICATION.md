@@ -137,7 +137,7 @@ directly traceable by implementation source files via `// @impl [SPEC-E906-*]`.
 ### `[SPEC-E906-CORO-02]` Hardware MSGBOX ISR Direct Waking
 * **Requirement**: Linux doorbell kicks on MSGBOX Channel 1 must wake the
   suspended coroutine in under 25 ns without thread context switches.
-* **Mechanism**: PLIC IRQ 48 executes `fc_msgbox_doorbell_isr()`:
+* **Mechanism**: the message box interrupt (T-Head CLIC line 17; the E906 has no PLIC) executes `fc_msgbox_doorbell_isr()`:
   1. Clears hardware MSGBOX interrupt status.
   2. Resumes `s_rpmsg_coroutine_handle` directly in top-half ISR.
 * **Implementation Target**: `targets/allwinner_e906/src/rpmsg.cpp`

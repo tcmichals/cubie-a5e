@@ -1309,7 +1309,7 @@ void sunxi_msgbox_init_ex(bool enable_irq) {
 }
 ```
 When `enable_irq = false`, `RD_IRQ_EN_REG` is cleared to 0. This prevents the peripheral from asserting its external interrupt line:
-- Routed to **PLIC Line 48** for XuanTie E906 RISC-V.
+- Routed to **CLIC line 17** for the XuanTie E906 RISC-V (it has a T-Head CLIC, no PLIC).
 - Routed to **Xtensa Core Interrupt Line** for Cadence HiFi4 DSP.
 - Routed to **GIC SPI 0** for the ARM Cortex-A55 host (ARM bank read IRQ; SPI 174 is the CPUS bank write IRQ).
 
@@ -1326,7 +1326,7 @@ By keeping interrupts disabled by default, firmware polling loops (`has_data()` 
 #### Rationale for Polled Reception in Bare-Metal Co-Processors:
 1. **Zero Interrupt Overhead**: An interrupt on RISC-V or Xtensa requires pushing 16 to 32 general-purpose registers to stack/memory, flushing the pipeline, jumping through the vector table, executing the ISR, and executing `mret`/`rfi`. In high-speed IPC (60,000+ msgs/sec), interrupt entry/exit consumes 80–120 clock cycles per packet.
 2. **Deterministic Jitter**: Polling within a real-time event loop (`while (1) { if (has_data()) ... }`) guarantees strictly bounded latency without priority inversion or nested trap latency.
-3. **No Spurious Traps**: Disabling `RD_IRQ_EN_REG` ensures the core does not vector to an unhandled interrupt on PLIC Line 48 or Xtensa IRQ while running bare metal without an RTOS interrupt dispatcher.
+3. **No Spurious Traps**: Disabling `RD_IRQ_EN_REG` ensures the core does not vector to an unhandled interrupt on CLIC line 17 or the Xtensa IRQ while running bare metal without an RTOS interrupt dispatcher.
 4. **RTOS Compatibility**: Turnkey support for RTOS environments (`vTaskNotifyGiveFromISR`) is achieved simply by calling `hal::MsgBox::init(true)`.
 
 ---

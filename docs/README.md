@@ -66,7 +66,7 @@ docs/
 | **SoC Silicon** | Allwinner A527 / T527 (`sun55iw3`) | Allwinner A733 (`sun60iw2p1`) | [A5E Guide](platforms/CUBIE_A5E_PLATFORM_GUIDE.md) / [A7A Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
 | **CPU Cluster** | 8× Cortex-A55 (Octa-core) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) | [Real-Time OS Isolation](common/REALTIME_FLIGHT_ARCHITECTURE.md) |
 | **RAM Subsystem** | 2 GiB / 4 GiB LPDDR4 / LPDDR4X | 6 GiB LPDDR5 (Dynamic multi-PState training) | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
-| **Interrupt Controller** | ARM GICv2 (`0x03021000`) | ARM GICv3 (`0x03400000`/`0x03460000`) | [A7A Bring-Up Issues](buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md) |
+| **Interrupt Controller** | ARM GIC-600, GICv3 (`0x03400000`, `sun55i-a523.dtsi`) | ARM GICv3 (`0x03400000`/`0x03460000`) | [A7A Bring-Up Issues](buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md) |
 | **Co-Processor** | XuanTie E906 (RV32IMAFCX: single-precision FPU, no `D`, no `P`) | XuanTie E902 (RV32EMC) | [Co-Processor & RemoteProc Guide](buildroot/HowToRISCV.md) |
 | **Boot Chain** | Mainline TF-A + Mainline U-Boot 2026.01 | Hybrid Boot (Vendor `boot0` + BL31 + Vendor U-Boot 2018.07) | [A5E Guide](platforms/CUBIE_A5E_PLATFORM_GUIDE.md) / [A7A Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |
 | **Mainline Kernel** | **100% In Mainline Linux** (`sun55i-a523.dtsi`) | **Mainline Linux 7.1 + CCU/Pinctrl Patch Series** | [A7A Platform Guide](platforms/CUBIE_A7A_PLATFORM_GUIDE.md) |

@@ -76,7 +76,7 @@ The E906 executes out of on-chip SRAM pools and dedicated DDR carveouts:
 
 > [!IMPORTANT]
 > ### TRACE BUFFER SILICON LOCATION: STRICTLY ON-CHIP SRAM, NEVER DDR
-> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (`0x3FFC0000` in `e906_sram.ld` or `0x40040000` in `e906_ddr.ld`):
+> The RemoteProc trace buffer (`g_rproc_trace_buffer[4096]`, exposed to userspace as `/sys/kernel/debug/remoteproc/remoteproc0/trace0`) **must reside exclusively in on-chip SRAM (`SRAM_A3`)**, placed into the `.trace_buffer` section (SRAM Space 0, from `0x3FFC0000`, in `e906_sram.ld`; SRAM Space 1 `SRAM_A3_2`, from `0x40000000`, in `e906_ddr.ld`; `0x40040000`+ is the 1:1 DRAM view, not SRAM):
 > 1. **Early Boot & Determinism**: The E906 logs boot vectors, clock status, and peripheral bring-up immediately upon reset—long before DDR is initialized, or even when DDR is powered down in low-power sleep.
 > 2. **Zero Wait States**: On-chip SRAM guarantees single-cycle logging latency without DRAM bus contention, page misses, or memory refresh stalls.
 > 3. **Crash Survivability**: When a fatal exception or illegal instruction trap occurs (`testCrash`), crash register dumps (`mepc`, `mcause`, `sp`) are safely preserved into SRAM even if the DDR controller has locked up or crashed.
