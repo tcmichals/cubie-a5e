@@ -25,10 +25,10 @@ When a transfer is initiated, the driver arms the hardware and **immediately sus
 │    (0% CPU wasted during bus shifting)                                      │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │ Hardware shifts bits at 25-50 MHz...
-                                       │ SPI Controller asserts PLIC IRQ 15 (TC)
+                                       │ SPI Controller asserts its CLIC line (via S_INTC)
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. Interrupt Handler (PLIC ISR - Top Half):                                 │
+│ 3. Interrupt Handler (CLIC ISR - Top Half):                                 │
 │    - Drains RX FIFO / verifies DMA completion                               │
 │    - Deasserts Chip Select (PC3) & clears SPI_ISR.TC                        │
 │    - Posts coroutine handle to thread-safe SPSC Ready Queue:                │
@@ -128,12 +128,21 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 
 ---
 
-## 5. PLIC Interrupt Vector Mapping (XuanTie E906)
+## 5. E906 Interrupt Lines (CLIC)
 
-| PLIC IRQ | Peripheral | Trigger Condition | HAL Action |
+The E906 has a T-Head CLIC at `0xE0800000`, not a PLIC. Peripheral interrupts reach it through
+the S_INTC router (`GINTC_CONFIG_REG0`, `0x070210C0`, bit = GIC − 32); the CLIC line stays idle
+until the router bit is set. Measured on the A5E 2026-10-21; details in the
+[message box reference §4a](../../../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
+
+| CLIC line | Peripheral | Router bit | Status |
 | :--- | :--- | :--- | :--- |
-| **IRQ 8** | `UART0` | TX Empty / RX Available | Debug console I/O |
-| **IRQ 10** | `UART2` | Receiver Timeout (RTO) / TX FIFO Empty | Harvests DMA packet / wakes serial coroutine |
-| **IRQ 15** | `SPI0` | Transfer Complete (`TC_INT`) | Deasserts CS / wakes SPI awaiter |
-| **CLIC 17** | `MSGBOX` | Message Received (Channel 1) | Wakes IPC command task |
-| **PIO IRQ** | `Main PIO` | Edge on Pin 22 (FPGA Ready) or Pin 29 (IMU DRDY) | Triggers instant SPI burst |
+| **7** | Machine timer (`mtimecmp` `0xE0004000`, 24 MHz) | — | silicon |
+| **17** | `MSGBOX` RV bank read IRQ (Linux → E906) | — | silicon |
+| **90** | `UART3` (GIC 37) | 5 | silicon |
+| **91** | `TWI1` (GIC 43) | 11 | silicon |
+| 88 | DMA | — | manual, not measured |
+| 92 | `SPI0` | — | by the router rule, not measured |
+
+UART3 busy-detect reports IIR id `0x7`; treating "bit 0 clear" as "interrupt pending" storms the
+CLIC. Change the baud with the `UART_HALT` (`0xA4`) configure-at-busy sequence.

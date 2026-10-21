@@ -95,6 +95,24 @@ Offsets from the bank base; `OFF(n) = 0x100 * n`. **[vendor] [ours]**
   Re-read 2026-10-17 (§5a): `sunxi_msgbox_send_data()` only checks for a full FIFO and writes;
   the only `WRITE_IRQ_ENABLE` set is in `sunxi_msgbox_startup()`.
 
+## 4a. The E906 side: CLIC, not PLIC (2026-10-21) [silicon]
+
+Measured by the AbstractX session on the A5E (AbstractX `370206e`, engineering_log 2026-10-21).
+
+- The E906 has a T-Head **CLIC** at `0xE0800000` (control words at `0xE0801000 + 4*id`). There is
+  no PLIC; `mcause & 0xFFF` is the CLIC line.
+- `mtvec` must be MODE=3 (CLIC) and 64-byte aligned. `mie` reads 0 in CLIC mode and is ignored;
+  each line is enabled in its CLIC control word.
+- Lines: **7** machine timer, **17** message box (RV bank read IRQ), **90** UART3, **91** TWI1.
+- UART3 and TWI1 reach the CLIC through the S_INTC router, `GINTC_CONFIG_REG0` at `0x070210C0`:
+  bit = GIC − 32 (UART3 GIC 37 → bit 5, TWI1 GIC 43 → bit 11), CLIC line = 90 + (GIC − 32) / 8.
+  The CLIC line's IP stays 0 until the router bit is set.
+- Not measured: DMA (manual: line 88), SPI0 (by the rule: 92).
+- `mtime` is at `0xE000BFF8`, `mtimecmp` at `0xE0004000`, 24 MHz. `mcycle` runs at 200 MHz.
+  Nothing answers at `0x1400xxxx`.
+- The E906 has no D extension: code built for `ilp32d` locks the core on the first `fsd` in the
+  trap entry. cubie firmware builds `rv32imac`/`ilp32` (`firmware/common/common.mk`).
+
 ## 5. "Was my message read?" — TX completion
 
 There is no interrupt named "message read". The options:
