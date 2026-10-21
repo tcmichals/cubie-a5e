@@ -60,4 +60,4 @@ This guide documents recurring review feedback, rejection traps, and maintainer 
 
 ### C. Hardirq Concurrency & TOCTOU
 - Multi-channel mailbox registers must be guarded with `spin_lock_irqsave(&mbox->lock, flags)`.
-- Acknowledge/clear the hardware pending bit **before** reading the FIFO entries. If a remote message arrives during the drain loop, clearing before drain ensures the pending bit is re-asserted, preventing lost doorbells.
+- Drain the FIFO first, then clear the hardware pending bit. The sun55i hardware ignores the clear while the FIFO is not empty, so clearing first fires the IRQ a second time; a message arriving after the clear sets the bit again, so nothing is lost (D13, `docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md` §8 Q4).

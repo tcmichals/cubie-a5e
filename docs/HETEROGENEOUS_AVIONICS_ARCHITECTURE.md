@@ -24,7 +24,7 @@ flowchart TB
         end
 
         subgraph "Inter-Processor Communications (IPC)"
-            MSGBOX["Hardware Mailbox / MSGBOX (0x03003000)<br/>• 8-channel 32-bit FIFO<br/>• ARM GIC IRQ 147 / RISC-V PLIC IRQ 16"]
+            MSGBOX["Hardware Mailbox / MSGBOX (0x03003000)<br/>• 8-deep 32-bit FIFO per channel<br/>• ARM GIC SPI 0 / RISC-V PLIC (number unverified)"]
             RPROC["sunxi_rproc Linux Driver<br/>• /sys/class/remoteproc/remoteproc0/"]
         end
 
@@ -90,7 +90,7 @@ flowchart TB
 
 ### Interrupt Service Routine (ISR) Vector Mapping
 
-* **MSGBOX IPC Doorbell:** GIC IRQ 147 (ARM) &harr; PLIC IRQ 16 (RISC-V).
+* **MSGBOX IPC Doorbell:** GIC SPI 0, the ARM bank interrupt (ARM; SPI 147 is `csi3`) &harr; PLIC (RISC-V; the number differs between docs and firmware, unverified). See [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
 * **Dual-SPI Link (SPI0/SPI1):** GIC IRQ 45 / 46 &harr; PLIC IRQ 14 / 15.
 * **UART0 / UART2:** GIC IRQ 34 / 36 &harr; PLIC IRQ 8 / 10.
 * **ISR-to-Coroutine Bridge:** The ISR signals a static `std::atomic` event handle that directly resumes the waiting C++20 coroutine frame in **$<1.2\,\mu\text{s}$**.
@@ -103,8 +103,7 @@ flowchart TB
 * **Driver Location:** [`drivers/remoteproc/sunxi_rproc.c`](../project-cubie-a5e/patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch)
 * **Patch File:** `patches/linux/0002-remoteproc-sunxi-add-allwinner-riscv-remoteproc.patch`
 * **Compatible Strings:**
-  * `allwinner,sun55i-a523-rproc` (A523)
-  * `allwinner,sun55i-a527-rproc` (Radxa Cubie A5E / T527)
+  * `allwinner,sun55i-a523-rproc` (A523 / A527 / T527, Radxa Cubie A5E; the only compatible in v3)
   * `allwinner,sun60i-a733-rproc` (Radxa Cubie A7A / A7Z)
 * **Target Mailing Lists:**
   * `linux-sunxi@lists.linux.sunxi.org`

@@ -101,10 +101,15 @@ mbox_send_message(chan, data)
 ---
 
 ### B. Controller Pacing: `last_tx_done()` Semantics
-- Mailbox channels configure `txdone_poll = true` and `txpoll_period = 1` (ms).
-- **Drain vs Capacity**:
-  - `last_tx_done()` must report `true` only when `count == 0` (empty).
-  - If it reported `true` when `count < FIFO_MAX` (e.g. 7 out of 8 entries used), the mailbox framework would immediately dispatch the next message, causing FIFO overflow under bursty VirtIO RPMsg ping-pong traffic.
+- Timer mode (default): `txdone_poll = true`, `txpoll_period = 1` (ms). With `allwinner,tx-done-irq`
+  the controller uses `txdone_irq` instead (write interrupt armed after every send).
+- **Capacity, not drain** (owner decision 2026-10-16, `upstream-remoteproc/DESIGN_DECISIONS.md`
+  "Message box TX completion"):
+  - `last_tx_done()` returns `true` while `count < 8` (the receiver's FIFO has room). A kick is a
+    doorbell; the data is in the vrings.
+  - `send_data()` never writes a full FIFO (returns `-EBUSY`), so there is no overflow.
+  - The earlier `count == 0` rule made every kick in a burst wait for the 1 ms poll and overflowed
+    the 20-slot core queue (measured 2026-10-16).
 
 ---
 

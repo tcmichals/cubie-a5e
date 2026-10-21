@@ -129,7 +129,7 @@ void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iom
 ### 1.2 Two-Stage CCF Clock, Reset Lifecycle & PubSRAM Remap
 Clock gating and reset release are tied directly into the Linux Common Clock Framework (CCF) using a two-stage sequencing model:
 
-1. **`.prepare()`**: Deasserts bus resets (`rst_cfg`, `rst_sram`, `rst_msgbox`) and gates on CCU clocks. It enables the shared secondary SRAM bank (`SRAMA3_2`) for RISC-V MCU access by setting `SUNXI_REMAP_SRAMA3_2_BIT` in the remap control register. Finally, it zeroes the SRAM regions (`memset_io`) to clear ECC/parity noise and initialize `.bss`.
+1. **`.prepare()`**: Powers the `riscv` and `sram` power domains, deasserts bus resets (`rst_cfg`, `rst_sram`, `rst_debug`; the message box clock and reset belong to the msgbox node) and gates on CCU clocks. It enables the shared secondary SRAM bank (`SRAMA3_2`) for RISC-V MCU access by setting `SUNXI_REMAP_SRAMA3_2_BIT` in the remap control register. Finally, it zeroes the SRAM regions (`memset_io`) to clear ECC/parity noise and initialize `.bss`.
 2. **`.start()`**: Enables the crash notification IRQ, writes the boot vector entry point into `STA_ADD_REG` (`0x07130204`) while the core execution reset remains held, and deasserts `rst_core` to begin instruction fetching.
 
 ```text
@@ -450,44 +450,39 @@ Moving the VirtIO vrings and buffers from external DDR (Profile 1) to on-chip SR
 
 ---
 
-## 6. In-Kernel Unit Testing (KUnit): 68/68 Tests Passing
+## 6. In-Kernel Unit Testing (KUnit): 51 Tests
 
 Upstream kernel acceptance demands verifying edge cases and error unwinding paths that physical hardware cannot easily trigger.
 
-We implemented exhaustive KUnit test suites directly in the Linux tree under `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST` and `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`:
+We implemented KUnit test suites directly in the Linux tree under `CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST` and `CONFIG_SUN55I_MSGBOX_KUNIT_TEST`:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        Linux Kernel KUnit Framework                    │
 ├──────────────────────────────────┬─────────────────────────────────────┤
-│  sunxi_rproc_test.c (34 Tests)   │  sun55i_msgbox_test.c (34 Tests)    │
+│  sunxi_rproc_test.c (25 Tests)   │  sun55i_msgbox_test.c (26 Tests)    │
 ├──────────────────────────────────┼─────────────────────────────────────┤
-│ • DA -> VA Address Translation   │ • 12-Channel Routing Table Sweep    │
-│ • 64-bit Integer Overflow Guards │ • Invalid Index Clamping (-1, 12)   │
-│ • Mock MMIO Lifecycle (prepare)  │ • Register Offset & Bitmask Formulas│
-│ • Mock MMIO Lifecycle (start)    │ • Mock MMIO send_data (All Channels)│
-│ • Mock MMIO Lifecycle (stop)     │ • FIFO Status Full Sweep (0..15)    │
-│ • Workqueue & Mailbox kick() UAF │ • Stale FIFO Purging on Startup     │
-│ • NULL is_iomem pointer safety   │ • Bounded Loop Hardirq Anti-Lockup  │
-│ • Cross-Space Memory Isolation   │ • Channel Crosstalk Isolation       │
-│ • Complete rproc_ops Integrity   │ • Simultaneous 3-Route Concurrency  │
+│ • DA -> VA: SRAM Space 0 / 1     │ • 12-Channel Routing Table Sweep    │
+│ • Rejects 0x3FF80000, DSP RAM,   │ • Invalid Channel Rejection         │
+│   0x40040000 (DRAM, not SRAM)    │ • send_data on all channels         │
+│ • Overflow / Boundary Guards     │ • send_data refuses a full FIFO     │
+│ • DRAM left to core carveouts    │ • last_tx_done / peek_data sweeps   │
+│ • start: boot address program    │ • startup/shutdown flush (bounded)  │
+│ • prepare: remap bit, SRAM clear │ • RX IRQ: drain then clear, bounded │
+│ • rx callback defers to workqueue│ • TX IRQ: armed after every send   │
 └──────────────────────────────────┴─────────────────────────────────────┘
-Total: 68 Test Cases across In-Kernel Drivers (100% PASS)
+Total: 51 Test Cases across In-Kernel Drivers
 ```
 
-Running the test suite on target silicon validates all 68 assertions cleanly:
+Running the test suite on target silicon:
 ```bash
 cat /sys/kernel/debug/kunit/sunxi_rproc/results
-# 1..34
-# ok 1 sunxi_rproc_da_to_va_sram0
+# 1..25
 # ...
-# [PASS] 34/34 passed
 
 cat /sys/kernel/debug/kunit/sun55i_msgbox/results
-# 1..34
-# ok 1 sun55i_msgbox_send_data
+# 1..26
 # ...
-# [PASS] 34/34 passed
 ```
 
 ---
@@ -497,7 +492,7 @@ cat /sys/kernel/debug/kunit/sun55i_msgbox/results
 With `sunxi_rproc.c`, `sun55i-msgbox.c`, and our multi-profile test infrastructure proven on silicon:
 1. The Linux host reliably loads multi-segment ELF binaries across Dedicated SRAM, Shared PubSRAM, and DDR carveouts via Address Translation Tables.
 2. Live debugfs trace streaming eliminates the need for serial cables.
-3. 68 in-kernel KUnit tests protect address translation, bounded interrupt loops, and teardown ordering.
+3. 51 in-kernel KUnit tests (25 remoteproc, 26 message box) protect address translation, bounded interrupt loops, and teardown ordering.
 4. The co-processor delivers proven latencies ranging from **191 µs** (standard VirtIO) down to **13.7 µs** (direct SRAM SPSC).
 
 In **[Part 3](part3_baremetal_firmware_ipc_and_coroutines_intro.md)**, we dive into the co-processor firmware implementation:

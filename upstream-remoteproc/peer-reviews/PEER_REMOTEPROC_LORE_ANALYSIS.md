@@ -137,5 +137,5 @@ By understanding the traps that subsystem maintainers (Mathieu Poirier, Bjorn An
 | **Bjorn Andersson** | Named carveouts wiped out on core reboot. | Register carveouts in `.prepare()` hook, not in `probe()`. |
 | **Krzysztof Kozlowski** | `enum:` across multiple items in `reg-names` or `clock-names`. | Rigid positional items with `- const:` entries only. |
 | **Krzysztof Kozlowski** | Using `--in-reply-to` on major series revisions. | Each version must be a standalone top-level thread on mailing lists. |
-| **Jassi Brar** | `last_tx_done` returns `true` on buffer capacity instead of complete drain. | Must test `count == 0` (empty) to avoid VirtIO ring buffer exhaustion. |
+| **Jassi Brar** | `last_tx_done` returns `true` on buffer capacity instead of complete drain. | Must test `count == 0` (empty) to avoid VirtIO ring buffer exhaustion. **Superseded:** the project uses `count < 8` (FIFO has room) and `send_data()` refuses a full FIFO — `DESIGN_DECISIONS.md` "Message box TX completion". The `count == 0` request came from the v2 Sashiko review (UPSTREAM_LESSONS_LEARNED Lesson 2.1); this Jassi Brar attribution is unverified. |
 | **Jassi Brar** | Stack-allocated pointers passed to `mbox_send_message()`. | Payloads must outlive the call (static storage or driver struct). |

@@ -68,26 +68,25 @@ All three paradigms share a common hardware primitive for inter-core signaling: 
 |      Allwinner T527 Hardware Message Box (0x03003000)       |
 +------------------------------+------------------------------+
 | ARM64 Linux (Cortex-A55)     | XuanTie E906 (RISC-V)        |
-| Bank 0 (ARM Host Bank)       | Bank 1 (E906 / RV Bank)      |
+| ARM bank (host)              | RV bank (E906)               |
 +------------------------------+------------------------------+
-| TX: Chan 1 FIFO (Slot 9)     | RX: Chan 1 FIFO (Slot 9)     |
-| RX: Chan 0 FIFO              | TX: Chan 0 FIFO              |
+| TX/RX: Linux channel 9       | TX/RX: port 2, channel 1     |
+| (one FIFO per direction)     | (one FIFO per direction)     |
 +------------------------------+------------------------------+
 | Host Interrupt Routing:      | Co-Processor Interrupts:     |
-|  - GIC SPI 0   (Bank 0/UIO)  |  - PLIC IRQ 25 / CLIC L17    |
-|  - GIC SPI 205 (TX Done IRQ) |  - Bank 1 Mailbox RX IRQ     |
-|  - GIC SPI 147 (Bank 0 RX)   |                              |
+|  - GIC SPI 0   (ARM bank)    |  - PLIC IRQ 25 / CLIC L17    |
+|  - GIC SPI 205 (TX Done IRQ) |  - RV bank RX IRQ            |
 +------------------------------+------------------------------+
 ```
 
 ### 2.1 The Four-Bank Silicon Discovery (Upstream v3)
 A critical finding during upstream Linux driver bring-up (`v3` series) is that the Allwinner message box contains **four independent hardware banks**:
-* Bank 0: ARM Cortex-A55
-* Bank 1: XuanTie E906 RISC-V
-* Bank 2: HiFi4 DSP
-* Bank 3: CPUS (Allwinner Low-Power Core)
+* ARM (`0x03003000`): Cortex-A55
+* DSP (`0x07120000`): HiFi4 DSP
+* CPUS (`0x07094000`): Allwinner low-power core
+* RV (`0x07136000`): XuanTie E906 RISC-V
 
-Each bank has its own dedicated bus clock and reset line in the Reset & Clock Controller (R-CCU). If software fails to enable the RV bank's clock, writes to the E906's message box are silently dropped by silicon gates! The upstream v3 driver explicitly manages all four banks.
+Each bank has its own bus clock and reset line, spread over the main CCU, the MCU CCU and the R CCU (see the [message box reference](../platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §6). If software fails to enable the RV bank's clock, writes to the E906's message box are silently dropped by silicon gates! The upstream v3 driver explicitly manages all four banks.
 
 Furthermore, upstream `remoteproc` consolidates to a **single bidirectional mailbox channel (`<&msgbox 9>`)**. Because each mailbox channel features a dedicated 8-entry FIFO in both directions, a single channel handle cleanly multiplexes host kicks and coprocessor notifications without race conditions.
 

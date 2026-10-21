@@ -129,11 +129,11 @@ Both the XuanTie E906 (T527) and XuanTie E902 (A733) operate at the **exact same
 | **Execution Efficiency** | **Higher IPC** (~1.4–1.7 DMIPS/MHz) | **Lower IPC** (~0.9–1.1 DMIPS/MHz) |
 | **Base Integer Architecture** | **RV32I** (Standard 32-bit RISC-V) | **RV32E** (Embedded Reduced Register Set) |
 | **Integer Register Count** | **32 Registers** (`x0`–`x31`) | **16 Registers** (`x0`–`x15`) |
-| **Floating Point Unit (FPU)** | **Hardware FPU**: IEEE-754 Single (`F`) & Double (`D`) Precision | **NONE** (Soft-Float only; no `f0`–`f31` float registers) |
+| **Floating Point Unit (FPU)** | **Hardware FPU**: IEEE-754 Single (`F`) only, no `D` (silicon `misa = 0x40901125`, `RV32IMAFCX`) | **NONE** (Soft-Float only; no `f0`–`f31` float registers) |
 | **Multiply / Divide (`M`)** | Hardware integer multiplier & divider | Hardware integer multiplier & divider |
 | **Atomic Instructions (`A`)** | Supported (`lr.w`, `sc.w`, `amoswap`, `amoadd`) | Not implemented |
 | **Compressed (`C`)** | Supported (16-bit instructions) | Supported (16-bit instructions) |
-| **Mandatory Compiler Flags** | `-march=rv32imafdc -mabi=ilp32d` | `-march=rv32emc -mabi=ilp32e` |
+| **Mandatory Compiler Flags** | at most `-march=rv32imafc -mabi=ilp32f` (project builds soft-float `rv32imac` / `ilp32`) | `-march=rv32emc -mabi=ilp32e` |
 
 > [!WARNING]
 > **CRITICAL COMPILER/ABI MISMATCH HAZARD**:
@@ -170,6 +170,7 @@ echo stop > /sys/class/remoteproc/remoteproc0/state
 ```
 
 ### B. Device Tree Nodes (T527 / A523, `sun55i-a523.dtsi`)
+Message box facts (banks, IRQ lines, clocks): [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
 The board DTS adds `memory-region`/`memory-region-names` and sets `status = "okay"` on the remoteproc node.
 ```dts
 msgbox: mailbox@3003000 {
@@ -179,12 +180,20 @@ msgbox: mailbox@3003000 {
           <0x07094000 0x1000>,
           <0x07136000 0x1000>;
     reg-names = "arm", "dsp", "cpus", "rv";
-    clocks = <&ccu CLK_BUS_MSGBOX>;
-    resets = <&ccu RST_BUS_MSGBOX>;
-    interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,
-                 <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>,
-                 <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,
-                 <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+    clocks = <&ccu CLK_BUS_MSGBOX>,
+             <&mcu_ccu CLK_BUS_MCU_DSP_MSGBOX>,
+             <&r_ccu CLK_BUS_R_MSGBOX>,
+             <&mcu_ccu CLK_BUS_MCU_RISCV_MSGBOX>;
+    clock-names = "arm", "dsp", "cpus", "rv";
+    resets = <&ccu RST_BUS_MSGBOX>,
+             <&mcu_ccu RST_BUS_MCU_DSP_MSGBOX>,
+             <&r_ccu RST_BUS_R_MSGBOX>,
+             <&mcu_ccu RST_BUS_MCU_RISCV_MSGBOX>;
+    reset-names = "arm", "dsp", "cpus", "rv";
+    interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>,     /* ARM bank read IRQ */
+                 <GIC_SPI 181 IRQ_TYPE_LEVEL_HIGH>,   /* DSP bank write IRQ */
+                 <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>,   /* CPUS bank write IRQ */
+                 <GIC_SPI 205 IRQ_TYPE_LEVEL_HIGH>;   /* RV bank write IRQ */
     interrupt-names = "arm", "dsp", "cpus", "rv";
     #mbox-cells = <1>;
 };
@@ -207,8 +216,7 @@ rproc: remoteproc@7130000 {
     reset-names = "cfg", "core", "sram", "debug";
     power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
     power-domain-names = "riscv", "sram";
-    mboxes = <&msgbox 8>, <&msgbox 9>;
-    mbox-names = "rx", "tx";
+    mboxes = <&msgbox 9>;    /* one channel, both directions (D11) */
     status = "disabled";
 };
 ```

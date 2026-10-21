@@ -11,7 +11,7 @@
 Embedded hardware rarely stays static. On modern heterogeneous SoCs—like the Allwinner T527 / A527 and A733 pairing octa-core ARM Cortex-A55 cores with dedicated XuanTie E906/E902 RISC-V real-time coprocessors—the exact pin routing, peripheral assignments, and memory maps shift depending on what the board is doing:
 
 * **Flight Stack / Avionics**: Hardware UART0 is dedicated to the Linux debug console, UART2 and SPI0 are isolated and handed directly to the RISC-V core for sub-millisecond sensor acquisition, and onboard I2C sensors (IMU, barometer) are enabled on the Linux bus.
-* **Userspace I/O (UIO) / High-Rate IPC**: The hardware inter-processor mailbox (`msgbox`) and dedicated MCU SRAM blocks are detached from the standard kernel mailbox subsystem and bound to `generic-uio`, allowing userspace ring buffers to poll at microsecond latencies.
+* **Userspace I/O (UIO) / High-Rate IPC**: The hardware inter-processor mailbox (`msgbox`) and dedicated MCU SRAM blocks are detached from the standard kernel mailbox subsystem and bound to the project-only `sun55i-msgbox-uio` driver (which keeps the message box clock and reset on; `generic-uio` does not), allowing userspace ring buffers to poll at microsecond latencies.
 * **Standard Prototyping**: Expansion pins are exposed as standard `/dev/spidev0.0` nodes and userspace GPIO lines.
 
 ### The Monolithic DTB Anti-Pattern

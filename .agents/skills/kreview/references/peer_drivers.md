@@ -22,10 +22,10 @@ This reference document establishes the architectural benchmarks for the **Allwi
 | Feature | Allwinner `sun55i-msgbox.c` | Allwinner Legacy `sun6i-msgbox.c` | ARM MHU `arm_mhu.c` | BCM2835 `bcm2835-mailbox.c` | Upstream Rule / Rationale |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Topology** | 4-port, 12-channel full mesh crossbar | 2-port, 8-channel point-to-point | Multi-channel point-to-point | Single FIFO doorbells | Sun55i links 4 heterogeneous cores (ARM, DSP, CPUS, RISC-V); each sender writes to receiver's bank. |
-| **Pacing (`last_tx_done`)**| `count < 8` (FIFO has room), 1 ms poll; A55 cannot get a TX interrupt (msgbox reference §6b) | remote IRQ status, 5 ms poll | Hardware ACK | FIFO empty bit | Owner decision 2026-10-16. `count == 0` with a 1 ms poll overflowed the 20-slot core queue in bursts. |
-| **Pending Clear Timing** | Clear before FIFO drain | Clear before FIFO drain | Auto-cleared by hardware | Auto-cleared by hardware | Clears TOCTOU race: messages arriving during drain re-assert IRQ pending instead of being blackholed. |
+| **Pacing (`last_tx_done`)**| `count < 8` (FIFO has room); DT selects 1 ms poll (default) or the write IRQ (`allwinner,tx-done-irq`, armed after every send; E906 bank on SPI 205, msgbox reference §6b) | remote IRQ status, 5 ms poll | Hardware ACK | FIFO empty bit | Owner decision 2026-10-16. `count == 0` with a 1 ms poll overflowed the 20-slot core queue in bursts. |
+| **Pending Clear Timing** | Drain FIFO, then clear (D13) | Drain, then clear ("can be cleared only once the FIFO is empty") | Auto-cleared by hardware | Auto-cleared by hardware | The pending bit follows "FIFO not empty" and ignores a clear while a message waits: clearing first raised 2 IRQs per message (measured, D13). A message arriving after the clear sets it again. |
 | **Drain Loop Cap** | `for (i = 0; i < FIFO_MAX; i++)` | Bounded drain loop | Single word | Single word | Unbounded loops in hardirq top-half can cause CPU soft-lockups if remote processor spams FIFO. |
-| **Clocks & Resets** | Host bank only (`CLK_BUS_MSGBOX`) | Single SoC clock/reset | AMBA bus clocks | Bus clocks | Linux must not claim or reset coprocessor hardware banks on unbind. |
+| **Clocks & Resets** | All four banks' bus clocks and resets (D12, reopened 2026-10-16) | Single SoC clock/reset | AMBA bus clocks | Bus clocks | Each bank has its own clock and reset; with only the ARM bank's, the RV bank stays gated and doorbells never reach the E906 (measured, msgbox reference §6). |
 
 ---
 

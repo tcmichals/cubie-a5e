@@ -38,7 +38,7 @@ you will need:
 * **Optional Hardware Probe**: T-Head CK-Link or SEGGER J-Link for instruction-level hardware single-stepping via board test pads.
 
 ### Host Toolchain & Software Prerequisites
-* **RISC-V Bare-Metal Cross-Compiler**: `riscv-none-elf-gcc` / `riscv-none-elf-g++` (RV32IMAFC ABI `ilp32f` or `ilp32d`).
+* **RISC-V Bare-Metal Cross-Compiler**: `riscv-none-elf-gcc` / `riscv-none-elf-g++` (the project builds soft-float, `-march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32`, `firmware/common/common.mk`; the core supports at most `rv32imafc` / `ilp32f`, it has no `D`).
 * **ARM64 Linux Kernel Toolchain**: `aarch64-linux-gnu-gcc` (GCC 13+ recommended).
 * **Device Tree Compiler**: `dtc` (v1.6.0+).
 * **Linux Distribution**: Upstream Linux kernel (6.6+ or 7.x PREEMPT_RT) with `CONFIG_REMOTEPROC=y` and `CONFIG_MAILBOX=y`.
@@ -213,8 +213,7 @@ and boot through dedicated on-chip SRAM:
    During driver probe, `sunxi_rproc.c` binds to the registered hardware blocks:
    ```dts
    rproc: remoteproc@7130000 {
-       compatible = "allwinner,sun55i-a523-rproc",
-                    "allwinner,sun55i-a527-rproc";
+       compatible = "allwinner,sun55i-a523-rproc";
        reg = <0x07130000 0x1000>,
              <0x07280000 0x40000>,
              <0x072C0000 0x40000>,
@@ -222,16 +221,16 @@ and boot through dedicated on-chip SRAM:
        reg-names = "cfg", "r_sram", "r_sram1", "remap";
        clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
                 <&mcu_ccu CLK_MCU_RISCV>,
-                <&mcu_ccu CLK_BUS_MCU_PUBSRAM>,
-                <&mcu_ccu CLK_BUS_MCU_RISCV_MSGBOX>;
-       clock-names = "bus", "core", "sram", "msgbox";
+                <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
+       clock-names = "bus", "core", "sram";
        resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
                 <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
                 <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
-                <&mcu_ccu RST_BUS_MCU_RISCV_MSGBOX>;
-       reset-names = "cfg", "core", "sram", "msgbox";
-       mboxes = <&msgbox 8>, <&msgbox 9>;
-       mbox-names = "rx", "tx";
+                <&mcu_ccu RST_BUS_MCU_RISCV_DEBUG>;
+       reset-names = "cfg", "core", "sram", "debug";
+       power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
+       power-domain-names = "riscv", "sram";
+       mboxes = <&msgbox 9>;    /* one channel, both directions */
        status = "disabled";
    };
    ```

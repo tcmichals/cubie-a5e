@@ -117,7 +117,7 @@ The `ioProcessor` solves this using **Circular RX DMA combined with DesignWare 8
 ## 4. Hardware Doorbell & Inter-Core Synchronization (MSGBOX)
 
 * **Mailbox Controller (`0x03003000` / `0x40030000`):**
-  * **Channel 0 (RISC-V -> Linux):** Written by RISC-V after pushing 128-byte packets to shared SRAM C. Asserts GIC IRQ 147 on ARM Cortex-A55.
+  * **Channel 0 (RISC-V -> Linux):** Written by RISC-V after pushing 128-byte packets to shared SRAM C. Asserts the ARM bank interrupt, GIC SPI 0, on the ARM Cortex-A55 (SPI 147 is `csi3`). Message box facts: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../../../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
   * **Channel 1 (Linux -> RISC-V):** Written by Linux after dispatching PCIe TLPs. Asserts PLIC IRQ 25 on XuanTie E906.
 * **Memory Fences:**
   * Every queue update executes an explicit RISC-V memory barrier:

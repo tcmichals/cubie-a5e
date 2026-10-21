@@ -79,8 +79,8 @@ Offsets from the bank base; `OFF(n) = 0x100 * n`. **[vendor] [ours]**
   its **write** interrupt for the A55 goes to the A55 on that bank's own GIC line (§1 table:
   DSP SPI 181, CPUS SPI 174, RV SPI 205). **[manual Table 2-15] [silicon §6b]**
 - **The vendor DT has these lines wrong** (it lists SPI 0, 1, 181, 174 for arm, dsp, cpus, rv);
-  we copied it. Correct: **SPI 0, 181, 174, 205**. Fixed in the 7.1 dtsi and binding example
-  (2026-10-17, uncommitted). Our 7.1 driver requests SPI 0, plus the three remote bank lines
+  we copied it. Correct: **SPI 0, 181, 174, 205**. Fixed in the dtsi and binding example
+  (2026-10-17, `98e26bbd53e6` `f441eb024f6e`, in v3). Our driver requests SPI 0, plus the three remote bank lines
   only when the DT has `allwinner,tx-done-irq`. **[ours]**
 - The write status is **latched**: it sets while free slots ≥ threshold and stays set after the
   FIFO fills again until written 1 (the clear only takes while the condition is false). Enabling
@@ -296,8 +296,7 @@ firmware, which leaves kicks in the FIFO; it must be rebuilt into the image.
 
 | User | Interrupts | TX completion | RX |
 |---|---|---|---|
-| Linux `sun55i-msgbox` (v3 series as of 2026-10-15) | ARM bank only (SPI 0) | poll `count == 0`, 1 ms | clear pending, then drain ≤ 8 under the lock |
-| Linux `sun55i-msgbox` (7.1, 2026-10-17, uncommitted) | SPI 0; + the write-IRQ line of each bank in use (SPI 205 for the E906) with `allwinner,tx-done-irq` | timer: poll `count < 8`, 1 ms; ISR: write IRQ armed after every send (OMAP model) | drain ≤ 8, then clear pending |
+| Linux `sun55i-msgbox` (v3 series = 7.1, `b957de4d382e`, 2026-10-17) | SPI 0; + the write-IRQ line of each bank in use (SPI 205 for the E906) with `allwinner,tx-done-irq` | timer: poll `count < 8`, 1 ms; ISR: write IRQ armed after every send (OMAP model) | drain ≤ 8, then clear pending |
 | Vendor `sunxi-msgbox` | all four bank lines (vendor DT numbers: wrong for the remote banks) | poll 5 ms, or write IRQ threshold 1 | drain until empty (10 ms time limit), then clear pending |
 | E906 firmware HAL | none (polls) | doorbell waits for FIFO space | drains every queued doorbell each pass |
 | UIO profile (`sun55i-msgbox-uio`) | ARM bank (SPI 0) to userspace | E906 sends a doorbell only when Linux's FIFO is empty | userspace drains, clears pending, unmasks |
@@ -310,7 +309,7 @@ firmware, which leaves kicks in the FIFO; it must be rebuilt into the image.
 2. ~~Does the E906's *read* interrupt also reach Linux?~~ No: it is the E906's own interrupt 17
    (`RISCV_MSGBOX_RISCV`, manual Table 2-16); the A55 only gets the bank's write IRQ.
 3. Is the 1 ms poll the limit for 16-in-flight rpmsg throughput? Needs kernel tracing
-   (`txdone_hrtimer` count).
+   (`txdone_hrtimer` count). After v3 (TODO §5.6a P1).
 4. ~~D13: clear the read pending bit before or after draining?~~ Measured 2026-10-16: our driver
    clears it **before** draining, which the hardware ignores while the FIFO is not empty, so the
    interrupt fires a second time: **20,000 SPI 0 interrupts for 10,000 messages** (ping and stress

@@ -26,7 +26,7 @@ Early bring-up efforts inherited assumptions from older chips (Allwinner D1, V85
 | **SRAM Space 0 Mapping** | DA `0x40000000` $\rightarrow$ PA `0x07280000` | **DA `0x3FFC0000`–`0x3FFFFFFF` $\rightarrow$ PA `0x07280000` (256 KB)** | Vendor DTS `reg = <0x07280000 0x40000>`, live probe |
 | **SRAM Space 1 Mapping** | DA `0x40040000` $\rightarrow$ PA `0x072C0000` | **DA `0x40000000`–`0x4003FFFF` $\rightarrow$ PA `0x072C0000` (256 KB)** | Continuous 512 KB SRAM window: `0x3FFC0000`–`0x40040000` |
 | **DRAM Space Mapping** | Offset translation | **DA `0x40040000`+ $\rightarrow$ Host PA `0x40040000`+ (1:1 transparent)** | Co-processor bus matrix transparent DRAM bridge |
-| **RemoteProc Doorbell** | Mailbox Channel 0 or 4 | **Mailbox Channel 8 (`mboxes = <&msgbox 8>`)** | Allwinner BSP `sun55iw3p1.dtsi` |
+| **RemoteProc Doorbell** | Mailbox Channel 0 or 4 | **One ARM ↔ E906 channel, both directions.** Vendor BSP uses channel 8 (`<&msgbox 8>`); our driver uses channel 9 (`mboxes = <&msgbox 9>`, D11) | Allwinner BSP `sun55iw3p1.dtsi`; `upstream-remoteproc/DESIGN_DECISIONS.md` D11 |
 | **DSP Doorbell Channel**| Shared with RISC-V | **Mailbox Channel 4 (`mboxes = <&msgbox 4>`)** | Allwinner DSP BSP `sun60iw1`/`sun55iw3` |
 | **ITCM / DTCM** | Present at `0x00000000` / `0x00080000` | **DOES NOT EXIST IN SILICON** (Immediate bus abort) | Live memory probe; setting `STA_ADD` to 0x0 locks core |
 
@@ -188,15 +188,15 @@ reserved-memory {
 | **Stop sequence** | assert mod rst → mod/cfg clk off → assert cfg/dbg rst → pubsram clk off → `pm_runtime_put_sync()` | assert core rst in `stop()`, rest in `unprepare()` | OK |
 | **Core clock rate** | not set in the E906 driver (DSP node uses `clock-frequency`) | not set | OK |
 | **SRAM** | Space 0/1 as `no-map` reserved-memory via `memory-region` | Space 0/1 as `reg` entries | Reviewers may prefer reserved-memory; decide |
-| **Remap reg `0x07010364`** | owned by the **DSP** driver (`sram-for-cpux`, bit 0); no vendor driver touches bit 1 | E906 driver maps it and sets bit 1 | ❌ Shared register: needs one owner (syscon/CCU), not a raw `reg` in the E906 node |
-| **Memory-region names** | `vdev0buffer`, `vdev0vring0`, `vdev0vring1` (names the remoteproc core looks up) | `vram`, `dram`, `trace` | Decide: standard names would let the core place vrings |
-| **Mailbox channels** | one channel (8, `"arm-kick"`), message = vq id, rx handles that vq only | two channels (8 rx, 9 tx), rx notifies both vqs | Keep two for v3 (firmware depends on it); note |
+| **Remap reg `0x07010364`** | owned by the **DSP** driver (`sram-for-cpux`, bit 0); no vendor driver touches bit 1 | E906 driver maps it and sets bit 1 | ✅ Decided (D9): keep sharing it; the E906 driver read-modify-writes bit 1 only; move to a syscon/CCU only if maintainers ask |
+| **Memory-region names** | `vdev0buffer`, `vdev0vring0`, `vdev0vring1` (names the remoteproc core looks up) | `vram`, `dram`, `trace` | ✅ Decided (D10): keep the positional `vram`/`dram`/`trace` set (index 0 = DMA pool) |
+| **Mailbox channels** | one channel (8, `"arm-kick"`), message = vq id, rx handles that vq only | one channel (9, no `mbox-names`), rx notifies both vqs | ✅ Decided (D11) in `90a703569570` `cac85cc320f8` `64c3c511452a` |
 | **Rx path** | `queue_work()` from `rx_callback`, `rproc_vq_interrupt()` in the work | same (fixed in `23bdbbde39b0`) | ✅ |
 | **Kick** | `tx_block = false`, `knows_txdone` unset, heap payload freed in `tx_done` | `tx_block = false`, `knows_txdone = false`, `static const` payload | ✅ equivalent |
 | **Teardown** | `rproc_del()` → free mailbox → `destroy_workqueue()` | `rproc_del()` → free mailbox → `cancel_work_sync()` | ✅ |
-| **Msgbox clocks/resets** | ARM bank clock + reset only | ARM bank clock + reset only | ✅ Aligned in `36f04f6e046b` `acbe383ec84c` |
-| **Msgbox `last_tx_done`** | "FIFO not full" (5 ms poll), or write-IRQ `txdone_irq` | "FIFO empty" (`count == 0`, 1 ms poll) | Throughput difference; revisit after v3 with a benchmark |
-| **Msgbox IRQ pending** | cleared **after** draining ("can be cleared only once the FIFO is empty") | cleared **before** draining | Probably one extra IRQ per message; check `/proc/interrupts` on the board |
+| **Msgbox clocks/resets** | ARM bank clock + reset only | all four banks' clocks + resets (the RV bank must be clocked for doorbells to reach the E906) | ✅ D12 reopened; board-tested 2026-10-17 in `b957de4d382e` `f441eb024f6e` |
+| **Msgbox `last_tx_done`** | "FIFO not full" (5 ms poll), or write-IRQ `txdone_irq` | "FIFO has room" (`count < 8`); DT selects 1 ms poll (default) or write IRQ (`allwinner,tx-done-irq`) | ✅ Decided 2026-10-16, board-tested 2026-10-17 (`98e26bbd53e6` `b957de4d382e`) |
+| **Msgbox IRQ pending** | cleared **after** draining ("can be cleared only once the FIFO is empty") | drains the FIFO, **then** clears the pending bit (D13) | ✅ Board-tested 2026-10-17: one SPI 0 IRQ per message (`b957de4d382e`) |
 
 ---
 

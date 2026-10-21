@@ -293,7 +293,7 @@ ping_shm -n 100000
 ---
 
 ### App 5: `testPingRpmsg` (Standard Linux VirtIO RPMsg over Coherent DDR Buffers)
-* **Purpose**: Standard Linux kernel RPMsg framework communication (`virtio_rpmsg_bus`) using hardware Mailbox Channel 8 doorbells.
+* **Purpose**: Standard Linux kernel RPMsg framework communication (`virtio_rpmsg_bus`) using one hardware mailbox channel for doorbells in both directions (Linux channel 9, `mboxes = <&msgbox 9>`; E906 `MsgBox::Channel1`).
 * **Functionality**:
   - RemoteProc resource table declares `RSC_VDEV` (VirtIO ID 7) with 2 vrings (16 descriptors each) using `.da = FW_RSC_ADDR_ANY`.
   - Allocated dynamically by Linux kernel (`dma_alloc_coherent`) in **physical DDR DRAM** (`0xf2f80000` Vring 0, `0xf2f82000` Vring 1, `0xf2f84000` payload buffers).

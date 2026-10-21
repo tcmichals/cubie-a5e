@@ -209,28 +209,31 @@ On the Allwinner T527 and A523/A527, `REMAP_CTRL_REG` controls memory bridge rou
 | Bit Field | Name | Reset | Hardware Meaning & Routing |
 | :--- | :--- | :--- | :--- |
 | **Bit 0** | `MCU_RAM_REMAP` | `0` | **`0`**: DSP local memory (`0x00020000` and `0x00400000`–`0x0044FFFF`) is private and exclusive to the Cadence HiFi4 DSP.<br>**`1`**: DSP memory window is visible to CPUX to exchange IPC messages with the DSP.<br>*(E906 driver leaves Bit 0 as `0` to prevent any DSP collisions).* |
-| **Bit 1** | `SRAMA3_2_RAM_REMAP` | `0` | **`0`**: `SRAMA3_2` is not bridged for `MCU_SYS`.<br>**`1`**: `SRAMA3_2` (`0x07280000` / `0x072c0000`) is bridged into `MCU_SYS`, appearing at core DA **`0x40040000`**. |
+| **Bit 1** | `SRAMA3_2_RAM_REMAP` | `0` | **`0`**: `SRAMA3_2` is not bridged for `MCU_SYS`.<br>**`1`**: `SRAMA3_2` (`0x07280000` / `0x072c0000`) is bridged into `MCU_SYS`: SRAM Space 1 (`0x072c0000`) appears at core DA **`0x40000000`** (DA `0x40040000`+ is DRAM 1:1). |
 
 #### 2. Device Tree Node Definition (`sun55i-a523.dtsi`)
-The clean Device Tree node connects the remoteproc driver exclusively to E906 resources (no DSP memory or PUBSRAM clocks/resets):
+The Device Tree node as in `sun55i-a523.dtsi` (v3):
 
 ```dts
 rproc: remoteproc@7130000 {
-	compatible = "allwinner,sun55i-a523-rproc",
-	             "allwinner,sun55i-a527-rproc";
+	compatible = "allwinner,sun55i-a523-rproc";
 	reg = <0x07130000 0x1000>,      /* "cfg": E906 CFG & boot-address registers */
-	      <0x07280000 0x40000>,     /* "r_sram": SRAM_A3 Space 0 (256 KB on A523, 512 KB on T527) */
-	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM_A3 Space 1 (256 KB on A523, 512 KB on T527) */
-	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG (0x07010364 on A523, 0x07140364 on T527) */
+	      <0x07280000 0x40000>,     /* "r_sram": SRAM A3 Space 0 (E906 DA 0x3FFC0000) */
+	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM A3 Space 1 (E906 DA 0x40000000) */
+	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG, bit 1 only */
 	reg-names = "cfg", "r_sram", "r_sram1", "remap";
 	clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
-	         <&mcu_ccu CLK_MCU_RISCV>;
-	clock-names = "bus", "core";
+	         <&mcu_ccu CLK_MCU_RISCV>,
+	         <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
+	clock-names = "bus", "core", "sram";
 	resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
-	         <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
-	reset-names = "cfg", "core";
-	mboxes = <&msgbox 0>, <&msgbox 1>;
-	mbox-names = "rx", "tx";
+	         <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
+	         <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
+	         <&mcu_ccu RST_BUS_MCU_RISCV_DEBUG>;
+	reset-names = "cfg", "core", "sram", "debug";
+	power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
+	power-domain-names = "riscv", "sram";
+	mboxes = <&msgbox 9>;           /* one channel, both directions (D11) */
 	status = "disabled";
 };
 ```

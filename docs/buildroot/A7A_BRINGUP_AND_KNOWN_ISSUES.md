@@ -9,7 +9,7 @@ This document provides a comprehensive technical reference for the **Radxa Cubie
 | Subsystem | Specification | Notes |
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big) + 6× Cortex-A55 (LITTLE) DynamIQ Cluster |
-| **Co-Processor** | XuanTie E906 RISC-V (32-bit RV32IMAFCP) | Deterministic real-time I/O & flight control coprocessor |
+| **Co-Processor** | XuanTie E902 RISC-V (32-bit RV32EMC) | Deterministic real-time I/O & flight control coprocessor |
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 2400 MHz) | Multi-PState dynamic hardware calibration via `boot0` |
 | **Interrupts** | ARM GICv3 (GIC-600) | Distributor: `0x03400000`, Redistributors: `0x03460000` |
 | **Boot Chain** | `BROM` $\rightarrow$ `boot0` (SRAM) $\rightarrow$ `BL31` $\rightarrow$ `U-Boot 2018.07` | Packaged as 16 MB binary blob `radxa_a733_bootloader.bin` |

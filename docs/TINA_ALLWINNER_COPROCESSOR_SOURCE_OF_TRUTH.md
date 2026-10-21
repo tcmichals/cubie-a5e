@@ -275,24 +275,11 @@ A critical architectural hazard in heterogeneous embedded design is **clock cont
 
 ### 5.3 Hardware Message Box (Mailbox) Registers
 
-Physical bases: ARM = `0x03003000`, DSP = `0x07120000`, CPUS = `0x07094000`, RISC-V = `0x07136000`.  
-Register offset address calculation formula for remote core $n$ and channel $p \in \{0, 1, 2, 3\}$:
-$$\text{Address} = \text{CoreBase} + \text{RegOffset} + (n \times 0x100) + (p \times 0x4)$$
+Physical bases: ARM = `0x03003000`, DSP = `0x07120000`, CPUS = `0x07094000`, RISC-V = `0x07136000`.
 
-| Register Offset | Register Name | Type | Description |
-| :--- | :--- | :--- | :--- |
-| `0x20 + n*0x100` | `MSGBOX_RD_IRQ_EN_REG` | RW | Read Interrupt Enable (Bit $2p$ = 1 enables IRQ for Channel $p$) |
-| `0x24 + n*0x100` | `MSGBOX_RD_IRQ_STA_REG`| W1C | Read Interrupt Status (Bit $2p$ = 1 indicates message pending; write 1 to clear) |
-| `0x30 + n*0x100` | `MSGBOX_WR_IRQ_EN_REG` | RW | Write FIFO Not Full Interrupt Enable |
-| `0x34 + n*0x100` | `MSGBOX_WR_IRQ_STA_REG`| W1C | Write FIFO Not Full Interrupt Status |
-| `0x50 + n*0x100 + p*0x4`| `MSGBOX_FIFO_STA_REG`| RO | FIFO Full Flag (Bit 0: `1` = FIFO Full, `0` = Space Available) |
-| `0x60 + n*0x100 + p*0x4`| `MSGBOX_MSG_STA_REG` | RO | Message Count (Bits [3:0] = Number of unread words in FIFO, 0–8; vendor `MSG_NUM_MASK 0xF`) |
-| `0x70 + n*0x100 + p*0x4`| `MSGBOX_MSG_REG` | RW | **32-Bit FIFO Data Port** (Read pops from FIFO; write pushes to FIFO) |
-
-#### Routing Index $n$ Matrix (`to_coef_n[local][remote]`):
-* **Linux $\leftrightarrow$ RISC-V**: $n = 2$
-* **Linux $\rightarrow$ DSP**: $n = 0$
-* **DSP $\rightarrow$ Linux**: $n = 1$
+Registers, bit layout, routing (`to_coef_n`) and interrupt lines are in the single message box
+reference: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md)
+§2–§4. (The copy that was here had the write-IRQ bits and the DSP routing wrong.)
 
 ---
 

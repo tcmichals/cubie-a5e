@@ -41,7 +41,7 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
    - **FAIL** if `rproc_vq_interrupt()` or any sleeping function is invoked directly in `rx_callback`. It must be deferred to an ordered workqueue (`queue_work(priv->workqueue, &priv->vq_work)`).
 3. **SMP Race & Hardirq Locking**:
    - Are shared hardware registers accessed in ISR guarded by `spin_lock_irqsave()`?
-   - Are TOCTOU windows closed by acknowledging the hardware pending bit BEFORE draining FIFOs?
+   - Is the hardware pending bit cleared only AFTER the FIFO is drained? The hardware ignores the clear while the FIFO is not empty, so clearing first fires the IRQ twice (D13; [msgbox reference](../../../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §8 Q4).
    - Are FIFO drain loops capped at `FIFO_MAX` to prevent CPU soft-lockups?
 4. **DMA & Cache Attribute Coherency**:
    - Are trace and DRAM buffers mapped with matching attributes (`MEMREMAP_WC`) to prevent ARM64 Write-Back vs Write-Combining aliasing?

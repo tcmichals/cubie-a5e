@@ -284,7 +284,7 @@ The owner's design decisions (what we deliberately keep even when a review disag
   2. The client sets `cl.knows_txdone = false` and `cl.tx_block = false`, and never calls `mbox_client_txdone()`.
   3. Payloads must outlive `mbox_send_message()` because the core queues the pointer: use immutable `static const u32` values, one per vring (no shared writable `kick_msg`).
   4. The Allwinner vendor BSP uses the same client settings (`knows_txdone` unset, `tx_block = false`).
-* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller, not `knows_txdone = true` in the client. Done 2026-10-16 (DESIGN_DECISIONS "Message box TX completion"): `last_tx_done()` = `count < 8`, optional write IRQ while full.
+* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller, not `knows_txdone = true` in the client. Done 2026-10-16 (DESIGN_DECISIONS "Message box TX completion"): `last_tx_done()` = `count < 8`; with `allwinner,tx-done-irq` the write IRQ is armed after every send (OMAP model, revised 2026-10-17).
 
 ---
 
@@ -384,7 +384,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 * 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
   1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
   2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
-  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` (decision 2026-10-16: `count < 8`, DT selects timer or ISR when full), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` (decision 2026-10-16: `count < 8`, DT selects timer or ISR; the ISR arms the write IRQ after every send), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
   4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
   5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
 * 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.

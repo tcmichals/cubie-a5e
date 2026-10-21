@@ -40,9 +40,9 @@ The Allwinner T527 / A527 is an advanced, heterogeneous octa-core ARM applicatio
 |  |  - 128 KB HiFi4 DSP Local RAM (PubSRAM C @ 0x00020000) [DSP Local Instruction/Data Memory]    |  |
 |  |  - 160 KB Secure SRAM A2 (0x00044000) [TF-A BL31 / OP-TEE / PSCI 1.1]                       |  |
 |  |  - 128 KB DSP Secondary Local Memory (0x00400000 IRAM, 0x00420000/0x00440000 DRAM)          |  |
-|  |  - 512–1024 KB Dual-Bank SRAM A3 (Exclusive E906 RISC-V Firmware Space):                   |  |
-|  |    * SRAM Space 0: 256/512 KB @ 0x07280000/0x07200000 (Core DA 0x3FFC0000)                  |  |
-|  |    * SRAM Space 1: 256/512 KB @ 0x072c0000/0x07280000 (Core DA 0x40000000)                  |  |
+|  |  - 512 KB Dual-Bank SRAM A3 (Exclusive E906 RISC-V Firmware Space):                         |  |
+|  |    * SRAM Space 0: 256 KB @ 0x07280000 (Core DA 0x3FFC0000)                                 |  |
+|  |    * SRAM Space 1: 256 KB @ 0x072c0000 (Core DA 0x40000000)                                 |  |
 |  |      --> Switchable via REMAP_CTRL_REG (Offset 0x364, Bit 1) into MCU_SYS                   |  |
 |  +---------------------------------------------------------------------------------------------+  |
 |                                                                                                   |
@@ -71,17 +71,17 @@ The Allwinner T527 features multiple discrete physical SRAM pools distributed ac
 | **`DSP Local IRAM`** | `0x00400000`–`0x0040FFFF` | 64 KB | DSP / System | HiFi4 Instruction RAM | ❌ **FORBIDDEN (DSP Local)** |
 | **`DSP Local DRAM0`**| `0x00420000`–`0x00427FFF` | 32 KB | DSP / System | HiFi4 Data RAM Bank 0 | ❌ **FORBIDDEN (DSP Local)** |
 | **`DSP Local DRAM1`**| `0x00440000`–`0x00447FFF` | 32 KB | DSP / System | HiFi4 Data RAM Bank 1 | ❌ **FORBIDDEN (DSP Local)** |
-| **`SRAM Space 0`** | `0x07280000` / `0x07200000` | 256/512 KB | `MCU_SYS` (E906) | Zero-wait-state MCU SRAM Space 0 (**E906 Core DA `0x3FFC0000`**). Primary firmware pool. | ✅ **YES (Primary E906 Pool)** |
-| **`SRAM Space 1`** | `0x072c0000` / `0x07280000` | 256/512 KB | Shared / System | Zero-wait-state MCU SRAM Space 1 (**E906 Core DA `0x40000000`**). Accessible when `REMAP[1] = 1`. | ✅ **YES (Secondary E906 Pool)** |
+| **`SRAM Space 0`** | `0x07280000` | 256 KB | `MCU_SYS` (E906) | Zero-wait-state MCU SRAM Space 0 (**E906 Core DA `0x3FFC0000`**). Primary firmware pool. | ✅ **YES (Primary E906 Pool)** |
+| **`SRAM Space 1`** | `0x072c0000` | 256 KB | Shared / System | Zero-wait-state MCU SRAM Space 1 (**E906 Core DA `0x40000000`**). Accessible when `REMAP[1] = 1`. | ✅ **YES (Secondary E906 Pool)** |
 
 > [!NOTE]
 > On the A527 variant (`sun55iw3p1`), `SRAM A3` is partitioned in the device tree as two 256 KB slices:
 > - `r_sram` @ `0x07280000` (256 KB) $\rightarrow$ Core DA `0x3FFC0000`
 > - `r_sram1` @ `0x072c0000` (256 KB) $\rightarrow$ Core DA `0x40000000`
 > 
-> On the T527 variant (`sun60iw1p1`), `SRAM A3` is partitioned as two 512 KB slices:
-> - `r_sram` @ `0x07200000` (512 KB) $\rightarrow$ Core DA `0x3FFC0000`
-> - `r_sram1` @ `0x07280000` (512 KB) $\rightarrow$ Core DA `0x40000000`
+> The T527 and A527 are the same `sun55iw3` die: the layout above is the one verified on the
+> Cubie A5E silicon. (Earlier versions of this page listed `0x07200000` / `0x07280000` 512 KB
+> slices for "T527 (`sun60iw1p1`)"; `sun60iw1p1` is a different SoC's vendor dtsi, not the T527.)
 
 > [!IMPORTANT]
 > ### HARDWARE TRUTH: NO TCM & NO 0x00020000 FOR E906
@@ -89,8 +89,8 @@ The Allwinner T527 features multiple discrete physical SRAM pools distributed ac
 > 2. **0x00020000 is HiFi4 DSP Memory**: Silicon is wired directly to the Cadence HiFi4 DSP as its local Instruction/Data RAM. E906 execution here causes fatal bus collisions with the DSP.
 > 3. **0x00044000 is OP-TEE / TrustZone**: Firewalled for secure boot and OP-TEE.
 > 4. **E906 Belongs Exclusively in On-Chip SRAM**:
->    - Primary pool: `0x3FFC0000` (`r_sram`, 256–512 KB)
->    - Secondary pool: `0x40000000` (`r_sram1`, 256–512 KB via `REMAP_CTRL_REG[1] = 1`)
+>    - Primary pool: `0x3FFC0000` (`r_sram`, 256 KB)
+>    - Secondary pool: `0x40000000` (`r_sram1`, 256 KB via `REMAP_CTRL_REG[1] = 1`)
 >    - DDR Carveouts: `0x48100000` for streaming VirtIO RPMsg payload buffers.
 
 ---
@@ -186,13 +186,13 @@ Because the ARM Cortex-A55, XuanTie RISC-V, and Tensilica HiFi4 DSP connect to t
 
 Full reference: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
 
-The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every host channel raises the **ARM bank interrupt, GIC SPI 0** (verified on silicon). The other banks' GIC lines (vendor `sun55iw3p1.dtsi`) only signal messages pending in those processors' own banks; Linux does not request them.
+The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every message for Linux raises the **ARM bank read interrupt, GIC SPI 0** (verified on silicon). The remote banks' lines that reach the A55 are their **write** (TX-done) interrupts, used only with `allwinner,tx-done-irq`. The vendor `sun55iw3p1.dtsi` lists these lines wrong; the values below are from the manual (Table 2-15) and silicon. Channel routing and registers: see the reference above.
 
-| Host Channels | Remote Processor | Remote Bank | Remote Bank GIC Line | Co-Processor Interrupt |
-| :--- | :--- | :--- | :--- | :--- |
-| **0–3** | CPUS (Power Core) | `0x07094000` | SPI 181 | CPUS IRQ 12 |
-| **4–7** | Cadence HiFi4 DSP | `0x07120000` | SPI 1 | DSP IRQ 7 |
-| **8–11** | XuanTie RISC-V | `0x07136000` | SPI 174 | PLIC IRQ 25 / Core Local IRQ |
+| Host Channels | Remote Processor | Remote Bank | Remote Bank Write IRQ (to A55) |
+| :--- | :--- | :--- | :--- |
+| **0–3** | CPUS (Power Core) | `0x07094000` | SPI 174 |
+| **4–7** | Cadence HiFi4 DSP | `0x07120000` | SPI 181 |
+| **8–11** | XuanTie RISC-V | `0x07136000` | SPI 205 |
 
 ---
 
@@ -207,9 +207,9 @@ To utilize `SRAM Space 1` and boot firmware safely, the Linux RemoteProc driver 
 
 1. DRIVER PROBE:
    ├── Map "cfg" register block (0x07130000)
-   ├── Map "r_sram" memory window (0x07280000 / 0x07200000 - SRAM Space 0)
-   ├── Map "r_sram1" memory window (0x072c0000 / 0x07280000 - SRAM Space 1)
-   └── Map "remap" control register (0x07010364 / 0x07140364)
+   ├── Map "r_sram" memory window (0x07280000 - SRAM Space 0)
+   ├── Map "r_sram1" memory window (0x072c0000 - SRAM Space 1)
+   └── Map "remap" control register (0x07010364)
 
 2. CORE PREPARATION (sunxi_rproc_prepare):
    ├── Deassert CCU bus & configuration resets
@@ -221,12 +221,12 @@ To utilize `SRAM Space 1` and boot firmware safely, the Linux RemoteProc driver 
    └── Cleanly zero out SRAM memory banks (memset_io) to eliminate parity noise
 
 3. ELF SEGMENT LOADING (sunxi_rproc_da_to_va):
-   ├── DA 0x3FFC0000..0x3FFFFFFF ─────────> Copies to SRAM Space 0 (0x07280000 / 0x07200000)
-   ├── DA 0x40000000..0x4003FFFF ─────────> Copies to SRAM Space 1 (0x072c0000 / 0x07280000)
+   ├── DA 0x3FFC0000..0x3FFFFFFF ─────────> Copies to SRAM Space 0 (0x07280000)
+   ├── DA 0x40000000..0x4003FFFF ─────────> Copies to SRAM Space 1 (0x072c0000)
    ├── DA < 0x00020000 (BROM)    ─────────> REJECTED (-EINVAL)
    ├── DA 0x00020000..0x0003FFFF (DSP) ───> REJECTED (-EINVAL)
    ├── DA 0x00040000..0x00067FFF (OP-TEE)-> REJECTED (-EINVAL)
-   └── DA 0x48100000+            ─────────> Copies to DDR DMA Reserved Memory Pool
+   └── DA 0x40040000+ (DRAM 1:1) ─────────> Not in da_to_va(): the remoteproc core resolves it from the carveouts
 
 4. CORE LAUNCH (sunxi_rproc_start):
    ├── Write ELF Entry Address (0x3FFC0000) to E906_STA_ADD_REG (0x07130204)
@@ -261,24 +261,27 @@ hifi4_rproc: hifi4_rproc@7140364 {
 };
 
 rproc: remoteproc@7130000 {
-	compatible = "allwinner,sun55i-a523-rproc",
-	             "allwinner,sun55i-a527-rproc";
+	/* As in linux-cubie sun55i-a523.dtsi (v3) */
+	compatible = "allwinner,sun55i-a523-rproc";
 	reg = <0x07130000 0x1000>,      /* "cfg": E906 CFG & boot-address registers */
-	      <0x07280000 0x40000>,     /* "r_sram": SRAM_A3 Space 0 (256 KB on A523, 512 KB on T527) */
-	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM_A3 Space 1 (256 KB on A523, 512 KB on T527) */
-	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG (0x07010364 on A523, 0x07140364 on T527) */
+	      <0x07280000 0x40000>,     /* "r_sram": SRAM A3 Space 0 (E906 DA 0x3FFC0000) */
+	      <0x072c0000 0x40000>,     /* "r_sram1": SRAM A3 Space 1 (E906 DA 0x40000000) */
+	      <0x07010364 0x4>;         /* "remap": REMAP_CTRL_REG, bit 1 only */
 	reg-names = "cfg", "r_sram", "r_sram1", "remap";
 	clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
-	         <&mcu_ccu CLK_MCU_RISCV>;
-	clock-names = "bus", "core";
+	         <&mcu_ccu CLK_MCU_RISCV>,
+	         <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
+	clock-names = "bus", "core", "sram";
 	resets = <&mcu_ccu RST_BUS_MCU_RISCV_CFG>,
-	         <&mcu_ccu RST_BUS_MCU_RISCV_CORE>;
-	reset-names = "cfg", "core";
-	mboxes = <&msgbox 0>, <&msgbox 1>;
-	mbox-names = "rx", "tx";
+	         <&mcu_ccu RST_BUS_MCU_RISCV_CORE>,
+	         <&mcu_ccu RST_BUS_MCU_PUBSRAM>,
+	         <&mcu_ccu RST_BUS_MCU_RISCV_DEBUG>;
+	reset-names = "cfg", "core", "sram", "debug";
+	power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
+	power-domain-names = "riscv", "sram";
+	mboxes = <&msgbox 9>;           /* one channel, both directions (D11) */
 	status = "disabled";
 };
-```
 ```
 
 ---
@@ -288,7 +291,7 @@ rproc: remoteproc@7130000 {
 1. **`MCU_SYS` is the unified heterogeneous domain** containing both the XuanTie RISC-V and Tensilica HiFi4 DSP cores.
 2. **`REMAP_CTRL_REG` (Offset `0x364`) is the key hardware switch**:
    - Bit 0 (`MCU_RAM_REMAP`): Controls whether DSP local RAM (`0x00400000`–`0x0044FFFF`) is shared with system CPUX.
-   - Bit 1 (`SRAMA3_2_RAM_REMAP`): Controls whether `SRAMA3_2` (`0x07280000` / `0x072c0000`, 512 KB / 256 KB) is bridged into `MCU_SYS`.
+   - Bit 1 (`SRAMA3_2_RAM_REMAP`): Controls whether `SRAMA3_2` (`0x07280000` / `0x072c0000`, 256 KB each) is bridged into `MCU_SYS`.
 3. **`SRAM Space 1` can be utilized for**:
    - High-throughput zero-wait-state RISC-V execution at DA `0x40000000`.
    - Dedicated HiFi4 DSP workspace.

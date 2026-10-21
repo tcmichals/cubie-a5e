@@ -1077,9 +1077,9 @@ The Cadence Tensilica HiFi4 Audio DSP on the Allwinner T527 shares the central h
 
 ### 11.1 Hardware Routing Architecture for HiFi4 DSP
 
-In the Allwinner 4-port Message Box controller:
+In the Allwinner 4-port Message Box controller (full reference: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md); `0x07094000` is the CPUS bank, not the DSP):
 - **ARM Host Base Address**: `0x03003000`
-- **DSP Local Base Address**: `0x07094000` (Local Port 0)
+- **DSP Local Base Address**: `0x07120000` (Local Port 0)
 - **ARM Destination Port for DSP**: `0x03003000 + 0x100` (ARM Port 1)
 - **Linux Mailbox Controller Channels**:
   * **Channel 4**: Host ARM $\rightarrow$ HiFi4 DSP (Linux TX $\rightarrow$ DSP RX FIFO 0)
@@ -1093,7 +1093,7 @@ In the Allwinner 4-port Message Box controller:
 |   Linux Mailbox Driver                                 sunxi_msgbox Driver    |
 |                                                                               |
 |   Linux Tx (Ch 4) ------> Writes to DSP Port 0 -----> DSP Rx (Ch 0)          |
-|                           [0x07094070]                 [0x07094070]           |
+|                           [0x07120070]                 [0x07120070]           |
 |                                                                               |
 |   Linux Rx (Ch 5) <------ Reads ARM Port 1 <-------- DSP Tx (Ch 1)          |
 |   [0x03003174]            [0x03003174]                 [0x03003174]           |
@@ -1188,7 +1188,7 @@ The Allwinner T527 hardware Message Box features **independent hardware ports an
 
 | Processing Core | Local Base | Local Rx Ch | Linux Tx Ch | Remote ARM Tx Base | Linux Rx Ch | Debugfs Test Node |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Cadence HiFi4 DSP** | `0x07094000` (Port 0) | Ch 0 | **Ch 4** | `0x03003174` (ARM Port 1) | **Ch 5** | `/sys/kernel/debug/mailbox-test-dsp/message` |
+| **Cadence HiFi4 DSP** | `0x07120000` (Port 0) | Ch 0 | **Ch 4** | `0x03003174` (ARM Port 1) | **Ch 5** | `/sys/kernel/debug/mailbox-test-dsp/message` |
 | **XuanTie E906 RISC-V** | `0x07136000` (Port 2) | Ch 0 | **Ch 8** | `0x03003274` (ARM Port 2) | **Ch 9** | `/sys/kernel/debug/mailbox-test-e906/message` |
 
 ```text
@@ -1201,7 +1201,7 @@ The Allwinner T527 hardware Message Box features **independent hardware ports an
                                    v                 v
             +---------------------------+   +---------------------------+
             |    Cadence HiFi4 DSP      |   |   XuanTie E906 RISC-V     |
-            | Local Port 0 (0x07094000) |   | Local Port 2 (0x07136000) |
+            | Local Port 0 (0x07120000) |   | Local Port 2 (0x07136000) |
             | Runs: dsp-testMsgbox.elf  |   | Runs: testMsgbox.elf      |
             +---------------------------+   +---------------------------+
 ```
@@ -1311,7 +1311,7 @@ void sunxi_msgbox_init_ex(bool enable_irq) {
 When `enable_irq = false`, `RD_IRQ_EN_REG` is cleared to 0. This prevents the peripheral from asserting its external interrupt line:
 - Routed to **PLIC Line 48** for XuanTie E906 RISC-V.
 - Routed to **Xtensa Core Interrupt Line** for Cadence HiFi4 DSP.
-- Routed to **GIC SPI 174** for ARM Cortex-A55 Host.
+- Routed to **GIC SPI 0** for the ARM Cortex-A55 host (ARM bank read IRQ; SPI 174 is the CPUS bank write IRQ).
 
 By keeping interrupts disabled by default, firmware polling loops (`has_data()` / `is_rx_pending()`) avoid unhandled interrupt exceptions and trap handler overhead while polling hardware FIFO registers. When migrating to an RTOS (FreeRTOS / Zephyr), pass `enable_irq = true` to enable hardware interrupt notification.
 

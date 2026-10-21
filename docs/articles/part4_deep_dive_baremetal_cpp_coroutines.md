@@ -77,13 +77,20 @@ AbstractX (C++20)   [█] 384 B  (97.6% RAM Reduction)
 
 Running complex control loops, Kalman filters, and math algorithms with the L1 Data Cache disabled (`mhcr.DE = 0`) wastes massive CPU headroom. AbstractX activates the full XuanTie hardware cache pipeline.
 
+> **Status (2026-10-20): planned, not in the shipped firmware.** The firmware in this repository
+> runs with the D-cache **off**: `firmware/common/arch_riscv/startup.S` keeps `mhcr.DE = 0`, and
+> `hal::Pmp::dcache_clean_range()` / `dcache_invalidate_range()` in `firmware/common/hal/pmp.cpp`
+> are fences only. Linux maps the shared memory uncached, so no cache maintenance is needed today.
+> Enabling the cache (the code in §3.1–3.3) is AbstractX work after the v3 upstream series
+> (`upstream-remoteproc/DESIGN_DECISIONS.md` "E906 D-cache is off"); it has not been run on silicon.
+
 ### 3.1 The Silicon Landmine: Unlocking `CSR_MXSTATUS`
 On XuanTie cores, vendor custom instructions are disabled at reset. Executing cache maintenance opcodes without first unlocking the CPU triggers an immediate **Illegal Instruction exception (`mcause = 2`)**!
 
 As confirmed in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`), software must first set bit 22 (`THEADISAEE`) and bit 15 (`MM`) in `CSR_MXSTATUS` (0x7C0):
 
 ```assembly
-/* bsp/startup.S */
+/* planned AbstractX startup (not in this repo) */
 li   t0, (1 << 22) | (1 << 15)  /* THEADISAEE (bit 22) + MM (bit 15) */
 csrs 0x7C0, t0                  /* CSR_MXSTATUS: Unlock T-Head vendor opcodes */
 ```
@@ -92,7 +99,7 @@ csrs 0x7C0, t0                  /* CSR_MXSTATUS: Unlock T-Head vendor opcodes */
 Once unlocked, startup code invalidates stale cache lines via `CSR_MCOR` (0x7C2) and activates the Instruction Cache, Data Cache, Write-Back allocation, and the Branch Target Buffer (BTB) via `CSR_MHCR` (0x7C1):
 
 ```assembly
-/* bsp/startup.S */
+/* planned AbstractX startup (not in this repo) */
 li   t0, (1 << 6) | (1 << 17)   /* Invalidate I-Cache & D-Cache lines */
 csrw 0x7C2, t0                  /* CSR_MCOR */
 

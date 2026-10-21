@@ -35,7 +35,7 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 | **`.stop()`** | Asserts `rst_core`, disarms the optional crash IRQ (`disable_irq()`, no lock held) | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot |
 | **`.unprepare()`** | Clears remap bit 1, disables clocks, asserts debug/SRAM/cfg resets, drops the power domains | Disables clocks | Asserts module-reset via TI-SCI | N/A |
 | **`.da_to_va()`** | ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000` (256 KB each), plus host-PA identity entries. Everything else returns `NULL`: DRAM firmware, trace and vrings resolve through the core's carveout list (DA `0x40040000`+ is DRAM 1:1) | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` |
-| **`.kick()`** | Sends a pointer to an immutable `static const u32` payload per vring; the msgbox controller paces TX (`txdone_poll`), the client never calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue |
+| **`.kick()`** | Sends a pointer to an immutable `static const u32` payload per vring; the msgbox controller completes TX (`txdone_poll`, or `txdone_irq` with `allwinner,tx-done-irq`), the client never calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue |
 | **Crash Handling** | Optional `crash` IRQ (no DTS wires one; the vendor BSP has none): `disable_irq_nosync()` + `rproc_report_crash(rproc, RPROC_FATAL_ERROR)`; an atomic "armed" bit re-enables it in `.start()` | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` |
 
 ---
@@ -49,16 +49,15 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
   - In `.start()`: Deassert `rst_core` only after firmware loading completes and after programming the entry point register (`STA_ADD_REG`).
 
 ### Rule 2: Initialize Workqueues Before Requesting Interrupts or Mailbox Channels
-- **The Problem**: If `mbox_request_channel_byname()` is called before `INIT_WORK(&priv->vq_work, ...)`, any incoming message from a previously running remote core will trigger `rx_callback`, which calls `schedule_work()` on an uninitialized `work_struct`, crashing the kernel. Furthermore, if probe fails with `-EPROBE_DEFER`, cleanup code calling `cancel_work_sync()` on an uninitialized work struct will trigger a kernel BUG.
+- **The Problem**: If `mbox_request_channel()` is called before `INIT_WORK(&priv->vq_work, ...)`, any incoming message from a previously running remote core will trigger `rx_callback`, which calls `schedule_work()` on an uninitialized `work_struct`, crashing the kernel. Furthermore, if probe fails with `-EPROBE_DEFER`, cleanup code calling `cancel_work_sync()` on an uninitialized work struct will trigger a kernel BUG.
 - **The Invariant**: `INIT_WORK()` must precede any call to request mailbox channels or register interrupt handlers.
 
 ### Rule 3: Teardown Order — `rproc_del()`, Then the Mailbox, Then the Work
-- **The Problem**: `rproc_del()` stops the core and removes the virtio devices, and virtio removal can still kick, so the tx channel must still exist while it runs. Once the channels are freed, no rx callback can queue the work again, so cancelling the work after that is final.
+- **The Problem**: `rproc_del()` stops the core and removes the virtio devices, and virtio removal can still kick, so the mailbox channel must still exist while it runs. Once the channels are freed, no rx callback can queue the work again, so cancelling the work after that is final.
 - **The Invariant** (`remove()`; the probe error path skips step 1):
   ```c
   rproc_del(rproc);                  /* 1. Stop core, remove virtio (may still kick) */
-  mbox_free_channel(priv->rx_chan);  /* 2. No more rx callbacks after this */
-  mbox_free_channel(priv->tx_chan);
+  mbox_free_channel(priv->mbox_chan); /* 2. No more rx callbacks after this */
   cancel_work_sync(&priv->vq_work);  /* 3. Nothing can re-queue it now */
   ```
   A work item that runs after the virtqueues are gone is safe: `rproc_vq_interrupt()` looks them up under the remoteproc vq SRCU (`remoteproc_virtio.c`). `stm32_rproc` and the Allwinner vendor BSP use the same order. Calling `rproc_del()` last is wrong.
@@ -92,7 +91,7 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 - **The Solution**: Use immutable static storage, one entry per vring:
   ```c
   static const u32 sunxi_rproc_kick_msg[2] = { 0, 1 };
-  mbox_send_message(priv->tx_chan, (void *)&sunxi_rproc_kick_msg[vqid & 1]);
+  mbox_send_message(priv->mbox_chan, (void *)&sunxi_rproc_kick_msg[vqid & 1]);
   ```
 
 ### Rule 7: Bound All FIFO Drain Loops in Hardirqs
