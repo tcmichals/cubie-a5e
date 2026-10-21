@@ -44,9 +44,6 @@ driver and test files:
     (100000 messages, 16 in flight, no loss), with vrings in DRAM and in
     SRAM, TX done by poll and by write interrupt, and message box
     unbind/bind. One interrupt per message.
-  - A non-RT kernel with DEBUG_ATOMIC_SLEEP and PROVE_LOCKING showed no
-    warnings from these drivers (run before the message box drain and TX
-    completion changes; the board tests above cover those).
   - On next-20261020: W=1 build, dt_binding_check, dtbs_check and
     checkpatch --strict are clean.
 
