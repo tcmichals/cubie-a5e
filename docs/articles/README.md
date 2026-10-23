@@ -16,6 +16,8 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
    * **Topics**: Memory determinism (zero-wait-state 1-cycle TCM vs DDR DRAM arbitration), lightweight lock-free circular ring buffer (libmetal) + Hardware Mailbox doorbell interrupts, interactive OpenOCD/GDB debugging, and introduction to stackless C++20 coroutines.
 4. **[Part 4: C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V: 19x Faster Context Switching](part4_deep_dive_baremetal_cpp_coroutines.md)**
    * **Topics**: Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO (Heap Allocation eLision Optimization) for zero-cost coroutines, benchmarks vs FreeRTOS (19x speedup, <400 B RAM for 8 tasks), and non-blocking hardware awaiters.
+5. **[Part 5: Experiment First, Compile Later: Python on Both Processors of the Allwinner T527](https://github.com/tcmichals/AbstractX/blob/main/docs/articles/micropython-on-e906/README.md)** (in the AbstractX repository)
+   * **Topics**: How the device-tree overlay and U-Boot hand UART3, I²C1 and DMA channels to the E906; remoteproc; RPMsg explained layer by layer (doorbell, vrings, addressed messages, endpoints, `/dev/rpmsgN`) and the three streams built on it; MicroPython running inside AbstractX on the E906; Python on Linux driving Python on the E906; live CPU, profiler and timeline views; sharing the DMA controller with Linux; board measurements.
 
 ---
 

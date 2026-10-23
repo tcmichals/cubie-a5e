@@ -317,8 +317,9 @@ Across this 4-part series, we walked through the complete engineering progressio
 ### Series Complete Navigation
 * **[Part 1: Architecture and Memory-Mapped Debugging](https://www.hackster.io/MichalsTC/unlocking-the-xuantie-risc-v-core-on-allwinner-t527-part-1-976063)**
 * **[Part 2: Building the Linux `remoteproc` Driver and Hardware Verification Suite](https://www.hackster.io/MichalsTC/bringing-up-heterogeneous-risc-v-on-allwinner-socs-part-2-53deb8)**
-* **[Part 3: Ultra-Low-Latency IPC: Connecting Linux and RISC-V on Allwinner T527](#part-3)**
+* **[Part 3: Ultra-Low-Latency IPC: Connecting Linux and RISC-V on Allwinner T527](https://github.com/tcmichals/cubie-a5e/blob/main/docs/articles/part3_baremetal_firmware_ipc_and_coroutines_intro.md)**
 * **Part 4: C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V** *(You are here)*
+* **[Part 5: Experiment First, Compile Later: Python on Both Processors of the Allwinner T527](https://github.com/tcmichals/AbstractX/blob/main/docs/articles/micropython-on-e906/README.md)**: MicroPython on the E906, RPMsg streams explained, Python on Linux driving the E906
 
 ---
 
