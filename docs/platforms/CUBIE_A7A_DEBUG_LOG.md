@@ -1183,3 +1183,152 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
 - **Git Checkpoints & Release Tags**:
   - `cubie-a5e`: Tagged `v1.0.3-unified-dual-bus-wifi6-silicon-verified` on `main`.
   - `linux-cubie`: Tagged `v7.1.0-cubie-dual-bus-wifi-working` on `cubie-linux-7.1`.
+
+---
+
+### Milestone 10: XuanTie E902 RemoteProc Architecture, Driver Scope & Tree Isolation Strategy (Oct 24, 2026)
+
+- **Objective**:
+  - Enable XuanTie E902 (RV32EMC @ 200 MHz, no FPU, 208 KB System SRAM A2) real-time coprocessor execution via Linux RemoteProc (Mode 2) without disrupting or contaminating the existing upstream v3 submission series (`allwinner,sun55i-a523-rproc`).
+
+- **Tree Isolation Strategy (Zero Contamination of Upstream v3)**:
+  1. **Strict Upstream Preservation**:
+     - `next-sun55i-rproc-msgbox` (commit `b4f021d5b97a`) and `upstream-remoteproc/v3/` remain 100% frozen for the pending v3 upstream series submission.
+     - The `cubie-linux-7.1` working tree's `drivers/remoteproc/sunxi_rproc.c` and KUnit test suite remain strictly untouched so regression-free parity is maintained.
+  2. **Dedicated Feature Branch**:
+     - All experimental A733 / E902 kernel modifications and Device Tree configurations will be contained within a dedicated topic branch: `feature/a733-e902-remoteproc` branched from `cubie-linux-7.1`.
+     - Device Tree changes will be encapsulated in a standalone overlay (`cubie-a7a-rproc.dtso`) so the base `sun60i-a733-cubie-a7a.dts` remains stable.
+
+- **Driver Scoping (How Many Drivers Needed?)**:
+  - **Zero New Kernel Drivers Required**:
+    - **Remoteproc**: Uses existing `sunxi_rproc.c` architecture; only requires adding SoC configuration struct `sun60i_e902_cfg` (mapping System SRAM A2 at `0x00040000`, 208 KB, and boot entry at `0x07032204`).
+    - **Mailbox**: Uses existing `sun55i-msgbox.c` architecture; A733 CPUS msgbox (`msgbox0` at `0x07090000`) uses identical FIFO and interrupt semantics.
+    - **PMIC & Regulators**: Uses existing mainline `allwinner,sun6i-a31-i2c` driving `s_twi0` (`0x07083000`) and standard `axp20x` regulator drivers.
+    - **Clock & Resets**: Uses existing `ccu-sun60i-a733-r.c` clock controller.
+
+- **Stack Delivery Sequence**:
+  1. **Arm Trusted Firmware (TF-A / BL31)**:
+     - Patch `plat/allwinner/common/sunxi_security.c` in the TF-A GitHub repository to un-gate `R_SPC` (`0x07002000`) and `R_TZMA` (`0x07003000`), granting Non-Secure EL1 Linux access to `E902_CFG` (`0x07032000`) and SRAM A2 (`0x00040000`).
+     - Enable native fallback power management (`sunxi_native_pm.c`) when `scp.fex` is omitted.
+  2. **Device Tree Overlay (`cubie-a7a-rproc.dtso`)**:
+     - Declare `&rproc` with SRAM A2 (`0x00040000`, 208 KB) and DMA pool carveout (`0x4E000000`).
+  3. **RISC-V Firmware Runtime**:
+     - Target RV32E toolchain flags: `-march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany`.
+     - Implement 16-register context frame in `e902_startup.S` avoiding illegal instruction faults on `x16`–`x31`.
+
+- **Comprehensive Step-by-Step Implementation & Engineering Changelog**:
+
+  #### Step 1: Upstream Submission & Git Branch Isolation
+  * **Repository / Branch**: `linux-cubie` -> `cubie-linux-7.1` (untouched), `next-sun55i-rproc-msgbox` (untouched), `feature/a733-e902-remoteproc` (active topic branch).
+  * **Action Taken**:
+    - Created branch `feature/a733-e902-remoteproc` from `cubie-linux-7.1`.
+    - Confirmed `drivers/remoteproc/sunxi_rproc.c` on `cubie-linux-7.1` has zero uncommitted changes.
+    - Verified all 7 upstream v3 patches in `upstream-remoteproc/v3/` remain identical to commit `b4f021d5b97a`.
+  * **Verification**: `git status` on `cubie-linux-7.1` clean; `git diff cubie-linux-7.1 next-sun55i-rproc-msgbox` strictly limited to v3 delta.
+
+  #### Step 2: TF-A (BL31) Security Boundary Firewall Un-Gating
+  * **Repository / Component**: ARM Trusted Firmware (`arm-trusted-firmware`).
+  * **Files Modified**: `plat/allwinner/common/sunxi_security.c`, `plat/allwinner/common/sunxi_pm.c`.
+  * **Hardware Registers Changed**:
+    - `SUNXI_R_SPC_BASE` (`0x07002000`):
+      * Write `0xffffffff` to offsets `0x04`, `0x14`, `0x24`, `0x34` (grants Non-Secure access to CPUS, PRCM, `R_PIO`, and `E902_CFG` @ `0x07032000`).
+    - `SUNXI_R_TZMA_BASE` (`0x07003000`):
+      * Write `0x0` to offsets `0x00`, `0x04`, `0x08` (opens System SRAM A2 `0x00040000`–`0x00073FFF` to Non-Secure EL1).
+    - Power Management Fallback:
+      * When SCPI responds with timeout / absent `scp.fex`, hook PSCI system reset/off directly to `sunxi_native_pm.c` (watchdog reset and PRCM power-off).
+  * **Rationale**: Stock BL31 write-protects `0x07032204` (`E902_STA_ADD_REG`). Access from Non-Secure Linux EL1 triggers interconnect bus abort (SError).
+  * **Verification**: Readback from Linux `devmem2 0x07032204` succeeds without SError kernel panic.
+
+  #### Step 3: Bootloader & TOC1 Packaging (Decouple Power Management)
+  * **Repository / Component**: `cubie-a5e` -> `project-cubie-a5e/board/radxa/cubie_a7a/post-image.sh`.
+  * **Files Modified**: `post-image.sh`, `genimage.cfg`, U-Boot PMIC initialization.
+  * **Configuration Changes**:
+    - Generate alternative TOC1 bootloader container without `scp.fex`: `radxa_a733_bootloader_rt.bin`.
+    - U-Boot `s_twi0` (`sunxi_r_i2c0` @ `0x07083000`) driver directly configures AXP8191 (`0x36`):
+      * Latch `DCDC1` = 3.3V (USB hub, Wi-Fi 6, Ethernet PHY).
+      * Latch `ALDO1` = 1.8V (PRCM / IO banks).
+      * Latch `ELDO1`, `ELDO2`, `ELDO4` = ON.
+    - Suppress `arm_svc_arisc_startup()`, leaving XuanTie E902 held in reset in `r_ccu` at cold boot.
+  * **Rationale**: Frees the E902 from executing proprietary `scp.fex` so Linux `remoteproc` can claim full lifecycle control.
+  * **Verification**: Serial console boots cleanly into Linux without ARISC timeout; PMIC rails remain stable at rated voltages.
+
+  #### Step 4: Device Tree Overlay (`cubie-a7a-rproc.dtso`)
+  * **Repository / Component**: `cubie-a5e` -> `project-cubie-a5e/board/radxa/cubie_a7a/cubie-a7a-rproc.dtso`.
+  * **Node Definitions**:
+    ```dts
+    /dts-v1/;
+    /plugin/;
+
+    / {
+        compatible = "radxa,cubie-a7a", "allwinner,sun60i-a733";
+
+        fragment@0 {
+            target-path = "/reserved-memory";
+            __overlay__ {
+                #address-cells = <2>;
+                #size-cells = <2>;
+
+                rproc_carveout: rproc@4e000000 {
+                    compatible = "shared-dma-pool";
+                    reg = <0x00 0x4e000000 0x00 0x01000000>; /* 16 MB */
+                    no-map;
+                };
+            };
+        };
+
+        fragment@1 {
+            target = <&soc>;
+            __overlay__ {
+                rproc_e902: remoteproc@7032000 {
+                    compatible = "allwinner,sun60i-a733-rproc";
+                    reg = <0x00 0x07032000 0x00 0x400>,   /* E902_CFG */
+                          <0x00 0x00040000 0x00 0x34000>; /* SRAM A2 (208 KB) */
+                    reg-names = "cfg", "sram";
+                    clocks = <&r_ccu CLK_RISCV>,
+                             <&r_ccu CLK_RISCV_CFG>;
+                    clock-names = "core", "bus";
+                    resets = <&r_ccu RST_BUS_RISCV_CFG>,
+                             <&r_ccu RST_BUS_R_CPUCFG>;
+                    reset-names = "cfg", "core";
+                    mboxes = <&r_msgbox 0>;
+                    memory-region = <&rproc_carveout>;
+                    status = "okay";
+                };
+            };
+        };
+    };
+    ```
+  * **Rationale**: Non-intrusive runtime overlay allows dynamic enabling of Mode 2 RemoteProc without altering the base board DTS.
+  * **Verification**: Compile with `dtc -@ -I dts -O dtb` (0 warnings). Overlay loads via U-Boot `fdtoverlay` cleanly.
+
+  #### Step 5: Kernel RemoteProc Driver Integration (Feature Branch)
+  * **Repository / Branch**: `linux-cubie` on `feature/a733-e902-remoteproc`.
+  * **Files Modified**: `drivers/remoteproc/sunxi_rproc.h`, `drivers/remoteproc/sunxi_rproc.c`.
+  * **Code Changes**:
+    - In `sunxi_rproc.h`:
+      * Define `SUN60I_SRAM_A2_SYS 0x00040000UL` and `SUN60I_SRAM_A2_SIZE 0x00034000UL` (208 KB).
+      * Define `E902_STA_ADD_REG 0x0204`.
+    - In `sunxi_rproc.c`:
+      * Define `sun60i_rproc_att[]`:
+        `{ SUN60I_SRAM_A2_SYS, SUN60I_SRAM_A2_SYS, SUN60I_SRAM_A2_SIZE, ATT_IOMEM }`
+      * Define `sun60i_e902_cfg`:
+        `.name = "XuanTie E902 RISC-V", .att = sun60i_rproc_att, .boot_reg_offset = E902_STA_ADD_REG`
+      * Add entry to `sunxi_rproc_of_match[]`:
+        `{ .compatible = "allwinner,sun60i-a733-rproc", .data = &sun60i_e902_cfg }`
+  * **Rationale**: Reuses 100% of the proven `sunxi_rproc.c` lifecycle, ELF loader, and VirtIO vring infrastructure.
+  * **Verification**: `sunxi-rproc.ko`, `drivers/remoteproc/sunxi_rproc.o`, and KUnit `drivers/remoteproc/sunxi_rproc_test.o` compiled cleanly with 0 errors and 0 warnings under GCC 15.1.0 (`aarch64-linux-gcc`). Committed to `feature/a733-e902-remoteproc` (`8e92f2e5014e`). `cubie-linux-7.1` verified 100% clean and untouched.
+
+  #### Step 6: RISC-V E902 Bare-Metal Firmware Suite
+  * **Repository / Component**: `cubie-a5e` -> `firmware/riscv-firmware/apps/exampleRiscv/`.
+  * **Files Created / Modified**:
+    - `firmware/common/arch_riscv/e902_sram.ld`: Linker script with `ORIGIN = 0x00040000`, `LENGTH = 208K`.
+    - `firmware/riscv-firmware/apps/exampleRiscv/Makefile`: Configured `BOARD=a7a` target with `-march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany` and automatic selection of `e902_sram.ld`.
+  * **Rationale**: Compiling standard `ilp32` emits instructions accessing `x16`–`x31` which trigger hardware illegal instruction traps on the E902 silicon.
+  * **Verification**: Built `exampleRiscv.elf` (176 bytes text, 4096 bytes bss) using xPack GCC 15.2.0. Disassembly (`riscv-none-elf-objdump -d`) verified:
+    - Origin entry vector: `0x00040000 <_vectors>`
+    - Target execution entry: `0x0004004a <_start>`
+    - Registers used: strictly limited to `t0` (`x5`), `t1` (`x6`), `t2` (`x7`)
+    - Zero instructions referencing registers above `x15`; zero floating-point opcodes.
+
+
+

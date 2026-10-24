@@ -17,12 +17,12 @@ BOARD ?= a5e
 ifeq ($(BOARD),a7a)
 # Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
 ARCH_FLAGS = -march=rv32emc_zicsr -mabi=ilp32e -mcmodel=medany
+LDSCRIPT  ?= ../../../common/arch_riscv/e902_sram.ld
 else
 # Allwinner T527: XuanTie E906 (RV32IMAFCX, single-float, up to 200 MHz)
 ARCH_FLAGS = -march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany
-endif
-
 LDSCRIPT  ?= ../../../common/arch_riscv/e906_sram.ld
+endif
 
 OPT_FLAGS  = -O2 -g
 
