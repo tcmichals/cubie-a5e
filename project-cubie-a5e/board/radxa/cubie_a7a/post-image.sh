@@ -14,6 +14,11 @@ ${HOST_DIR}/bin/mkenvimage -s 0x10000 -o "${BINARIES_DIR}/uboot.env" "${BOARD_DI
 cp -f "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt"
 cp -f "${BOARD_DIR}/uEnv.txt" "${BINARIES_DIR}/uEnv.txt"
 
+# Stage device tree overlays if available
+if [ -f "${BOARD_DIR}/../../dts-overlay/allwinner/cubie-a7a-rproc.dtbo" ]; then
+    cp -f "${BOARD_DIR}/../../dts-overlay/allwinner/cubie-a7a-rproc.dtbo" "${BINARIES_DIR}/cubie-a7a-rproc.dtbo"
+fi
+
 # 3. Stage verified Radxa A733 16MB bootloader blob into BINARIES_DIR
 if [ -f "${BOARD_DIR}/radxa_a733_bootloader.bin" ]; then
     cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
@@ -23,6 +28,9 @@ else
     echo ">>> Fetching Radxa A733 bootloader blob..."
     curl -sL "https://github.com/radxa-build/radxa-a733/releases/download/rsdk-t5/radxa-a733_trixie_cli_t5.output_512.img.xz" | xz -dc 2>/dev/null | head -c 16777216 > "${BINARIES_DIR}/radxa_a733_bootloader.bin"
 fi
+
+# 3b. Un-gate BL31 R_SPC Port 3 (E902_CFG @ 0x07032000) for XuanTie E902 remoteproc
+python3 "${BOARD_DIR}/patch_bl31_security.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
 
 # 4. Run genimage packaging pipeline
 rm -rf "${GENIMAGE_TMP}"

@@ -1330,5 +1330,89 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
     - Registers used: strictly limited to `t0` (`x5`), `t1` (`x6`), `t2` (`x7`)
     - Zero instructions referencing registers above `x15`; zero floating-point opcodes.
 
+---
+
+### Milestone 11: Arm Trusted Firmware (TF-A / BL31) Reverse Engineering, In-Segment Executable Trampoline Patching, and `sdcard.img` Pipeline Integration
+
+#### 1. Context & Architectural Root Cause
+Running `make -C bld.a7a linux-rebuild` recompiles only the Linux kernel (`Image`) and in-tree DTB (`sun60i-a733-cubie-a7a.dtb`). It does **not**:
+1. Recompile ARM Trusted Firmware (TF-A / BL31);
+2. Patch or repack the monolithic 16 MB vendor bootloader binary (`radxa_a733_bootloader.bin`);
+3. Re-run `genimage` to rebuild `sdcard.img` or the VFAT boot partition (`boot.vfat`).
+
+Consequently, any kernel rebuild leaves the stock BL31 active on the SD card, keeping `R_SPC` Port 3 secure and causing an immediate hardware SError bus abort whenever Linux accesses `0x07032000` (`E902_CFG`).
+
+#### 2. Reverse Engineering the Vendor Bootloader (`radxa_a733_bootloader.bin`)
+Binary analysis of `radxa_a733_bootloader.bin` uncovered the exact boot chain:
+* **Sector 256 (0x20000 / 128 KB)**: Primary `eGON.BT0` (Allwinner A733 LPDDR5 DRAM trainer).
+* **Offset 0x6a000 (434,176 bytes)**: Flattened Device Tree Image (FIT / `.itb`, magic `0xd00dfeed`, totalsize `1,188,965` bytes).
+  - `/images/uboot`: U-Boot 2018.07 ARM64 standalone (`load = 0x4a000000`).
+  - `/images/atf`: ARM Trusted Firmware BL31 (`load = 0x48000000`, `entry = 0x48000000`, size 115,677 bytes).
+  - `/images/scp`: OpenRISC / XuanTie coprocessor firmware (`or1k`, size 122,240 bytes).
+  - `/images/fdt-1`: Flattened DTB for `sun60i-a733-cubie-a7s` (25,896 bytes).
+  - **Integrity Status**: The FIT image is unsigned and un-hashed (zero sha1/sha256 hash subnodes).
+* **BL31 Internal Memory Structure**:
+  - `0x000`–`0x107` (264 bytes): Allwinner vendor header (`b 0x108`, `monitor`, `CHKv1.0`, version string `v2.5(debug):177ce84c2-dirty`).
+  - `0x108`: BL31 entrypoint (`mov x20, x0; mov x21, x1; ...`) executing at VA `0x48000108`.
+  - VA `0x48013180` (`sunxi_security_setup`):
+    ```arm64
+    48013180: movk  x1, #0x205, lsl #16       ; x1 = 0x02054000 (SPC_BASE)
+    48013184: str   w0, [x1]                  ; Un-gate SPC Ports 0..7
+    ...
+    480131ac: str   wzr, [x1]                 ; Un-gate R_TZMA Reg 0 (0x07003000)
+    480131b0: str   wzr, [x1, #4]             ; Un-gate R_TZMA Reg 4 (0x07003004)
+    480131b4: str   wzr, [x1, #8]             ; Un-gate R_TZMA Reg 8 (0x07003008)
+    480131b8: mov   x1, #0x2004
+    480131bc: movk  x1, #0x700, lsl #16       ; x1 = 0x07002004 (R_SPC_BASE + 0x04)
+    480131c0: str   w0, [x1]                  ; Un-gate R_SPC Port 0
+    480131c4: str   w0, [x1, #16]             ; Un-gate R_SPC Port 1 (0x07002014)
+    480131c8: str   w0, [x1, #32]             ; Un-gate R_SPC Port 2 (0x07002024)
+    ; MISSING: R_SPC Port 3 (0x07002034) was omitted, locking 0x07032000!
+    480131cc: mov   x1, #0x290
+    ```
+
+#### 3. In-Segment Executable Trampoline Design
+To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment executable trampoline was placed in the zero-padding gap created by `.align 11` (for `vbar_el3 = 0x48015800`) in the `.text` segment:
+1. **Hook at VA `0x480131c8` (file offset `0x15e96c`)**:
+   - Original: `str w0, [x1, #32]` (`0xb9002020`)
+   - Replaced with: `b 0x48015570` (`0x140008ea`)
+2. **Trampoline at VA `0x48015570` (file offset `0x160d14`)**:
+   ```arm64
+   48015570: str w0, [x1, #32]    ; Original R_SPC Port 2 write
+   48015574: str w0, [x1, #48]    ; R_SPC Port 3 (0x07002034) UN-GATE!
+   48015578: b   0x480131cc       ; Return to next BL31 instruction
+   ```
+3. **Disassembly Verification**:
+   ```text
+   00000000480131bc <.data>:
+       480131bc: f2a0e001  movk x1, #0x700, lsl #16
+       480131c0: b9000020  str  w0, [x1]
+       480131c4: b9001020  str  w0, [x1, #16]
+       480131c8: 140008ea  b    0x48015570
+       480131cc: d2805201  mov  x1, #0x290
+
+   0000000048015570 <.data>:
+       48015570: b9002020  str  w0, [x1, #32]
+       48015574: b9003020  str  w0, [x1, #48]
+       48015578: 17fff715  b    0x480131cc
+   ```
+
+#### 4. Automated Build Integration
+1. **Patch Script Created**: `project-cubie-a5e/board/radxa/cubie_a7a/patch_bl31_security.py`
+   - Automatically detects hook position, validates zero padding, injects trampoline, and writes branch.
+2. **Integrated into Post-Image Pipeline**: `project-cubie-a5e/board/radxa/cubie_a7a/post-image.sh`
+   - Added Step 3b: automatically patches `${BINARIES_DIR}/radxa_a733_bootloader.bin`.
+   - Stages `cubie-a7a-rproc.dtbo` into `BINARIES_DIR`.
+3. **Genimage Packaging Updated**: `project-cubie-a5e/board/radxa/cubie_a7a/genimage.cfg`
+   - Added `cubie-a7a-rproc.dtbo` to `boot.vfat` image files.
+4. **Boot Config Updated**: `project-cubie-a5e/board/radxa/cubie_a7a/config.txt`
+   - Configured `dtoverlay=cubie-a7a-rproc`.
+5. **Firmware Staged**:
+   - Copied `exampleRiscv.elf` to `rootfs-overlay/lib/firmware/exampleRiscv.elf` and `bld.a7a/target/lib/firmware/exampleRiscv.elf`.
+6. **Live Target Verification**:
+   - Regenerated `bld.a7a/images/sdcard.img` (620,756,992 bytes).
+   - Inspected raw sectors in `sdcard.img`: Hook `0x140008ea` and Trampoline `[0xb9002020, 0xb9003020, 0x17fff715]` confirmed present at offsets `0x15e96c` and `0x160d14`.
+
+
 
 

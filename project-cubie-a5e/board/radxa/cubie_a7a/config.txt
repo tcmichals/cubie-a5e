@@ -10,6 +10,9 @@
 # To enable Lite-libmetal UIO Doorbell mode:
 # dtoverlay=cubie-a7a-flight-stack cubie-a7a-uio
 
+# To enable XuanTie E902 remoteproc coprocessor:
+dtoverlay=cubie-a7a-rproc
+
 # ==============================================================================
 # 2. Kernel Command-Line Arguments (cmdline)
 # ==============================================================================
