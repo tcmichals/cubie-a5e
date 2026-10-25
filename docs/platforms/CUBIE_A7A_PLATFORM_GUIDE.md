@@ -14,7 +14,7 @@ This document is the authoritative hardware, bootloader, firmware provenance, an
 | :--- | :--- | :--- |
 | **SoC** | Allwinner A733 (`sun60iw2p1`) | 2× Cortex-A76 (Big @ 2.0 GHz) + 6× Cortex-A55 (LITTLE @ 1.8 GHz) DynamIQ Cluster |
 | **RAM** | 6 GiB LPDDR5 (400 MHz to 1800 MHz) | 4-PState dynamic PHY training executed by `boot0` in SRAM |
-| **Co-Processor** | **XuanTie E902 RISC-V** (RV32EMC) | Dedicated CPUS / Always-On Power Management coprocessor running `scp.fex` loaded by U-Boot / boot0 (Linux `remoteproc` deactivated on A733) |
+| **Co-Processor** | **XuanTie E902 RISC-V** (RV32EMC) | Dual-mode: Mode 1 (Vendor CPUS `scp.fex`) or Mode 2 (Mainline Linux `remoteproc` via `allwinner,sun60i-a733-rproc`). See [E902 Rebuild Guide](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A7A_E902_REBUILD_GUIDE.md). |
 | **Interrupt Controller** | ARM GIC-600 (GICv3) | Distributor: `0x03400000`, Redistributors: `0x03460000`, ITS: `0x03440000` |
 | **Clock Controller (CCU)** | Main CCU: `0x02002000`, PRCM R_CCU: `0x07010000` | Verified against A733 silicon memory map |
 | **Mainline Kernel** | **Linux 7.1 PREEMPT_RT** | Ingests CCU, RTC, Pinctrl, and GICv3 patches |
@@ -227,3 +227,17 @@ python3 project-cubie-a5e/board/radxa/cubie_a7a/tools/verify_sdcard_image.py bld
 # Flash to MicroSD card
 sudo dd if=$PWD/bld.a7a/images/sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
 ```
+
+---
+
+## 8. XuanTie E902 Remoteproc & BL31 Security Un-Gating
+
+The Allwinner A733 features an integrated **T-Head XuanTie E902** 32-bit RISC-V core (`RV32EMC`) operating in the Always-On (`R_`) power management domain at 200 MHz.
+
+* **Mode 1 (Vendor Default)**: `scp.fex` loaded into SRAM A2 (`0x00040000`) by TF-A / U-Boot at EL3 before Linux boots; acts as CPUS firmware for S3 Suspend-to-RAM.
+* **Mode 2 (Mainline Linux RemoteProc)**: Enabled via the `allwinner,sun60i-a733-rproc` driver, dynamic Device Tree Overlay (`cubie-a7a-rproc.dtbo`), and automated BL31 security un-gating (`patch_bl31_security.py`). Allows loading custom bare-metal or RTOS firmware (`exampleRiscv.elf`) dynamically from `/lib/firmware/` with hardware mailbox IPC and virtio rpmsg.
+
+> [!TIP]
+> For the complete, authoritative step-by-step procedure to rebuild the RISC-V firmware, compile the Linux remoteproc driver, patch TF-A BL31, package the SD card image, and verify hardware execution on silicon, refer to the dedicated guide:
+> 👉 **[Radxa Cubie A7A: XuanTie E902 Remoteproc Rebuild & Bring-Up Guide](file:///home/tcmichals/projects/cubie/cubie-a5e/docs/platforms/CUBIE_A7A_E902_REBUILD_GUIDE.md)**
+

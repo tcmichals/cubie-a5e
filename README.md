@@ -149,6 +149,9 @@ cubie-a5e/
    Detailed lab debug notes tracing power rail sequencing, PMIC registers, analog PHY tuning, and peripheral bring-up.
 5. **[Radxa Cubie A7A Platform Specification](docs/platforms/CUBIE_A7A_PLATFORM_GUIDE.md)**:
    Hardware specs, LPDDR5 training, GICv3 interrupt controller, and register maps.
+6. **[Radxa Cubie A7A: XuanTie E902 Remoteproc Rebuild & Bring-Up Guide](docs/platforms/CUBIE_A7A_E902_REBUILD_GUIDE.md)**:
+   Step-by-step instructions for RISC-V firmware build, kernel driver compilation, TF-A BL31 security un-gating, SD card image packaging, and hardware verification.
+
 
 ---
 
