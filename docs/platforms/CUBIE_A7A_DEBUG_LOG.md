@@ -1413,6 +1413,37 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
    - Regenerated `bld.a7a/images/sdcard.img` (620,756,992 bytes).
    - Inspected raw sectors in `sdcard.img`: Hook `0x140008ea` and Trampoline `[0xb9002020, 0xb9003020, 0x17fff715]` confirmed present at offsets `0x15e96c` and `0x160d14`.
 
+---
 
+### Milestone 12: Buildroot Kernel Config Update, Driver Compilation, and Full Image Verification
 
+#### 1. Buildroot Configuration Updates
+* **Topic Branch Published**: Pushed `feature/a733-e902-remoteproc` to `https://github.com/tcmichals/linux-cubie.git` (commit `8e92f2e5014e`), maintaining complete isolation of `cubie-linux-7.1` and `next-sun55i-rproc-msgbox` for upstream v3.
+* **Defconfig Updated**:
+  - `project-cubie-a5e/configs/cubie_a7a_defconfig`:
+    Set `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="feature/a733-e902-remoteproc"`.
+  - `bld.a7a/.config`:
+    Set `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="feature/a733-e902-remoteproc"`.
+* **Kernel Kconfig Fragment Updated**:
+  - `project-cubie-a5e/board/radxa/cubie_a7a/linux.config`:
+    ```kconfig
+    CONFIG_REMOTEPROC=y
+    CONFIG_SUNXI_REMOTEPROC=y
+    CONFIG_RPMSG_VIRTIO=y
+    CONFIG_RPMSG_CHAR=y
+    ```
 
+#### 2. Kernel Rebuild & Symbol Verification
+* Executed `make -C bld.a7a linux-rebuild`.
+* Verified `vmlinux` symbol table using `aarch64-linux-nm`:
+  - `sun60i_e902_cfg` (data @ `ffff80008129e150`) built-in.
+  - `sunxi_rproc_probe` (text @ `ffff800080d5c820`) built-in.
+  - `sunxi_rproc_ops`, `sunxi_rproc_start`, `sunxi_rproc_kick` built-in.
+  - Zero compilation errors, zero warnings.
+
+#### 3. Image Packaging & Ready Status
+* Executed `post-image.sh` pipeline:
+  - BL31 security un-gating hook & trampoline verified in `radxa_a733_bootloader.bin`.
+  - Partition 1 (`boot.vfat`) packed with updated `Image`, `sun60i-a733-cubie-a7a.dtb`, `cubie-a7a-rproc.dtbo`, `config.txt` (`dtoverlay=cubie-a7a-rproc`), and `boot.scr`.
+  - Partition 2 (`rootfs.ext4`) contains `/lib/firmware/exampleRiscv.elf`.
+  - Generated output: `bld.a7a/images/sdcard.img` (620,756,992 bytes).
