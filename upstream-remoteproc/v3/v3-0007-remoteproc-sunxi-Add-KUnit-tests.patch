@@ -1,4 +1,4 @@
-From b4f021d5b97a8ae32dffcce4c056272db370bd73 Mon Sep 17 00:00:00 2001
+From 15c6872a4577765aca520bf47aa0ef7846bbcb11 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 7/7] remoteproc: sunxi: Add KUnit tests
@@ -622,5 +622,5 @@ index 000000000000..4dd391e2c6dd
 +MODULE_DESCRIPTION("KUnit tests for Allwinner sunxi remoteproc driver");
 +MODULE_LICENSE("GPL");
 -- 
-2.53.0
+2.43.0
 

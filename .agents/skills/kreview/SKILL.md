@@ -43,10 +43,14 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
    - Are shared hardware registers accessed in ISR guarded by `spin_lock_irqsave()`?
    - Is the hardware pending bit cleared only AFTER the FIFO is drained? The hardware ignores the clear while the FIFO is not empty, so clearing first fires the IRQ twice (D13; [msgbox reference](../../../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §8 Q4).
    - Are FIFO drain loops capped at `FIFO_MAX` to prevent CPU soft-lockups?
-4. **DMA & Cache Attribute Coherency**:
+   - **FAIL** if a controller calls client code (`mbox_chan_received_data()`, `mbox_chan_txdone()`, any callback) while holding its own lock. A client may send from its callback, and the send path may take the same lock (2026-10-26: missed by the 10-13 reviews' fix and made a real deadlock by the TX-done IRQ commit).
+4. **Framework Contract on Errors**:
+   - For every error an op can return (`send_data()`, `startup()`, ...), read what the core does with it (`msg_submit()` / `tx_tick()` / `txdone_hrtimer()` in `drivers/mailbox/mailbox.c`). **FAIL** if the error leaves work with no retry path (2026-10-26: `-EBUSY` from `send_data()` in poll mode left the message queued, because the core starts the poll timer only after a successful send).
+   - Review the whole file again after any later change, not only the diff a finding was fixed in.
+5. **DMA & Cache Attribute Coherency**:
    - Are trace and DRAM buffers mapped with matching attributes (`MEMREMAP_WC`) to prevent ARM64 Write-Back vs Write-Combining aliasing?
    - Are local SRAMs mapped with `is_iomem = true` and `devm_ioremap_resource_wc()`?
-5. **Bus Flush & Reset Ordering**:
+6. **Bus Flush & Reset Ordering**:
    - Are MMIO register writes (`STA_ADD`, `REMAP`) followed by an explicit `readl()` flush before releasing hardware resets?
 
 ### Tier 3: Error Unwinding & Resource Lifetimes

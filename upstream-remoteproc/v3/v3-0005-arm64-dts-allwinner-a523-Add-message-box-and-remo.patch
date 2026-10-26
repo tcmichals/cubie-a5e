@@ -1,4 +1,4 @@
-From 326d0a1d68588e077bf556cd51336d6aa6334c3b Mon Sep 17 00:00:00 2001
+From f48bfc2c11aa7ebea59bc07ce0f4161eec770de5 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 5/7] arm64: dts: allwinner: a523: Add message box and
@@ -87,5 +87,5 @@ index 85ef492ffeae..3063facef5b8 100644
  	};
  };
 -- 
-2.53.0
+2.43.0
 

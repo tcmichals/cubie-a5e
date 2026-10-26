@@ -9,9 +9,11 @@ v2: https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.
 Changes in v3 (details in each patch):
   - Message box: all four banks are clocked and out of reset (an
     unclocked bank drops writes). The FIFO is drained before its pending
-    bit is cleared. A kick is done once the receiver's FIFO has room;
-    allwinner,tx-done-irq selects the receiver bank's write interrupt
-    instead of the 1 ms poll, like ti,mbox-send-noirq does for OMAP.
+    bit is cleared, and messages are delivered after the controller lock
+    is dropped. A kick is done once the receiver's FIFO has room; a full
+    FIFO is never written. allwinner,tx-done-irq selects the receiver
+    bank's write interrupt instead of the 1 ms poll, like
+    ti,mbox-send-noirq does for OMAP.
   - Remoteproc: one mailbox channel; the receive callback is deferred to
     an ordered workqueue; address translation covers only the two SRAM
     windows; debug reset and power domains added; all resources are
@@ -35,7 +37,7 @@ Notes for review:
 
 Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT with the same
 driver and test files:
-  - KUnit: 24/24 message box, 15/15 remoteproc. The message box tests
+  - KUnit: 26/26 message box, 15/15 remoteproc. The message box tests
     also pass under UML on x86_64.
   - rpmsg ping (10000 messages, about 165 us round trip) and stress
     (100000 messages, 16 in flight, no loss), with vrings in DRAM and in

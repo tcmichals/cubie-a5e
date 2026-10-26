@@ -1,16 +1,17 @@
-From df75045f732fe42f126d00b5142e9fed8c9789fb Mon Sep 17 00:00:00 2001
+From 380a4807ce2da284e6b22e0f090982ee1b2eab8a Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 6/7] mailbox: sun55i: Add KUnit tests
 
-Add 24 KUnit tests for the sun55i message box driver: the routing of
-all 12 channels, sending on every channel, a full FIFO refused,
-last_tx_done() and peek_data() against the FIFO count, startup and
-shutdown dropping stale messages (bounded by the FIFO depth), TX done
-by the write interrupt, and the interrupt handler (spurious and
-disabled-channel interrupts, empty FIFOs, several channels and routes
-in one pass, the drain bound, the pending bit cleared after the drain,
-no crosstalk between channels).
+Add 26 KUnit tests for the sun55i message box driver: the routing of
+all 12 channels, sending on every channel, a message for a full FIFO
+held until there is room (and dropped by shutdown), last_tx_done() and
+peek_data() against the FIFO count, startup and shutdown dropping stale
+messages (bounded by the FIFO depth), TX done by the write interrupt,
+and the interrupt handler (spurious and disabled-channel interrupts,
+empty FIFOs, several channels and routes in one pass, the drain bound,
+the pending bit cleared after the drain, delivery outside the lock to a
+client that replies from its callback, no crosstalk between channels).
 
 The driver's register helpers are redirected with KUnit static stubs to
 mock banks that model the hardware: reading a message FIFO pops it,
@@ -28,14 +29,15 @@ Changes in v3:
   architecture restriction and no endianness issue (Sashiko)
 - The startup flush test now checks that the FIFO is drained; it
   passed through the failsafe before (Sashiko)
-- New tests: drain before clearing the pending bit, full FIFO refused,
-  TX done by write interrupt
+- New tests: drain before clearing the pending bit, full FIFO never
+  written (message held in timer mode), TX done by write interrupt,
+  delivery outside the lock
 - Duplicate tests merged (routing is one table)
 ---
  drivers/mailbox/Kconfig              |  11 +
  drivers/mailbox/Makefile             |   1 +
- drivers/mailbox/sun55i_msgbox_test.c | 764 +++++++++++++++++++++++++++
- 3 files changed, 776 insertions(+)
+ drivers/mailbox/sun55i_msgbox_test.c | 865 +++++++++++++++++++++++++++
+ 3 files changed, 877 insertions(+)
  create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
 
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
@@ -74,20 +76,22 @@ index 40024aa906a6..b9bd14960af0 100644
  
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
 new file mode 100644
-index 000000000000..66921df56d06
+index 000000000000..a6dc1b06d26a
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
-@@ -0,0 +1,764 @@
+@@ -0,0 +1,865 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * KUnit tests for Allwinner sun55i 4-port Message Box driver (sun55i-msgbox.c)
 + *
 + * Covers:
 + *  - the 12-channel routing table and out-of-range channel numbers
-+ *  - send_data, last_tx_done, peek_data, startup and shutdown
++ *  - send_data, last_tx_done, peek_data, startup and shutdown; in timer
++ *    mode a message for a full FIFO is held until last_tx_done() has room
 + *  - TX done by write IRQ: armed only while the FIFO is full, the handler
 + *    disarms, acks and ignores channels it did not arm
-+ *  - the interrupt handler: delivery, per-channel isolation, several
++ *  - the interrupt handler: delivery after the drain, outside the lock (a
++ *    client may reply from its callback), per-channel isolation, several
 + *    channels and ports in one pass, and the FIFO_MAX drain bound
 + *
 + * Directly invokes driver operations. All register access is redirected
@@ -354,25 +358,63 @@ index 000000000000..66921df56d06
 +	}
 +}
 +
-+static void test_functional_send_data_refuses_full_fifo(struct kunit *test)
++static void test_functional_send_data_holds_for_full_fifo(struct kunit *test)
 +{
 +	struct mock_msgbox_fixture *fix = create_mock_fixture(test);
++	u32 status = SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4;
 +	u32 fifo = SUNXI_MSGBOX_MSG_FIFO(2, 1) / 4;
 +	u32 val = 0xA5A5A5A5;
 +
-+	/* Writing a full FIFO corrupts its count: never do it */
-+	mock_write_reg(fix, 3, SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4, SUN55I_FIFO_MAX);
++	/*
++	 * Writing a full FIFO corrupts its count: never do it. The core only
++	 * polls a channel whose send succeeded, so timer mode accepts the
++	 * message and last_tx_done() writes it once a slot is free.
++	 */
++	mock_write_reg(fix, 3, status, SUN55I_FIFO_MAX);
 +	mock_write_reg(fix, 3, fifo, 0);
-+	KUNIT_EXPECT_EQ(test, sun55i_msgbox_chan_ops.send_data(&fix->chans[9], &val), -EBUSY);
++	KUNIT_EXPECT_EQ(test, sun55i_msgbox_chan_ops.send_data(&fix->chans[9], &val), 0);
 +	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), 0U);
 +
-+	/* With room it writes */
-+	mock_write_reg(fix, 3, SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4, SUN55I_FIFO_MAX - 1);
++	/* Still full: not done, nothing written */
++	KUNIT_EXPECT_FALSE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[9]));
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), 0U);
++
++	/* The receiver read one: the held message goes in and fills the FIFO */
++	mock_write_reg(fix, 3, status, SUN55I_FIFO_MAX - 1);
++	KUNIT_EXPECT_FALSE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[9]));
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), val);
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, status), SUN55I_FIFO_MAX);
++
++	/* Room again: done, and it is written only once */
++	mock_write_reg(fix, 3, status, SUN55I_FIFO_MAX - 1);
++	mock_write_reg(fix, 3, fifo, 0);
++	KUNIT_EXPECT_TRUE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[9]));
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), 0U);
++
++	/* With room it writes at once */
 +	KUNIT_EXPECT_EQ(test, sun55i_msgbox_chan_ops.send_data(&fix->chans[9], &val), 0);
 +	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), val);
 +
 +	/* Timer mode: neither path arms the write IRQ */
 +	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, SUNXI_MSGBOX_WRITE_IRQ_ENABLE(2) / 4), 0U);
++}
++
++static void test_functional_shutdown_drops_held_message(struct kunit *test)
++{
++	struct mock_msgbox_fixture *fix = create_mock_fixture(test);
++	u32 status = SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4;
++	u32 fifo = SUNXI_MSGBOX_MSG_FIFO(2, 1) / 4;
++	u32 val = 0xA5A5A5A5;
++
++	mock_write_reg(fix, 3, status, SUN55I_FIFO_MAX);
++	KUNIT_EXPECT_EQ(test, sun55i_msgbox_chan_ops.send_data(&fix->chans[9], &val), 0);
++	sun55i_msgbox_chan_ops.shutdown(&fix->chans[9]);
++
++	/* A held message does not reach the next user of the channel */
++	mock_write_reg(fix, 3, status, 0);
++	mock_write_reg(fix, 3, fifo, 0);
++	KUNIT_EXPECT_TRUE(test, sun55i_msgbox_chan_ops.last_tx_done(&fix->chans[9]));
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, fifo), 0U);
 +}
 +
 +/* Write IRQ mode: fixture channels wired to the mailbox core's txdone path */
@@ -637,6 +679,65 @@ index 000000000000..66921df56d06
 +	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 0, stat_idx) & RD_IRQ_PEND_BIT(0), 0U);
 +}
 +
++/* rx callback that records the state the driver delivers in */
++struct mock_rx_state {
++	struct mock_rx_sink sink;
++	struct mock_msgbox_fixture *fix;
++	int calls;
++	u32 fifo_count[SUN55I_FIFO_MAX];
++	bool lock_held;
++};
++
++static void mock_rx_state_cb(struct mbox_client *cl, void *data)
++{
++	struct mock_rx_state *st = container_of(cl, struct mock_rx_state, sink.client);
++	struct mock_msgbox_fixture *fix = st->fix;
++	u32 val = 0x11;
++
++	if (st->calls < SUN55I_FIFO_MAX)
++		st->fifo_count[st->calls] =
++			mock_read_reg(fix, 0, SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4);
++	st->calls++;
++
++	/* Only meaningful on SMP: on UP a spinlock is never seen as taken */
++	if (spin_trylock(&fix->mbox.lock))
++		spin_unlock(&fix->mbox.lock);
++	else
++		st->lock_held = true;
++
++	/* A client may reply from its callback; send_data() takes the lock */
++	sun55i_msgbox_chan_ops.send_data(&fix->chans[9], &val);
++}
++
++static void test_irq_delivers_outside_lock(struct kunit *test)
++{
++	struct mock_msgbox_fixture *fix = create_tx_irq_fixture(test);
++	struct mock_rx_state *st = kunit_kzalloc(test, sizeof(*st), GFP_KERNEL);
++	int i;
++
++	KUNIT_ASSERT_NOT_NULL(test, st);
++	st->fix = fix;
++	st->sink.client.rx_callback = mock_rx_state_cb;
++	fix->chans[9].cl = &st->sink.client;
++
++	/* Channel 9 (local_n = 2, p = 1): three messages waiting */
++	mock_write_reg(fix, 0, SUNXI_MSGBOX_READ_IRQ_ENABLE(2) / 4, RD_IRQ_EN_BIT(1));
++	mock_write_reg(fix, 0, SUNXI_MSGBOX_READ_IRQ_STATUS(2) / 4, RD_IRQ_PEND_BIT(1));
++	mock_write_reg(fix, 0, SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4, 3);
++
++	KUNIT_EXPECT_EQ(test, sun55i_msgbox_irq(0, &fix->mbox), IRQ_HANDLED);
++	KUNIT_EXPECT_EQ(test, st->calls, 3);
++	KUNIT_EXPECT_FALSE(test, st->lock_held);
++
++	/* The drain and the pending clear finished before the first callback */
++	for (i = 0; i < 3; i++)
++		KUNIT_EXPECT_EQ(test, st->fifo_count[i], 0U);
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 0, SUNXI_MSGBOX_READ_IRQ_STATUS(2) / 4), 0U);
++
++	/* The replies went out */
++	KUNIT_EXPECT_EQ(test, mock_read_reg(fix, 3, SUNXI_MSGBOX_MSG_STATUS(2, 1) / 4), 3U);
++}
++
 +static void test_irq_pending_with_empty_fifo(struct kunit *test)
 +{
 +	struct mock_msgbox_fixture *fix = create_mock_fixture(test);
@@ -807,7 +908,8 @@ index 000000000000..66921df56d06
 +	KUNIT_CASE(test_functional_send_data_all_twelve_channels),
 +	KUNIT_CASE(test_functional_send_data_null),
 +	KUNIT_CASE(test_functional_last_tx_done_sweep),
-+	KUNIT_CASE(test_functional_send_data_refuses_full_fifo),
++	KUNIT_CASE(test_functional_send_data_holds_for_full_fifo),
++	KUNIT_CASE(test_functional_shutdown_drops_held_message),
 +	KUNIT_CASE(test_functional_peek_data_sweep),
 +	KUNIT_CASE(test_functional_startup_and_shutdown),
 +	KUNIT_CASE(test_functional_shutdown_isolation),
@@ -819,6 +921,7 @@ index 000000000000..66921df56d06
 +	KUNIT_CASE(test_irq_disabled_channel_ignored),
 +	KUNIT_CASE(test_irq_single_message_received),
 +	KUNIT_CASE(test_irq_clears_pending_after_drain),
++	KUNIT_CASE(test_irq_delivers_outside_lock),
 +	KUNIT_CASE(test_irq_pending_with_empty_fifo),
 +	KUNIT_CASE(test_irq_multi_channel_concurrency),
 +	KUNIT_CASE(test_irq_multi_port_burst_interleaved),
@@ -843,5 +946,5 @@ index 000000000000..66921df56d06
 +MODULE_DESCRIPTION("KUnit tests for Allwinner sun55i Message Box driver");
 +MODULE_LICENSE("GPL");
 -- 
-2.53.0
+2.43.0
 

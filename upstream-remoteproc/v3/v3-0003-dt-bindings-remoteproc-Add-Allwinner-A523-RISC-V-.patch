@@ -1,4 +1,4 @@
-From d9f6e6cf3f214445481e66e1b29b263e0ba7313f Mon Sep 17 00:00:00 2001
+From 6ad9cf0945b2041919fa85259c320eb58efab93a Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
@@ -204,5 +204,5 @@ index 258adff512ec..b1261b8c297e 100644
  M:	Richard Henderson <richard.henderson@linaro.org>
  M:	Matt Turner <mattst88@gmail.com>
 -- 
-2.53.0
+2.43.0
 
