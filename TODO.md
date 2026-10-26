@@ -706,6 +706,18 @@ Every fix lands on `cubie-linux-7.1` first (board test), then is folded into the
 | P1 | Kick throughput (poll + drain policy); vendor uses "not full" / write IRQ | F6 | after v3 | |
 | C1 | E906 D-cache: enable (`mxstatus.THEADISAEE`, `mhcr.DE`) and implement `hal::Pmp::dcache_clean_range()` / `dcache_invalidate_range()` with `dcache.cpa` / `dcache.ipa` per line + `sync` (add `_xtheadcmo` to `-march`); clean after E906 writes vrings/buffers/trace, invalidate before reading Linux data. Today the D-cache is off (`firmware/common/hal/pmp.cpp`), so DRAM works but uncached. Check the E906 line size in the manual. Linux side unchanged (WC mappings). D7 does **not** remove DRAM: `dram`/`trace` stay carveouts, only the duplicate lookup in `da_to_va()` goes | firmware | after v3 | |
 
+#### v3 board test before sending (2026-10-26 night, send target Tue 2026-10-27)
+
+Tests the MSGBOX-LOCK fixes on silicon. Kernel: `linux-cubie` `cubie-linux-7.1` at `c74e686d8f3e`. If any item fails, do not send: the cover letter says the board ran these exact driver files.
+
+- [ ] Build and flash: `make LOCALVERSION=`, kernel version matches `uname -r`, modules load, network up (BOARD row rule; at most one backup Image in `/boot`)
+- [ ] KUnit at boot: 41/41 (`dmesg | grep -i kunit`; msgbox 26, remoteproc 15)
+- [ ] Timer mode (no `allwinner,tx-done-irq`): rpmsg ping 10000 and stress (16 in flight), no loss, one msgbox IRQ per message
+- [ ] Write IRQ mode (`allwinner,tx-done-irq`): same ping and stress, no loss
+- [ ] Message box unbind/bind and remoteproc stop/start, then ping again
+- [ ] Optional: one boot with `PROVE_LOCKING` + `DEBUG_ATOMIC_SLEEP`, run ping/stress, no lockdep or sleep-in-atomic splat
+- [ ] Record results in the MSGBOX-LOCK row (and DebugLog if anything new), mark it ✅
+
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
 
 Ground truth used: silicon readbacks (`firmware/tests.md` heartbeat `MISA=0x40901125`, live register probes)
