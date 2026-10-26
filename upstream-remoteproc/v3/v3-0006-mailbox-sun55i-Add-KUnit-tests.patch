@@ -1,4 +1,4 @@
-From 380a4807ce2da284e6b22e0f090982ee1b2eab8a Mon Sep 17 00:00:00 2001
+From 91500316b05ee9bfcef3a14213b2b86ddb5ebff9 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 6/7] mailbox: sun55i: Add KUnit tests
@@ -76,7 +76,7 @@ index 40024aa906a6..b9bd14960af0 100644
  
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
 new file mode 100644
-index 000000000000..a6dc1b06d26a
+index 000000000000..14a9e1ebe798
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
 @@ -0,0 +1,865 @@
@@ -88,8 +88,8 @@ index 000000000000..a6dc1b06d26a
 + *  - the 12-channel routing table and out-of-range channel numbers
 + *  - send_data, last_tx_done, peek_data, startup and shutdown; in timer
 + *    mode a message for a full FIFO is held until last_tx_done() has room
-+ *  - TX done by write IRQ: armed only while the FIFO is full, the handler
-+ *    disarms, acks and ignores channels it did not arm
++ *  - TX done by write IRQ: armed after every send (and for a full FIFO),
++ *    the handler disarms, acks and ignores channels it did not arm
 + *  - the interrupt handler: delivery after the drain, outside the lock (a
 + *    client may reply from its callback), per-channel isolation, several
 + *    channels and ports in one pass, and the FIFO_MAX drain bound

@@ -1,4 +1,4 @@
-From 15c6872a4577765aca520bf47aa0ef7846bbcb11 Mon Sep 17 00:00:00 2001
+From 3a05cbdb815630b24a23e48ea74707475fce83e9 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 7/7] remoteproc: sunxi: Add KUnit tests
@@ -31,17 +31,17 @@ Changes in v3:
   deferring to the workqueue
 - Duplicate tests merged
 ---
- drivers/remoteproc/Kconfig            |  12 +
+ drivers/remoteproc/Kconfig            |  14 +
  drivers/remoteproc/Makefile           |   1 +
- drivers/remoteproc/sunxi_rproc_test.c | 546 ++++++++++++++++++++++++++
- 3 files changed, 559 insertions(+)
+ drivers/remoteproc/sunxi_rproc_test.c | 551 ++++++++++++++++++++++++++
+ 3 files changed, 566 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc_test.c
 
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
-index d8fb5d67706e..fd1ea71e169d 100644
+index d8fb5d67706e..8ce6600bf61a 100644
 --- a/drivers/remoteproc/Kconfig
 +++ b/drivers/remoteproc/Kconfig
-@@ -397,6 +397,18 @@ config SUNXI_REMOTEPROC
+@@ -397,6 +397,20 @@ config SUNXI_REMOTEPROC
  	  co-processor on Allwinner A523, A527, and T527 SoCs via the
  	  remote processor framework.
  
@@ -52,9 +52,11 @@ index d8fb5d67706e..fd1ea71e169d 100644
 +	depends on SUNXI_REMOTEPROC && KUNIT && (ARM64 || COMPILE_TEST) && !UML
 +	default KUNIT_ALL_TESTS
 +	help
-+	  KUnit tests for the Allwinner sunxi_rproc driver, covering
-+	  da_to_va() address translation logic and boundary conditions
-+	  across dedicated SRAM spaces, DRAM carveouts, and trace regions.
++	  KUnit tests for the Allwinner sunxi_rproc driver: da_to_va()
++	  address translation for both SRAM spaces and DRAM carveouts,
++	  prepare()/unprepare() (remap bit, SRAM clear, carveouts), start()
++	  boot address programming, kicks, and the rx callback deferring to
++	  a workqueue.
 +	  Say Y here to run these tests during boot or via kunit.py.
 +
  endif # REMOTEPROC
@@ -71,10 +73,10 @@ index 02acefa6d880..a3503a71f332 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC_KUNIT_TEST)	+= sunxi_rproc_test.o
 diff --git a/drivers/remoteproc/sunxi_rproc_test.c b/drivers/remoteproc/sunxi_rproc_test.c
 new file mode 100644
-index 000000000000..4dd391e2c6dd
+index 000000000000..ed9674dd1e01
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc_test.c
-@@ -0,0 +1,546 @@
+@@ -0,0 +1,551 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * KUnit tests for Allwinner XuanTie RISC-V remoteproc driver (sunxi_rproc.c)
@@ -405,7 +407,7 @@ index 000000000000..4dd391e2c6dd
 +	use_mmio_mocks(ctx);
 +
 +	/* Bit 0 belongs to the DSP (reset value 1): only bit 1 may change */
-+	ctx->mock_remap_reg = SUNXI_REMAP_MCU_RAM_BIT;
++	writel(SUNXI_REMAP_MCU_RAM_BIT, ctx->priv.remap_va);
 +
 +	/* prepare() should set SUNXI_REMAP_SRAMA3_2_BIT (bit 1) */
 +	ret = sunxi_rproc_prepare(&ctx->rproc);
@@ -545,6 +547,11 @@ index 000000000000..4dd391e2c6dd
 +	KUNIT_EXPECT_FALSE(test, object_is_on_stack(ctx->kick_data[0]));
 +	KUNIT_EXPECT_FALSE(test, object_is_on_stack(ctx->kick_data[1]));
 +
++	/* A vring without a payload is refused, not sent as another vring */
++	sunxi_rproc_kick(&ctx->rproc, 2);
++	sunxi_rproc_kick(&ctx->rproc, -1);
++	KUNIT_EXPECT_EQ(test, ctx->kick_count, 2);
++
 +	/* No mailbox channel: kick is a no-op */
 +	ctx->priv.mbox_chan = NULL;
 +	sunxi_rproc_kick(&ctx->rproc, 0);
@@ -554,8 +561,8 @@ index 000000000000..4dd391e2c6dd
 +/* ==================== Mailbox rx callback ==================== */
 +
 +/*
-+ * The mailbox rx callback runs in hardirq context with the msgbox lock held,
-+ * and the rpmsg receive path takes mutexes. The callback must only queue the
++ * The mailbox rx callback runs in hardirq context, and the rpmsg receive
++ * path takes mutexes. The callback must only queue the
 + * vring work; the work must run in a kworker (regression test for calling
 + * rproc_vq_interrupt() from the callback).
 + */

@@ -1,4 +1,4 @@
-From 67e4deec61a7aa3de1d237960f8f30bfdb3f06df Mon Sep 17 00:00:00 2001
+From 1fc5494465806098d8e46f1bdb65bfa92094a4e9 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box driver
@@ -42,6 +42,8 @@ Changes in v3:
 - Handler drains under the controller lock, bounded by the FIFO depth
   (Sashiko), and delivers outside it; shutdown() synchronizes with it
 - Startup and shutdown share one bounded flush
+- Our write IRQs are disarmed at probe, and again in shutdown() once
+  a running TX-done handler has finished
 - Register access goes through sun55i_readl()/sun55i_writel() so the
   KUnit tests can model the hardware
 - sun60i/A733 support dropped from this series
@@ -49,17 +51,17 @@ Changes in v3:
  MAINTAINERS                     |   7 +
  drivers/mailbox/Kconfig         |   9 +
  drivers/mailbox/Makefile        |   2 +
- drivers/mailbox/sun55i-msgbox.c | 587 ++++++++++++++++++++++++++++++++
+ drivers/mailbox/sun55i-msgbox.c | 607 ++++++++++++++++++++++++++++++++
  drivers/mailbox/sun55i-msgbox.h |  86 +++++
- 5 files changed, 691 insertions(+)
+ 5 files changed, 711 insertions(+)
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
  create mode 100644 drivers/mailbox/sun55i-msgbox.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index f58a305de664..258adff512ec 100644
+index fcff12847485..e4cb1d116974 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -938,6 +938,13 @@ S:	Maintained
+@@ -947,6 +947,13 @@ S:	Maintained
  F:	Documentation/devicetree/bindings/hwlock/allwinner,sun6i-a31-hwspinlock.yaml
  F:	drivers/hwspinlock/sun6i_hwspinlock.c
  
@@ -108,10 +110,10 @@ index 45dc59bb3e7f..40024aa906a6 100644
  obj-$(CONFIG_QCOM_CPUCP_MBOX)	+= qcom-cpucp-mbox.o
 diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
 new file mode 100644
-index 000000000000..30a523cfc1cb
+index 000000000000..e5bcc615e5e0
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.c
-@@ -0,0 +1,587 @@
+@@ -0,0 +1,607 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Allwinner sun55i 4-Port Hardware Message Box Driver
@@ -249,8 +251,9 @@ index 000000000000..30a523cfc1cb
 +
 +			/*
 +			 * Outside the lock: a client may send from its rx
-+			 * callback, and send_data() takes the lock. shutdown()
-+			 * waits for this handler before the channel goes away.
++			 * callback, and in write IRQ mode send_data() takes the
++			 * lock. shutdown() waits for this handler before the
++			 * channel goes away.
 +			 */
 +			for (i = 0; i < count; i++)
 +				mbox_chan_received_data(chan, &msgs[i]);
@@ -426,6 +429,8 @@ index 000000000000..30a523cfc1cb
 +			return -EBUSY;
 +		}
 +		mbox->tx_held_msg[n] = msg;
++		/* The poll timer may run on another CPU: message before flag */
++		smp_mb__before_atomic();
 +		set_bit(n, &mbox->tx_held);
 +		return 0;
 +	}
@@ -510,13 +515,17 @@ index 000000000000..30a523cfc1cb
 +	/* A message held for a full FIFO is dropped with the channel */
 +	clear_bit(n, &mbox->tx_held);
 +
-+	/*
-+	 * The core also calls shutdown() when startup() failed; release the
-+	 * line only if this channel's startup() got it.
-+	 */
++	/* Release the line only if this channel's startup() got it */
 +	if (test_and_clear_bit(n, &mbox->tx_irq_held)) {
 +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
 +		sun55i_msgbox_tx_irq_put(mbox, remote_id);
++		/*
++		 * A TX-done handler that was already running submits the next
++		 * message through send_data(), which arms the IRQ again. It has
++		 * finished now (free_irq() or synchronize_irq() above), so
++		 * disarm once more.
++		 */
++		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
 +	}
 +
 +	sun55i_msgbox_rx_flush(mbox, local_n, p);
@@ -628,10 +637,23 @@ index 000000000000..30a523cfc1cb
 +	if (ret)
 +		return ret;
 +
-+	/* Disable all read IRQs and clear status */
++	/*
++	 * Disable all read IRQs and clear status, and disarm our write IRQs in
++	 * the remote banks, which an earlier kernel or bind may have left on.
++	 */
 +	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
++		const struct sun55i_route *route = &sun55i_msgbox_arm_routes[local_n];
++		void __iomem *wr_en = mbox->regs[route->remote_id] +
++				      SUNXI_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n);
++		u32 val = sun55i_readl(wr_en);
++		int p;
++
 +		sun55i_writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
 +		sun55i_writel(U32_MAX, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
++
++		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++)
++			val &= ~WR_IRQ_EN_BIT(p);
++		sun55i_writel(val, wr_en);
 +	}
 +
 +	/* The ARM bank interrupt signals messages received by this processor */

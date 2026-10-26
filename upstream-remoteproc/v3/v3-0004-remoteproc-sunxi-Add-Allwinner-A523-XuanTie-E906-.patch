@@ -1,4 +1,4 @@
-From f1bca9256d4730eff5092eaafedf8b248a4cd050 Mon Sep 17 00:00:00 2001
+From c17e31dda7ff186148addb141f92c1159e4f9c20 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906
@@ -7,19 +7,20 @@ Subject: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906
 Add a remoteproc driver for the XuanTie E906 RISC-V core in the
 Allwinner A523, A527 and T527 (sun55i).
 
-.prepare() powers the RISC-V and SRAM power domains, releases the
-configuration, SRAM and debug resets, enables the clocks, hands SRAM
-space 1 to the core through bit 1 of the remap register and registers
-the memory-region entries as carveouts. .start() writes the ELF entry
-point to the boot address register and releases the core reset.
+.prepare() powers the RISC-V and SRAM power domains, holds the core in
+reset, releases the configuration, SRAM and debug resets, enables the
+clocks, hands SRAM space 1 to the core through bit 1 of the remap
+register, clears both SRAM spaces and registers the memory-region
+entries as carveouts. .start() writes the ELF entry point to the boot
+address register and releases the core reset.
 
-The driver translates the two SRAM windows, by core and by host
-address; DRAM firmware, the trace buffer and the vrings are resolved by
-the core from the carveouts. Vring kicks and the core's notifications
-use one message box channel. The mailbox receive callback runs in
-atomic context, so it queues work on an ordered workqueue, which calls
-rproc_vq_interrupt(). An optional crash interrupt is reported with
-rproc_report_crash().
+The driver translates the two SRAM windows, by core and by host address;
+DRAM firmware, the trace buffer and the vrings are resolved by the core
+from the carveouts. Vring kicks and the core's notifications use one
+message box channel. The mailbox receive callback runs in atomic
+context, so it queues work on an ordered workqueue, which calls
+rproc_vq_interrupt() for every vring. An optional crash interrupt is
+reported with rproc_report_crash().
 
 Based on the vendor sunxi-rproc driver by Allwinner Technology Co.,
 Ltd.
@@ -36,22 +37,24 @@ Changes in v3:
 - All register regions, clocks and resets are required; no fallback to
   the configuration reset for the core reset (Sashiko)
 - Handle the debug reset and the RISC-V and SRAM power domains
-- One mailbox channel for kicks and notifications
+- One mailbox channel for kicks and notifications; a notification
+  checks every vring in rproc->notifyids
+- prepare() holds the core in reset before clearing the SRAM
 - Kicks send static const per-vring payloads with knows_txdone = false
   instead of a shared kick_msg (Sashiko)
 - Teardown: rproc_del(), then mbox_free_channel(), then
   cancel_work_sync() (Sashiko)
 - The crash interrupt is armed once the core reset is released, with an
-  atomic flag (Sashiko)
+  atomic flag (Sashiko); lookup and request errors fail the probe
 - Read back the boot address before releasing the core reset (Sashiko)
 - Carveouts mapped MEMREMAP_WC; SRAM regions reuse the SRAM mapping
   (Sashiko)
 ---
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
- drivers/remoteproc/sunxi_rproc.c | 666 +++++++++++++++++++++++++++++++
+ drivers/remoteproc/sunxi_rproc.c | 691 +++++++++++++++++++++++++++++++
  drivers/remoteproc/sunxi_rproc.h | 117 ++++++
- 4 files changed, 792 insertions(+)
+ 4 files changed, 817 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
 
@@ -85,10 +88,10 @@ index 689686de0d41..02acefa6d880 100644
 +obj-$(CONFIG_SUNXI_REMOTEPROC)		+= sunxi_rproc.o
 diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_rproc.c
 new file mode 100644
-index 000000000000..405ec885efb0
+index 000000000000..676a34f136ed
 --- /dev/null
 +++ b/drivers/remoteproc/sunxi_rproc.c
-@@ -0,0 +1,666 @@
+@@ -0,0 +1,691 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Allwinner XuanTie E906 RISC-V Remote Processor Driver
@@ -142,12 +145,18 @@ index 000000000000..405ec885efb0
 +};
 +EXPORT_SYMBOL_IF_KUNIT(sun55i_riscv_cfg);
 +
++static int sunxi_rproc_vq_notify(int id, void *ptr, void *data)
++{
++	rproc_vq_interrupt(data, id);
++	return 0;
++}
++
++/* One channel carries all notifications: check every vring */
 +static void sunxi_rproc_vq_work(struct work_struct *work)
 +{
 +	struct sunxi_rproc *priv = container_of(work, struct sunxi_rproc, vq_work);
 +
-+	rproc_vq_interrupt(priv->rproc, 0);
-+	rproc_vq_interrupt(priv->rproc, 1);
++	idr_for_each(&priv->rproc->notifyids, sunxi_rproc_vq_notify, priv->rproc);
 +}
 +
 +/*
@@ -208,7 +217,17 @@ index 000000000000..405ec885efb0
 +		goto err_free_mem;
 +	}
 +
-+	/* 1. Deassert the configuration, SRAM and debug resets (core stays in reset) */
++	/*
++	 * 1. Hold the core in reset (a bootloader or an earlier kernel may
++	 * have left it running), then deassert the configuration, SRAM and
++	 * debug resets.
++	 */
++	ret = reset_control_assert(priv->rst_core);
++	if (ret) {
++		dev_err(priv->dev, "failed to assert core reset: %d\n", ret);
++		goto err_pm_put;
++	}
++
 +	ret = reset_control_deassert(priv->rst_cfg);
 +	if (ret) {
 +		dev_err(priv->dev, "failed to deassert cfg reset: %d\n", ret);
@@ -357,7 +376,7 @@ index 000000000000..405ec885efb0
 + * and reads it later from the poll timer. Use immutable static storage, one
 + * entry per vring, so nothing is rewritten while queued.
 + */
-+static const u32 sunxi_rproc_kick_msg[2] = { 0, 1 };
++static const u32 sunxi_rproc_kick_msg[] = { 0, 1 };
 +
 +VISIBLE_IF_KUNIT
 +void sunxi_rproc_kick(struct rproc *rproc, int vqid)
@@ -368,8 +387,13 @@ index 000000000000..405ec885efb0
 +	if (!priv->mbox_chan)
 +		return;
 +
++	if (vqid < 0 || vqid >= ARRAY_SIZE(sunxi_rproc_kick_msg)) {
++		dev_err_ratelimited(priv->dev, "no kick payload for vring %d\n", vqid);
++		return;
++	}
++
 +	ret = mbox_send_message(priv->mbox_chan,
-+				(void *)&sunxi_rproc_kick_msg[vqid & 1]);
++				(void *)&sunxi_rproc_kick_msg[vqid]);
 +	if (ret < 0)
 +		dev_err_ratelimited(priv->dev, "failed to send mailbox kick: %d\n", ret);
 +}
@@ -582,7 +606,8 @@ index 000000000000..405ec885efb0
 +	int crash_irq;
 +	int ret;
 +
-+	of_property_read_string(dev->of_node, "firmware-name", &fw_name);
++	/* firmware-name is optional; keep the default without it */
++	rproc_of_parse_firmware(dev, 0, &fw_name);
 +
 +	rproc = devm_rproc_alloc(dev, dev_name(dev), &sunxi_rproc_ops,
 +				 fw_name, sizeof(*priv));
@@ -662,10 +687,14 @@ index 000000000000..405ec885efb0
 +						IRQF_ONESHOT | IRQF_NO_AUTOEN,
 +						"sunxi-rproc-crash",
 +						priv);
-+		if (ret)
-+			dev_warn(dev, "failed to request crash IRQ %d: %d\n", crash_irq, ret);
-+		else
-+			priv->crash_irq = crash_irq;
++		if (ret) {
++			dev_err_probe(dev, ret, "failed to request crash IRQ\n");
++			goto err_mem_release;
++		}
++		priv->crash_irq = crash_irq;
++	} else if (crash_irq != -ENXIO) {
++		ret = dev_err_probe(dev, crash_irq, "failed to get crash IRQ\n");
++		goto err_mem_release;
 +	}
 +
 +	/* Mailbox (optional: without it the core runs standalone) */
@@ -751,7 +780,6 @@ index 000000000000..405ec885efb0
 +};
 +module_platform_driver(sunxi_rproc_driver);
 +
-+MODULE_AUTHOR("Allwinner Technology Co., Ltd.");
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
 +MODULE_DESCRIPTION("Allwinner XuanTie E906 RISC-V Remoteproc Driver");
 +MODULE_LICENSE("GPL");

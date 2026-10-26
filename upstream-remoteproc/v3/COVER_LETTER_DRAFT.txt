@@ -22,7 +22,7 @@ Changes in v3 (details in each patch):
     memory-region; "schema" dropped from the subjects (Krzysztof).
   - KUnit patches moved after the drivers. The message box tests run
     against a mock that models the FIFOs and status registers.
-  - Rebased on next-20261020.
+  - Rebased on next-20261026.
 
 Notes for review:
   - The remap register (0x07010364, PRCM) is shared with the DSP: bit 1
@@ -42,8 +42,9 @@ driver and test files:
   - rpmsg ping (10000 messages, about 165 us round trip) and stress
     (100000 messages, 16 in flight, no loss), with vrings in DRAM and in
     SRAM, TX done by poll and by write interrupt, and message box
-    unbind/bind. One interrupt per message.
-  - On next-20261020: W=1 build, dt_binding_check, dtbs_check and
+    unbind/bind with the remoteproc driver unbound. One interrupt per
+    message.
+  - On next-20261026: W=1 build, dt_binding_check, dtbs_check and
     checkpatch --strict are clean.
 
 Tools: I used Claude Code (Anthropic) to help review the code against
