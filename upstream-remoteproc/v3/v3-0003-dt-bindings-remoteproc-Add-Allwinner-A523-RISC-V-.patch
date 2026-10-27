@@ -1,4 +1,4 @@
-From a0729e4cf0c82d07ced413b6686682c4fced7b4e Mon Sep 17 00:00:00 2001
+From 24f0188103f83b642a493ffbabf4043f5f219f3f Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
@@ -22,24 +22,27 @@ Changes in v3:
 - reg and reg-names are a fixed list of four (cfg, r_sram, r_sram1,
   remap), all required (Krzysztof)
 - clocks and resets are fixed lists, no minItems (Krzysztof); add the
-  debug reset
+  debug reset. The msgbox and parent clocks and the msgbox reset are
+  dropped: they belong to the message box node
 - Add the RISC-V and SRAM power domains
-- One message box channel; mbox-names dropped
-- memory-region and memory-region-names are a positional list: the
-  virtio pool at index 0, then DRAM, then trace
+- One message box channel; mbox-names dropped. mboxes is optional: a
+  user can drive the message box from userspace (UIO) instead
+- The crash interrupt description says the A523 has no dedicated line
+  for it
 - "schema" dropped from the subject (Krzysztof)
+- Jernej Skrabec and Samuel Holland dropped from the maintainers; the
+  MAINTAINERS entry moves to the driver patch
 ---
- .../allwinner,sun55i-a523-rproc.yaml          | 144 ++++++++++++++++++
- MAINTAINERS                                   |   8 +
- 2 files changed, 152 insertions(+)
+ .../allwinner,sun55i-a523-rproc.yaml          | 147 ++++++++++++++++++
+ 1 file changed, 147 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 
 diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 new file mode 100644
-index 000000000000..3f704dd2ea68
+index 000000000000..31339b9473ef
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,147 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -128,7 +131,10 @@ index 000000000000..3f704dd2ea68
 +
 +  interrupts:
 +    maxItems: 1
-+    description: Crash notification from the RISC-V core
++    description:
++      Interrupt the RISC-V core raises on a fatal error. The A523 has no
++      dedicated line for this, so it is present only where the system
++      integration provides one.
 +
 +  interrupt-names:
 +    items:
@@ -184,25 +190,6 @@ index 000000000000..3f704dd2ea68
 +        mboxes = <&msgbox 9>;
 +        firmware-name = "riscv-firmware.elf";
 +    };
-diff --git a/MAINTAINERS b/MAINTAINERS
-index e4cb1d116974..5498510c2c16 100644
---- a/MAINTAINERS
-+++ b/MAINTAINERS
-@@ -969,6 +969,14 @@ L:	linux-media@vger.kernel.org
- S:	Maintained
- F:	drivers/staging/media/sunxi/cedrus/
- 
-+ALLWINNER XUANTIE RISC-V REMOTEPROC DRIVER
-+M:	Tim Michals <tcmichals@gmail.com>
-+L:	linux-remoteproc@vger.kernel.org
-+L:	linux-sunxi@lists.linux.dev
-+S:	Maintained
-+F:	Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
-+F:	drivers/remoteproc/sunxi_rproc*
-+
- ALPHA PORT
- M:	Richard Henderson <richard.henderson@linaro.org>
- M:	Matt Turner <mattst88@gmail.com>
 -- 
 2.43.0
 

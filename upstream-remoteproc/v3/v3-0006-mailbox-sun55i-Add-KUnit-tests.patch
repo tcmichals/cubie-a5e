@@ -1,4 +1,4 @@
-From 91500316b05ee9bfcef3a14213b2b86ddb5ebff9 Mon Sep 17 00:00:00 2001
+From 4bbfcdc1aea6fac1e9376575671a58b86fe050f0 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 6/7] mailbox: sun55i: Add KUnit tests
@@ -36,8 +36,8 @@ Changes in v3:
 ---
  drivers/mailbox/Kconfig              |  11 +
  drivers/mailbox/Makefile             |   1 +
- drivers/mailbox/sun55i_msgbox_test.c | 865 +++++++++++++++++++++++++++
- 3 files changed, 877 insertions(+)
+ drivers/mailbox/sun55i_msgbox_test.c | 902 +++++++++++++++++++++++++++
+ 3 files changed, 914 insertions(+)
  create mode 100644 drivers/mailbox/sun55i_msgbox_test.c
 
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
@@ -76,10 +76,10 @@ index 40024aa906a6..b9bd14960af0 100644
  
 diff --git a/drivers/mailbox/sun55i_msgbox_test.c b/drivers/mailbox/sun55i_msgbox_test.c
 new file mode 100644
-index 000000000000..14a9e1ebe798
+index 000000000000..810a30b7ee3c
 --- /dev/null
 +++ b/drivers/mailbox/sun55i_msgbox_test.c
-@@ -0,0 +1,865 @@
+@@ -0,0 +1,902 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * KUnit tests for Allwinner sun55i 4-port Message Box driver (sun55i-msgbox.c)
@@ -89,7 +89,8 @@ index 000000000000..14a9e1ebe798
 + *  - send_data, last_tx_done, peek_data, startup and shutdown; in timer
 + *    mode a message for a full FIFO is held until last_tx_done() has room
 + *  - TX done by write IRQ: armed after every send (and for a full FIFO),
-+ *    the handler disarms, acks and ignores channels it did not arm
++ *    the handler disarms, acks and ignores channels it did not arm; a
++ *    startup() that cannot get the line never enables the receive IRQ
 + *  - the interrupt handler: delivery after the drain, outside the lock (a
 + *    client may reply from its callback), per-channel isolation, several
 + *    channels and ports in one pass, and the FIFO_MAX drain bound
@@ -98,6 +99,9 @@ index 000000000000..14a9e1ebe798
 + * (KUnit static stubs) to mock banks that model the hardware: reading a
 + * message FIFO pops it, writing one pushes, and the IRQ status registers are
 + * write-1-to-clear, a read pending bit only clearing once its FIFO is empty.
++ * The stubs follow the test task, so a real interrupt taken while a test runs
++ * is redirected too: accesses outside the mock banks from interrupt context
++ * go to the hardware.
 + *
 + * Copyright (C) 2026 Tim Michals <tcmichals@gmail.com>
 + */
@@ -175,6 +179,8 @@ index 000000000000..14a9e1ebe798
 +	/* Hardware defect: reading a FIFO does not lower its message count */
 +	bool fifo_stuck;
 +	int fifo_reads;
++	/* Every bit ever written to the host bank's READ_IRQ_ENABLE, per port */
++	u32 rd_en_written[SUN55I_NUM_ROUTES];
 +};
 +
 +/* Test-side access: the registers as stored, no hardware behaviour */
@@ -204,7 +210,9 @@ index 000000000000..14a9e1ebe798
 +			return &fix->regs[proc][(a - base) / 4];
 +		}
 +	}
-+	KUNIT_FAIL(kunit_get_current_test(), "register access outside the mock banks");
++	/* A real interrupt taken while this test runs: not ours to fail */
++	if (in_task())
++		KUNIT_FAIL(kunit_get_current_test(), "register access outside the mock banks");
 +	return NULL;
 +}
 +
@@ -220,7 +228,7 @@ index 000000000000..14a9e1ebe798
 +	u32 n, reg, *r = mock_decode(addr, &n, &reg);
 +
 +	if (!r)
-+		return 0;
++		return in_task() ? 0 : readl(addr);
 +
 +	/* Reading the message FIFO pops one message */
 +	if (reg >= SUNXI_MSGBOX_MSG_FIFO(0, 0) &&
@@ -236,13 +244,22 @@ index 000000000000..14a9e1ebe798
 +
 +static void mock_writel(u32 val, void __iomem *addr)
 +{
++	struct mock_msgbox_fixture *fix = kunit_get_current_test()->priv;
 +	u32 n, reg, *r = mock_decode(addr, &n, &reg);
 +	int p;
 +
-+	if (!r)
++	if (!r) {
++		if (!in_task())
++			writel(val, addr);
 +		return;
++	}
 +
 +	switch (reg) {
++	case SUNXI_MSGBOX_READ_IRQ_ENABLE(0):
++		if (r >= fix->regs[0] && r < fix->regs[0] + ARRAY_SIZE(fix->regs[0]) &&
++		    n < SUN55I_NUM_ROUTES)
++			fix->rd_en_written[n] |= val;
++		break;
 +	case SUNXI_MSGBOX_READ_IRQ_STATUS(0):
 +		/* W1C; a read pending bit stays set while its FIFO is not empty */
 +		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {
@@ -900,6 +917,25 @@ index 000000000000..14a9e1ebe798
 +
 +/* =============== Test Suite Registration =============== */
 +
++/*
++ * startup() that cannot get the TX-done line fails, and the core then clears
++ * chan->cl: the receive IRQ must never have been enabled, or a handler on
++ * another CPU could deliver to the cleared client.
++ */
++static void test_tx_irq_startup_failure_leaves_rx_off(struct kunit *test)
++{
++	struct mock_msgbox_fixture *fix = create_tx_irq_fixture(test);
++	struct sun55i_tx_irq *rv = &fix->mbox.tx_irqs[SUN55I_PROC_RV];
++
++	rv->irq = IRQ_NOTCONNECTED;
++	rv->name = "test-rv";
++
++	KUNIT_EXPECT_EQ(test, sun55i_msgbox_chan_ops.startup(&fix->chans[8]), -ENOTCONN);
++	KUNIT_EXPECT_EQ(test, fix->rd_en_written[2] & RD_IRQ_EN_BIT(0), 0U);
++	KUNIT_EXPECT_EQ(test, rv->users, 0U);
++	KUNIT_EXPECT_FALSE(test, test_bit(8, &fix->mbox.tx_irq_held));
++}
++
 +static struct kunit_case sun55i_msgbox_cases[] = {
 +	/* Routing Table Tests */
 +	KUNIT_CASE(test_chan_to_route_all),
@@ -931,6 +967,7 @@ index 000000000000..14a9e1ebe798
 +	KUNIT_CASE(test_tx_irq_armed_after_every_send),
 +	KUNIT_CASE(test_tx_irq_handler_disarms_and_acks),
 +	KUNIT_CASE(test_tx_irq_handler_ignores_unarmed),
++	KUNIT_CASE(test_tx_irq_startup_failure_leaves_rx_off),
 +	{}
 +};
 +

@@ -1,4 +1,4 @@
-From 1fc5494465806098d8e46f1bdb65bfa92094a4e9 Mon Sep 17 00:00:00 2001
+From 256968d179c431b2eb57c009c3319f8d5227bdb4 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box driver
@@ -46,14 +46,17 @@ Changes in v3:
   a running TX-done handler has finished
 - Register access goes through sun55i_readl()/sun55i_writel() so the
   KUnit tests can model the hardware
+- The shared reset is deasserted at probe and never asserted, as in
+  sun6i-msgbox: the other banks carry traffic between the other
+  processors
 - sun60i/A733 support dropped from this series
 ---
  MAINTAINERS                     |   7 +
  drivers/mailbox/Kconfig         |   9 +
  drivers/mailbox/Makefile        |   2 +
- drivers/mailbox/sun55i-msgbox.c | 607 ++++++++++++++++++++++++++++++++
+ drivers/mailbox/sun55i-msgbox.c | 602 ++++++++++++++++++++++++++++++++
  drivers/mailbox/sun55i-msgbox.h |  86 +++++
- 5 files changed, 711 insertions(+)
+ 5 files changed, 706 insertions(+)
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
  create mode 100644 drivers/mailbox/sun55i-msgbox.h
 
@@ -110,10 +113,10 @@ index 45dc59bb3e7f..40024aa906a6 100644
  obj-$(CONFIG_QCOM_CPUCP_MBOX)	+= qcom-cpucp-mbox.o
 diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
 new file mode 100644
-index 000000000000..e5bcc615e5e0
+index 000000000000..de8a3eb08f7c
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.c
-@@ -0,0 +1,607 @@
+@@ -0,0 +1,602 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Allwinner sun55i 4-Port Hardware Message Box Driver
@@ -458,16 +461,10 @@ index 000000000000..e5bcc615e5e0
 +
 +	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 +
-+	/* Drop stale receive data, then clear the pending bit */
-+	sun55i_msgbox_rx_flush(mbox, local_n, p);
-+
-+	/* Enable receive IRQ */
-+	spin_lock_irqsave(&mbox->lock, flags);
-+	val = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+	val |= RD_IRQ_EN_BIT(p);
-+	sun55i_writel(val, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+	spin_unlock_irqrestore(&mbox->lock, flags);
-+
++	/*
++	 * Get the TX-done line before the receive IRQ is enabled: on failure the
++	 * core clears chan->cl, which a receive handler must not be using.
++	 */
 +	if (mbox->tx_done_irq) {
 +		int ret;
 +
@@ -478,16 +475,20 @@ index 000000000000..e5bcc615e5e0
 +			      mbox->regs[remote_id] + SUNXI_MSGBOX_WRITE_IRQ_STATUS(remote_n));
 +
 +		ret = sun55i_msgbox_tx_irq_get(mbox, remote_id);
-+		if (ret) {
-+			spin_lock_irqsave(&mbox->lock, flags);
-+			val = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+			val &= ~RD_IRQ_EN_BIT(p);
-+			sun55i_writel(val, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+			spin_unlock_irqrestore(&mbox->lock, flags);
++		if (ret)
 +			return ret;
-+		}
 +		set_bit(n, &mbox->tx_irq_held);
 +	}
++
++	/* Drop stale receive data, then clear the pending bit */
++	sun55i_msgbox_rx_flush(mbox, local_n, p);
++
++	/* Enable receive IRQ */
++	spin_lock_irqsave(&mbox->lock, flags);
++	val = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
++	val |= RD_IRQ_EN_BIT(p);
++	sun55i_writel(val, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
++	spin_unlock_irqrestore(&mbox->lock, flags);
 +
 +	return 0;
 +}
@@ -580,11 +581,6 @@ index 000000000000..e5bcc615e5e0
 +};
 +EXPORT_SYMBOL_IF_KUNIT(sun55i_msgbox_chan_ops);
 +
-+static void sun55i_msgbox_assert_reset(void *data)
-+{
-+	reset_control_assert(data);
-+}
-+
 +static int sun55i_msgbox_probe(struct platform_device *pdev)
 +{
 +	struct device *dev = &pdev->dev;
@@ -629,13 +625,15 @@ index 000000000000..e5bcc615e5e0
 +	if (IS_ERR(rst))
 +		return dev_err_probe(dev, PTR_ERR(rst), "failed to get resets\n");
 +
++	/*
++	 * The DSP, CPUS and RISC-V banks also carry traffic between the other
++	 * processors, which may already be running. Asserting the reset would
++	 * wipe their FIFOs, so it is never asserted, on unbind or on a probe
++	 * failure, as in sun6i-msgbox.
++	 */
 +	ret = reset_control_deassert(rst);
 +	if (ret)
 +		return dev_err_probe(dev, ret, "failed to deassert reset\n");
-+
-+	ret = devm_add_action_or_reset(dev, sun55i_msgbox_assert_reset, rst);
-+	if (ret)
-+		return ret;
 +
 +	/*
 +	 * Disable all read IRQs and clear status, and disarm our write IRQs in

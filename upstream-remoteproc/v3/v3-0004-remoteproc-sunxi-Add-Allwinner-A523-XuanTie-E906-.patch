@@ -1,4 +1,4 @@
-From c17e31dda7ff186148addb141f92c1159e4f9c20 Mon Sep 17 00:00:00 2001
+From 8dcdc28db204123be488e2c06362489772ce62ca Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906
@@ -35,7 +35,9 @@ Changes in v3:
   core's carveout lookup. Unmatched addresses are no longer used as
   host addresses (Sashiko)
 - All register regions, clocks and resets are required; no fallback to
-  the configuration reset for the core reset (Sashiko)
+  the configuration reset for the core reset (Sashiko). The mailbox is
+  optional
+- MAINTAINERS entry added here (it was in the binding patch)
 - Handle the debug reset and the RISC-V and SRAM power domains
 - One mailbox channel for kicks and notifications; a notification
   checks every vring in rproc->notifyids
@@ -50,14 +52,34 @@ Changes in v3:
 - Carveouts mapped MEMREMAP_WC; SRAM regions reuse the SRAM mapping
   (Sashiko)
 ---
+ MAINTAINERS                      |   8 +
  drivers/remoteproc/Kconfig       |   8 +
  drivers/remoteproc/Makefile      |   1 +
  drivers/remoteproc/sunxi_rproc.c | 691 +++++++++++++++++++++++++++++++
  drivers/remoteproc/sunxi_rproc.h | 117 ++++++
- 4 files changed, 817 insertions(+)
+ 5 files changed, 825 insertions(+)
  create mode 100644 drivers/remoteproc/sunxi_rproc.c
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
 
+diff --git a/MAINTAINERS b/MAINTAINERS
+index e4cb1d116974..5498510c2c16 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -969,6 +969,14 @@ L:	linux-media@vger.kernel.org
+ S:	Maintained
+ F:	drivers/staging/media/sunxi/cedrus/
+ 
++ALLWINNER XUANTIE RISC-V REMOTEPROC DRIVER
++M:	Tim Michals <tcmichals@gmail.com>
++L:	linux-remoteproc@vger.kernel.org
++L:	linux-sunxi@lists.linux.dev
++S:	Maintained
++F:	Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
++F:	drivers/remoteproc/sunxi_rproc*
++
+ ALPHA PORT
+ M:	Richard Henderson <richard.henderson@linaro.org>
+ M:	Matt Turner <mattst88@gmail.com>
 diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
 index 70dec8c3fe4e..d8fb5d67706e 100644
 --- a/drivers/remoteproc/Kconfig

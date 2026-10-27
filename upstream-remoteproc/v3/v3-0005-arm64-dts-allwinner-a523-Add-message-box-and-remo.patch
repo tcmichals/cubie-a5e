@@ -1,4 +1,4 @@
-From 01e46f750f9cc7fc4658f67322271c379e4cc576 Mon Sep 17 00:00:00 2001
+From 3469175adf36e9f8b4314243856f439fb31dca82 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 5/7] arm64: dts: allwinner: a523: Add message box and
@@ -14,10 +14,12 @@ firmware name and reserved memory regions.
 
 ---
 Changes in v3:
-- Message box: all four banks with their clocks and resets; remote bank
-  interrupts corrected to SPI 181/174/205
+- Message box: all four banks with their clocks and resets; the DSP and
+  CPUS bank addresses were swapped in v2; remote bank interrupts
+  corrected to SPI 181/174/205
 - Remoteproc: debug reset, RISC-V and SRAM power domains, one message
-  box channel
+  box channel; the message box clock and reset moved to the message box
+  node
 ---
  .../arm64/boot/dts/allwinner/sun55i-a523.dtsi | 47 +++++++++++++++++++
  1 file changed, 47 insertions(+)

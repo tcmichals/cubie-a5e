@@ -49,6 +49,8 @@ as `vdev0buffer`, `vdev0vring0`), even though the vendor BSP uses it:
 The remoteproc node maps the 4-byte `remap` register and read-modify-writes bit 1 only
 (SRAM A3_2 → MCU); bit 0 belongs to the DSP. It works on silicon. The cover letter explains
 it. Move it to a syscon or the R-CCU only if maintainers ask.
+2026-10-27 (owner, after the harsh review): kept for v3. The cover letter also offers the sunxi
+SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
 
 ### Message box: host bank clock and reset only (D12) — REOPENED 2026-10-16
 **This decision was wrong and must be redone before v3 is sent.** Each bank has its own bus clock
@@ -56,6 +58,11 @@ and reset; with only the ARM bank's described, the RV bank stays gated and in re
 doorbells to the E906 never arrived and `last_tx_done()` read a gated bank. Measured:
 [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §6.
 Original text kept below for the record.
+
+**Unbind (owner, 2026-10-27):** all four banks stay clocked and out of reset, but the shared
+reset is only deasserted at probe and never asserted, on unbind or on a probe failure, as in
+`sun6i-msgbox`: the other banks carry traffic between the other processors. The bus clocks
+are still released on unbind (devm), as `sun6i-msgbox` disables its clock in `remove()`.
 
 #### Original D12 text
 The msgbox node enables only the ARM host bank's clock and reset, like the vendor DT and the
@@ -94,6 +101,12 @@ and the SRAM ping slot as `/dev/uio0`).
 ### Crash interrupt kept (D14)
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
 cover letter must not claim it is tested.
+2026-10-27 (owner): kept in the binding, whose description now says the A523 has no dedicated
+line for it and it is present only where the system integration provides one.
+
+### Compatible stays `allwinner,sun55i-a523-rproc` (owner, 2026-10-27)
+The harsh review suggested `…-e906`, since the SoC also has a HiFi4 DSP. Kept for v3; rename
+in a later version only if a maintainer asks.
 
 ### KUnit stays in the series (D15)
 Both KUnit patches stay, but every test must exercise driver behaviour (see
