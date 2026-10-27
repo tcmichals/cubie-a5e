@@ -54,12 +54,30 @@ mapping. The final review expected DT maintainers to object to SRAM in `/reserve
 the cover letter, and offer the `sram` phandle form only if a maintainer asks. The series DTS
 itself has no `memory-region`.
 
+### SRAM reg-names follow the manual (owner, 2026-10-27)
+The rproc `reg-names` for the two SRAMs are `sram-a3-0` and `sram-a3-1`: the T527 manual (V0.92,
+memory map p.32, MCU_SRAM) calls them SRAMA3_0 (`0x07280000`) and SRAMA3_1 (`0x072C0000`), and
+mainline sunxi DT lower-cases manual names (`sram-c`, `sram-a3-a4`). `r_sram`/`r_sram1` were
+dropped: `r_` means the PRCM domain on sunxi. Kernel `eea917a5d5fb`.
+
+### msgbox carries Allwinner's copyright (2026-10-27)
+The register definitions came verbatim from the vendor `bsp/drivers/msgbox/sunxi-msgbox.c`
+(Copyright 2020-2023 Allwinner, GPL-2.0-or-later; `A7A_kernel/linux-a733`), so the driver keeps
+"Based on" and carries Allwinner's copyright line, as `sunxi_rproc.c` does.
+
 ### Remap register `0x07010364` is shared (D9)
 The remoteproc node maps the 4-byte `remap` register and read-modify-writes bit 1 only
 (SRAM A3_2 → MCU); bit 0 belongs to the DSP. It works on silicon. The cover letter explains
 it. Move it to a syscon or the R-CCU only if maintainers ask.
 2026-10-27 (owner, after the harsh review): kept for v3. The cover letter also offers the sunxi
 SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
+**2026-10-27, under question (REMAP-1):** the T527 manual says bit 1 shares **SRAMA3_2** (512 KB at
+`0x07300000`, listed under NPU) with MCU_SYS, and our SRAM space 1 at `0x072C0000` is SRAMA3_1.
+The vendor BSP (`A7A_kernel/linux-a733/bsp`) never sets it for the E906: `0x07010364` is a `reg`
+of the HiFi4 node only, and only `sunxi_rproc_hifi4_boot.c` writes it (bit 0). "Works on silicon"
+was only ever measured with the bit set. Board check tonight with the bit left alone; if the
+E906 still uses space 1, the owner decides whether the driver drops the remap write and the
+`remap` reg (which removes this shared-register question from the series).
 
 ### Message box: all four banks clocked and out of reset (D12, redone)
 The original D12 (host bank only) was wrong and was redone before v3: the binding and DTS list
