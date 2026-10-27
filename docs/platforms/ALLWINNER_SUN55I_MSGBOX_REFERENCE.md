@@ -132,7 +132,7 @@ no tracing).
 
 ### 5a. Vendor TX completion, read from source (2026-10-17) [vendor]
 
-Source: `old-kernels/linux-aw2501/.git/modules/bsp` (Radxa `allwinner-bsp`, branch
+Source: `linux-aw2501` `bsp` (where it is on each PC: RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0) (Radxa `allwinner-bsp`, branch
 `cubie-aiot-v1.4.6`, commit `2045a3ca2a01`), `drivers/msgbox/sunxi-msgbox.c`. One driver serves
 the T527 (`allwinner,sun55iw3-msgbox`) and the A733 (`allwinner,sun60iw2-msgbox`, §9).
 

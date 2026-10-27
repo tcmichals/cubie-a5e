@@ -43,7 +43,7 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 > These rules are decisions. Each one names its source. A review (AI or human) that
 > disagrees does not change the code by itself: check it against the kernel source and the
 > vendor BSP first, then update the rule here **and** the code together.
-> Vendor BSP reference: `old-kernels/linux-aw2501/.git/modules/bsp` (Radxa allwinner-bsp,
+> Vendor BSP reference: `linux-aw2501` `bsp` (location varies per PC: see docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0) (Radxa allwinner-bsp,
 > read with `git --git-dir=... show HEAD:<path>`): `drivers/remoteproc/sunxi_rproc.c`,
 > `drivers/remoteproc/sunxi_rproc_e906_boot.c`, `drivers/msgbox/sunxi-msgbox.c`,
 > `configs/linux-5.15/sun55iw3p1.dtsi`.

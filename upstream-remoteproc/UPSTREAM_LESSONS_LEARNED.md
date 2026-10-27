@@ -402,7 +402,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.
 - [ ] Teardown: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()` (probe error path: free mailbox → cancel work).
 - [ ] One non-RT kernel run with `CONFIG_DEBUG_ATOMIC_SLEEP=y` + `CONFIG_PROVE_LOCKING=y` (PREEMPT_RT hides atomic-context bugs).
-- [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`old-kernels/linux-aw2501/.git/modules/bsp`), not against project docs alone.
+- [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`linux-aw2501` or `linux-a733`, located per PC as in docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Carveouts and dump segments registered in `.parse_fw()` (after allocating the entries, before nothing can fail): the core frees them only once `parse_fw()` succeeded, so registering in `.prepare()` leaks them when `parse_fw()` fails (final review 2026-10-27).
 - [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`, all looked up by name. Board-tested 2026-10-17 (msgbox reference §6b).

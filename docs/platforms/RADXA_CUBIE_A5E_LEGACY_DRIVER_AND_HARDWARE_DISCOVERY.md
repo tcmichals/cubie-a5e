@@ -80,18 +80,35 @@ In earlier revisions of the Linux RemoteProc driver (`sunxi_rproc.c`):
 
 ### 4.0 Where the Vendor Source Lives (local, no download needed)
 
-The Radxa vendor kernel package is at `old-kernels/linux-aw2501`. Its submodule checkouts are empty,
-but the git objects are present, so files are read directly:
+The trees sit in a different place on each PC, so docs name them, not their paths. Find them with
+`find ~ -maxdepth 6 -type d \( -name linux-aw2501 -o -name linux-a733 \)`. Known locations:
+`~/projects/cubie/old-kernels/linux-aw2501` and `…/CubieA5E/A5E/linux-aw2501`;
+`…/CubieA5E/A7A_kernel/linux-a733`.
+
+| Tree | What it is | Use it for |
+|---|---|---|
+| `linux-aw2501` | Radxa vendor kernel package for the Cubie A5E: `bsp` = radxa/allwinner-bsp (cubie-aiot-v1.4.6, HEAD 2045a3ca), `device-a527` = radxa/allwinner-device (device-a527-v1.4.6, HEAD a23224f) | A523/A527 facts: E906 remoteproc, msgbox, SoC dtsi, Cubie A5E board DT |
+| `linux-a733` | Radxa vendor kernel for the Cubie A7A (A733); its `bsp` also carries the sun55iw3 (A523) drivers and dtsi | A733/E902 facts; a second copy of the A523 BSP |
+| T527 user manual | `T527_User_Manual_V0.92.pdf` (Downloads on this PC; `pdftotext -layout` works) | Memory map (p.32), REMAP_CTRL_REG (p.385) |
+
+Files, relative to the tree (`bsp/…` and `device-a527/…`):
+
+```
+bsp/drivers/remoteproc/sunxi_rproc.c              # generic rproc core
+bsp/drivers/remoteproc/sunxi_rproc_e906_boot.c    # E906 clocks/resets/start/stop
+bsp/drivers/remoteproc/sunxi_rproc_hifi4_boot.c   # HiFi4; the only writer of 0x07010364 (bit 0)
+bsp/drivers/msgbox/sunxi-msgbox.c                 # msgbox controller
+bsp/configs/linux-5.15/sun55iw3p1.dtsi            # SoC dtsi
+device-a527/configs/cubie_a5e/linux-5.15/board.dts  # Cubie A5E board DT (E906 memory-mappings)
+```
+
+Where the submodules are checked out (as on the CubieA5E PC) the files are read directly. Where
+they are empty, the git objects are still there:
 
 ```bash
-cd /home/tcmichals/projects/cubie/old-kernels/linux-aw2501
-B=.git/modules/bsp            # https://github.com/radxa/allwinner-bsp (cubie-aiot-v1.4.6, HEAD 2045a3ca)
-V=.git/modules/device-a527    # https://github.com/radxa/allwinner-device (device-a527-v1.4.6, HEAD a23224f)
-git --git-dir=$B show HEAD:drivers/remoteproc/sunxi_rproc.c            # generic rproc core
-git --git-dir=$B show HEAD:drivers/remoteproc/sunxi_rproc_e906_boot.c  # E906 clocks/resets/start/stop
-git --git-dir=$B show HEAD:drivers/msgbox/sunxi-msgbox.c               # msgbox controller
-git --git-dir=$B show HEAD:configs/linux-5.15/sun55iw3p1.dtsi          # SoC dtsi
-git --git-dir=$V show HEAD:configs/cubie_a5e/linux-5.15/board.dts      # Cubie A5E board DT
+B=.git/modules/bsp; V=.git/modules/device-a527
+git --git-dir=$B show HEAD:drivers/remoteproc/sunxi_rproc_e906_boot.c
+git --git-dir=$V show HEAD:configs/cubie_a5e/linux-5.15/board.dts
 ```
 
 The `src` submodule (radxa/kernel `allwinner-aiot-linux-5.15`) is not stored locally.
