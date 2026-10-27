@@ -73,7 +73,7 @@ it. Move it to a syscon or the R-CCU only if maintainers ask.
 SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
 **2026-10-27, under question (REMAP-1):** the T527 manual says bit 1 shares **SRAMA3_2** (512 KB at
 `0x07300000`, listed under NPU) with MCU_SYS, and our SRAM space 1 at `0x072C0000` is SRAMA3_1.
-The vendor BSP (`A7A_kernel/linux-a733/bsp`) never sets it for the E906: `0x07010364` is a `reg`
+The vendor BSP (`A5E/linux-aw2501/bsp` and `A7A_kernel/linux-a733/bsp`) never sets it for the E906, while the vendor Cubie A5E board DT maps and reserves SRAM space 1 for it: `0x07010364` is a `reg`
 of the HiFi4 node only, and only `sunxi_rproc_hifi4_boot.c` writes it (bit 0). "Works on silicon"
 was only ever measured with the bit set. Board check tonight with the bit left alone; if the
 E906 still uses space 1, the owner decides whether the driver drops the remap write and the
