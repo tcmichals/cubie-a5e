@@ -22,31 +22,15 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 
 ---
 
-## 🚦 Hardware & Mainline Driver Status Matrix
+## 🚦 Status
 
-> [!IMPORTANT]
-> **Please read carefully if you are evaluating this repository:**
-> Mainline Linux support for Allwinner A527/T527 and A733 is under active bring-up. Below is an honest, verified status matrix of what is working today on real silicon versus what is still under active development.
+| Board | Done | Next |
+| :--- | :--- | :--- |
+| **Cubie A5E**<br>(A527 / T527) | Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A)<br>E906 remoteproc + message box: start/stop, trace, crash capture<br>RPMsg and UIO IPC, ping benchmarks, KUnit on board<br>Wi-Fi 6 AIC8800 (SDIO) | Board-test the v3 message box fixes, then send v3 upstream<br>Camera: OV5647 over MIPI CSI-2 (cable in hand)<br>E906 D-cache<br>ISP / VPU, NPU |
+| **Cubie A7A**<br>(A733) | Linux 7.1 boot<br>USB 2.0 host + FE1.1S hub<br>Wi-Fi 6 AIC8800 (USB), 433 Mbps<br>E902 remoteproc: driver branch, BL31 patch, overlay, image builds (**not run on the board yet**) | E902: rebase onto the v3 fixes, E902 firmware, first boot on the board<br>Fix reboot (watchdog reset hangs)<br>Fix Ethernet TX DMA timeout<br>Audit the USB changes |
 
-| Subsystem | Cubie A5E (A527/T527) | Cubie A7A / A7Z (A733) | Driver / Implementation Status |
-| :--- | :--- :| :---: | :--- |
-| **Bootloader & BROM** | **Working** | **Working** | U-Boot 2026.01 + TF-A BL31 + OP-TEE + auto-training LPDDR5/LPDDR4X |
-| **Mainline Kernel** | **Working** | **Working** | Linux 7.1.0 with `PREEMPT_RT` patchset, 8-core SMP boot |
-| **Serial Debug Console** | **Working** | **Working** | `ttyS0` @ 115200 baud (standard 8250/dw-uart) |
-| **eMMC / MicroSD (MMC)** | **Working** | **Working** | Mainline `sunxi-mmc` driver |
-| **Gigabit Ethernet (GMAC)** | **Working** | **Active Blocker** | Mainline `dwmac-sun55i` (A5E) / TX DMA multi-MSI tuning underway (A7A) |
-| **PMIC & Power Regulators** | **Working** | **Working** | AXP717 + AXP323 (A5E) / AXP8191 via RSB (A7A) |
-| **Hardware Watchdog & Reboot**| **Working** | **Working** | `sunxi_wdt` fast hardware restart handler verified on silicon |
-| **Message Box (Mailbox IPC)**| **Working** | **Working** | 4-port hardware crossbar (`sun55i-msgbox.c`), v3 upstream ready |
-| **RISC-V E906 / E902 Core** | **Working** | **Working** | Linux `remoteproc` standard (`sunxi_rproc.c`), v3 upstream ready |
-| **HiFi4 Audio DSP Core** | **Working** | **Planned** | Remoteproc + SRAM mapping + dedicated ELF test suite |
-| **Wi-Fi 6 (AIC8800)** | **Working (SDIO)** | **Working (USB)** | Unified dual-bus mainline driver (`aic8800-upstream`), 433 Mbps live throughput |
-| **USB 2.0 Host & Hub** | **Working** | **Working** | EHCI/OHCI (A5E) / DWC3 + PCK-600 + Sun60i USB2 PHY + FE1.1S 4-port hub @ 480 Mbps |
-| **NPU AI Accelerator** | **Working** | **Working** | 2.0/3.0 TOPS via open-source Etnaviv DRM driver (`/dev/dri/card0`) + Teflon |
-| **3D GPU Core** | **Working** | **Under Dev** | Panfrost Mali-G57 (A5E) / Imagination BXM-4-64 driver needed (A7A) |
-| **MIPI CSI-2 Cameras** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: V4L2 ISP & media controller bindings not yet mainlined |
-| **MIPI DSI Display / HDMI** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: DRM display engine (DE33) driver requires mainline porting |
-| **Hardware Video Codec** | ⚠️ **NOT Working** | ⚠️ **NOT Working** | **WIP**: Stateless Cedrus VPU support pending sun55i/sun60i tables |
+Not working on either board yet: MIPI CSI cameras, display / HDMI, hardware video codec.
+Task details: [TODO.md](TODO.md). A7A history: [docs/platforms/CUBIE_A7A_DEBUG_LOG.md](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
 
 ---
 

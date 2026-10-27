@@ -54,6 +54,8 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 ## 2. Active Feature Bring-Up: Camera, Hardware ISP & Video Encoding (VPU / Cedrus)
 
+**Next after v3 is sent** (owner, 2026-10-27; camera cable in hand). Start with the OV5647 sensor bring-up below.
+
 * **Goal**: Capture live camera streams from an OmniVision OV5647 sensor over 2-lane MIPI CSI-2, process through the onboard Allwinner Hardware ISP 5.22, and encode to H.264 video using the hardware Video Engine (VE / Cedar) with **zero CPU memcpy overhead** via standard Linux `dma-buf` memory sharing.
 
 - [ ] **Camera Sensor Interface Bring-Up (OmniVision OV5647)**:
