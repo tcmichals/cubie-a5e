@@ -108,6 +108,14 @@ line for it and it is present only where the system integration provides one.
 The harsh review suggested `…-e906`, since the SoC also has a HiFi4 DSP. Kept for v3; rename
 in a later version only if a maintainer asks.
 
+### No system suspend support (owner, 2026-10-27)
+The E906 is a co-processor next to a Linux that runs all the time; this is not a suspend/wake
+product, and suspend would need ARM Trusted Firmware support the board does not have. The
+remoteproc driver has no `dev_pm_ops`, and no platform `.shutdown` for kexec (`prepare()` holds the
+core in reset when the next kernel boots it). The cover letter says suspend is not supported. The
+framework comparison (`peer-reviews/RPROC_FRAMEWORK_FEATURE_MATRIX_20261027.md`, N2/R3) raised both;
+do not re-raise them.
+
 ### KUnit stays in the series (D15)
 Both KUnit patches stay, but every test must exercise driver behaviour (see
 [UPSTREAM_LESSONS_LEARNED.md](UPSTREAM_LESSONS_LEARNED.md) §4). In the series they go last,

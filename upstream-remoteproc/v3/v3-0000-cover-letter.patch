@@ -45,6 +45,8 @@ Notes for review:
   - The optional crash interrupt is supported by the driver but not
     wired in any DT and not tested; the A523 has no dedicated line for
     it and the vendor BSP has none.
+  - System suspend is not supported: the E906 runs next to a Linux that
+    stays up, so the driver has no PM callbacks.
   - Merging: patches 1, 2 and 6 are for the mailbox tree, 3, 4 and 7
     for remoteproc, and 5 for sunxi. Patch 5 needs the bindings in
     patches 1 and 3.
