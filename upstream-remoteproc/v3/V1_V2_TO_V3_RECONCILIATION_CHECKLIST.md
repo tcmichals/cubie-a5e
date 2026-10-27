@@ -1,3 +1,8 @@
+> **Superseded 2026-10-27** by [V1_V2_VERIFICATION_20261027.md](V1_V2_VERIFICATION_20261027.md):
+> re-derived from the 19 review emails and checked against `cubie-linux-7.1` @ `0a433b3f3508`.
+> This file missed the 26 v1 Sashiko findings and 7 v1 Krzysztof items, listed two items no
+> reviewer raised (CY-2, KK-7), and marked SB-16 FIXED although it is declined. Kept for history.
+
 # v1 / v2 Review Feedback → v3 Reconciliation (kseries stage 2)
 
 Every comment from the v1 and v2 reviews, checked against the **v3 series itself**
