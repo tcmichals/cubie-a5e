@@ -45,6 +45,15 @@ as `vdev0buffer`, `vdev0vring0`), even though the vendor BSP uses it:
   is wrong for SRAM;
 - our firmware uses `FW_RSC_ADDR_ANY` and lets Linux place the vrings, which is the pool case.
 
+### Vring pool in DRAM or SRAM (owner, 2026-10-27)
+`memory-region[0]` is a `shared-dma-pool` and may sit in DRAM or on an E906 SRAM; both are
+board-tested every sweep (profile 1/1T: `cubie-a5e-flight-stack`, DRAM `0x48000000`; profile 2:
+`cubie-a5e-testPingRpmsgSram`, SRAM space 1 `0x072c0000`). A pool on an SRAM reuses that SRAM's
+mapping. The final review expected DT maintainers to object to SRAM in `/reserved-memory`
+(mainline also uses `mmio-sram` + a `sram` phandle, TI K3, meson-mx-ao-arc): keep both, say so in
+the cover letter, and offer the `sram` phandle form only if a maintainer asks. The series DTS
+itself has no `memory-region`.
+
 ### Remap register `0x07010364` is shared (D9)
 The remoteproc node maps the 4-byte `remap` register and read-modify-writes bit 1 only
 (SRAM A3_2 → MCU); bit 0 belongs to the DSP. It works on silicon. The cover letter explains
