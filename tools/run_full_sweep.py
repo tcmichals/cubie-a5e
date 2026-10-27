@@ -475,6 +475,23 @@ def count_kunit_cases(rel_path):
     except OSError:
         return None
 
+# Kernel log reports that make a run fail even when every KUnit case passed
+KERNEL_SPLAT_RE = r"WARNING:|BUG:|Oops|inconsistent lock state|possible circular locking|sleeping function called"
+# A report belongs to us if it names a KUnit test thread or one of the drivers
+OUR_SPLAT_RE = re.compile(r"kunit_try_catch|sun55i|sunxi.rproc|msgbox|remoteproc")
+
+
+def find_kernel_splats():
+    """
+    WARNING/BUG reports in the kernel log that come from a KUnit test thread or
+    from our drivers. KUnit does not fail a case that only triggers a warning
+    (2026-10-27: a test raised its IRQ with interrupts on, the kernel warned,
+    and every case still passed), so these are checked separately.
+    """
+    _, out, _ = run_ssh(f"dmesg | grep -A6 -E '{KERNEL_SPLAT_RE}'", timeout=10)
+    return [b.strip() for b in out.split("\n--\n") if b.strip() and OUR_SPLAT_RE.search(b)]
+
+
 def validate_kunit_tests():
     """
     Query, validate, and report in-kernel KUnit driver test suites on target hardware.
@@ -484,11 +501,11 @@ def validate_kunit_tests():
     suites_info = {
         "sunxi_rproc": {
             "title": "sunxi_rproc (Remoteproc Driver)",
-            "source": "drivers/remoteproc/sunxi_rproc_test.c",
+            "source": "drivers/remoteproc/sunxi_rproc_kunit.c",
         },
         "sun55i_msgbox": {
             "title": "sun55i_msgbox (Mailbox Driver)",
-            "source": "drivers/mailbox/sun55i_msgbox_test.c",
+            "source": "drivers/mailbox/sun55i_msgbox_kunit.c",
         },
     }
     for meta in suites_info.values():
@@ -589,12 +606,21 @@ def validate_kunit_tests():
         print(f"  {s['title']:<32} | {tests:<6} | {s['passed']:<6} | {s['failed']:<6} | {s['skipped']:<7} | {color}{s['status']}{reset}")
 
     print("  " + "-" * 32 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 6 + "-+-" + "-" * 7 + "-+-------")
+    splats = find_kernel_splats()
     overall_status = "PASS" if all(s["status"] == "PASS" for s in suite_results.values()) else "FAIL"
+    if splats:
+        overall_status = "FAIL"
     color = "\033[92m" if overall_status == "PASS" else "\033[91m"
     reset = "\033[0m"
     tests = f"{total_executed}/{total_expected}"
     print(f"  {'COMBINED TOTAL':<32} | {tests:<6} | {total_passed:<6} | {total_failed:<6} | {total_skipped:<7} | {color}{overall_status}{reset}")
     print("=" * 76)
+
+    if splats:
+        print(f"\033[91m[ERROR] {len(splats)} kernel WARNING/BUG report(s) from KUnit or our drivers:\033[0m")
+        for block in splats:
+            print("\n".join("    " + line for line in block.splitlines()))
+        print()
 
     # If any failures, print alert with test names
     any_failed = any(s["failed_tests"] for s in suite_results.values())
@@ -616,6 +642,7 @@ def validate_kunit_tests():
         "total_passed": total_passed,
         "total_failed": total_failed,
         "total_skipped": total_skipped,
+        "kernel_splats": splats,
         "suites": suite_results
     }
 

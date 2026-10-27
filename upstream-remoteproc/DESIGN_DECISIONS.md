@@ -52,8 +52,9 @@ it. Move it to a syscon or the R-CCU only if maintainers ask.
 2026-10-27 (owner, after the harsh review): kept for v3. The cover letter also offers the sunxi
 SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
 
-### Message box: host bank clock and reset only (D12) — REOPENED 2026-10-16
-**This decision was wrong and must be redone before v3 is sent.** Each bank has its own bus clock
+### Message box: all four banks clocked and out of reset (D12, redone)
+The original D12 (host bank only) was wrong and was redone before v3: the binding and DTS list
+all four clocks and resets, and probe refuses a DT with fewer (2026-10-27). Each bank has its own bus clock
 and reset; with only the ARM bank's described, the RV bank stays gated and in reset, so Linux's
 doorbells to the E906 never arrived and `last_tx_done()` read a gated bank. Measured:
 [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](../docs/platforms/ALLWINNER_SUN55I_MSGBOX_REFERENCE.md) §6.

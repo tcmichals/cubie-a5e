@@ -99,7 +99,7 @@ In `remove()` (remoteproc client with a mailbox):
 1. **`rproc_del()` FIRST:** it stops the core and removes the virtio devices. Virtio removal can still kick, so the tx channel must still exist. Freeing the mailbox before `rproc_del()` is a use-after-free on the channel.
 2. **Free the mailbox channels SECOND:** after `mbox_free_channel()` returns, no rx callback can run or re-queue work.
 3. **Drain work LAST:** `cancel_work_sync()` (or let a devm workqueue be destroyed by devres after `remove()`).
-   - A work item that runs after the virtqueues are gone is safe: `rproc_vq_interrupt()` looks them up under the remoteproc vq SRCU (`drivers/remoteproc/remoteproc_virtio.c`).
+   - Nothing in the core protects `rproc_vq_interrupt()` against vring teardown: there is no vq SRCU. The `notifyids` lookup is unlocked, so a vq work item running while `rproc_del()` removes the virtio devices can race it. Every mailbox-driven driver (imx, stm32, ours) shares this; it is a core issue, not a driver finding (corrected 2026-10-27, the earlier text claimed an SRCU that does not exist).
    - Precedent: `stm32_rproc` and the Allwinner vendor BSP (`rproc_del()` → free mailbox → `destroy_workqueue()`).
 
 In `probe()` error unwind (`err_mbox_release`):

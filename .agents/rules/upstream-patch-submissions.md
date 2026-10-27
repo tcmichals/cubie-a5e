@@ -24,7 +24,7 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
    - Hardware register banks do not have arbitrary permutations. Never use `items: enum: [...]`.
 2. **Positional `items:` for Interrupts**:
    - Do NOT use free-form narrative text in `description:` explaining port order.
-   - Define an explicit positional list for `interrupts` and `interrupt-names` with `minItems: 1`.
+   - Define an explicit positional list for `interrupts` and `interrupt-names`. Lines that exist in the silicon are required (no `minItems`): a driver option that does not use some of them does not make them optional (Krzysztof v1: "How could an interrupt be optional?"; owner decision 2026-10-27).
 3. **No Redundant Descriptions or Formatting Pipes**:
    - Drop `description: bus clock` or `description: bus reset`.
    - Drop `|` pipes on single-line property descriptions.

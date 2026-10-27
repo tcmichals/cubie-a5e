@@ -34,12 +34,12 @@ FILES_TOUCHED = [
     "drivers/remoteproc/Kconfig",
     "drivers/remoteproc/Makefile",
     "drivers/remoteproc/sunxi_rproc.c",
-    "drivers/remoteproc/sunxi_rproc_test.c",
+    "drivers/remoteproc/sunxi_rproc_kunit.c",
     "arch/arm64/boot/dts/allwinner/sun55i-a523.dtsi",
     "drivers/mailbox/Kconfig",
     "drivers/mailbox/Makefile",
     "drivers/mailbox/sun55i-msgbox.c",
-    "drivers/mailbox/sun55i_msgbox_test.c",
+    "drivers/mailbox/sun55i_msgbox_kunit.c",
 ]
 
 BASE_FILES_IN_TAR = [

@@ -52,7 +52,7 @@ The owner's design decisions (what we deliberately keep even when a review disag
 
 ---
 
-### Lesson 1.2: Positional `items:` with `minItems` Instead of Free-Form Text for Interrupts
+### Lesson 1.2: Positional `items:` for Interrupts, and Lines That Exist Are Required
 * **What Went Wrong**:
   We wrote:
   ```yaml
@@ -68,31 +68,31 @@ The owner's design decisions (what we deliberately keep even when a review disag
     items:
       enum: [arm, dsp, cpus, rv]
   ```
-  Maintainer feedback:
+  Maintainer feedback (Krzysztof, v1 and v2):
+  > *"How could an interrupt be optional? It either is or is not there."*
   > *"No, this has to be constrained/specific. See writing bindings and any existing examples. Also, just list the interrupts with minItems, instead of free form text."*
 
+  v2 and the first v3 draft kept `minItems: 1`, with the remote lines required only together with `allwinner,tx-done-irq`. That mixed up the hardware (four lines always exist) with a driver option (ISR or 1 ms timer for TX done), which is what Krzysztof's first question was about.
+
 * **The Upstream Rule**:
-  Do not explain ordering rules in narrative `description:` blocks when the YAML schema can enforce it programmatically.
-* **The Correct Pattern**:
-  Use a positional `items:` list with `minItems: 1`:
+  The binding describes the hardware. A line that exists in the silicon is listed and required; that a driver mode does not use it does not make it optional. Do not explain ordering in narrative `description:` blocks when the schema can enforce it.
+* **The Correct Pattern** (msgbox binding since 2026-10-27):
   ```yaml
   interrupts:
-    minItems: 1
     items:
-      - description: ARM Cortex-A55 host port interrupt
-      - description: HiFi4 Audio DSP port interrupt
-      - description: CPUS power management port interrupt
-      - description: XuanTie RISC-V port interrupt
+      - description: Cortex-A55 bank read interrupt, messages for the host
+      - description: HiFi4 DSP bank write interrupt for the host
+      - description: CPUS bank write interrupt for the host
+      - description: XuanTie RISC-V bank write interrupt for the host
 
   interrupt-names:
-    minItems: 1
     items:
       - const: arm
       - const: dsp
       - const: cpus
       - const: rv
   ```
-  This guarantees that position 0 is always `arm` (mandatory), and any optional interrupts (`dsp`, `cpus`, `rv`) must appear in that exact hardware sequence.
+  Both are in `required:`. A node with a single interrupt (the rproc crash line) needs no `interrupt-names`.
 
 ---
 
@@ -394,7 +394,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 ## Summary Checklist Before Next Patch Submission
 
 - [ ] Every `reg-names`, `clock-names`, `reset-names` uses positional `- const:` lists (NO `enum`).
-- [ ] Every `interrupts` and `interrupt-names` uses positional `items:` with `minItems`.
+- [ ] Every `interrupts` and `interrupt-names` uses positional `items:`; lines that exist in the silicon are required, no `minItems` (Lesson 1.2).
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
 - [ ] Mailbox TX: timer mode `last_tx_done()` = `count < 8`; ISR mode (`allwinner,tx-done-irq`) `txdone_irq`, write IRQ armed after every send (OMAP model); never write a full FIFO (DESIGN_DECISIONS.md).
@@ -404,9 +404,11 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] One non-RT kernel run with `CONFIG_DEBUG_ATOMIC_SLEEP=y` + `CONFIG_PROVE_LOCKING=y` (PREEMPT_RT hides atomic-context bugs).
 - [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`old-kernels/linux-aw2501/.git/modules/bsp`), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
-- [ ] Static memory carveouts registered in .prepare() so they persist across core reboots.
-- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`. Board-tested 2026-10-17 (msgbox reference §6b).
+- [ ] Carveouts and dump segments registered in `.parse_fw()` (after allocating the entries, before nothing can fail): the core frees them only once `parse_fw()` succeeded, so registering in `.prepare()` leaks them when `parse_fw()` fails (final review 2026-10-27).
+- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`, all looked up by name. Board-tested 2026-10-17 (msgbox reference §6b).
 - [ ] `memory-region` / `memory-region-names` listed positionally (Lesson 1.5); no driver logic keyed on region names.
 - [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).
+- [ ] KUnit run under UML with `PROVE_LOCKING`, `DEBUG_PREEMPT`, `DEBUG_ATOMIC_SLEEP` and `KASAN`, and the kernel log has no `WARNING:`/`BUG:` from a test: KUnit passes a case that only warns (2026-10-27: a test raised its IRQ with interrupts on, warned, and passed). The full sweep checks the board's log the same way.
+- [ ] Drivers and KUnit tests built for arm64 both `=y` and `=m` with a full `Image modules` build, so modpost runs (2026-10-27: a test used the unexported `irq_to_desc()` and only failed as a module), with GCC and clang at `W=1`.
 - [ ] Nothing in the series contradicts [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) without the owner's sign-off.
 - [ ] `git send-email` dispatched as an independent top-level thread (NO `--in-reply-to` linking to previous versions).
