@@ -116,6 +116,14 @@ core in reset when the next kernel boots it). The cover letter says suspend is n
 framework comparison (`peer-reviews/RPROC_FRAMEWORK_FEATURE_MATRIX_20261027.md`, N2/R3) raised both;
 do not re-raise them.
 
+### Mailbox binding requires all four interrupts (owner, 2026-10-27)
+The four msgbox lines (host bank read, DSP/CPUS/RISC-V bank write) exist on every A523, so the
+binding lists all four, with `interrupt-names`, as required; no `minItems`, no
+`allwinner,tx-done-irq` conditional. This answers Krzysztof's v1 question "How could an
+interrupt be optional?". `allwinner,tx-done-irq` only selects how the driver learns that a send
+is done (1 ms poll or the remote bank's write interrupt); received messages use the host bank
+read interrupt in both modes, and the driver requests the write lines only in tx-done-irq mode.
+
 ### KUnit stays in the series (D15)
 Both KUnit patches stay, but every test must exercise driver behaviour (see
 [UPSTREAM_LESSONS_LEARNED.md](UPSTREAM_LESSONS_LEARNED.md) §4). In the series they go last,
