@@ -17,6 +17,8 @@ for the XuanTie E906 RISC-V real-time co-processor without manual intervention:
      C++ ping_shm, Python ping_uio.py
   4. Restore Profile 1, reboot cleanly, and generate final quantitative summary table
      + persistent JSON and Markdown reports.
+  Optional: line coverage of the message box and remoteproc drivers (gcov), when the
+  kernel is built as tools/sweep_gcov.py describes and --gcov-build-dir is given.
 """
 
 import sys
@@ -28,6 +30,7 @@ import os
 import shutil
 
 import threading
+import sweep_gcov
 try:
     import serial
 except ImportError:
@@ -127,6 +130,8 @@ class SerialLogger:
             return self.buffer[-count:]
 
 g_serial_logger = None
+g_coverage = None		# sweep_gcov.BoardCoverage, when coverage is collected
+g_active_overlay = "boot"	# label of the counters a reboot is about to clear
 
 def strip_ansi(text: str) -> str:
     return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
@@ -228,6 +233,11 @@ def wait_for_target(max_attempts=30):
 
 def set_overlay_and_reboot(overlay_str, cmdline_str=None, base_dtb=None):
     """Select base DTB (None = boot.cmd default) and overlays, reboot, wait. True = board and remoteproc0 up."""
+    global g_active_overlay
+    # A reboot clears the gcov counters: keep what this profile covered
+    if g_coverage:
+        g_coverage.snapshot(g_active_overlay)
+    g_active_overlay = overlay_str
     print(f"\n[CONFIG] Setting overlay: '{overlay_str}'" + (f", base DTB: '{base_dtb}'" if base_dtb else ""))
     run_ssh(f"sed -i '/^[# ]*dtoverlay=/d' /boot/config.txt; echo 'dtoverlay={overlay_str}' >> /boot/config.txt")
     run_ssh("sed -i '/^cmdline=uio_pdrv_genirq/d' /boot/config.txt")
@@ -962,7 +972,7 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
         print("=" * 76)
 
 def main():
-    global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger
+    global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger, g_coverage
     import argparse
     parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E (E906 RISC-V)")
     parser.add_argument("--ip", default=os.environ.get("TARGET_IP", TARGET_IP), help=f"Target board IP address (default: {TARGET_IP})")
@@ -977,6 +987,11 @@ def main():
     parser.add_argument("--report-out", default=SWEEP_MD_OUT, help=f"Path for output Markdown sweep report (default: {SWEEP_MD_OUT})")
     parser.add_argument("--history-json", default=SWEEP_HISTORY_JSON, help=f"Path for cumulative JSON history (default: {SWEEP_HISTORY_JSON})")
     parser.add_argument("--history-md", default=SWEEP_HISTORY_MD, help=f"Path for historical Markdown report (default: {SWEEP_HISTORY_MD})")
+    parser.add_argument("--gcov-build-dir", default=os.environ.get("GCOV_BUILD_DIR"),
+                        help="Kernel build dir (O=) with GCOV_KERNEL and the two drivers instrumented; "
+                             "collects driver line coverage (see tools/sweep_gcov.py)")
+    parser.add_argument("--gcov-tool", default=os.environ.get("GCOV_TOOL"),
+                        help="Cross gcov of the compiler that built the kernel (default: Buildroot's)")
     args = parser.parse_args()
 
     TARGET_IP = args.ip
@@ -989,6 +1004,11 @@ def main():
         print("[ERROR] A password was specified via --password, but 'sshpass' is not installed on the host.", file=sys.stderr)
         print("        Please install sshpass (e.g. `sudo apt install sshpass`) or use SSH keys.", file=sys.stderr)
         sys.exit(1)
+
+    if args.gcov_build_dir:
+        g_coverage = sweep_gcov.BoardCoverage(run_ssh, args.gcov_build_dir, args.gcov_tool)
+        if g_coverage.skip_reason:
+            print(f"[COVERAGE] not collected: {g_coverage.skip_reason}")
 
     if args.serial:
         g_serial_logger = SerialLogger(args.serial, baud=args.serial_baud, log_path=args.serial_log)
@@ -1225,6 +1245,11 @@ def main():
             all_pass = False
     print("=" * 76)
 
+    driver_coverage = None
+    if g_coverage:
+        driver_coverage = g_coverage.report()
+        sweep_gcov.print_report(driver_coverage)
+
     # Save Host Reports
     report_bundle = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1232,7 +1257,8 @@ def main():
         "kunit_tests": kunit_summary,
         "sweep_summary": results,
         "msgbox_tx_modes": msgbox_tx_modes,
-        "profiles": aggregated_profile_data
+        "profiles": aggregated_profile_data,
+        "driver_coverage": driver_coverage,
     }
     try:
         with open(args.json_out, "w") as f:
@@ -1289,6 +1315,9 @@ def main():
                             f"{fmt(m.get('jitter_us'))} | {fmt(m.get('p99_us'))} | {fmt(m.get('msgs_s'))} | "
                             f"{fmt(m.get('rx_irqs_per_msg'))} | {fmt(m.get('tx_irqs'))} | {fmt(m.get('queue_overflows'))} |\n")
             f.write("\n")
+
+            if driver_coverage:
+                sweep_gcov.write_markdown(f, driver_coverage)
 
             if aggregated_profile_data:
                 f.write("\n## Detailed Quantitative Metrics per Profile\n\n")

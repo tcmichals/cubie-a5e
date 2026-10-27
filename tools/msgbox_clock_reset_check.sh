@@ -34,8 +34,10 @@ EOF
 		if [ "$1" = 1 ]; then
 			[ $gate -eq 1 ] && [ $rst -eq 1 ] && [ "$a" = 1 ] || fail "$name bank not clocked/out of reset/alive"
 		else
+			# The reset is never asserted (the other banks carry
+			# traffic between the other processors); clocks are released
 			[ $gate -eq 0 ] || fail "$name gate still on after unbind"
-			[ $rst -eq 0 ] || fail "$name reset still deasserted after unbind"
+			[ $rst -eq 1 ] || fail "$name reset asserted on unbind"
 			[ "$a" = 0 ] || fail "$name bank still answers after unbind"
 		fi
 	done
