@@ -71,13 +71,18 @@ The remoteproc node maps the 4-byte `remap` register and read-modify-writes bit 
 it. Move it to a syscon or the R-CCU only if maintainers ask.
 2026-10-27 (owner, after the harsh review): kept for v3. The cover letter also offers the sunxi
 SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
-**2026-10-27, under question (REMAP-1):** the T527 manual says bit 1 shares **SRAMA3_2** (512 KB at
-`0x07300000`, listed under NPU) with MCU_SYS, and our SRAM space 1 at `0x072C0000` is SRAMA3_1.
-The vendor BSP (`linux-aw2501` and `linux-a733`, see [RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0](../docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md)) never sets it for the E906, while the vendor Cubie A5E board DT maps and reserves SRAM space 1 for it: `0x07010364` is a `reg`
-of the HiFi4 node only, and only `sunxi_rproc_hifi4_boot.c` writes it (bit 0). "Works on silicon"
-was only ever measured with the bit set. Board check tonight with the bit left alone; if the
-E906 still uses space 1, the owner decides whether the driver drops the remap write and the
-`remap` reg (which removes this shared-register question from the series).
+**Why it stays (owner, 2026-10-28; settled, do not re-open):** the remap register is how the
+E906 side gets more RAM, and AbstractX depends on it: bit 0 (`MCU_RAM_REMAP`, reset 1) shares
+the HiFi4 DSP's local RAM (`0x00020000`, 128 KB, AbstractX's MicroPython heap), and bit 1
+(`SRAMA3_2_RAM_REMAP`) shares the 512 KB SRAMA3_2 (`0x07300000`) with MCU_SYS (T527 manual V0.94
+p.33 and p.418). The driver sets bit 1 and leaves bit 0 alone. Test results correct the wording,
+never the decision.
+
+**REMAP-1, closed 2026-10-28:** with bit 1 never set, the E906 still uses SRAM space 1 (SRAMA3_1,
+`0x072C0000`): trace buffer and the full sweep including Profile 2 pass with no performance
+change. So bit 1 does not gate space 1, as the manual says; the comments that said it "switches
+SRAM A3_2 (space 1)" to the core were wrong and now say it shares SRAM A3_2 with the MCU
+subsystem.
 
 ### Message box: all four banks clocked and out of reset (D12, redone)
 The original D12 (host bank only) was wrong and was redone before v3: the binding and DTS list

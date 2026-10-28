@@ -18,11 +18,12 @@
  * 4. STAY OUT OF DSP SECONDARY RAM: 0x00400000 - 0x0044FFFF belongs to HiFi4 DSP.
  * 5. E906 FIRMWARE LIVES IN SRAM & DDR:
  *    - SRAM Space 0: 0x3FFC0000 (256 KB, r_sram @ 0x07280000)
- *    - SRAM Space 1: 0x40000000 (256 KB, r_sram1 @ 0x072C0000, enabled via REMAP_CTRL_REG[1]=1)
+ *    - SRAM Space 1: 0x40000000 (256 KB, SRAMA3_1 @ 0x072C0000, no remap bit needed)
+ *    - SRAMA3_2: 0x07300000 (512 KB, same address for the E906), shared by REMAP_CTRL_REG[1]=1
  *    - Continuous 512 KB on-chip SRAM from 0x3FFC0000 to 0x40040000.
  */
 
-/* Forbidden Non-E906 Regions (DO NOT USE FOR E906!) */
+/* Not for firmware images. DSP local RAM is usable as data while no DSP firmware runs (AbstractX REPL heap) */
 #define DSP_LOCAL_RAM_BASE          0x00020000  /* 128 KB HiFi4 DSP Local Memory */
 #define DSP_LOCAL_RAM_SIZE          0x00020000
 #define OPTEE_SRAM_A2_BASE          0x00044000  /* 160 KB OP-TEE / TrustZone SRAM A2 */

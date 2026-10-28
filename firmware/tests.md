@@ -175,12 +175,14 @@ send; the E906 drains host doorbells while `reply()` waits for a host buffer
 
 ## 2. Hardware Memory Map for Firmware Tests
 
-All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memory regions `0x00020000` (HiFi4 DSP) and `0x00044000` (OP-TEE TrustZone) are strictly off-limits:
+All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. No firmware image is loaded into `0x00020000` (HiFi4 DSP local RAM) or `0x00044000` (OP-TEE TrustZone). The DSP RAM, SRAMA3_2 and the DRAM carveout are data RAM for the E906, checked by `testExtraRam`:
 
 | Memory Region | Core Address (DA) | Host Address (A527) | Host Address (T527) | Size | Usage in Test Suite |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **SRAM Space 0** | `0x3FFC0000` | `0x07280000` | `0x07200000` | 256 KB | Primary boot, `.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer` |
-| **SRAM Space 1** | `0x40000000` | `0x072C0000` | `0x07280000` | 256 KB | Secondary SRAM bank enabled via `REMAP_CTRL_REG[1]=1`, shared IPC |
+| **SRAM Space 1** | `0x40000000` | `0x072C0000` | `0x07280000` | 256 KB | SRAMA3_1; needs no remap bit (measured 2026-10-28), shared IPC |
+| **SRAMA3_2** | `0x07300000` | `0x07300000` | — | 512 KB | Shared with the E906 by `REMAP_CTRL_REG[1]=1` (sunxi_rproc `prepare()`); `testExtraRam` |
+| **DSP local RAM** | `0x00020000` | — | — | 128 KB | `REMAP_CTRL_REG[0]` (reset 1); AbstractX REPL heap while no DSP firmware runs; `testExtraRam` |
 | **Crash Signature** | `0x3FFFFF00` | `0x072BFF00` | `0x0723FF00` | 256 B | Top 256 bytes of SRAM Space 0 (`0xDEADF00D` post-mortem block) |
 | **DDR Carveout (`vdev`)** | `0x48000000` | `0x48000000` | `0x48000000` | 1 MB | Dedicated non-cacheable DDR payload pool for bulk streaming (`testDRAMMsg`) |
 | **DDR RPMsg Pool** | `0xf2f80000` | `0xf2f80000` | `0xf2f80000` | Coherent DMA | Dynamically allocated by Linux kernel (`dma_alloc_coherent`) in DDR DRAM for VirtIO vrings & RPMsg payload buffers (`testPingRpmsg`) |
@@ -278,6 +280,29 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. Memo
   ```
 
 ---
+
+### App 3a: `testExtraRam` (DSP RAM, DRAM carveout, SRAMA3_2)
+
+The RAM the E906 has besides SRAM spaces 0 and 1, which AbstractX relies on (the
+`e906_repl_app` MicroPython heap is the DSP local RAM). The firmware runs from SRAM space 0 and,
+for each region, writes every word with an address-dependent pattern, reads it all back (catches
+aliasing), repeats inverted, then does byte and halfword stores read back as words. A region is
+left zeroed with a signature at its start (`0x45585452` "EXTR", base, errors).
+
+| Region | E906 address | Size | Shared by |
+| :--- | :--- | :--- | :--- |
+| DSP local RAM | `0x00020000` | 128 KB | `REMAP_CTRL_REG` bit 0 (reset 1) |
+| DRAM carveout `dram@48100000` | `0x48100000` | 1 MiB | (DRAM, 1:1) |
+| SRAMA3_2 | `0x07300000` | 512 KB | `REMAP_CTRL_REG` bit 1, set by sunxi_rproc `prepare()` |
+
+`trace0` prints `EXTRA-RAM <region> PASS` or `FAIL errors=... first=...`; SRAMA3_2 is probed
+last, so a region the E906 cannot reach shows as the crash autopsy after its "probing" line. The
+full sweep (Profile 1, step 1.7) also reads the signature back with `devmem` at the host address
+of the DRAM carveout and SRAMA3_2. The DSP RAM has no host view to check. Do not run it while DSP
+firmware runs: it overwrites the DSP RAM.
+
+Board 2026-10-28 (kernel `8671beca6667`, `REMAP_CTRL_REG` = `0x3`): all three PASS, Linux reads
+both signatures.
 
 ### App 4: `exampleRiscv` (Minimal Reference Template)
 * **Directory**: `riscv-firmware/apps/exampleRiscv/`

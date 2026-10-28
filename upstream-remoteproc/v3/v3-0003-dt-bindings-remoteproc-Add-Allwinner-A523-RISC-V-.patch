@@ -1,4 +1,4 @@
-From 24f0188103f83b642a493ffbabf4043f5f219f3f Mon Sep 17 00:00:00 2001
+From c4a65c934ef79557de2efd21fe56e54c97c0e685 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
@@ -6,8 +6,9 @@ Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
 
 The Allwinner A523, A527 and T527 (sun55i) contain a T-Head XuanTie E906
 RISC-V core. It runs from a dedicated 256 KiB SRAM and can use a second
-256 KiB SRAM, which a bit in a PRCM remap register switches to it. Its
-reset vector is set in its configuration block.
+256 KiB SRAM and DRAM; a bit in a PRCM remap register shares a further
+512 KiB SRAM (SRAM A3_2) with its subsystem. Its reset vector is set in
+its configuration block.
 
 Describe the configuration block, both SRAMs and the remap register,
 the bus, core and SRAM clocks, the configuration, core, SRAM and debug
@@ -19,8 +20,10 @@ buffer) and an optional crash interrupt.
 Changes in v3:
 - File renamed to allwinner,sun55i-a523-rproc.yaml to match the
   compatible
-- reg and reg-names are a fixed list of four (cfg, r_sram, r_sram1,
-  remap), all required (Krzysztof)
+- reg and reg-names are a fixed list of four (cfg, sram-a3-0,
+  sram-a3-1, remap), all required (Krzysztof); the SRAMs are named as
+  in the T527 manual (SRAMA3_0, SRAMA3_1); the description says the
+  remap bit shares SRAM A3_2, not SRAM space 1
 - clocks and resets are fixed lists, no minItems (Krzysztof); add the
   debug reset. The msgbox and parent clocks and the msgbox reset are
   dropped: they belong to the message box node
@@ -28,21 +31,23 @@ Changes in v3:
 - One message box channel; mbox-names dropped. mboxes is optional: a
   user can drive the message box from userspace (UIO) instead
 - The crash interrupt description says the A523 has no dedicated line
-  for it
+  for it; it is the only interrupt, so no interrupt-names
+- memory-region[0] is a shared-dma-pool; the example has the memory
+  regions
 - "schema" dropped from the subject (Krzysztof)
 - Jernej Skrabec and Samuel Holland dropped from the maintainers; the
   MAINTAINERS entry moves to the driver patch
 ---
- .../allwinner,sun55i-a523-rproc.yaml          | 147 ++++++++++++++++++
- 1 file changed, 147 insertions(+)
+ .../allwinner,sun55i-a523-rproc.yaml          | 146 ++++++++++++++++++
+ 1 file changed, 146 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 
 diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 new file mode 100644
-index 000000000000..31339b9473ef
+index 000000000000..ffb32d391b4f
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,146 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -57,10 +62,11 @@ index 000000000000..31339b9473ef
 +description:
 +  The Allwinner A523, A527 and T527 (sun55i) SoCs contain a T-Head XuanTie
 +  E906 RISC-V core next to the Cortex-A55 cluster. The core runs from a
-+  dedicated 256 KiB SRAM, can also use a second 256 KiB SRAM that is
-+  switched to it through a remap register, and can access DRAM. Its reset
++  dedicated 256 KiB SRAM, can also use a second 256 KiB SRAM and DRAM,
++  and a remap register shared with the HiFi4 DSP shares a further 512 KiB
++  SRAM (SRAM A3_2) with the core's subsystem. Its reset
 +  vector is set in a register of its configuration block, and it exchanges
-+  notifications with the host through the CPUX message box.
++  notifications with the Cortex-A55 host through the message box.
 +
 +properties:
 +  compatible:
@@ -69,15 +75,15 @@ index 000000000000..31339b9473ef
 +  reg:
 +    items:
 +      - description: Configuration block, including the boot address register
-+      - description: Dedicated SRAM space 0
-+      - description: Switchable SRAM space 1
++      - description: SRAM A3_0, the core's dedicated SRAM space 0
++      - description: SRAM A3_1, the core's SRAM space 1
 +      - description: SRAM remap control register
 +
 +  reg-names:
 +    items:
 +      - const: cfg
-+      - const: r_sram
-+      - const: r_sram1
++      - const: sram-a3-0
++      - const: sram-a3-1
 +      - const: remap
 +
 +  clocks:
@@ -118,7 +124,7 @@ index 000000000000..31339b9473ef
 +  memory-region:
 +    minItems: 1
 +    items:
-+      - description: Virtio vring and buffer pool
++      - description: Virtio vring and buffer pool, a shared-dma-pool
 +      - description: Firmware code and data in DRAM
 +      - description: Trace buffer
 +
@@ -135,10 +141,6 @@ index 000000000000..31339b9473ef
 +      Interrupt the RISC-V core raises on a fatal error. The A523 has no
 +      dedicated line for this, so it is present only where the system
 +      integration provides one.
-+
-+  interrupt-names:
-+    items:
-+      - const: crash
 +
 +  power-domains:
 +    items:
@@ -175,7 +177,7 @@ index 000000000000..31339b9473ef
 +              <0x07280000 0x40000>,
 +              <0x072c0000 0x40000>,
 +              <0x07010364 0x4>;
-+        reg-names = "cfg", "r_sram", "r_sram1", "remap";
++        reg-names = "cfg", "sram-a3-0", "sram-a3-1", "remap";
 +        clocks = <&mcu_ccu CLK_BUS_MCU_RISCV_CFG>,
 +                 <&mcu_ccu CLK_MCU_RISCV>,
 +                 <&mcu_ccu CLK_BUS_MCU_PUBSRAM>;
@@ -188,8 +190,10 @@ index 000000000000..31339b9473ef
 +        power-domains = <&ppu PD_RISCV>, <&ppu PD_SRAM>;
 +        power-domain-names = "riscv", "sram";
 +        mboxes = <&msgbox 9>;
++        memory-region = <&riscv_vram>, <&riscv_dram>;
++        memory-region-names = "vram", "dram";
 +        firmware-name = "riscv-firmware.elf";
 +    };
 -- 
-2.43.0
+2.53.0
 

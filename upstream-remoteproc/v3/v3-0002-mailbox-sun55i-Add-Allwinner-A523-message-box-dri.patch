@@ -1,4 +1,4 @@
-From 256968d179c431b2eb57c009c3319f8d5227bdb4 Mon Sep 17 00:00:00 2001
+From 234a4c4ba987753dd7165c2f542bb1d6416f3eb6 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box driver
@@ -15,8 +15,9 @@ dropping the lock, so a client may send from its rx callback.
 
 Clocks and shared resets are enabled for all four banks, since the host
 writes into and reads status from remote banks; an unclocked bank drops
-writes. TX completion is polled (last_tx_done() checks FIFO count < 8)
-or signaled via write interrupt (allwinner,tx-done-irq).
+writes; the shared resets are deasserted at probe and never asserted.
+TX completion is polled (last_tx_done() checks FIFO count < 8) or
+signaled by the receiver bank's write interrupt (allwinner,tx-done-irq).
 
 Based on the vendor sunxi-msgbox driver by Allwinner Technology Co.,
 Ltd.
@@ -44,24 +45,37 @@ Changes in v3:
 - Startup and shutdown share one bounded flush
 - Our write IRQs are disarmed at probe, and again in shutdown() once
   a running TX-done handler has finished
-- Register access goes through sun55i_readl()/sun55i_writel() so the
+- Register access goes through sun55i_msgbox_readl()/_writel() so the
   KUnit tests can model the hardware
+- Timer mode: send_data() and last_tx_done() check and write the FIFO
+  under the controller lock, so the poll timer writing a held message
+  and a new send cannot overfill it
+- A held message whose blocking send timed out is dropped at the next
+  send instead of being written after it
+- probe() sets the channels up before requesting the interrupt (the
+  handler walks them); devm_mutex_init()
+- probe() requires four clocks and four resets; the interrupts are
+  looked up by name; the TX-done lines are kept per remote bank and
+  named after it (-cpus, -dsp, -rv)
+- The receive handler reads each port's enable and status once
+- Allwinner's copyright line: the register definitions come from the
+  vendor driver
 - The shared reset is deasserted at probe and never asserted, as in
   sun6i-msgbox: the other banks carry traffic between the other
   processors
 - sun60i/A733 support dropped from this series
 ---
  MAINTAINERS                     |   7 +
- drivers/mailbox/Kconfig         |   9 +
+ drivers/mailbox/Kconfig         |  12 +
  drivers/mailbox/Makefile        |   2 +
- drivers/mailbox/sun55i-msgbox.c | 602 ++++++++++++++++++++++++++++++++
- drivers/mailbox/sun55i-msgbox.h |  86 +++++
- 5 files changed, 706 insertions(+)
+ drivers/mailbox/sun55i-msgbox.c | 613 ++++++++++++++++++++++++++++++++
+ drivers/mailbox/sun55i-msgbox.h |  95 +++++
+ 5 files changed, 729 insertions(+)
  create mode 100644 drivers/mailbox/sun55i-msgbox.c
  create mode 100644 drivers/mailbox/sun55i-msgbox.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index fcff12847485..e4cb1d116974 100644
+index 365bec8eb7fb..3e66a30747d6 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -947,6 +947,13 @@ S:	Maintained
@@ -79,10 +93,10 @@ index fcff12847485..e4cb1d116974 100644
  M:	Vasily Khoruzhick <anarsoul@gmail.com>
  M:	Yangtao Li <tiny.windzz@gmail.com>
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
-index ab869769e278..2e7286119a48 100644
+index ab869769e278..370a55c8dc91 100644
 --- a/drivers/mailbox/Kconfig
 +++ b/drivers/mailbox/Kconfig
-@@ -332,6 +332,15 @@ config SUN6I_MSGBOX
+@@ -332,6 +332,18 @@ config SUN6I_MSGBOX
  	  various Allwinner SoCs. This mailbox is used for communication
  	  between the application CPUs and the power management coprocessor.
  
@@ -94,6 +108,9 @@ index ab869769e278..2e7286119a48 100644
 +	  (sun55i) SoCs. It provides 12 hardware FIFO channels between the
 +	  Cortex-A55 host and the CPUS, HiFi4 DSP and XuanTie E906 RISC-V
 +	  processors.
++
++	  To compile this driver as a module, choose M here: the module will
++	  be called sun55i-msgbox.
 +
  config SPRD_MBOX
  	tristate "Spreadtrum Mailbox"
@@ -113,45 +130,51 @@ index 45dc59bb3e7f..40024aa906a6 100644
  obj-$(CONFIG_QCOM_CPUCP_MBOX)	+= qcom-cpucp-mbox.o
 diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msgbox.c
 new file mode 100644
-index 000000000000..de8a3eb08f7c
+index 000000000000..1618c16219fc
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.c
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,613 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Allwinner sun55i 4-Port Hardware Message Box Driver
++ * Allwinner sun55i (A523) Message Box driver
 + *
++ * Copyright (C) 2020-2023 Allwinner Technology Co., Ltd.
 + * Copyright (C) 2026 Tim Michals <tcmichals@gmail.com>
 + * Based on vendor sunxi-msgbox driver by Allwinner Technology Co., Ltd.
 + */
 +
 +#include <kunit/static_stub.h>
 +#include <kunit/visibility.h>
++#include <linux/bitops.h>
 +#include <linux/clk.h>
 +#include <linux/device.h>
 +#include <linux/err.h>
 +#include <linux/interrupt.h>
 +#include <linux/io.h>
-+#include <linux/kernel.h>
++#include <linux/limits.h>
++#include <linux/lockdep.h>
 +#include <linux/mailbox_controller.h>
++#include <linux/mod_devicetable.h>
 +#include <linux/module.h>
 +#include <linux/of.h>
 +#include <linux/platform_device.h>
 +#include <linux/reset.h>
 +#include <linux/spinlock.h>
++#include <linux/string.h>
 +
 +#include "sun55i-msgbox.h"
 +
 +/*
-+ * Hardware routing table for Cortex-A55 host (local_id = 0):
-+ *   local_n = 0 -> CPUS (remote_id = SUN55I_PROC_CPUS, remote_n = 0) -> Channels 0..3
-+ *   local_n = 1 -> DSP  (remote_id = SUN55I_PROC_DSP,  remote_n = 0) -> Channels 4..7
-+ *   local_n = 2 -> RV   (remote_id = SUN55I_PROC_RV,   remote_n = 2) -> Channels 8..11
++ * Hardware routing table for the Cortex-A55 host (bank SUN55I_PROC_ARM). The
++ * name is the remote bank's entry in "interrupt-names".
++ *   local_n = 0 -> CPUS (remote_n = 0) -> channels 0..3
++ *   local_n = 1 -> DSP  (remote_n = 0) -> channels 4..7
++ *   local_n = 2 -> RV   (remote_n = 2) -> channels 8..11
 + */
-+static const struct sun55i_route sun55i_msgbox_arm_routes[SUN55I_NUM_ROUTES] = {
-+	[0] = { .remote_id = SUN55I_PROC_CPUS, .remote_n = 0 },
-+	[1] = { .remote_id = SUN55I_PROC_DSP,  .remote_n = 0 },
-+	[2] = { .remote_id = SUN55I_PROC_RV,   .remote_n = 2 },
++static const struct sun55i_route sun55i_msgbox_routes[SUN55I_NUM_ROUTES] = {
++	[0] = { .remote_id = SUN55I_PROC_CPUS, .remote_n = 0, .name = "cpus" },
++	[1] = { .remote_id = SUN55I_PROC_DSP,  .remote_n = 0, .name = "dsp" },
++	[2] = { .remote_id = SUN55I_PROC_RV,   .remote_n = 2, .name = "rv" },
 +};
 +
 +static inline struct sun55i_msgbox *to_sun55i_msgbox(struct mbox_chan *chan)
@@ -161,66 +184,50 @@ index 000000000000..de8a3eb08f7c
 +
 +/* All register access goes through these, so KUnit can model the hardware */
 +VISIBLE_IF_KUNIT
-+u32 sun55i_readl(void __iomem *addr)
++u32 sun55i_msgbox_readl(void __iomem *addr)
 +{
-+	KUNIT_STATIC_STUB_REDIRECT(sun55i_readl, addr);
++	KUNIT_STATIC_STUB_REDIRECT(sun55i_msgbox_readl, addr);
 +	return readl(addr);
 +}
-+EXPORT_SYMBOL_IF_KUNIT(sun55i_readl);
++EXPORT_SYMBOL_IF_KUNIT(sun55i_msgbox_readl);
 +
 +VISIBLE_IF_KUNIT
-+void sun55i_writel(u32 val, void __iomem *addr)
++void sun55i_msgbox_writel(u32 val, void __iomem *addr)
 +{
-+	KUNIT_STATIC_STUB_REDIRECT(sun55i_writel, val, addr);
++	KUNIT_STATIC_STUB_REDIRECT(sun55i_msgbox_writel, val, addr);
 +	writel(val, addr);
 +}
-+EXPORT_SYMBOL_IF_KUNIT(sun55i_writel);
++EXPORT_SYMBOL_IF_KUNIT(sun55i_msgbox_writel);
 +
++/* @chan_idx comes from the core, which only passes its own channels */
 +VISIBLE_IF_KUNIT
-+void sun55i_chan_to_route(int chan_idx, int *local_n, int *p,
-+			  int *remote_id, int *remote_n)
++void sun55i_msgbox_chan_to_route(int chan_idx, int *local_n, int *p,
++				 int *remote_id, int *remote_n)
 +{
-+	if (chan_idx < 0 || chan_idx >= SUN55I_NUM_CHANS) {
-+		*local_n = 0;
-+		*p = 0;
-+		*remote_id = 0;
-+		*remote_n = 0;
-+		return;
-+	}
 +	*local_n = chan_idx / SUN55I_CHANS_PER_PROC;
 +	*p = chan_idx % SUN55I_CHANS_PER_PROC;
-+	*remote_id = sun55i_msgbox_arm_routes[*local_n].remote_id;
-+	*remote_n = sun55i_msgbox_arm_routes[*local_n].remote_n;
++	*remote_id = sun55i_msgbox_routes[*local_n].remote_id;
++	*remote_n = sun55i_msgbox_routes[*local_n].remote_n;
 +}
-+EXPORT_SYMBOL_IF_KUNIT(sun55i_chan_to_route);
++EXPORT_SYMBOL_IF_KUNIT(sun55i_msgbox_chan_to_route);
 +
 +/*
-+ * Drain one channel and clear its pending bit, under the lock that startup()
-+ * and shutdown() take to change its enable bit. Returns the number of
-+ * messages read into @msgs, or -ENODATA if the channel has no enabled
-+ * interrupt pending.
++ * Read what is queued for us on one channel (at most FIFO_MAX, so a runaway
++ * remote cannot lock up the CPU) into @msgs, then clear its pending bit.
++ * Returns the number of messages read.
 + */
 +static int sun55i_msgbox_rx_drain(struct sun55i_msgbox *mbox, int local_n, int p,
 +				  u32 *msgs)
 +{
-+	void __iomem *base = mbox->regs[0];
-+	unsigned long flags;
++	void __iomem *base = mbox->regs[SUN55I_PROC_ARM];
 +	int count = 0;
-+	u32 pending;
 +
-+	spin_lock_irqsave(&mbox->lock, flags);
++	lockdep_assert_held(&mbox->lock);
 +
-+	pending = sun55i_readl(base + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n)) &
-+		  sun55i_readl(base + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
-+	if (!(pending & RD_IRQ_PEND_BIT(p))) {
-+		spin_unlock_irqrestore(&mbox->lock, flags);
-+		return -ENODATA;
-+	}
-+
-+	/* Cap drain at FIFO_MAX to prevent CPU lockup from a runaway remote */
 +	while (count < SUN55I_FIFO_MAX &&
-+	       (sun55i_readl(base + SUNXI_MSGBOX_MSG_STATUS(local_n, p)) & MSG_NUM_MASK))
-+		msgs[count++] = sun55i_readl(base + SUNXI_MSGBOX_MSG_FIFO(local_n, p));
++	       (sun55i_msgbox_readl(base + SUN55I_MSGBOX_MSG_STATUS(local_n, p)) &
++		SUN55I_MSGBOX_MSG_NUM_MASK))
++		msgs[count++] = sun55i_msgbox_readl(base + SUN55I_MSGBOX_MSG_FIFO(local_n, p));
 +
 +	/*
 +	 * The pending bit follows "FIFO not empty": the hardware ignores the
@@ -228,9 +235,8 @@ index 000000000000..de8a3eb08f7c
 +	 * left it set and raised a second interrupt for every message. A
 +	 * message that arrives after this clear sets it again.
 +	 */
-+	sun55i_writel(RD_IRQ_PEND_BIT(p), base + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
-+
-+	spin_unlock_irqrestore(&mbox->lock, flags);
++	sun55i_msgbox_writel(SUN55I_MSGBOX_RD_IRQ_PEND_BIT(p),
++			     base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));
 +
 +	return count;
 +}
@@ -239,28 +245,36 @@ index 000000000000..de8a3eb08f7c
 +irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id)
 +{
 +	struct sun55i_msgbox *mbox = dev_id;
++	void __iomem *base = mbox->regs[SUN55I_PROC_ARM];
++	u32 msgs[SUN55I_CHANS_PER_PROC][SUN55I_FIFO_MAX];
++	int count[SUN55I_CHANS_PER_PROC];
 +	irqreturn_t ret = IRQ_NONE;
-+	u32 msgs[SUN55I_FIFO_MAX];
-+	int i, count, local_n, p;
++	int local_n, p, i;
 +
 +	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
++		struct mbox_chan *chans =
++			&mbox->controller.chans[local_n * SUN55I_CHANS_PER_PROC];
++		unsigned long flags;
++		u32 pending;
++
++		spin_lock_irqsave(&mbox->lock, flags);
++		pending = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n)) &
++			  sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));
++		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++)
++			count[p] = pending & SUN55I_MSGBOX_RD_IRQ_PEND_BIT(p) ?
++				   sun55i_msgbox_rx_drain(mbox, local_n, p, msgs[p]) : -1;
++		spin_unlock_irqrestore(&mbox->lock, flags);
++
++		/*
++		 * Outside the lock: a client may send from its rx callback,
++		 * and send_data() takes the lock. shutdown() waits for this
++		 * handler before the channel goes away.
++		 */
 +		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {
-+			struct mbox_chan *chan =
-+				&mbox->controller.chans[local_n * SUN55I_CHANS_PER_PROC + p];
-+
-+			count = sun55i_msgbox_rx_drain(mbox, local_n, p, msgs);
-+			if (count < 0)
++			if (count[p] < 0)
 +				continue;
-+
-+			/*
-+			 * Outside the lock: a client may send from its rx
-+			 * callback, and in write IRQ mode send_data() takes the
-+			 * lock. shutdown() waits for this handler before the
-+			 * channel goes away.
-+			 */
-+			for (i = 0; i < count; i++)
-+				mbox_chan_received_data(chan, &msgs[i]);
-+
++			for (i = 0; i < count[p]; i++)
++				mbox_chan_received_data(&chans[p], &msgs[p][i]);
 +			ret = IRQ_HANDLED;
 +		}
 +	}
@@ -272,8 +286,9 @@ index 000000000000..de8a3eb08f7c
 +static u32 sun55i_msgbox_tx_count(struct sun55i_msgbox *mbox, int remote_id,
 +				  int remote_n, int p)
 +{
-+	return sun55i_readl(mbox->regs[remote_id] +
-+		     SUNXI_MSGBOX_MSG_STATUS(remote_n, p)) & MSG_NUM_MASK;
++	return sun55i_msgbox_readl(mbox->regs[remote_id] +
++				   SUN55I_MSGBOX_MSG_STATUS(remote_n, p)) &
++	       SUN55I_MSGBOX_MSG_NUM_MASK;
 +}
 +
 +/*
@@ -291,19 +306,20 @@ index 000000000000..de8a3eb08f7c
 +					int remote_n, int p, bool enable)
 +{
 +	void __iomem *base = mbox->regs[remote_id];
-+	void __iomem *reg = base + SUNXI_MSGBOX_WRITE_IRQ_ENABLE(remote_n);
++	void __iomem *reg = base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(remote_n);
 +	unsigned long flags;
 +	u32 val;
 +
 +	spin_lock_irqsave(&mbox->lock, flags);
-+	val = sun55i_readl(reg);
++	val = sun55i_msgbox_readl(reg);
 +	if (enable) {
-+		sun55i_writel(WR_IRQ_PEND_BIT(p), base + SUNXI_MSGBOX_WRITE_IRQ_STATUS(remote_n));
-+		val |= WR_IRQ_EN_BIT(p);
++		sun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p),
++				     base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(remote_n));
++		val |= SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);
 +	} else {
-+		val &= ~WR_IRQ_EN_BIT(p);
++		val &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);
 +	}
-+	sun55i_writel(val, reg);
++	sun55i_msgbox_writel(val, reg);
 +	spin_unlock_irqrestore(&mbox->lock, flags);
 +}
 +
@@ -312,55 +328,47 @@ index 000000000000..de8a3eb08f7c
 +{
 +	struct sun55i_tx_irq *tx = dev_id;
 +	struct sun55i_msgbox *mbox = tx->mbox;
-+	struct mbox_chan *done[SUN55I_NUM_CHANS];
-+	int i, nr_done = 0, local_n, p;
-+	unsigned long flags;
++	const struct sun55i_route *route = &sun55i_msgbox_routes[tx->local_n];
++	void __iomem *base = mbox->regs[route->remote_id];
++	struct mbox_chan *chans = &mbox->controller.chans[tx->local_n * SUN55I_CHANS_PER_PROC];
++	unsigned long flags, done = 0;
++	u32 en, pend;
++	int p;
 +
 +	spin_lock_irqsave(&mbox->lock, flags);
 +
-+	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
-+		const struct sun55i_route *route = &sun55i_msgbox_arm_routes[local_n];
-+		void __iomem *base = mbox->regs[route->remote_id];
-+		u32 en, pend;
++	en = sun55i_msgbox_readl(base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));
++	pend = sun55i_msgbox_readl(base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));
 +
-+		if (route->remote_id != tx->remote_id)
++	for (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {
++		if (!(en & pend & SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p)))
 +			continue;
 +
-+		en = sun55i_readl(base + SUNXI_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));
-+		pend = sun55i_readl(base + SUNXI_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));
-+
-+		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {
-+			if (!(en & pend & WR_IRQ_PEND_BIT(p)))
-+				continue;
-+
-+			/* Level: mask it before acking, a slot is free now */
-+			en &= ~WR_IRQ_EN_BIT(p);
-+			sun55i_writel(en, base + SUNXI_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));
-+			sun55i_writel(WR_IRQ_PEND_BIT(p),
-+				      base + SUNXI_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));
-+
-+			done[nr_done++] =
-+				&mbox->controller.chans[local_n * SUN55I_CHANS_PER_PROC + p];
-+		}
++		/* Level: mask it before acking, a slot is free now */
++		en &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);
++		sun55i_msgbox_writel(en, base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));
++		sun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p),
++				     base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));
++		__set_bit(p, &done);
 +	}
 +
 +	spin_unlock_irqrestore(&mbox->lock, flags);
 +
 +	/* Outside the lock: txdone submits the next message (send_data) */
-+	for (i = 0; i < nr_done; i++)
-+		mbox_chan_txdone(done[i], 0);
++	for_each_set_bit(p, &done, SUN55I_CHANS_PER_PROC)
++		mbox_chan_txdone(&chans[p], 0);
 +
-+	return nr_done ? IRQ_HANDLED : IRQ_NONE;
++	return done ? IRQ_HANDLED : IRQ_NONE;
 +}
 +EXPORT_SYMBOL_IF_KUNIT(sun55i_msgbox_tx_irq);
 +
 +/*
-+ * A remote bank's line is requested while at least one channel to that bank
-+ * is started, so lines of banks nobody talks to stay free.
++ * A route's TX-done line is requested while at least one channel on it is
++ * started, so lines of banks nobody talks to stay free.
 + */
-+static int sun55i_msgbox_tx_irq_get(struct sun55i_msgbox *mbox, int remote_id)
++static int sun55i_msgbox_tx_irq_get(struct sun55i_msgbox *mbox, int local_n)
 +{
-+	struct sun55i_tx_irq *tx = &mbox->tx_irqs[remote_id];
++	struct sun55i_tx_irq *tx = &mbox->tx_irqs[local_n];
 +	int ret = 0;
 +
 +	mutex_lock(&mbox->tx_irq_lock);
@@ -377,9 +385,9 @@ index 000000000000..de8a3eb08f7c
 +	return ret;
 +}
 +
-+static void sun55i_msgbox_tx_irq_put(struct sun55i_msgbox *mbox, int remote_id)
++static void sun55i_msgbox_tx_irq_put(struct sun55i_msgbox *mbox, int local_n)
 +{
-+	struct sun55i_tx_irq *tx = &mbox->tx_irqs[remote_id];
++	struct sun55i_tx_irq *tx = &mbox->tx_irqs[local_n];
 +
 +	mutex_lock(&mbox->tx_irq_lock);
 +	if (!--tx->users) {
@@ -391,62 +399,59 @@ index 000000000000..de8a3eb08f7c
 +	mutex_unlock(&mbox->tx_irq_lock);
 +}
 +
-+/*
-+ * Drop what is queued for us on a channel (bounded to FIFO_MAX), then clear
-+ * its pending bit: the clear only takes once the FIFO is empty.
-+ */
-+static void sun55i_msgbox_rx_flush(struct sun55i_msgbox *mbox, int local_n, int p)
-+{
-+	void __iomem *base = mbox->regs[0];
-+	int i;
-+
-+	for (i = 0; i < SUN55I_FIFO_MAX; i++) {
-+		if (!(sun55i_readl(base + SUNXI_MSGBOX_MSG_STATUS(local_n, p)) & MSG_NUM_MASK))
-+			break;
-+		sun55i_readl(base + SUNXI_MSGBOX_MSG_FIFO(local_n, p));
-+	}
-+	sun55i_writel(RD_IRQ_PEND_BIT(p), base + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
-+}
-+
 +static int sun55i_msgbox_send_data(struct mbox_chan *chan, void *data)
 +{
 +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
 +	int n = chan - mbox->controller.chans;
 +	int local_n, p, remote_id, remote_n;
++	unsigned long flags;
 +	u32 msg = 0;
++	bool full;
 +
 +	if (data)
 +		memcpy(&msg, data, sizeof(msg));
 +
-+	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++
++	/*
++	 * Under the lock: in timer mode the poll timer may write a held
++	 * message into the same FIFO from another CPU (last_tx_done()).
++	 */
++	spin_lock_irqsave(&mbox->lock, flags);
++
++	/*
++	 * The core calls send_data() only with no request active, so a message
++	 * still held here is one it gave up on (a blocking send timed out):
++	 * drop it rather than send it after this newer one.
++	 */
++	__clear_bit(n, &mbox->tx_held);
 +
 +	/*
 +	 * Writing a full FIFO corrupts its count, so never do it. In write IRQ
-+	 * mode the IRQ armed here retries the message once a slot is free. In
++	 * mode the IRQ armed below retries the message once a slot is free. In
 +	 * timer mode the core polls only a channel whose send succeeded, so
 +	 * hold the message and let last_tx_done() write it.
 +	 */
-+	if (sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) >= SUN55I_FIFO_MAX) {
-+		if (mbox->tx_done_irq) {
-+			sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, true);
-+			return -EBUSY;
-+		}
++	full = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) >= SUN55I_FIFO_MAX;
++	if (!full) {
++		sun55i_msgbox_writel(msg, mbox->regs[remote_id] +
++				     SUN55I_MSGBOX_MSG_FIFO(remote_n, p));
++	} else if (!mbox->tx_done_irq) {
 +		mbox->tx_held_msg[n] = msg;
-+		/* The poll timer may run on another CPU: message before flag */
-+		smp_mb__before_atomic();
-+		set_bit(n, &mbox->tx_held);
-+		return 0;
++		__set_bit(n, &mbox->tx_held);
 +	}
 +
-+	sun55i_writel(msg, mbox->regs[remote_id] + SUNXI_MSGBOX_MSG_FIFO(remote_n, p));
++	spin_unlock_irqrestore(&mbox->lock, flags);
 +
 +	/*
 +	 * A kick is a doorbell, the data is in shared memory: it is done once
 +	 * the FIFO accepted it and has room for the next one. The write IRQ
 +	 * reports exactly that, at once or when the receiver reads a message.
 +	 */
-+	if (mbox->tx_done_irq)
++	if (mbox->tx_done_irq) {
 +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, true);
++		return full ? -EBUSY : 0;
++	}
 +
 +	return 0;
 +}
@@ -454,12 +459,14 @@ index 000000000000..de8a3eb08f7c
 +static int sun55i_msgbox_startup(struct mbox_chan *chan)
 +{
 +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
++	void __iomem *base = mbox->regs[SUN55I_PROC_ARM];
 +	int n = chan - mbox->controller.chans;
 +	int local_n, p, remote_id, remote_n;
++	u32 stale[SUN55I_FIFO_MAX];
 +	unsigned long flags;
 +	u32 val;
 +
-+	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 +
 +	/*
 +	 * Get the TX-done line before the receive IRQ is enabled: on failure the
@@ -469,25 +476,21 @@ index 000000000000..de8a3eb08f7c
 +		int ret;
 +
 +		/* TX done: the write IRQ, raised while one slot is free */
-+		sun55i_writel(WR_IRQ_THR_ONE_FREE, mbox->regs[remote_id] +
-+			      SUNXI_MSGBOX_WRITE_IRQ_THRESHOLD(remote_n, p));
-+		sun55i_writel(WR_IRQ_PEND_BIT(p),
-+			      mbox->regs[remote_id] + SUNXI_MSGBOX_WRITE_IRQ_STATUS(remote_n));
++		sun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_THR_ONE_FREE, mbox->regs[remote_id] +
++				     SUN55I_MSGBOX_WRITE_IRQ_THRESHOLD(remote_n, p));
 +
-+		ret = sun55i_msgbox_tx_irq_get(mbox, remote_id);
++		ret = sun55i_msgbox_tx_irq_get(mbox, local_n);
 +		if (ret)
 +			return ret;
 +		set_bit(n, &mbox->tx_irq_held);
 +	}
 +
-+	/* Drop stale receive data, then clear the pending bit */
-+	sun55i_msgbox_rx_flush(mbox, local_n, p);
-+
-+	/* Enable receive IRQ */
++	/* Drop stale receive data, then enable the receive IRQ */
 +	spin_lock_irqsave(&mbox->lock, flags);
-+	val = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+	val |= RD_IRQ_EN_BIT(p);
-+	sun55i_writel(val, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
++	sun55i_msgbox_rx_drain(mbox, local_n, p, stale);
++	val = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));
++	val |= SUN55I_MSGBOX_RD_IRQ_EN_BIT(p);
++	sun55i_msgbox_writel(val, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));
 +	spin_unlock_irqrestore(&mbox->lock, flags);
 +
 +	return 0;
@@ -496,30 +499,30 @@ index 000000000000..de8a3eb08f7c
 +static void sun55i_msgbox_shutdown(struct mbox_chan *chan)
 +{
 +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
++	void __iomem *base = mbox->regs[SUN55I_PROC_ARM];
 +	int n = chan - mbox->controller.chans;
 +	int local_n, p, remote_id, remote_n;
++	u32 stale[SUN55I_FIFO_MAX];
 +	unsigned long flags;
 +	u32 val;
 +
-+	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 +
-+	/* Disable receive IRQ */
++	/* Disable the receive IRQ; a message held for a full FIFO is dropped */
 +	spin_lock_irqsave(&mbox->lock, flags);
-+	val = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+	val &= ~RD_IRQ_EN_BIT(p);
-+	sun55i_writel(val, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
++	val = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));
++	val &= ~SUN55I_MSGBOX_RD_IRQ_EN_BIT(p);
++	sun55i_msgbox_writel(val, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));
++	__clear_bit(n, &mbox->tx_held);
 +	spin_unlock_irqrestore(&mbox->lock, flags);
 +
 +	/* The handler delivers outside the lock: let it finish with this channel */
 +	synchronize_irq(mbox->irq);
 +
-+	/* A message held for a full FIFO is dropped with the channel */
-+	clear_bit(n, &mbox->tx_held);
-+
 +	/* Release the line only if this channel's startup() got it */
 +	if (test_and_clear_bit(n, &mbox->tx_irq_held)) {
 +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
-+		sun55i_msgbox_tx_irq_put(mbox, remote_id);
++		sun55i_msgbox_tx_irq_put(mbox, local_n);
 +		/*
 +		 * A TX-done handler that was already running submits the next
 +		 * message through send_data(), which arms the IRQ again. It has
@@ -529,7 +532,10 @@ index 000000000000..de8a3eb08f7c
 +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
 +	}
 +
-+	sun55i_msgbox_rx_flush(mbox, local_n, p);
++	/* Drop what arrived meanwhile */
++	spin_lock_irqsave(&mbox->lock, flags);
++	sun55i_msgbox_rx_drain(mbox, local_n, p, stale);
++	spin_unlock_irqrestore(&mbox->lock, flags);
 +}
 +
 +static bool sun55i_msgbox_last_tx_done(struct mbox_chan *chan)
@@ -537,25 +543,28 @@ index 000000000000..de8a3eb08f7c
 +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
 +	int n = chan - mbox->controller.chans;
 +	int local_n, p, remote_id, remote_n;
++	unsigned long flags;
++	bool done;
 +
-+	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 +
 +	/*
 +	 * Timer mode only. A kick is a doorbell, the data is in shared memory:
 +	 * it is done once the receiver's FIFO accepted it and has room for the
 +	 * next one; a full FIFO waits for the next poll.
 +	 */
-+	if (sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) >= SUN55I_FIFO_MAX)
-+		return false;
++	spin_lock_irqsave(&mbox->lock, flags);
++	done = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) < SUN55I_FIFO_MAX;
 +
 +	/* send_data() found the FIFO full and held the message: write it now */
-+	if (test_and_clear_bit(n, &mbox->tx_held)) {
-+		sun55i_writel(mbox->tx_held_msg[n],
-+			      mbox->regs[remote_id] + SUNXI_MSGBOX_MSG_FIFO(remote_n, p));
-+		return sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) < SUN55I_FIFO_MAX;
++	if (done && __test_and_clear_bit(n, &mbox->tx_held)) {
++		sun55i_msgbox_writel(mbox->tx_held_msg[n], mbox->regs[remote_id] +
++				     SUN55I_MSGBOX_MSG_FIFO(remote_n, p));
++		done = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) < SUN55I_FIFO_MAX;
 +	}
++	spin_unlock_irqrestore(&mbox->lock, flags);
 +
-+	return true;
++	return done;
 +}
 +
 +static bool sun55i_msgbox_peek_data(struct mbox_chan *chan)
@@ -563,12 +572,12 @@ index 000000000000..de8a3eb08f7c
 +	struct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);
 +	int n = chan - mbox->controller.chans;
 +	int local_n, p, remote_id, remote_n;
-+	u32 count;
 +
-+	sun55i_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
++	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
 +
-+	count = sun55i_readl(mbox->regs[0] + SUNXI_MSGBOX_MSG_STATUS(local_n, p)) & MSG_NUM_MASK;
-+	return count > 0;
++	return sun55i_msgbox_readl(mbox->regs[SUN55I_PROC_ARM] +
++				   SUN55I_MSGBOX_MSG_STATUS(local_n, p)) &
++	       SUN55I_MSGBOX_MSG_NUM_MASK;
 +}
 +
 +VISIBLE_IF_KUNIT
@@ -595,7 +604,9 @@ index 000000000000..de8a3eb08f7c
 +		return -ENOMEM;
 +
 +	spin_lock_init(&mbox->lock);
-+	mutex_init(&mbox->tx_irq_lock);
++	ret = devm_mutex_init(dev, &mbox->tx_irq_lock);
++	if (ret)
++		return ret;
 +
 +	chans = devm_kcalloc(dev, SUN55I_NUM_CHANS, sizeof(*chans), GFP_KERNEL);
 +	if (!chans)
@@ -603,6 +614,12 @@ index 000000000000..de8a3eb08f7c
 +
 +	for (i = 0; i < SUN55I_NUM_CHANS; i++)
 +		chans[i].con_priv = mbox;
++
++	/* The interrupt handler walks the channels: set them up before it */
++	mbox->controller.dev = dev;
++	mbox->controller.ops = &sun55i_msgbox_chan_ops;
++	mbox->controller.chans = chans;
++	mbox->controller.num_chans = SUN55I_NUM_CHANS;
 +
 +	for (i = 0; i < SUN55I_MAX_PROCESSORS; i++) {
 +		mbox->regs[i] = devm_platform_ioremap_resource(pdev, i);
@@ -615,11 +632,21 @@ index 000000000000..de8a3eb08f7c
 +	 * Every bank has its own bus clock and reset. The host writes messages
 +	 * into the remote banks and reads their FIFO status, so all of them
 +	 * must be clocked and out of reset; an unclocked bank drops writes and
-+	 * reads back as zero.
++	 * reads back as zero. A DT missing one would fail silently, so check.
 +	 */
 +	ret = devm_clk_bulk_get_all_enabled(dev, &clks);
 +	if (ret < 0)
 +		return dev_err_probe(dev, ret, "failed to enable clocks\n");
++	if (ret != SUN55I_MAX_PROCESSORS)
++		return dev_err_probe(dev, -EINVAL, "need %d clocks, found %d\n",
++				     SUN55I_MAX_PROCESSORS, ret);
++
++	ret = reset_control_get_count(dev);
++	if (ret < 0)
++		return dev_err_probe(dev, ret, "failed to count resets\n");
++	if (ret != SUN55I_MAX_PROCESSORS)
++		return dev_err_probe(dev, -EINVAL, "need %d resets, found %d\n",
++				     SUN55I_MAX_PROCESSORS, ret);
 +
 +	rst = devm_reset_control_array_get_shared(dev);
 +	if (IS_ERR(rst))
@@ -640,22 +667,23 @@ index 000000000000..de8a3eb08f7c
 +	 * the remote banks, which an earlier kernel or bind may have left on.
 +	 */
 +	for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {
-+		const struct sun55i_route *route = &sun55i_msgbox_arm_routes[local_n];
++		const struct sun55i_route *route = &sun55i_msgbox_routes[local_n];
++		void __iomem *base = mbox->regs[SUN55I_PROC_ARM];
 +		void __iomem *wr_en = mbox->regs[route->remote_id] +
-+				      SUNXI_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n);
-+		u32 val = sun55i_readl(wr_en);
++				      SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n);
++		u32 val = sun55i_msgbox_readl(wr_en);
 +		int p;
 +
-+		sun55i_writel(0, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_ENABLE(local_n));
-+		sun55i_writel(U32_MAX, mbox->regs[0] + SUNXI_MSGBOX_READ_IRQ_STATUS(local_n));
++		sun55i_msgbox_writel(0, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));
++		sun55i_msgbox_writel(U32_MAX, base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));
 +
 +		for (p = 0; p < SUN55I_CHANS_PER_PROC; p++)
-+			val &= ~WR_IRQ_EN_BIT(p);
-+		sun55i_writel(val, wr_en);
++			val &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);
++		sun55i_msgbox_writel(val, wr_en);
 +	}
 +
 +	/* The ARM bank interrupt signals messages received by this processor */
-+	irq = platform_get_irq(pdev, 0);
++	irq = platform_get_irq_byname(pdev, "arm");
 +	if (irq < 0)
 +		return irq;
 +
@@ -666,33 +694,33 @@ index 000000000000..de8a3eb08f7c
 +
 +	/*
 +	 * The write IRQ of a channel is raised in the receiver's bank, on that
-+	 * bank's own line to this processor (same index as the bank in "reg").
-+	 * Look the lines up now so a bad DT fails the probe; each is requested
-+	 * only while a channel to its bank is started.
++	 * bank's own line to this processor. Look the lines up now so a bad DT
++	 * fails the probe; each is requested only while a channel on its route
++	 * is started.
 +	 */
 +	mbox->tx_done_irq = of_property_read_bool(dev->of_node, "allwinner,tx-done-irq");
-+	for (i = 1; mbox->tx_done_irq && i < SUN55I_MAX_PROCESSORS; i++) {
-+		struct sun55i_tx_irq *tx = &mbox->tx_irqs[i];
++	for (local_n = 0; mbox->tx_done_irq && local_n < SUN55I_NUM_ROUTES; local_n++) {
++		const struct sun55i_route *route = &sun55i_msgbox_routes[local_n];
++		struct sun55i_tx_irq *tx = &mbox->tx_irqs[local_n];
 +
 +		tx->mbox = mbox;
-+		tx->remote_id = i;
-+		tx->irq = platform_get_irq(pdev, i);
++		tx->local_n = local_n;
++		tx->irq = platform_get_irq_byname(pdev, route->name);
 +		if (tx->irq < 0)
 +			return tx->irq;
 +
-+		tx->name = devm_kasprintf(dev, GFP_KERNEL, "%s-tx%d", dev_name(dev), i);
++		tx->name = devm_kasprintf(dev, GFP_KERNEL, "%s-%s", dev_name(dev), route->name);
 +		if (!tx->name)
 +			return -ENOMEM;
 +	}
 +
-+	mbox->controller.dev           = dev;
-+	mbox->controller.ops           = &sun55i_msgbox_chan_ops;
-+	mbox->controller.chans         = chans;
-+	mbox->controller.num_chans     = SUN55I_NUM_CHANS;
-+	/* TX done by the write IRQ ("allwinner,tx-done-irq") or by polling */
-+	mbox->controller.txdone_irq    = mbox->tx_done_irq;
-+	mbox->controller.txdone_poll   = !mbox->tx_done_irq;
-+	mbox->controller.txpoll_period = 1;
++	/* TX done by the write IRQ ("allwinner,tx-done-irq") or by a 1 ms poll */
++	if (mbox->tx_done_irq) {
++		mbox->controller.txdone_irq = true;
++	} else {
++		mbox->controller.txdone_poll = true;
++		mbox->controller.txpoll_period = 1;
++	}
 +
 +	ret = devm_mbox_controller_register(dev, &mbox->controller);
 +	if (ret)
@@ -717,14 +745,14 @@ index 000000000000..de8a3eb08f7c
 +module_platform_driver(sun55i_msgbox_driver);
 +
 +MODULE_AUTHOR("Tim Michals <tcmichals@gmail.com>");
-+MODULE_DESCRIPTION("Allwinner sun55i 4-Port Message Box Driver");
++MODULE_DESCRIPTION("Allwinner sun55i Message Box driver");
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/mailbox/sun55i-msgbox.h b/drivers/mailbox/sun55i-msgbox.h
 new file mode 100644
-index 000000000000..16c1d32402a3
+index 000000000000..98c0634c0532
 --- /dev/null
 +++ b/drivers/mailbox/sun55i-msgbox.h
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,95 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +#ifndef _SUN55I_MSGBOX_H_
 +#define _SUN55I_MSGBOX_H_
@@ -734,7 +762,9 @@ index 000000000000..16c1d32402a3
 +#include <linux/mailbox_controller.h>
 +#include <linux/mutex.h>
 +#include <linux/spinlock.h>
++#include <linux/types.h>
 +
++/* Banks, in "reg" order */
 +#define SUN55I_PROC_ARM			0
 +#define SUN55I_PROC_DSP			1
 +#define SUN55I_PROC_CPUS		2
@@ -746,55 +776,62 @@ index 000000000000..16c1d32402a3
 +#define SUN55I_NUM_CHANS		(SUN55I_NUM_ROUTES * SUN55I_CHANS_PER_PROC)
 +#define SUN55I_FIFO_MAX			8
 +
-+#define SUNXI_MSGBOX_OFFSET(n)			(0x100 * (n))
-+#define SUNXI_MSGBOX_READ_IRQ_ENABLE(n)		(0x020 + SUNXI_MSGBOX_OFFSET(n))
-+#define SUNXI_MSGBOX_READ_IRQ_STATUS(n)		(0x024 + SUNXI_MSGBOX_OFFSET(n))
-+#define SUNXI_MSGBOX_WRITE_IRQ_ENABLE(n)	(0x030 + SUNXI_MSGBOX_OFFSET(n))
-+#define SUNXI_MSGBOX_WRITE_IRQ_STATUS(n)	(0x034 + SUNXI_MSGBOX_OFFSET(n))
-+#define SUNXI_MSGBOX_MSG_STATUS(n, p)		(0x060 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
-+#define SUNXI_MSGBOX_MSG_FIFO(n, p)		(0x070 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
-+#define SUNXI_MSGBOX_WRITE_IRQ_THRESHOLD(n, p)	(0x080 + SUNXI_MSGBOX_OFFSET(n) + 0x4 * (p))
++#define SUN55I_MSGBOX_OFFSET(n)			(0x100 * (n))
++#define SUN55I_MSGBOX_READ_IRQ_ENABLE(n)	(0x020 + SUN55I_MSGBOX_OFFSET(n))
++#define SUN55I_MSGBOX_READ_IRQ_STATUS(n)	(0x024 + SUN55I_MSGBOX_OFFSET(n))
++#define SUN55I_MSGBOX_WRITE_IRQ_ENABLE(n)	(0x030 + SUN55I_MSGBOX_OFFSET(n))
++#define SUN55I_MSGBOX_WRITE_IRQ_STATUS(n)	(0x034 + SUN55I_MSGBOX_OFFSET(n))
++#define SUN55I_MSGBOX_MSG_STATUS(n, p)		(0x060 + SUN55I_MSGBOX_OFFSET(n) + 0x4 * (p))
++#define SUN55I_MSGBOX_MSG_FIFO(n, p)		(0x070 + SUN55I_MSGBOX_OFFSET(n) + 0x4 * (p))
++#define SUN55I_MSGBOX_WRITE_IRQ_THRESHOLD(n, p)	(0x080 + SUN55I_MSGBOX_OFFSET(n) + 0x4 * (p))
 +
-+#define RD_IRQ_EN_BIT(p)			BIT_U32((p) * 2)
-+#define RD_IRQ_PEND_BIT(p)			BIT_U32((p) * 2)
-+#define WR_IRQ_EN_BIT(p)			BIT_U32((p) * 2 + 1)
-+#define WR_IRQ_PEND_BIT(p)			BIT_U32((p) * 2 + 1)
++#define SUN55I_MSGBOX_RD_IRQ_EN_BIT(p)		BIT_U32((p) * 2)
++#define SUN55I_MSGBOX_RD_IRQ_PEND_BIT(p)	BIT_U32((p) * 2)
++#define SUN55I_MSGBOX_WR_IRQ_EN_BIT(p)		BIT_U32((p) * 2 + 1)
++#define SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p)	BIT_U32((p) * 2 + 1)
 +/* Write IRQ threshold field value 0: raised while at least one slot is free */
-+#define WR_IRQ_THR_ONE_FREE			0
-+#define MSG_NUM_MASK				GENMASK(3, 0)
++#define SUN55I_MSGBOX_WR_IRQ_THR_ONE_FREE	0
++#define SUN55I_MSGBOX_MSG_NUM_MASK		GENMASK(3, 0)
 +
++/* Where host port local_n sends to: the remote bank and its port for us */
 +struct sun55i_route {
 +	u8 remote_id;
 +	u8 remote_n;
++	const char *name;
 +};
 +
 +struct sun55i_msgbox;
 +
-+/* One per remote bank whose interrupt line carries our TX-done (write) IRQ */
++/* The interrupt line carrying our TX-done (write) IRQ for one route */
 +struct sun55i_tx_irq {
 +	struct sun55i_msgbox *mbox;
-+	int remote_id;
++	int local_n;
 +	int irq;
 +	const char *name;
-+	/* Started channels on this bank; the IRQ is requested while > 0 */
++	/* Started channels on this route; the IRQ is requested while > 0 */
 +	unsigned int users;
 +};
 +
 +struct sun55i_msgbox {
 +	struct mbox_controller controller;
 +	void __iomem *regs[SUN55I_MAX_PROCESSORS];
-+	/* Protects concurrent MMIO register access */
++	/*
++	 * Protects the read-modify-writes of the IRQ enable registers, the
++	 * receive drain with its pending clear, and in timer mode the FIFO
++	 * check and write together with the held message.
++	 */
 +	spinlock_t lock;
 +	/* Host bank interrupt: messages received by this processor */
 +	int irq;
 +	/* "allwinner,tx-done-irq": TX done by the write IRQ, else polled */
 +	bool tx_done_irq;
-+	struct sun55i_tx_irq tx_irqs[SUN55I_MAX_PROCESSORS];
-+	/* Channels whose startup() holds their bank's TX-done line */
++	/* Indexed by route (host port local_n) */
++	struct sun55i_tx_irq tx_irqs[SUN55I_NUM_ROUTES];
++	/* Channels whose startup() holds their route's TX-done line */
 +	unsigned long tx_irq_held;
 +	/* Serialises tx_irqs[].users and the matching request_irq()/free_irq() */
 +	struct mutex tx_irq_lock;
-+	/* Timer mode: channels whose message waits for room in a full FIFO */
++	/* Timer mode, under @lock: channels whose message waits for FIFO room */
 +	unsigned long tx_held;
 +	u32 tx_held_msg[SUN55I_NUM_CHANS];
 +};
@@ -802,15 +839,15 @@ index 000000000000..16c1d32402a3
 +#if IS_ENABLED(CONFIG_KUNIT)
 +extern const struct mbox_chan_ops sun55i_msgbox_chan_ops;
 +
-+u32 sun55i_readl(void __iomem *addr);
-+void sun55i_writel(u32 val, void __iomem *addr);
-+void sun55i_chan_to_route(int chan_idx, int *local_n, int *p,
-+			  int *remote_id, int *remote_n);
++u32 sun55i_msgbox_readl(void __iomem *addr);
++void sun55i_msgbox_writel(u32 val, void __iomem *addr);
++void sun55i_msgbox_chan_to_route(int chan_idx, int *local_n, int *p,
++				 int *remote_id, int *remote_n);
 +irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id);
 +irqreturn_t sun55i_msgbox_tx_irq(int irq, void *dev_id);
 +#endif
 +
 +#endif /* _SUN55I_MSGBOX_H_ */
 -- 
-2.43.0
+2.53.0
 

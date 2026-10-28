@@ -7,7 +7,9 @@
  *         Reserved Non-Cacheable DDR DRAM Carveout (1 MB @ 0x48100000).
  *
  * HARDWARE TRUTHS:
- * - 0x00020000 (128 KB) is HiFi4 DSP Memory! DO NOT USE for E906!
+ * - 0x00020000 (128 KB) is HiFi4 DSP local RAM (shared by REMAP_CTRL_REG bit 0): not
+ *   for firmware images; usable as data only while no DSP firmware runs (AbstractX
+ *   REPL heap, checked by testExtraRam)
  * - 0x00044000 (160 KB) is OP-TEE / TrustZone Memory (SRAM A2)! DO NOT USE!
  * - E906 firmware lives in on-chip SRAM (0x3FFC0000 / 0x40000000) and DDR.
  */
@@ -19,7 +21,7 @@ MEMORY
 {
     /* Dedicated Fast SRAM (Space 0) */
     SRAM_FAST (rwx) : ORIGIN = 0x3FFC0000, LENGTH = 256K
-    /* Switchable SRAM (Space 1 / SRAMA3_2 via REMAP_CTRL_REG[1]=1) */
+    /* SRAM space 1: SRAMA3_1, host 0x072C0000, needs no remap bit (region keeps its old name) */
     SRAM_A3_2 (rwx) : ORIGIN = 0x40000000, LENGTH = 256K
     /* Non-cacheable DDR DMA Carveout */
     DRAM      (rwx) : ORIGIN = 0x48100000, LENGTH = 1M

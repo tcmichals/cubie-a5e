@@ -35,6 +35,10 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
 - Develop and compile-check in `linux-cubie`. `bld.a5e/` and `bld.a7a/` are Buildroot
   output, for builds only: never edit or run `make` inside them (see DESIGN_DECISIONS.md).
 - Hardware facts come from silicon readbacks or the vendor BSP, not from project docs alone.
+- Before calling a hardware resource (SRAM, register bit, DMA channel, IRQ) unused, or proposing
+  to drop it, check who uses it: `~/projects/AbstractX` (the E906 flight firmware, e.g. its
+  MicroPython heap in DSP RAM at `0x00020000`), `firmware/tests.md` and the firmware apps
+  (`firmware/riscv-firmware/apps/`). A test that passes without a resource does not make it unused.
 - Before pushing back on the owner's kernel or device-tree design, search mainline
   (`drivers/`, `Documentation/devicetree/bindings/`) for a driver that already does it, and cite
   it. A general rule ("DT describes hardware, not policy") is not a reason to argue when a mainline

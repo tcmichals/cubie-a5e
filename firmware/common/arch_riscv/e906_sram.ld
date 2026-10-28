@@ -5,7 +5,9 @@
  * Memory: Dedicated SRAM A3 Pools (Device Address 0x40000000 / 0x3FFC0000, 256 KB)
  *
  * HARDWARE TRUTHS:
- * - 0x00020000 (128 KB) is HiFi4 DSP Memory! DO NOT USE for E906!
+ * - 0x00020000 (128 KB) is HiFi4 DSP local RAM (shared by REMAP_CTRL_REG bit 0): not
+ *   for firmware images; usable as data only while no DSP firmware runs (AbstractX
+ *   REPL heap, checked by testExtraRam)
  * - 0x00044000 (160 KB) is OP-TEE / TrustZone Memory (SRAM A2)! DO NOT USE!
  * - E906 firmware lives in SRAM A3 (0x3FFC0000 / 0x40000000).
  */

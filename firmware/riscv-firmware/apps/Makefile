@@ -1,6 +1,6 @@
 # Top-level Apps Makefile for XuanTie E906 (Allwinner T527)
 
-APPS = testFreeRTOS testBasic testStringBinaryTrace0 testCrash testPing testPingRpmsg testPingRpmsgSram testDRAMMsg testMsgbox testMsgboxStep exampleRiscv
+APPS = testFreeRTOS testBasic testExtraRam testStringBinaryTrace0 testCrash testPing testPingRpmsg testPingRpmsgSram testDRAMMsg testMsgbox testMsgboxStep exampleRiscv
 HOST_APPS = testPing/linux testPingRpmsg/linux testDRAMMsg/linux
 BIN_DIR = ../bin
 

@@ -336,6 +336,13 @@ def mbox_queue_overflows(new_lines):
 MSGBOX_TX_LINES = ("3003000.mailbox-cpus", "3003000.mailbox-dsp", "3003000.mailbox-rv")
 MSGBOX_RV_LINE = "3003000.mailbox-rv"
 
+# testExtraRam regions: (name, host address Linux checks, None = no host view, size)
+EXTRA_RAM_REGIONS = [
+    ("dsp-ram", None, 128 * 1024),		# DSP local RAM, E906 0x00020000
+    ("dram", 0x48100000, 1024 * 1024),	# dram@48100000 carveout
+    ("sram-a3-2", 0x07300000, 512 * 1024),	# shared by REMAP_CTRL_REG bit 1
+]
+
 MSGBOX_TX_BENCH = [
     # (key, label, firmware, command, expected messages)
     ("ping", "ping_rpmsg 10k, -D 0", "testPingRpmsg.elf", "/usr/bin/ping_rpmsg -n 10000 -D 0", 10000),
@@ -1271,6 +1278,27 @@ def main():
     for r in boot_reasons:
         print(f"  \033[91m[FAIL] {r}\033[0m")
     results.append(("Profile 1", "testFreeRTOS boot (tick + IRQ wake)", "FAIL" if boot_reasons else "PASS"))
+
+    # 1.7 The RAM beyond SRAM spaces 0/1 (testExtraRam): DSP local RAM (the AbstractX
+    # REPL heap), the DRAM carveout, and SRAMA3_2 shared by remap bit 1. The E906 checks
+    # each region; Linux then reads the signature it left in DRAM and SRAMA3_2.
+    print("\n--- 1.7 Running testExtraRam (DSP RAM, DRAM, SRAMA3_2) ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testExtraRam.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 6')
+    c, trace, _ = run_ssh("tr -d '\\000' < /sys/kernel/debug/remoteproc/remoteproc0/trace0", timeout=10)
+    trace = strip_ansi(trace)
+    for name, base, size in EXTRA_RAM_REGIONS:
+        why = []
+        if f"EXTRA-RAM {name} PASS" not in trace:
+            bad = [l for l in trace.splitlines() if f"EXTRA-RAM {name} FAIL" in l]
+            why.append(bad[0].strip() if bad else "no result in trace0 (fault or hang while probing)")
+        if base is not None and not why:
+            _, out, _ = run_ssh(f"devmem 0x{base:08x} 32; devmem 0x{base + 4:08x} 32; devmem 0x{base + 8:08x} 32", timeout=10)
+            words = [int(w, 16) for w in out.split()] if out.strip() else []
+            if words != [0x45585452, base, 0]:
+                why.append(f"Linux reads {[hex(w) for w in words]} at 0x{base:08x}, expected the E906 signature")
+        for r in why:
+            print(f"  \033[91m[FAIL] {name}: {r}\033[0m")
+        results.append(("Profile 1", f"testExtraRam: {name} ({size // 1024} KB)", "FAIL" if why else "PASS"))
     c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
     print(out)
     results.append(("Profile 1", "FreeRTOS ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))

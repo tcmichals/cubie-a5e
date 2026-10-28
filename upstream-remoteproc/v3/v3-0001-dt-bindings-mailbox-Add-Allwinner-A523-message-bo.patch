@@ -1,4 +1,4 @@
-From c58c5cfb78717cab6a6eb675f043045283465e2b Mon Sep 17 00:00:00 2001
+From 8d6ac14d3215d643714d200abfeef23ccc842f73 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 1/7] dt-bindings: mailbox: Add Allwinner A523 message box
@@ -12,10 +12,11 @@ channel has an 8-entry FIFO in each direction.
 The host bank has 12 channels, four for each remote processor. The
 binding lists all four banks, since the host writes to and reads the
 FIFO status of the remote banks, and lists the bank interrupts in the
-same order. Each bank has its own bus clock and reset, and an unclocked
-bank drops writes, so all four are described. Add optional
-allwinner,tx-done-irq property to select write-IRQ based TX completion
-instead of polling.
+same order: the host bank read interrupt and the write interrupts of
+the three remote banks, which every A523 has. Each bank has its own bus
+clock and reset, and an unclocked bank drops writes, so all four are
+described. The optional allwinner,tx-done-irq property selects TX
+completion by the receiver bank's write interrupt instead of polling.
 
 ---
 Changes in v3:
@@ -23,8 +24,11 @@ Changes in v3:
   are the same die; the A733 entry is dropped
 - reg, clocks and resets list all four banks in a fixed order, with
   clock-names and reset-names: every bank has its own bus clock and reset
-- interrupts and interrupt-names are a fixed list (arm, dsp, cpus, rv)
-  with minItems: 1, no free-form text (Krzysztof)
+- interrupts and interrupt-names are a fixed list (arm, dsp, cpus, rv),
+  all four required: every A523 has the four lines, and
+  allwinner,tx-done-irq only selects how TX done is detected. This
+  answers the v1 question of how an interrupt can be optional; no
+  free-form text (Krzysztof)
 - Remote bank interrupts in the example corrected to SPI 181/174/205
   (T527 manual, Table 2-15; checked on the board)
 - reg: the DSP and CPUS bank addresses were swapped in v2
@@ -34,16 +38,16 @@ Changes in v3:
   the subject (Krzysztof)
 - Samuel Holland dropped from the maintainers
 ---
- .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 157 ++++++++++++++++++
- 1 file changed, 157 insertions(+)
+ .../mailbox/allwinner,sun55i-a523-msgbox.yaml | 146 ++++++++++++++++++
+ 1 file changed, 146 insertions(+)
  create mode 100644 Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 
 diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
 new file mode 100644
-index 000000000000..16f9dbd5e720
+index 000000000000..47b6fe304dbc
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msgbox.yaml
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,146 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -114,7 +118,6 @@ index 000000000000..16f9dbd5e720
 +      - const: rv
 +
 +  interrupts:
-+    minItems: 1
 +    items:
 +      - description: Cortex-A55 bank read interrupt, messages for the host
 +      - description: HiFi4 DSP bank write interrupt for the host
@@ -122,7 +125,6 @@ index 000000000000..16f9dbd5e720
 +      - description: XuanTie RISC-V bank write interrupt for the host
 +
 +  interrupt-names:
-+    minItems: 1
 +    items:
 +      - const: arm
 +      - const: dsp
@@ -135,8 +137,8 @@ index 000000000000..16f9dbd5e720
 +      Signal TX done with the write interrupt of the receiver's bank instead
 +      of polling. A message is done once the receiver's FIFO has room for the
 +      next one either way; the write interrupt is raised while the FIFO has
-+      room. Without this property a full FIFO is polled. Needs the interrupts
-+      of the remote banks.
++      room. Without this property a full FIFO is polled. Received messages
++      use the host bank read interrupt either way.
 +
 +  '#mbox-cells':
 +    const: 1
@@ -153,17 +155,8 @@ index 000000000000..16f9dbd5e720
 +  - resets
 +  - reset-names
 +  - interrupts
++  - interrupt-names
 +  - '#mbox-cells'
-+
-+if:
-+  required:
-+    - allwinner,tx-done-irq
-+then:
-+  properties:
-+    interrupts:
-+      minItems: 4
-+    interrupt-names:
-+      minItems: 4
 +
 +additionalProperties: false
 +
@@ -202,5 +195,5 @@ index 000000000000..16f9dbd5e720
 +        #mbox-cells = <1>;
 +    };
 -- 
-2.43.0
+2.53.0
 
