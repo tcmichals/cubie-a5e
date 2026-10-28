@@ -297,7 +297,7 @@ left zeroed with a signature at its start (`0x45585452` "EXTR", base, errors).
 
 `trace0` prints `EXTRA-RAM <region> PASS` or `FAIL errors=... first=...`; SRAMA3_2 is probed
 last, so a region the E906 cannot reach shows as the crash autopsy after its "probing" line. The
-full sweep (Profile 1, step 1.7) also reads the signature back with `devmem` at the host address
+full sweep (Profile 1, step 1.6b) also reads the signature back with `devmem` at the host address
 of the DRAM carveout and SRAMA3_2. The DSP RAM has no host view to check. Do not run it while DSP
 firmware runs: it overwrites the DSP RAM.
 

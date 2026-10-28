@@ -1279,10 +1279,17 @@ def main():
         print(f"  \033[91m[FAIL] {r}\033[0m")
     results.append(("Profile 1", "testFreeRTOS boot (tick + IRQ wake)", "FAIL" if boot_reasons else "PASS"))
 
-    # 1.7 The RAM beyond SRAM spaces 0/1 (testExtraRam): DSP local RAM (the AbstractX
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
+    print(out)
+    results.append(("Profile 1", "FreeRTOS ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
+    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
+    print(out)
+    results.append(("Profile 1", "FreeRTOS stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
+
+    # 1.6b The RAM beyond SRAM spaces 0/1 (testExtraRam): DSP local RAM (the AbstractX
     # REPL heap), the DRAM carveout, and SRAMA3_2 shared by remap bit 1. The E906 checks
     # each region; Linux then reads the signature it left in DRAM and SRAMA3_2.
-    print("\n--- 1.7 Running testExtraRam (DSP RAM, DRAM, SRAMA3_2) ---")
+    print("\n--- 1.6b Running testExtraRam (DSP RAM, DRAM, SRAMA3_2) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testExtraRam.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 6')
     c, trace, _ = run_ssh("tr -d '\\000' < /sys/kernel/debug/remoteproc/remoteproc0/trace0", timeout=10)
     trace = strip_ansi(trace)
@@ -1299,12 +1306,6 @@ def main():
         for r in why:
             print(f"  \033[91m[FAIL] {name}: {r}\033[0m")
         results.append(("Profile 1", f"testExtraRam: {name} ({size // 1024} KB)", "FAIL" if why else "PASS"))
-    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
-    print(out)
-    results.append(("Profile 1", "FreeRTOS ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
-    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
-    print(out)
-    results.append(("Profile 1", "FreeRTOS stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
 
     # 1.7 Message box bank clocks/resets across unbind/bind
     print("\n--- 1.7 Message box clock/reset check (tools/msgbox_clock_reset_check.sh) ---")
