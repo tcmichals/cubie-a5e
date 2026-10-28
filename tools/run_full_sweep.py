@@ -742,12 +742,32 @@ def extract_key_metrics(report_bundle):
 
 # Range check against earlier runs: each metric against the median of the last
 # HISTORY_WINDOW passing runs. The band is the larger of 4 robust standard
-# deviations (1.4826 * MAD), HISTORY_REL_FLOOR of the median, and 2 µs for
+# deviations (1.4826 * MAD), HISTORY_REL_FLOOR of the median (more for the
+# metrics in HISTORY_REL_FLOOR_FOR), and 2 µs for
 # latencies, so run-to-run jitter does not fail a sweep. Only the bad direction
 # (slower, lower rate) fails; faster than history is reported, not failed.
 HISTORY_WINDOW = 10
 HISTORY_MIN_RUNS = 3
 HISTORY_REL_FLOOR = 0.10
+# Noisier metrics: Python timing has two clusters (about 32 and 35.5 us since
+# run 8, on unchanged kernels), and a jitter is a spread, not an average
+HISTORY_REL_FLOOR_FOR = [("_jitter_", 1.0), ("p3_uio_py_", 0.25)]
+
+# Test method changes: runs before run_id are not a baseline for these metrics
+METHOD_CHANGES = [
+    # 2026-10-15: 6a3eb45 (UIO ping checks every payload byte in device memory,
+    # real doorbell IRQ; the rate includes the check) and 6779369 (rpmsg ping
+    # without 50 us pacing); first in run 8
+    (8, ("p1_rpmsg_", "p3_")),
+]
+
+
+def comparable_since(key):
+    since = 0
+    for run_id, prefixes in METHOD_CHANGES:
+        if key.startswith(prefixes):
+            since = max(since, run_id)
+    return since
 
 
 def check_history_ranges(cur_metrics, history):
@@ -758,8 +778,10 @@ def check_history_ranges(cur_metrics, history):
         val = cur_metrics[key]
         if key.startswith("kunit_") or not isinstance(val, (int, float)):
             continue
+        since = comparable_since(key)
         xs = [r["metrics"][key] for r in passing
-              if isinstance(r.get("metrics", {}).get(key), (int, float))][-HISTORY_WINDOW:]
+              if isinstance(r.get("metrics", {}).get(key), (int, float))
+              and r.get("run_id", 0) >= since][-HISTORY_WINDOW:]
         if len(xs) < HISTORY_MIN_RUNS:
             out.append((key, val, None, None, None, len(xs), "NEW"))
             continue
@@ -767,7 +789,8 @@ def check_history_ranges(cur_metrics, history):
         med = xs_sorted[len(xs) // 2] if len(xs) % 2 else (xs_sorted[len(xs) // 2 - 1] + xs_sorted[len(xs) // 2]) / 2
         devs = sorted(abs(x - med) for x in xs)
         mad = devs[len(devs) // 2] if len(devs) % 2 else (devs[len(devs) // 2 - 1] + devs[len(devs) // 2]) / 2
-        band = max(4 * 1.4826 * mad, HISTORY_REL_FLOOR * abs(med), 2.0 if key.endswith("_us") else 0.0)
+        rel = max([f for part, f in HISTORY_REL_FLOOR_FOR if part in key], default=HISTORY_REL_FLOOR)
+        band = max(4 * 1.4826 * mad, rel * abs(med), 2.0 if key.endswith("_us") else 0.0)
         lo, hi = med - band, med + band
         lower_is_better = key.endswith("_us")
         if lo <= val <= hi:
@@ -861,6 +884,23 @@ def audit_engineering_invariants():
         })
         
     return audit_results
+
+def compare_all_runs(history, out=sys.stdout):
+    """Each recorded run against the passing runs before it; 1 if any run has a SLOW metric."""
+    any_slow = False
+    out.write(f"| Run | Date | Kernel | Status | In range | Out of range (value vs median of last {HISTORY_WINDOW} PASS) |\n")
+    out.write("| ---: | :--- | :--- | :---: | ---: | :--- |\n")
+    for i, run in enumerate(history):
+        ranges = check_history_ranges(run.get("metrics", {}), history[:i])
+        checked = [r for r in ranges if r[6] != "NEW"]
+        bad = [f"{k} {v:.1f} vs {med:.1f} ({verdict})" for k, v, med, _, _, _, verdict in checked
+               if verdict in ("SLOW", "FAST")]
+        any_slow |= any(r[6] == "SLOW" for r in checked)
+        ok = sum(1 for r in checked if r[6] == "OK")
+        out.write(f"| #{run.get('run_id')} | {str(run.get('timestamp'))[:16]} | `{str(run.get('git_kernel'))[:12]}` | "
+                  f"{run.get('overall_status')} | {ok}/{len(checked)} | {'; '.join(bad) or '-'} |\n")
+    return 1 if any_slow else 0
+
 
 def load_history(history_json_file):
     """Earlier sweep runs, oldest first; [] if there are none."""
@@ -1053,6 +1093,12 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
                 f.write(f"| {label} | {prev_val} | {cur_val} | `{delta_str}` | {badge} |\n")
             f.write("\n")
 
+            f.write("## Every Run Against the Passing Runs Before It\n\n")
+            f.write("SLOW: slower or lower rate than the band (fails the sweep since the check was added); "
+                    "FAST: better than the band.\n\n")
+            compare_all_runs(history, f)
+            f.write("\n")
+
             f.write("## Historical Runs Timeline\n\n")
             f.write("| Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |\n")
             f.write("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n")
@@ -1103,7 +1149,12 @@ def main():
                         help="Cross gcov of the compiler that built the kernel (default: Buildroot's)")
     parser.add_argument("--check-history", metavar="RESULTS_JSON",
                         help="Only run the range check: a saved results JSON against the history, no board")
+    parser.add_argument("--compare-all", action="store_true",
+                        help="Only replay the range check for every recorded run against the passing runs before it")
     args = parser.parse_args()
+
+    if args.compare_all:
+        return compare_all_runs(load_history(args.history_json))
 
     if args.check_history:
         with open(args.check_history) as f:
