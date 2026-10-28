@@ -1,0 +1,24 @@
+diff --git a/arch/um/include/asm/common.lds.S b/arch/um/include/asm/common.lds.S
+index fd481ac371de..336361412b47 100644
+--- a/arch/um/include/asm/common.lds.S
++++ b/arch/um/include/asm/common.lds.S
+@@ -90,6 +90,7 @@
+   }
+   .fini_array : {
+ 	__fini_array_start = .;
++	*(.fini_array.*)
+ 	*(.fini_array)
+ 	__fini_array_end = .;
+   }
+diff --git a/include/linux/seq_file.h b/include/linux/seq_file.h
+index 2fb266ea69fa..270a500a577c 100644
+--- a/include/linux/seq_file.h
++++ b/include/linux/seq_file.h
+@@ -104,6 +104,7 @@ static inline void seq_setwidth(struct seq_file *m, size_t size)
+ }
+ void seq_pad(struct seq_file *m, char c);
+ 
++#define mangle_path kernel_mangle_path /* UML gcov: libgcov has one */
+ char *mangle_path(char *s, const char *p, const char *esc);
+ int seq_open(struct file *, const struct seq_operations *);
+ ssize_t seq_read(struct file *, char __user *, size_t, loff_t *);

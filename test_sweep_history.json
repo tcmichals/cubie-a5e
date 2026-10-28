@@ -1406,7 +1406,21 @@
       "p2_stress_rate_msgs_s": 20450.2,
       "p1_dram_w16_rate_msgs_s": 5077.5,
       "p2_rpmsg_rate_msgs_s": 7574.6,
-      "p3_uio_irq_rtt_us": 59.352
+      "p3_uio_irq_rtt_us": 59.352,
+      "mbx_timer_ping_rtt_us": 167.199,
+      "mbx_timer_ping_p99_us": 194.541,
+      "mbx_timer_ping_rate_msgs_s": 5958.0,
+      "mbx_timer_stress_rate_msgs_s": 11513.9,
+      "mbx_timer_freertos_rtt_us": 193.583,
+      "mbx_timer_freertos_p99_us": 230.375,
+      "mbx_timer_freertos_rate_msgs_s": 5146.2,
+      "mbx_isr_ping_rtt_us": 167.301,
+      "mbx_isr_ping_p99_us": 195.916,
+      "mbx_isr_ping_rate_msgs_s": 5953.4,
+      "mbx_isr_stress_rate_msgs_s": 11415.3,
+      "mbx_isr_freertos_rtt_us": 191.037,
+      "mbx_isr_freertos_p99_us": 223.583,
+      "mbx_isr_freertos_rate_msgs_s": 5214.4
     },
     "deltas": {
       "kunit_passed": "+0 tests",

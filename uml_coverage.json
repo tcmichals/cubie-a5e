@@ -1,0 +1,2004 @@
+{
+  "status": "COLLECTED",
+  "gcov_tool": "gcov",
+  "drivers": {
+    "drivers/mailbox/sun55i-msgbox.c": {
+      "lines_covered": 202,
+      "lines_executable": 270,
+      "percent": 74.81,
+      "per_profile": {
+        "uml-kunit": {
+          "covered": 202,
+          "executable": 270
+        }
+      },
+      "uncovered": [
+        {
+          "line": 54,
+          "source": "return readl(addr);"
+        },
+        {
+          "line": 62,
+          "source": "writel(val, addr);"
+        },
+        {
+          "line": 457,
+          "source": "static int sun55i_msgbox_probe(struct platform_device *pdev)"
+        },
+        {
+          "line": 459,
+          "source": "struct device *dev = &pdev->dev;"
+        },
+        {
+          "line": 460,
+          "source": "struct clk_bulk_data *clks;"
+        },
+        {
+          "line": 461,
+          "source": "struct reset_control *rst;"
+        },
+        {
+          "line": 462,
+          "source": "struct mbox_chan *chans;"
+        },
+        {
+          "line": 463,
+          "source": "struct sun55i_msgbox *mbox;"
+        },
+        {
+          "line": 464,
+          "source": "int i, ret, irq, local_n;"
+        },
+        {
+          "line": 466,
+          "source": "mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);"
+        },
+        {
+          "line": 467,
+          "source": "if (!mbox)"
+        },
+        {
+          "line": 470,
+          "source": "spin_lock_init(&mbox->lock);"
+        },
+        {
+          "line": 471,
+          "source": "ret = devm_mutex_init(dev, &mbox->tx_irq_lock);"
+        },
+        {
+          "line": 472,
+          "source": "if (ret)"
+        },
+        {
+          "line": 475,
+          "source": "chans = devm_kcalloc(dev, SUN55I_NUM_CHANS, sizeof(*chans), GFP_KERNEL);"
+        },
+        {
+          "line": 476,
+          "source": "if (!chans)"
+        },
+        {
+          "line": 479,
+          "source": "for (i = 0; i < SUN55I_NUM_CHANS; i++)"
+        },
+        {
+          "line": 480,
+          "source": "chans[i].con_priv = mbox;"
+        },
+        {
+          "line": 483,
+          "source": "mbox->controller.dev = dev;"
+        },
+        {
+          "line": 484,
+          "source": "mbox->controller.ops = &sun55i_msgbox_chan_ops;"
+        },
+        {
+          "line": 485,
+          "source": "mbox->controller.chans = chans;"
+        },
+        {
+          "line": 486,
+          "source": "mbox->controller.num_chans = SUN55I_NUM_CHANS;"
+        },
+        {
+          "line": 488,
+          "source": "for (i = 0; i < SUN55I_MAX_PROCESSORS; i++) {"
+        },
+        {
+          "line": 489,
+          "source": "mbox->regs[i] = devm_platform_ioremap_resource(pdev, i);"
+        },
+        {
+          "line": 490,
+          "source": "if (IS_ERR(mbox->regs[i]))"
+        },
+        {
+          "line": 491,
+          "source": "return dev_err_probe(dev, PTR_ERR(mbox->regs[i]),"
+        },
+        {
+          "line": 501,
+          "source": "ret = devm_clk_bulk_get_all_enabled(dev, &clks);"
+        },
+        {
+          "line": 502,
+          "source": "if (ret < 0)"
+        },
+        {
+          "line": 503,
+          "source": "return dev_err_probe(dev, ret, \"failed to enable clocks\\n\");"
+        },
+        {
+          "line": 504,
+          "source": "if (ret != SUN55I_MAX_PROCESSORS)"
+        },
+        {
+          "line": 505,
+          "source": "return dev_err_probe(dev, -EINVAL, \"need %d clocks, found %d\\n\","
+        },
+        {
+          "line": 508,
+          "source": "ret = reset_control_get_count(dev);"
+        },
+        {
+          "line": 509,
+          "source": "if (ret < 0)"
+        },
+        {
+          "line": 510,
+          "source": "return dev_err_probe(dev, ret, \"failed to count resets\\n\");"
+        },
+        {
+          "line": 511,
+          "source": "if (ret != SUN55I_MAX_PROCESSORS)"
+        },
+        {
+          "line": 512,
+          "source": "return dev_err_probe(dev, -EINVAL, \"need %d resets, found %d\\n\","
+        },
+        {
+          "line": 515,
+          "source": "rst = devm_reset_control_array_get_shared(dev);"
+        },
+        {
+          "line": 516,
+          "source": "if (IS_ERR(rst))"
+        },
+        {
+          "line": 517,
+          "source": "return dev_err_probe(dev, PTR_ERR(rst), \"failed to get resets\\n\");"
+        },
+        {
+          "line": 525,
+          "source": "ret = reset_control_deassert(rst);"
+        },
+        {
+          "line": 526,
+          "source": "if (ret)"
+        },
+        {
+          "line": 527,
+          "source": "return dev_err_probe(dev, ret, \"failed to deassert reset\\n\");"
+        },
+        {
+          "line": 533,
+          "source": "for (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {"
+        },
+        {
+          "line": 534,
+          "source": "const struct sun55i_route *route = &sun55i_msgbox_routes[local_n];"
+        },
+        {
+          "line": 535,
+          "source": "void __iomem *base = mbox->regs[SUN55I_PROC_ARM];"
+        },
+        {
+          "line": 536,
+          "source": "void __iomem *wr_en = mbox->regs[route->remote_id] +"
+        },
+        {
+          "line": 537,
+          "source": "SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n);"
+        },
+        {
+          "line": 538,
+          "source": "u32 val = sun55i_msgbox_readl(wr_en);"
+        },
+        {
+          "line": 539,
+          "source": "int p;"
+        },
+        {
+          "line": 541,
+          "source": "sun55i_msgbox_writel(0, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));"
+        },
+        {
+          "line": 542,
+          "source": "sun55i_msgbox_writel(U32_MAX, base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));"
+        },
+        {
+          "line": 544,
+          "source": "for (p = 0; p < SUN55I_CHANS_PER_PROC; p++)"
+        },
+        {
+          "line": 545,
+          "source": "val &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);"
+        },
+        {
+          "line": 546,
+          "source": "sun55i_msgbox_writel(val, wr_en);"
+        },
+        {
+          "line": 550,
+          "source": "irq = platform_get_irq_byname(pdev, \"arm\");"
+        },
+        {
+          "line": 551,
+          "source": "if (irq < 0)"
+        },
+        {
+          "line": 554,
+          "source": "ret = devm_request_irq(dev, irq, sun55i_msgbox_irq, 0, dev_name(dev), mbox);"
+        },
+        {
+          "line": 555,
+          "source": "if (ret)"
+        },
+        {
+          "line": 556,
+          "source": "return dev_err_probe(dev, ret, \"failed to request irq\\n\");"
+        },
+        {
+          "line": 557,
+          "source": "mbox->irq = irq;"
+        },
+        {
+          "line": 565,
+          "source": "mbox->tx_done_irq = of_property_read_bool(dev->of_node, \"allwinner,tx-done-irq\");"
+        },
+        {
+          "line": 566,
+          "source": "for (local_n = 0; mbox->tx_done_irq && local_n < SUN55I_NUM_ROUTES; local_n++) {"
+        },
+        {
+          "line": 582,
+          "source": "if (mbox->tx_done_irq) {"
+        },
+        {
+          "line": 585,
+          "source": "mbox->controller.txdone_poll = true;"
+        },
+        {
+          "line": 586,
+          "source": "mbox->controller.txpoll_period = 1;"
+        },
+        {
+          "line": 589,
+          "source": "ret = devm_mbox_controller_register(dev, &mbox->controller);"
+        },
+        {
+          "line": 590,
+          "source": "if (ret)"
+        },
+        {
+          "line": 591,
+          "source": "return dev_err_probe(dev, ret, \"failed to register controller\\n\");"
+        }
+      ],
+      "line_counts": {
+        "44": 116,
+        "46": 116,
+        "51": 370,
+        "53": 370,
+        "54": 0,
+        "59": 167,
+        "61": 167,
+        "62": 0,
+        "68": 140,
+        "71": 140,
+        "72": 140,
+        "73": 140,
+        "74": 140,
+        "75": 24,
+        "83": 43,
+        "86": 43,
+        "87": 43,
+        "89": 43,
+        "91": 190,
+        "92": 93,
+        "94": 54,
+        "102": 43,
+        "103": 43,
+        "105": 43,
+        "109": 11,
+        "111": 11,
+        "112": 11,
+        "113": 11,
+        "114": 11,
+        "115": 11,
+        "116": 11,
+        "118": 44,
+        "119": 33,
+        "120": 33,
+        "121": 33,
+        "122": 33,
+        "124": 66,
+        "125": 33,
+        "126": 33,
+        "127": 165,
+        "128": 132,
+        "129": 132,
+        "130": 33,
+        "137": 198,
+        "138": 132,
+        "139": 120,
+        "140": 43,
+        "141": 31,
+        "146": 11,
+        "150": 70,
+        "153": 70,
+        "154": 70,
+        "169": 24,
+        "172": 24,
+        "173": 24,
+        "174": 24,
+        "175": 24,
+        "177": 48,
+        "178": 24,
+        "179": 24,
+        "180": 10,
+        "181": 10,
+        "182": 10,
+        "184": 14,
+        "186": 24,
+        "187": 24,
+        "188": 24,
+        "191": 8,
+        "193": 8,
+        "194": 8,
+        "195": 8,
+        "196": 8,
+        "197": 8,
+        "198": 8,
+        "199": 8,
+        "200": 8,
+        "202": 16,
+        "204": 8,
+        "205": 8,
+        "207": 48,
+        "208": 32,
+        "209": 27,
+        "212": 5,
+        "213": 5,
+        "214": 5,
+        "215": 5,
+        "216": 5,
+        "219": 8,
+        "222": 26,
+        "223": 5,
+        "225": 8,
+        "233": 8,
+        "235": 8,
+        "236": 8,
+        "238": 8,
+        "239": 8,
+        "240": 7,
+        "241": 7,
+        "242": 1,
+        "245": 1,
+        "246": 7,
+        "247": 8,
+        "249": 8,
+        "252": 7,
+        "254": 7,
+        "256": 7,
+        "257": 7,
+        "258": 6,
+        "261": 1,
+        "263": 7,
+        "264": 7,
+        "266": 45,
+        "268": 45,
+        "269": 45,
+        "270": 45,
+        "271": 45,
+        "272": 45,
+        "273": 45,
+        "275": 45,
+        "276": 88,
+        "278": 45,
+        "284": 90,
+        "291": 45,
+        "299": 45,
+        "300": 45,
+        "301": 39,
+        "302": 39,
+        "303": 6,
+        "304": 4,
+        "305": 4,
+        "308": 45,
+        "315": 45,
+        "316": 10,
+        "317": 10,
+        "323": 15,
+        "325": 15,
+        "326": 15,
+        "327": 15,
+        "328": 15,
+        "329": 15,
+        "330": 15,
+        "331": 15,
+        "333": 15,
+        "339": 15,
+        "340": 8,
+        "343": 8,
+        "344": 8,
+        "346": 8,
+        "347": 8,
+        "349": 7,
+        "353": 28,
+        "354": 14,
+        "355": 14,
+        "356": 14,
+        "357": 14,
+        "358": 14,
+        "360": 14,
+        "363": 17,
+        "365": 17,
+        "366": 17,
+        "367": 17,
+        "368": 17,
+        "369": 17,
+        "370": 17,
+        "371": 17,
+        "373": 17,
+        "376": 34,
+        "377": 17,
+        "378": 17,
+        "379": 17,
+        "380": 17,
+        "381": 17,
+        "384": 17,
+        "387": 17,
+        "388": 7,
+        "389": 7,
+        "396": 7,
+        "400": 34,
+        "401": 17,
+        "402": 17,
+        "403": 17,
+        "405": 23,
+        "407": 23,
+        "408": 23,
+        "409": 23,
+        "410": 23,
+        "411": 23,
+        "413": 23,
+        "420": 46,
+        "421": 23,
+        "424": 23,
+        "425": 2,
+        "426": 2,
+        "427": 2,
+        "429": 23,
+        "431": 23,
+        "434": 16,
+        "436": 16,
+        "437": 16,
+        "438": 16,
+        "440": 16,
+        "442": 16,
+        "443": 16,
+        "457": 0,
+        "459": 0,
+        "460": 0,
+        "461": 0,
+        "462": 0,
+        "463": 0,
+        "464": 0,
+        "466": 0,
+        "467": 0,
+        "470": 0,
+        "471": 0,
+        "472": 0,
+        "475": 0,
+        "476": 0,
+        "479": 0,
+        "480": 0,
+        "483": 0,
+        "484": 0,
+        "485": 0,
+        "486": 0,
+        "488": 0,
+        "489": 0,
+        "490": 0,
+        "491": 0,
+        "501": 0,
+        "502": 0,
+        "503": 0,
+        "504": 0,
+        "505": 0,
+        "508": 0,
+        "509": 0,
+        "510": 0,
+        "511": 0,
+        "512": 0,
+        "515": 0,
+        "516": 0,
+        "517": 0,
+        "525": 0,
+        "526": 0,
+        "527": 0,
+        "533": 0,
+        "534": 0,
+        "535": 0,
+        "536": 0,
+        "537": 0,
+        "538": 0,
+        "539": 0,
+        "541": 0,
+        "542": 0,
+        "544": 0,
+        "545": 0,
+        "546": 0,
+        "550": 0,
+        "551": 0,
+        "554": 0,
+        "555": 0,
+        "556": 0,
+        "557": 0,
+        "565": 0,
+        "566": 0,
+        "582": 0,
+        "585": 0,
+        "586": 0,
+        "589": 0,
+        "590": 0,
+        "591": 0,
+        "609": 1
+      },
+      "source": {
+        "44": "static inline struct sun55i_msgbox *to_sun55i_msgbox(struct mbox_chan *chan)",
+        "46": "\treturn chan->con_priv;",
+        "51": "u32 sun55i_msgbox_readl(void __iomem *addr)",
+        "53": "\tKUNIT_STATIC_STUB_REDIRECT(sun55i_msgbox_readl, addr);",
+        "54": "\treturn readl(addr);",
+        "59": "void sun55i_msgbox_writel(u32 val, void __iomem *addr)",
+        "61": "\tKUNIT_STATIC_STUB_REDIRECT(sun55i_msgbox_writel, val, addr);",
+        "62": "\twritel(val, addr);",
+        "68": "void sun55i_msgbox_chan_to_route(int chan_idx, int *local_n, int *p,",
+        "71": "\t*local_n = chan_idx / SUN55I_CHANS_PER_PROC;",
+        "72": "\t*p = chan_idx % SUN55I_CHANS_PER_PROC;",
+        "73": "\t*remote_id = sun55i_msgbox_routes[*local_n].remote_id;",
+        "74": "\t*remote_n = sun55i_msgbox_routes[*local_n].remote_n;",
+        "75": "}",
+        "83": "static int sun55i_msgbox_rx_drain(struct sun55i_msgbox *mbox, int local_n, int p,",
+        "86": "\tvoid __iomem *base = mbox->regs[SUN55I_PROC_ARM];",
+        "87": "\tint count = 0;",
+        "89": "\tlockdep_assert_held(&mbox->lock);",
+        "91": "\twhile (count < SUN55I_FIFO_MAX &&",
+        "92": "\t       (sun55i_msgbox_readl(base + SUN55I_MSGBOX_MSG_STATUS(local_n, p)) &",
+        "94": "\t\tmsgs[count++] = sun55i_msgbox_readl(base + SUN55I_MSGBOX_MSG_FIFO(local_n, p));",
+        "102": "\tsun55i_msgbox_writel(SUN55I_MSGBOX_RD_IRQ_PEND_BIT(p),",
+        "103": "\t\t\t     base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));",
+        "105": "\treturn count;",
+        "109": "irqreturn_t sun55i_msgbox_irq(int irq, void *dev_id)",
+        "111": "\tstruct sun55i_msgbox *mbox = dev_id;",
+        "112": "\tvoid __iomem *base = mbox->regs[SUN55I_PROC_ARM];",
+        "113": "\tu32 msgs[SUN55I_CHANS_PER_PROC][SUN55I_FIFO_MAX];",
+        "114": "\tint count[SUN55I_CHANS_PER_PROC];",
+        "115": "\tirqreturn_t ret = IRQ_NONE;",
+        "116": "\tint local_n, p, i;",
+        "118": "\tfor (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {",
+        "119": "\t\tstruct mbox_chan *chans =",
+        "120": "\t\t\t&mbox->controller.chans[local_n * SUN55I_CHANS_PER_PROC];",
+        "121": "\t\tunsigned long flags;",
+        "122": "\t\tu32 pending;",
+        "124": "\t\tspin_lock_irqsave(&mbox->lock, flags);",
+        "125": "\t\tpending = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n)) &",
+        "126": "\t\t\t  sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));",
+        "127": "\t\tfor (p = 0; p < SUN55I_CHANS_PER_PROC; p++)",
+        "128": "\t\t\tcount[p] = pending & SUN55I_MSGBOX_RD_IRQ_PEND_BIT(p) ?",
+        "129": "\t\t\t\t   sun55i_msgbox_rx_drain(mbox, local_n, p, msgs[p]) : -1;",
+        "130": "\t\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "137": "\t\tfor (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {",
+        "138": "\t\t\tif (count[p] < 0)",
+        "139": "\t\t\t\tcontinue;",
+        "140": "\t\t\tfor (i = 0; i < count[p]; i++)",
+        "141": "\t\t\t\tmbox_chan_received_data(&chans[p], &msgs[p][i]);",
+        "146": "\treturn ret;",
+        "150": "static u32 sun55i_msgbox_tx_count(struct sun55i_msgbox *mbox, int remote_id,",
+        "153": "\treturn sun55i_msgbox_readl(mbox->regs[remote_id] +",
+        "154": "\t\t\t\t   SUN55I_MSGBOX_MSG_STATUS(remote_n, p)) &",
+        "169": "static void sun55i_msgbox_tx_irq_enable(struct sun55i_msgbox *mbox, int remote_id,",
+        "172": "\tvoid __iomem *base = mbox->regs[remote_id];",
+        "173": "\tvoid __iomem *reg = base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(remote_n);",
+        "174": "\tunsigned long flags;",
+        "175": "\tu32 val;",
+        "177": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "178": "\tval = sun55i_msgbox_readl(reg);",
+        "179": "\tif (enable) {",
+        "180": "\t\tsun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p),",
+        "181": "\t\t\t\t     base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(remote_n));",
+        "182": "\t\tval |= SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);",
+        "184": "\t\tval &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);",
+        "186": "\tsun55i_msgbox_writel(val, reg);",
+        "187": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "188": "}",
+        "191": "irqreturn_t sun55i_msgbox_tx_irq(int irq, void *dev_id)",
+        "193": "\tstruct sun55i_tx_irq *tx = dev_id;",
+        "194": "\tstruct sun55i_msgbox *mbox = tx->mbox;",
+        "195": "\tconst struct sun55i_route *route = &sun55i_msgbox_routes[tx->local_n];",
+        "196": "\tvoid __iomem *base = mbox->regs[route->remote_id];",
+        "197": "\tstruct mbox_chan *chans = &mbox->controller.chans[tx->local_n * SUN55I_CHANS_PER_PROC];",
+        "198": "\tunsigned long flags, done = 0;",
+        "199": "\tu32 en, pend;",
+        "200": "\tint p;",
+        "202": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "204": "\ten = sun55i_msgbox_readl(base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));",
+        "205": "\tpend = sun55i_msgbox_readl(base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));",
+        "207": "\tfor (p = 0; p < SUN55I_CHANS_PER_PROC; p++) {",
+        "208": "\t\tif (!(en & pend & SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p)))",
+        "209": "\t\t\tcontinue;",
+        "212": "\t\ten &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);",
+        "213": "\t\tsun55i_msgbox_writel(en, base + SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n));",
+        "214": "\t\tsun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p),",
+        "215": "\t\t\t\t     base + SUN55I_MSGBOX_WRITE_IRQ_STATUS(route->remote_n));",
+        "216": "\t\t__set_bit(p, &done);",
+        "219": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "222": "\tfor_each_set_bit(p, &done, SUN55I_CHANS_PER_PROC)",
+        "223": "\t\tmbox_chan_txdone(&chans[p], 0);",
+        "225": "\treturn done ? IRQ_HANDLED : IRQ_NONE;",
+        "233": "static int sun55i_msgbox_tx_irq_get(struct sun55i_msgbox *mbox, int local_n)",
+        "235": "\tstruct sun55i_tx_irq *tx = &mbox->tx_irqs[local_n];",
+        "236": "\tint ret = 0;",
+        "238": "\tmutex_lock(&mbox->tx_irq_lock);",
+        "239": "\tif (!tx->users) {",
+        "240": "\t\tret = request_irq(tx->irq, sun55i_msgbox_tx_irq, 0, tx->name, tx);",
+        "241": "\t\tif (ret)",
+        "242": "\t\t\tdev_err(mbox->controller.dev, \"failed to request %s: %d\\n\",",
+        "245": "\tif (!ret)",
+        "246": "\t\ttx->users++;",
+        "247": "\tmutex_unlock(&mbox->tx_irq_lock);",
+        "249": "\treturn ret;",
+        "252": "static void sun55i_msgbox_tx_irq_put(struct sun55i_msgbox *mbox, int local_n)",
+        "254": "\tstruct sun55i_tx_irq *tx = &mbox->tx_irqs[local_n];",
+        "256": "\tmutex_lock(&mbox->tx_irq_lock);",
+        "257": "\tif (!--tx->users) {",
+        "258": "\t\tfree_irq(tx->irq, tx);",
+        "261": "\t\tsynchronize_irq(tx->irq);",
+        "263": "\tmutex_unlock(&mbox->tx_irq_lock);",
+        "264": "}",
+        "266": "static int sun55i_msgbox_send_data(struct mbox_chan *chan, void *data)",
+        "268": "\tstruct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);",
+        "269": "\tint n = chan - mbox->controller.chans;",
+        "270": "\tint local_n, p, remote_id, remote_n;",
+        "271": "\tunsigned long flags;",
+        "272": "\tu32 msg = 0;",
+        "273": "\tbool full;",
+        "275": "\tif (data)",
+        "276": "\t\tmemcpy(&msg, data, sizeof(msg));",
+        "278": "\tsun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);",
+        "284": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "291": "\t__clear_bit(n, &mbox->tx_held);",
+        "299": "\tfull = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) >= SUN55I_FIFO_MAX;",
+        "300": "\tif (!full) {",
+        "301": "\t\tsun55i_msgbox_writel(msg, mbox->regs[remote_id] +",
+        "302": "\t\t\t\t     SUN55I_MSGBOX_MSG_FIFO(remote_n, p));",
+        "303": "\t} else if (!mbox->tx_done_irq) {",
+        "304": "\t\tmbox->tx_held_msg[n] = msg;",
+        "305": "\t\t__set_bit(n, &mbox->tx_held);",
+        "308": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "315": "\tif (mbox->tx_done_irq) {",
+        "316": "\t\tsun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, true);",
+        "317": "\t\treturn full ? -EBUSY : 0;",
+        "323": "static int sun55i_msgbox_startup(struct mbox_chan *chan)",
+        "325": "\tstruct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);",
+        "326": "\tvoid __iomem *base = mbox->regs[SUN55I_PROC_ARM];",
+        "327": "\tint n = chan - mbox->controller.chans;",
+        "328": "\tint local_n, p, remote_id, remote_n;",
+        "329": "\tu32 stale[SUN55I_FIFO_MAX];",
+        "330": "\tunsigned long flags;",
+        "331": "\tu32 val;",
+        "333": "\tsun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);",
+        "339": "\tif (mbox->tx_done_irq) {",
+        "340": "\t\tint ret;",
+        "343": "\t\tsun55i_msgbox_writel(SUN55I_MSGBOX_WR_IRQ_THR_ONE_FREE, mbox->regs[remote_id] +",
+        "344": "\t\t\t\t     SUN55I_MSGBOX_WRITE_IRQ_THRESHOLD(remote_n, p));",
+        "346": "\t\tret = sun55i_msgbox_tx_irq_get(mbox, local_n);",
+        "347": "\t\tif (ret)",
+        "349": "\t\tset_bit(n, &mbox->tx_irq_held);",
+        "353": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "354": "\tsun55i_msgbox_rx_drain(mbox, local_n, p, stale);",
+        "355": "\tval = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));",
+        "356": "\tval |= SUN55I_MSGBOX_RD_IRQ_EN_BIT(p);",
+        "357": "\tsun55i_msgbox_writel(val, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));",
+        "358": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "360": "\treturn 0;",
+        "363": "static void sun55i_msgbox_shutdown(struct mbox_chan *chan)",
+        "365": "\tstruct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);",
+        "366": "\tvoid __iomem *base = mbox->regs[SUN55I_PROC_ARM];",
+        "367": "\tint n = chan - mbox->controller.chans;",
+        "368": "\tint local_n, p, remote_id, remote_n;",
+        "369": "\tu32 stale[SUN55I_FIFO_MAX];",
+        "370": "\tunsigned long flags;",
+        "371": "\tu32 val;",
+        "373": "\tsun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);",
+        "376": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "377": "\tval = sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));",
+        "378": "\tval &= ~SUN55I_MSGBOX_RD_IRQ_EN_BIT(p);",
+        "379": "\tsun55i_msgbox_writel(val, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));",
+        "380": "\t__clear_bit(n, &mbox->tx_held);",
+        "381": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "384": "\tsynchronize_irq(mbox->irq);",
+        "387": "\tif (test_and_clear_bit(n, &mbox->tx_irq_held)) {",
+        "388": "\t\tsun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);",
+        "389": "\t\tsun55i_msgbox_tx_irq_put(mbox, local_n);",
+        "396": "\t\tsun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);",
+        "400": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "401": "\tsun55i_msgbox_rx_drain(mbox, local_n, p, stale);",
+        "402": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "403": "}",
+        "405": "static bool sun55i_msgbox_last_tx_done(struct mbox_chan *chan)",
+        "407": "\tstruct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);",
+        "408": "\tint n = chan - mbox->controller.chans;",
+        "409": "\tint local_n, p, remote_id, remote_n;",
+        "410": "\tunsigned long flags;",
+        "411": "\tbool done;",
+        "413": "\tsun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);",
+        "420": "\tspin_lock_irqsave(&mbox->lock, flags);",
+        "421": "\tdone = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) < SUN55I_FIFO_MAX;",
+        "424": "\tif (done && __test_and_clear_bit(n, &mbox->tx_held)) {",
+        "425": "\t\tsun55i_msgbox_writel(mbox->tx_held_msg[n], mbox->regs[remote_id] +",
+        "426": "\t\t\t\t     SUN55I_MSGBOX_MSG_FIFO(remote_n, p));",
+        "427": "\t\tdone = sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) < SUN55I_FIFO_MAX;",
+        "429": "\tspin_unlock_irqrestore(&mbox->lock, flags);",
+        "431": "\treturn done;",
+        "434": "static bool sun55i_msgbox_peek_data(struct mbox_chan *chan)",
+        "436": "\tstruct sun55i_msgbox *mbox = to_sun55i_msgbox(chan);",
+        "437": "\tint n = chan - mbox->controller.chans;",
+        "438": "\tint local_n, p, remote_id, remote_n;",
+        "440": "\tsun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);",
+        "442": "\treturn sun55i_msgbox_readl(mbox->regs[SUN55I_PROC_ARM] +",
+        "443": "\t\t\t\t   SUN55I_MSGBOX_MSG_STATUS(local_n, p)) &",
+        "457": "static int sun55i_msgbox_probe(struct platform_device *pdev)",
+        "459": "\tstruct device *dev = &pdev->dev;",
+        "460": "\tstruct clk_bulk_data *clks;",
+        "461": "\tstruct reset_control *rst;",
+        "462": "\tstruct mbox_chan *chans;",
+        "463": "\tstruct sun55i_msgbox *mbox;",
+        "464": "\tint i, ret, irq, local_n;",
+        "466": "\tmbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);",
+        "467": "\tif (!mbox)",
+        "470": "\tspin_lock_init(&mbox->lock);",
+        "471": "\tret = devm_mutex_init(dev, &mbox->tx_irq_lock);",
+        "472": "\tif (ret)",
+        "475": "\tchans = devm_kcalloc(dev, SUN55I_NUM_CHANS, sizeof(*chans), GFP_KERNEL);",
+        "476": "\tif (!chans)",
+        "479": "\tfor (i = 0; i < SUN55I_NUM_CHANS; i++)",
+        "480": "\t\tchans[i].con_priv = mbox;",
+        "483": "\tmbox->controller.dev = dev;",
+        "484": "\tmbox->controller.ops = &sun55i_msgbox_chan_ops;",
+        "485": "\tmbox->controller.chans = chans;",
+        "486": "\tmbox->controller.num_chans = SUN55I_NUM_CHANS;",
+        "488": "\tfor (i = 0; i < SUN55I_MAX_PROCESSORS; i++) {",
+        "489": "\t\tmbox->regs[i] = devm_platform_ioremap_resource(pdev, i);",
+        "490": "\t\tif (IS_ERR(mbox->regs[i]))",
+        "491": "\t\t\treturn dev_err_probe(dev, PTR_ERR(mbox->regs[i]),",
+        "501": "\tret = devm_clk_bulk_get_all_enabled(dev, &clks);",
+        "502": "\tif (ret < 0)",
+        "503": "\t\treturn dev_err_probe(dev, ret, \"failed to enable clocks\\n\");",
+        "504": "\tif (ret != SUN55I_MAX_PROCESSORS)",
+        "505": "\t\treturn dev_err_probe(dev, -EINVAL, \"need %d clocks, found %d\\n\",",
+        "508": "\tret = reset_control_get_count(dev);",
+        "509": "\tif (ret < 0)",
+        "510": "\t\treturn dev_err_probe(dev, ret, \"failed to count resets\\n\");",
+        "511": "\tif (ret != SUN55I_MAX_PROCESSORS)",
+        "512": "\t\treturn dev_err_probe(dev, -EINVAL, \"need %d resets, found %d\\n\",",
+        "515": "\trst = devm_reset_control_array_get_shared(dev);",
+        "516": "\tif (IS_ERR(rst))",
+        "517": "\t\treturn dev_err_probe(dev, PTR_ERR(rst), \"failed to get resets\\n\");",
+        "525": "\tret = reset_control_deassert(rst);",
+        "526": "\tif (ret)",
+        "527": "\t\treturn dev_err_probe(dev, ret, \"failed to deassert reset\\n\");",
+        "533": "\tfor (local_n = 0; local_n < SUN55I_NUM_ROUTES; local_n++) {",
+        "534": "\t\tconst struct sun55i_route *route = &sun55i_msgbox_routes[local_n];",
+        "535": "\t\tvoid __iomem *base = mbox->regs[SUN55I_PROC_ARM];",
+        "536": "\t\tvoid __iomem *wr_en = mbox->regs[route->remote_id] +",
+        "537": "\t\t\t\t      SUN55I_MSGBOX_WRITE_IRQ_ENABLE(route->remote_n);",
+        "538": "\t\tu32 val = sun55i_msgbox_readl(wr_en);",
+        "539": "\t\tint p;",
+        "541": "\t\tsun55i_msgbox_writel(0, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n));",
+        "542": "\t\tsun55i_msgbox_writel(U32_MAX, base + SUN55I_MSGBOX_READ_IRQ_STATUS(local_n));",
+        "544": "\t\tfor (p = 0; p < SUN55I_CHANS_PER_PROC; p++)",
+        "545": "\t\t\tval &= ~SUN55I_MSGBOX_WR_IRQ_EN_BIT(p);",
+        "546": "\t\tsun55i_msgbox_writel(val, wr_en);",
+        "550": "\tirq = platform_get_irq_byname(pdev, \"arm\");",
+        "551": "\tif (irq < 0)",
+        "554": "\tret = devm_request_irq(dev, irq, sun55i_msgbox_irq, 0, dev_name(dev), mbox);",
+        "555": "\tif (ret)",
+        "556": "\t\treturn dev_err_probe(dev, ret, \"failed to request irq\\n\");",
+        "557": "\tmbox->irq = irq;",
+        "565": "\tmbox->tx_done_irq = of_property_read_bool(dev->of_node, \"allwinner,tx-done-irq\");",
+        "566": "\tfor (local_n = 0; mbox->tx_done_irq && local_n < SUN55I_NUM_ROUTES; local_n++) {",
+        "582": "\tif (mbox->tx_done_irq) {",
+        "585": "\t\tmbox->controller.txdone_poll = true;",
+        "586": "\t\tmbox->controller.txpoll_period = 1;",
+        "589": "\tret = devm_mbox_controller_register(dev, &mbox->controller);",
+        "590": "\tif (ret)",
+        "591": "\t\treturn dev_err_probe(dev, ret, \"failed to register controller\\n\");",
+        "609": "module_platform_driver(sun55i_msgbox_driver);"
+      }
+    },
+    "drivers/remoteproc/sunxi_rproc.c": {
+      "lines_covered": 201,
+      "lines_executable": 326,
+      "percent": 61.66,
+      "per_profile": {
+        "uml-kunit": {
+          "covered": 201,
+          "executable": 326
+        }
+      },
+      "uncovered": [
+        {
+          "line": 73,
+          "source": "return readl(addr);"
+        },
+        {
+          "line": 81,
+          "source": "writel(val, addr);"
+        },
+        {
+          "line": 89,
+          "source": "memset_io(addr, val, len);"
+        },
+        {
+          "line": 220,
+          "source": "dev_warn(priv->dev, \"crash dump segments incomplete: %d\\n\", ret);"
+        },
+        {
+          "line": 490,
+          "source": "ret = -ENOMEM;"
+        },
+        {
+          "line": 491,
+          "source": "goto err_free_mem;"
+        },
+        {
+          "line": 504,
+          "source": "goto err_free_mem;"
+        },
+        {
+          "line": 513,
+          "source": "err_free_mem:"
+        },
+        {
+          "line": 514,
+          "source": "while (i--)"
+        },
+        {
+          "line": 515,
+          "source": "kfree(mem[i]);"
+        },
+        {
+          "line": 536,
+          "source": "static int sunxi_rproc_map_sram(struct platform_device *pdev, const char *name,"
+        },
+        {
+          "line": 539,
+          "source": "struct device *dev = &pdev->dev;"
+        },
+        {
+          "line": 540,
+          "source": "struct sunxi_rproc *priv = platform_get_drvdata(pdev);"
+        },
+        {
+          "line": 541,
+          "source": "struct resource *res;"
+        },
+        {
+          "line": 542,
+          "source": "u64 da;"
+        },
+        {
+          "line": 544,
+          "source": "res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);"
+        },
+        {
+          "line": 545,
+          "source": "*va = devm_ioremap_resource_wc(dev, res);"
+        },
+        {
+          "line": 546,
+          "source": "if (IS_ERR(*va))"
+        },
+        {
+          "line": 547,
+          "source": "return dev_err_probe(dev, PTR_ERR(*va), \"failed to map '%s'\\n\", name);"
+        },
+        {
+          "line": 550,
+          "source": "if (sunxi_rproc_sys_to_da(priv->cfg, res->start, resource_size(res), &da))"
+        },
+        {
+          "line": 551,
+          "source": "return dev_err_probe(dev, -EINVAL, \"'%s' %pR is not in the %s address map\\n\","
+        },
+        {
+          "line": 552,
+          "source": "name, res, priv->cfg->name);"
+        },
+        {
+          "line": 554,
+          "source": "*phys = res->start;"
+        },
+        {
+          "line": 555,
+          "source": "*size = resource_size(res);"
+        },
+        {
+          "line": 557,
+          "source": "return 0;"
+        },
+        {
+          "line": 560,
+          "source": "static int sunxi_rproc_register_mem(struct platform_device *pdev, struct sunxi_rproc *priv)"
+        },
+        {
+          "line": 562,
+          "source": "struct device *dev = &pdev->dev;"
+        },
+        {
+          "line": 563,
+          "source": "struct resource *res;"
+        },
+        {
+          "line": 564,
+          "source": "int ret;"
+        },
+        {
+          "line": 566,
+          "source": "priv->cfg_va = devm_platform_ioremap_resource_byname(pdev, \"cfg\");"
+        },
+        {
+          "line": 567,
+          "source": "if (IS_ERR(priv->cfg_va))"
+        },
+        {
+          "line": 568,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->cfg_va), \"failed to map 'cfg'\\n\");"
+        },
+        {
+          "line": 570,
+          "source": "ret = sunxi_rproc_map_sram(pdev, \"sram-a3-0\", &priv->sram0_va, &priv->sram0_phys,"
+        },
+        {
+          "line": 572,
+          "source": "if (ret)"
+        },
+        {
+          "line": 575,
+          "source": "ret = sunxi_rproc_map_sram(pdev, \"sram-a3-1\", &priv->sram1_va, &priv->sram1_phys,"
+        },
+        {
+          "line": 577,
+          "source": "if (ret)"
+        },
+        {
+          "line": 584,
+          "source": "res = platform_get_resource_byname(pdev, IORESOURCE_MEM, \"remap\");"
+        },
+        {
+          "line": 585,
+          "source": "if (!res)"
+        },
+        {
+          "line": 586,
+          "source": "return dev_err_probe(dev, -EINVAL, \"missing 'remap' register\\n\");"
+        },
+        {
+          "line": 587,
+          "source": "priv->remap_va = devm_ioremap(dev, res->start, resource_size(res));"
+        },
+        {
+          "line": 588,
+          "source": "if (!priv->remap_va)"
+        },
+        {
+          "line": 589,
+          "source": "return dev_err_probe(dev, -ENOMEM, \"failed to map 'remap'\\n\");"
+        },
+        {
+          "line": 601,
+          "source": "struct device *dev = priv->dev;"
+        },
+        {
+          "line": 602,
+          "source": "struct device_node *np = dev->of_node;"
+        },
+        {
+          "line": 605,
+          "source": "count = of_reserved_mem_region_count(np);"
+        },
+        {
+          "line": 672,
+          "source": "static void sunxi_rproc_free_mbox(struct sunxi_rproc *priv)"
+        },
+        {
+          "line": 674,
+          "source": "if (priv->mbox_chan)"
+        },
+        {
+          "line": 675,
+          "source": "mbox_free_channel(priv->mbox_chan);"
+        },
+        {
+          "line": 676,
+          "source": "priv->mbox_chan = NULL;"
+        },
+        {
+          "line": 679,
+          "source": "cancel_work_sync(&priv->vq_work);"
+        },
+        {
+          "line": 680,
+          "source": "}"
+        },
+        {
+          "line": 682,
+          "source": "static int sunxi_rproc_probe(struct platform_device *pdev)"
+        },
+        {
+          "line": 684,
+          "source": "static const char * const pd_names[] = { \"riscv\", \"sram\" };"
+        },
+        {
+          "line": 685,
+          "source": "static const struct dev_pm_domain_attach_data pd_data = {"
+        },
+        {
+          "line": 689,
+          "source": "struct device *dev = &pdev->dev;"
+        },
+        {
+          "line": 690,
+          "source": "const char *fw_name = \"riscv-firmware.elf\";"
+        },
+        {
+          "line": 691,
+          "source": "struct dev_pm_domain_list *pd_list;"
+        },
+        {
+          "line": 692,
+          "source": "struct sunxi_rproc *priv;"
+        },
+        {
+          "line": 693,
+          "source": "struct rproc *rproc;"
+        },
+        {
+          "line": 694,
+          "source": "int crash_irq;"
+        },
+        {
+          "line": 695,
+          "source": "int ret;"
+        },
+        {
+          "line": 698,
+          "source": "ret = rproc_of_parse_firmware(dev, 0, &fw_name);"
+        },
+        {
+          "line": 699,
+          "source": "if (ret && ret != -EINVAL)"
+        },
+        {
+          "line": 700,
+          "source": "return dev_err_probe(dev, ret, \"invalid firmware-name\\n\");"
+        },
+        {
+          "line": 702,
+          "source": "rproc = devm_rproc_alloc(dev, dev_name(dev), &sunxi_rproc_ops,"
+        },
+        {
+          "line": 704,
+          "source": "if (!rproc)"
+        },
+        {
+          "line": 707,
+          "source": "ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));"
+        },
+        {
+          "line": 708,
+          "source": "if (ret)"
+        },
+        {
+          "line": 709,
+          "source": "return dev_err_probe(dev, ret, \"failed to set 32-bit DMA coherent mask\\n\");"
+        },
+        {
+          "line": 711,
+          "source": "priv = rproc->priv;"
+        },
+        {
+          "line": 712,
+          "source": "priv->rproc = rproc;"
+        },
+        {
+          "line": 713,
+          "source": "priv->dev = dev;"
+        },
+        {
+          "line": 714,
+          "source": "priv->cfg = device_get_match_data(dev);"
+        },
+        {
+          "line": 715,
+          "source": "if (!priv->cfg)"
+        },
+        {
+          "line": 717,
+          "source": "platform_set_drvdata(pdev, priv);"
+        },
+        {
+          "line": 720,
+          "source": "rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_RISCV);"
+        },
+        {
+          "line": 727,
+          "source": "ret = devm_pm_domain_attach_list(dev, &pd_data, &pd_list);"
+        },
+        {
+          "line": 728,
+          "source": "if (ret < 0)"
+        },
+        {
+          "line": 729,
+          "source": "return dev_err_probe(dev, ret, \"failed to attach power domains\\n\");"
+        },
+        {
+          "line": 731,
+          "source": "ret = devm_pm_runtime_enable(dev);"
+        },
+        {
+          "line": 732,
+          "source": "if (ret)"
+        },
+        {
+          "line": 735,
+          "source": "priv->clk_bus = devm_clk_get(dev, \"bus\");"
+        },
+        {
+          "line": 736,
+          "source": "if (IS_ERR(priv->clk_bus))"
+        },
+        {
+          "line": 737,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->clk_bus), \"failed to get 'bus' clock\\n\");"
+        },
+        {
+          "line": 739,
+          "source": "priv->clk_core = devm_clk_get(dev, \"core\");"
+        },
+        {
+          "line": 740,
+          "source": "if (IS_ERR(priv->clk_core))"
+        },
+        {
+          "line": 741,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->clk_core), \"failed to get 'core' clock\\n\");"
+        },
+        {
+          "line": 743,
+          "source": "priv->clk_sram = devm_clk_get(dev, \"sram\");"
+        },
+        {
+          "line": 744,
+          "source": "if (IS_ERR(priv->clk_sram))"
+        },
+        {
+          "line": 745,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->clk_sram), \"failed to get 'sram' clock\\n\");"
+        },
+        {
+          "line": 747,
+          "source": "priv->rst_cfg = devm_reset_control_get_exclusive(dev, \"cfg\");"
+        },
+        {
+          "line": 748,
+          "source": "if (IS_ERR(priv->rst_cfg))"
+        },
+        {
+          "line": 749,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->rst_cfg), \"failed to get 'cfg' reset\\n\");"
+        },
+        {
+          "line": 751,
+          "source": "priv->rst_core = devm_reset_control_get_exclusive(dev, \"core\");"
+        },
+        {
+          "line": 752,
+          "source": "if (IS_ERR(priv->rst_core))"
+        },
+        {
+          "line": 753,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->rst_core), \"failed to get 'core' reset\\n\");"
+        },
+        {
+          "line": 755,
+          "source": "priv->rst_sram = devm_reset_control_get_exclusive(dev, \"sram\");"
+        },
+        {
+          "line": 756,
+          "source": "if (IS_ERR(priv->rst_sram))"
+        },
+        {
+          "line": 757,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->rst_sram), \"failed to get 'sram' reset\\n\");"
+        },
+        {
+          "line": 759,
+          "source": "priv->rst_debug = devm_reset_control_get_exclusive(dev, \"debug\");"
+        },
+        {
+          "line": 760,
+          "source": "if (IS_ERR(priv->rst_debug))"
+        },
+        {
+          "line": 761,
+          "source": "return dev_err_probe(dev, PTR_ERR(priv->rst_debug),"
+        },
+        {
+          "line": 765,
+          "source": "ret = sunxi_rproc_register_mem(pdev, priv);"
+        },
+        {
+          "line": 766,
+          "source": "if (ret)"
+        },
+        {
+          "line": 770,
+          "source": "ret = sunxi_rproc_parse_memory_regions(priv);"
+        },
+        {
+          "line": 771,
+          "source": "if (ret)"
+        },
+        {
+          "line": 775,
+          "source": "crash_irq = platform_get_irq_optional(pdev, 0);"
+        },
+        {
+          "line": 776,
+          "source": "if (crash_irq > 0) {"
+        },
+        {
+          "line": 777,
+          "source": "ret = devm_request_threaded_irq(dev, crash_irq, NULL,"
+        },
+        {
+          "line": 782,
+          "source": "if (ret)"
+        },
+        {
+          "line": 783,
+          "source": "return dev_err_probe(dev, ret, \"failed to request crash IRQ\\n\");"
+        },
+        {
+          "line": 784,
+          "source": "priv->crash_irq = crash_irq;"
+        },
+        {
+          "line": 785,
+          "source": "} else if (crash_irq != -ENXIO) {"
+        },
+        {
+          "line": 786,
+          "source": "return dev_err_probe(dev, crash_irq, \"failed to get crash IRQ\\n\");"
+        },
+        {
+          "line": 790,
+          "source": "INIT_WORK(&priv->vq_work, sunxi_rproc_vq_work);"
+        },
+        {
+          "line": 792,
+          "source": "if (of_property_present(dev->of_node, \"mboxes\")) {"
+        },
+        {
+          "line": 814,
+          "source": "ret = rproc_add(rproc);"
+        },
+        {
+          "line": 815,
+          "source": "if (ret) {"
+        },
+        {
+          "line": 816,
+          "source": "sunxi_rproc_free_mbox(priv);"
+        },
+        {
+          "line": 817,
+          "source": "return dev_err_probe(dev, ret, \"failed to register rproc device\\n\");"
+        },
+        {
+          "line": 823,
+          "source": "static void sunxi_rproc_remove(struct platform_device *pdev)"
+        },
+        {
+          "line": 825,
+          "source": "struct sunxi_rproc *priv = platform_get_drvdata(pdev);"
+        },
+        {
+          "line": 831,
+          "source": "rproc_del(priv->rproc);"
+        },
+        {
+          "line": 833,
+          "source": "sunxi_rproc_free_mbox(priv);"
+        },
+        {
+          "line": 834,
+          "source": "}"
+        }
+      ],
+      "line_counts": {
+        "70": 21,
+        "72": 21,
+        "73": 0,
+        "78": 15,
+        "80": 15,
+        "81": 0,
+        "86": 6,
+        "88": 6,
+        "89": 0,
+        "94": 10,
+        "97": 10,
+        "99": 15,
+        "100": 15,
+        "102": 15,
+        "103": 10,
+        "104": 10,
+        "127": 16,
+        "129": 16,
+        "130": 12,
+        "131": 6,
+        "133": 10,
+        "134": 6,
+        "135": 6,
+        "141": 4,
+        "143": 4,
+        "144": 1,
+        "145": 1,
+        "151": 1,
+        "153": 1,
+        "155": 1,
+        "156": 1,
+        "164": 1,
+        "166": 1,
+        "168": 1,
+        "169": 1,
+        "173": 2,
+        "175": 2,
+        "181": 2,
+        "182": 1,
+        "184": 2,
+        "186": 2,
+        "195": 5,
+        "197": 5,
+        "198": 5,
+        "199": 5,
+        "200": 5,
+        "203": 5,
+        "204": 5,
+        "205": 5,
+        "207": 5,
+        "208": 5,
+        "209": 5,
+        "210": 5,
+        "211": 9,
+        "212": 4,
+        "213": 2,
+        "214": 2,
+        "219": 5,
+        "220": 0,
+        "221": 5,
+        "224": 11,
+        "226": 11,
+        "227": 11,
+        "228": 11,
+        "231": 11,
+        "232": 11,
+        "233": 1,
+        "234": 1,
+        "242": 10,
+        "243": 10,
+        "244": 1,
+        "245": 1,
+        "248": 9,
+        "249": 9,
+        "250": 1,
+        "251": 1,
+        "254": 8,
+        "255": 8,
+        "256": 1,
+        "257": 1,
+        "260": 7,
+        "261": 7,
+        "262": 1,
+        "263": 1,
+        "267": 6,
+        "268": 6,
+        "269": 1,
+        "270": 1,
+        "273": 5,
+        "274": 5,
+        "275": 1,
+        "276": 1,
+        "280": 4,
+        "281": 4,
+        "282": 1,
+        "283": 1,
+        "287": 3,
+        "288": 3,
+        "289": 3,
+        "292": 3,
+        "293": 3,
+        "295": 3,
+        "297": 1,
+        "298": 1,
+        "299": 2,
+        "300": 2,
+        "301": 3,
+        "302": 3,
+        "303": 4,
+        "304": 4,
+        "305": 5,
+        "306": 5,
+        "307": 7,
+        "308": 7,
+        "309": 7,
+        "314": 3,
+        "316": 3,
+        "318": 3,
+        "320": 3,
+        "322": 3,
+        "323": 3,
+        "324": 3,
+        "326": 3,
+        "327": 3,
+        "328": 3,
+        "331": 3,
+        "333": 3,
+        "338": 10,
+        "340": 10,
+        "341": 10,
+        "342": 10,
+        "344": 10,
+        "347": 10,
+        "351": 9,
+        "352": 9,
+        "354": 9,
+        "355": 9,
+        "356": 1,
+        "357": 1,
+        "360": 8,
+        "361": 5,
+        "362": 4,
+        "368": 6,
+        "370": 6,
+        "371": 6,
+        "373": 6,
+        "376": 6,
+        "378": 6,
+        "379": 4,
+        "380": 2,
+        "382": 6,
+        "395": 26,
+        "397": 26,
+        "398": 26,
+        "400": 26,
+        "401": 1,
+        "402": 1,
+        "405": 25,
+        "406": 2,
+        "407": 2,
+        "410": 46,
+        "411": 23,
+        "412": 23,
+        "413": 1,
+        "418": 35,
+        "420": 35,
+        "421": 35,
+        "422": 35,
+        "423": 35,
+        "426": 35,
+        "435": 106,
+        "436": 92,
+        "438": 92,
+        "439": 76,
+        "441": 16,
+        "443": 16,
+        "444": 5,
+        "453": 3,
+        "455": 3,
+        "457": 3,
+        "458": 3,
+        "461": 2,
+        "462": 2,
+        "463": 1,
+        "464": 1,
+        "476": 5,
+        "478": 5,
+        "479": 5,
+        "480": 5,
+        "481": 5,
+        "483": 9,
+        "484": 4,
+        "486": 8,
+        "487": 4,
+        "488": 4,
+        "489": 4,
+        "490": 0,
+        "491": 0,
+        "493": 4,
+        "500": 5,
+        "501": 5,
+        "503": 1,
+        "504": 0,
+        "506": 9,
+        "507": 4,
+        "509": 5,
+        "511": 5,
+        "513": 0,
+        "514": 0,
+        "515": 0,
+        "536": 0,
+        "539": 0,
+        "540": 0,
+        "541": 0,
+        "542": 0,
+        "544": 0,
+        "545": 0,
+        "546": 0,
+        "547": 0,
+        "550": 0,
+        "551": 0,
+        "552": 0,
+        "554": 0,
+        "555": 0,
+        "557": 0,
+        "560": 0,
+        "562": 0,
+        "563": 0,
+        "564": 0,
+        "566": 0,
+        "567": 0,
+        "568": 0,
+        "570": 0,
+        "572": 0,
+        "575": 0,
+        "577": 0,
+        "584": 0,
+        "585": 0,
+        "586": 0,
+        "587": 0,
+        "588": 0,
+        "589": 0,
+        "601": 0,
+        "602": 0,
+        "605": 0,
+        "672": 0,
+        "674": 0,
+        "675": 0,
+        "676": 0,
+        "679": 0,
+        "680": 0,
+        "682": 0,
+        "684": 0,
+        "685": 0,
+        "689": 0,
+        "690": 0,
+        "691": 0,
+        "692": 0,
+        "693": 0,
+        "694": 0,
+        "695": 0,
+        "698": 0,
+        "699": 0,
+        "700": 0,
+        "702": 0,
+        "704": 0,
+        "707": 0,
+        "708": 0,
+        "709": 0,
+        "711": 0,
+        "712": 0,
+        "713": 0,
+        "714": 0,
+        "715": 0,
+        "717": 0,
+        "720": 0,
+        "727": 0,
+        "728": 0,
+        "729": 0,
+        "731": 0,
+        "732": 0,
+        "735": 0,
+        "736": 0,
+        "737": 0,
+        "739": 0,
+        "740": 0,
+        "741": 0,
+        "743": 0,
+        "744": 0,
+        "745": 0,
+        "747": 0,
+        "748": 0,
+        "749": 0,
+        "751": 0,
+        "752": 0,
+        "753": 0,
+        "755": 0,
+        "756": 0,
+        "757": 0,
+        "759": 0,
+        "760": 0,
+        "761": 0,
+        "765": 0,
+        "766": 0,
+        "770": 0,
+        "771": 0,
+        "775": 0,
+        "776": 0,
+        "777": 0,
+        "782": 0,
+        "783": 0,
+        "784": 0,
+        "785": 0,
+        "786": 0,
+        "790": 0,
+        "792": 0,
+        "814": 0,
+        "815": 0,
+        "816": 0,
+        "817": 0,
+        "823": 0,
+        "825": 0,
+        "831": 0,
+        "833": 0,
+        "834": 0,
+        "851": 1
+      },
+      "source": {
+        "70": "u32 sunxi_rproc_readl(void __iomem *addr)",
+        "72": "\tKUNIT_STATIC_STUB_REDIRECT(sunxi_rproc_readl, addr);",
+        "73": "\treturn readl(addr);",
+        "78": "void sunxi_rproc_writel(u32 val, void __iomem *addr)",
+        "80": "\tKUNIT_STATIC_STUB_REDIRECT(sunxi_rproc_writel, val, addr);",
+        "81": "\twritel(val, addr);",
+        "86": "void sunxi_rproc_memset_io(void __iomem *addr, int val, size_t len)",
+        "88": "\tKUNIT_STATIC_STUB_REDIRECT(sunxi_rproc_memset_io, addr, val, len);",
+        "89": "\tmemset_io(addr, val, len);",
+        "94": "static int sunxi_rproc_sys_to_da(const struct sunxi_rproc_cfg *cfg, phys_addr_t sys,",
+        "97": "\tsize_t i;",
+        "99": "\tfor (i = 0; i < cfg->att_size; i++) {",
+        "100": "\t\tconst struct sunxi_rproc_att *att = &cfg->att[i];",
+        "102": "\t\tif (sys >= att->sa && sys + len <= att->sa + att->size) {",
+        "103": "\t\t\t*da = att->da + (sys - att->sa);",
+        "104": "\t\t\treturn 0;",
+        "127": "static void __iomem *sunxi_rproc_sram_va(struct sunxi_rproc *priv, u64 sys, size_t len)",
+        "129": "\tif (priv->sram0_va && sys >= priv->sram0_phys &&",
+        "130": "\t    sys + len <= priv->sram0_phys + priv->sram0_size)",
+        "131": "\t\treturn priv->sram0_va + (sys - priv->sram0_phys);",
+        "133": "\tif (priv->sram1_va && sys >= priv->sram1_phys &&",
+        "134": "\t    sys + len <= priv->sram1_phys + priv->sram1_size)",
+        "135": "\t\treturn priv->sram1_va + (sys - priv->sram1_phys);",
+        "141": "int sunxi_rproc_vq_notify(int id, void *ptr, void *data)",
+        "143": "\tKUNIT_STATIC_STUB_REDIRECT(sunxi_rproc_vq_notify, id, ptr, data);",
+        "144": "\trproc_vq_interrupt(data, id);",
+        "145": "\treturn 0;",
+        "151": "void sunxi_rproc_vq_work(struct work_struct *work)",
+        "153": "\tstruct sunxi_rproc *priv = container_of(work, struct sunxi_rproc, vq_work);",
+        "155": "\tidr_for_each(&priv->rproc->notifyids, sunxi_rproc_vq_notify, priv->rproc);",
+        "156": "}",
+        "164": "void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)",
+        "166": "\tstruct sunxi_rproc *priv = container_of(cl, struct sunxi_rproc, cl);",
+        "168": "\tqueue_work(priv->workqueue, &priv->vq_work);",
+        "169": "}",
+        "173": "irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)",
+        "175": "\tstruct sunxi_rproc *priv = data;",
+        "181": "\tif (test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))",
+        "182": "\t\tdisable_irq_nosync(irq);",
+        "184": "\trproc_report_crash(priv->rproc, RPROC_FATAL_ERROR);",
+        "186": "\treturn IRQ_HANDLED;",
+        "195": "static void sunxi_rproc_add_dump_segments(struct rproc *rproc)",
+        "197": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "198": "\tu64 da0, da1;",
+        "199": "\tunsigned int i;",
+        "200": "\tint ret;",
+        "203": "\tret = sunxi_rproc_sys_to_da(priv->cfg, priv->sram0_phys, priv->sram0_size, &da0);",
+        "204": "\tif (!ret)",
+        "205": "\t\tret = sunxi_rproc_sys_to_da(priv->cfg, priv->sram1_phys,",
+        "207": "\tif (!ret)",
+        "208": "\t\tret = rproc_coredump_add_segment(rproc, da0, priv->sram0_size);",
+        "209": "\tif (!ret)",
+        "210": "\t\tret = rproc_coredump_add_segment(rproc, da1, priv->sram1_size);",
+        "211": "\tfor (i = 0; !ret && i < priv->num_rmem; i++) {",
+        "212": "\t\tif (priv->rmem[i].is_iomem)",
+        "213": "\t\t\tcontinue;\t/* placed on an SRAM, already dumped */",
+        "214": "\t\tret = rproc_coredump_add_segment(rproc, (u32)priv->rmem[i].phys,",
+        "219": "\tif (ret)",
+        "220": "\t\tdev_warn(priv->dev, \"crash dump segments incomplete: %d\\n\", ret);",
+        "221": "}",
+        "224": "int sunxi_rproc_prepare(struct rproc *rproc)",
+        "226": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "227": "\tu32 remap_val;",
+        "228": "\tint ret;",
+        "231": "\tret = pm_runtime_resume_and_get(priv->dev);",
+        "232": "\tif (ret) {",
+        "233": "\t\tdev_err(priv->dev, \"failed to power up: %d\\n\", ret);",
+        "234": "\t\treturn ret;",
+        "242": "\tret = reset_control_assert(priv->rst_core);",
+        "243": "\tif (ret) {",
+        "244": "\t\tdev_err(priv->dev, \"failed to assert core reset: %d\\n\", ret);",
+        "245": "\t\tgoto err_pm_put;",
+        "248": "\tret = reset_control_deassert(priv->rst_cfg);",
+        "249": "\tif (ret) {",
+        "250": "\t\tdev_err(priv->dev, \"failed to deassert cfg reset: %d\\n\", ret);",
+        "251": "\t\tgoto err_pm_put;",
+        "254": "\tret = reset_control_deassert(priv->rst_sram);",
+        "255": "\tif (ret) {",
+        "256": "\t\tdev_err(priv->dev, \"failed to deassert sram reset: %d\\n\", ret);",
+        "257": "\t\tgoto err_assert_cfg;",
+        "260": "\tret = reset_control_deassert(priv->rst_debug);",
+        "261": "\tif (ret) {",
+        "262": "\t\tdev_err(priv->dev, \"failed to deassert debug reset: %d\\n\", ret);",
+        "263": "\t\tgoto err_assert_sram;",
+        "267": "\tret = clk_prepare_enable(priv->clk_bus);",
+        "268": "\tif (ret) {",
+        "269": "\t\tdev_err(priv->dev, \"failed to enable bus clock: %d\\n\", ret);",
+        "270": "\t\tgoto err_assert_debug;",
+        "273": "\tret = clk_prepare_enable(priv->clk_sram);",
+        "274": "\tif (ret) {",
+        "275": "\t\tdev_err(priv->dev, \"failed to enable sram clock: %d\\n\", ret);",
+        "276": "\t\tgoto err_disable_bus_clk;",
+        "280": "\tret = clk_prepare_enable(priv->clk_core);",
+        "281": "\tif (ret) {",
+        "282": "\t\tdev_err(priv->dev, \"failed to enable core clock: %d\\n\", ret);",
+        "283": "\t\tgoto err_disable_sram_clk;",
+        "287": "\tremap_val = sunxi_rproc_readl(priv->remap_va) | SUNXI_REMAP_SRAMA3_2_BIT;",
+        "288": "\tsunxi_rproc_writel(remap_val, priv->remap_va);",
+        "289": "\tsunxi_rproc_readl(priv->remap_va);",
+        "292": "\tsunxi_rproc_memset_io(priv->sram0_va, 0, priv->sram0_size);",
+        "293": "\tsunxi_rproc_memset_io(priv->sram1_va, 0, priv->sram1_size);",
+        "295": "\treturn 0;",
+        "297": "err_disable_sram_clk:",
+        "298": "\tclk_disable_unprepare(priv->clk_sram);",
+        "299": "err_disable_bus_clk:",
+        "300": "\tclk_disable_unprepare(priv->clk_bus);",
+        "301": "err_assert_debug:",
+        "302": "\treset_control_assert(priv->rst_debug);",
+        "303": "err_assert_sram:",
+        "304": "\treset_control_assert(priv->rst_sram);",
+        "305": "err_assert_cfg:",
+        "306": "\treset_control_assert(priv->rst_cfg);",
+        "307": "err_pm_put:",
+        "308": "\tpm_runtime_put_sync(priv->dev);",
+        "309": "\treturn ret;",
+        "314": "int sunxi_rproc_unprepare(struct rproc *rproc)",
+        "316": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "318": "\tsunxi_rproc_writel(sunxi_rproc_readl(priv->remap_va) & ~SUNXI_REMAP_SRAMA3_2_BIT,",
+        "320": "\tsunxi_rproc_readl(priv->remap_va);",
+        "322": "\tclk_disable_unprepare(priv->clk_core);",
+        "323": "\tclk_disable_unprepare(priv->clk_sram);",
+        "324": "\tclk_disable_unprepare(priv->clk_bus);",
+        "326": "\treset_control_assert(priv->rst_debug);",
+        "327": "\treset_control_assert(priv->rst_sram);",
+        "328": "\treset_control_assert(priv->rst_cfg);",
+        "331": "\tpm_runtime_put_sync(priv->dev);",
+        "333": "\treturn 0;",
+        "338": "int sunxi_rproc_start(struct rproc *rproc)",
+        "340": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "341": "\tconst struct sunxi_rproc_cfg *cfg = priv->cfg;",
+        "342": "\tint ret;",
+        "344": "\tdev_dbg(priv->dev, \"Starting %s core at entry 0x%llx\\n\",",
+        "347": "\tif (rproc->bootaddr > U32_MAX)",
+        "351": "\tsunxi_rproc_writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_offset);",
+        "352": "\tsunxi_rproc_readl(priv->cfg_va + cfg->boot_reg_offset);",
+        "354": "\tret = reset_control_deassert(priv->rst_core);",
+        "355": "\tif (ret) {",
+        "356": "\t\tdev_err(priv->dev, \"failed to release core reset: %d\\n\", ret);",
+        "357": "\t\treturn ret;",
+        "360": "\tif (priv->crash_irq > 0 &&",
+        "361": "\t    !test_and_set_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))",
+        "362": "\t\tenable_irq(priv->crash_irq);",
+        "368": "static int sunxi_rproc_stop(struct rproc *rproc)",
+        "370": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "371": "\tconst struct sunxi_rproc_cfg *cfg = priv->cfg;",
+        "373": "\tdev_dbg(priv->dev, \"Halting %s core...\\n\", cfg->name);",
+        "376": "\treset_control_assert(priv->rst_core);",
+        "378": "\tif (priv->crash_irq > 0 &&",
+        "379": "\t    test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))",
+        "380": "\t\tdisable_irq(priv->crash_irq);",
+        "382": "\treturn 0;",
+        "395": "void sunxi_rproc_kick(struct rproc *rproc, int vqid)",
+        "397": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "398": "\tint ret;",
+        "400": "\tif (!priv->mbox_chan) {",
+        "401": "\t\tdev_warn_once(priv->dev, \"vring kick without a mailbox (no mboxes in DT)\\n\");",
+        "402": "\t\treturn;",
+        "405": "\tif (vqid < 0 || vqid >= ARRAY_SIZE(sunxi_rproc_kick_msg)) {",
+        "406": "\t\tdev_err_ratelimited(priv->dev, \"no kick payload for vring %d\\n\", vqid);",
+        "407": "\t\treturn;",
+        "410": "\tret = mbox_send_message(priv->mbox_chan,",
+        "411": "\t\t\t\t(void *)&sunxi_rproc_kick_msg[vqid]);",
+        "412": "\tif (ret < 0)",
+        "413": "\t\tdev_err_ratelimited(priv->dev, \"failed to send mailbox kick: %d\\n\", ret);",
+        "418": "void *sunxi_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)",
+        "420": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "421": "\tconst struct sunxi_rproc_cfg *cfg = priv->cfg;",
+        "422": "\tvoid __iomem *va;",
+        "423": "\tsize_t i;",
+        "426": "\tif (len == 0 || da > U64_MAX - len)",
+        "435": "\tfor (i = 0; i < cfg->att_size; i++) {",
+        "436": "\t\tconst struct sunxi_rproc_att *att = &cfg->att[i];",
+        "438": "\t\tif (da < att->da || da + len > att->da + att->size)",
+        "439": "\t\t\tcontinue;",
+        "441": "\t\tva = sunxi_rproc_sram_va(priv, att->sa + (da - att->da), len);",
+        "443": "\t\tif (va && is_iomem)",
+        "444": "\t\t\t*is_iomem = !!(att->flags & SUNXI_RPROC_ATT_IOMEM);",
+        "453": "static int sunxi_rproc_sanity_check(struct rproc *rproc, const struct firmware *fw)",
+        "455": "\tint ret;",
+        "457": "\tret = rproc_elf_sanity_check(rproc, fw);",
+        "458": "\tif (ret)",
+        "461": "\tif (fw_elf_get_class(fw) != ELFCLASS32 ||",
+        "462": "\t    elf_hdr_get_e_machine(ELFCLASS32, fw->data) != EM_RISCV) {",
+        "463": "\t\tdev_err(&rproc->dev, \"firmware is not a 32-bit RISC-V ELF\\n\");",
+        "464": "\t\treturn -EINVAL;",
+        "476": "int sunxi_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)",
+        "478": "\tstruct sunxi_rproc *priv = rproc->priv;",
+        "479": "\tstruct rproc_mem_entry *mem[SUNXI_RPROC_MAX_RMEM];",
+        "480": "\tunsigned int i;",
+        "481": "\tint ret;",
+        "483": "\tfor (i = 0; i < priv->num_rmem; i++) {",
+        "484": "\t\tconst struct sunxi_rproc_rmem *rmem = &priv->rmem[i];",
+        "486": "\t\tmem[i] = rproc_mem_entry_init(priv->dev, rmem->va, (dma_addr_t)rmem->phys,",
+        "487": "\t\t\t\t\t      rmem->size, (u32)rmem->phys, NULL, NULL,",
+        "488": "\t\t\t\t\t      \"%s\", rmem->name);",
+        "489": "\t\tif (!mem[i]) {",
+        "490": "\t\t\tret = -ENOMEM;",
+        "491": "\t\t\tgoto err_free_mem;",
+        "493": "\t\tmem[i]->is_iomem = rmem->is_iomem;",
+        "500": "\tret = rproc_elf_load_rsc_table(rproc, fw);",
+        "501": "\tif (ret == -EINVAL)",
+        "503": "\telse if (ret)",
+        "504": "\t\tgoto err_free_mem;",
+        "506": "\tfor (i = 0; i < priv->num_rmem; i++)",
+        "507": "\t\trproc_add_carveout(rproc, mem[i]);",
+        "509": "\tsunxi_rproc_add_dump_segments(rproc);",
+        "511": "\treturn 0;",
+        "513": "err_free_mem:",
+        "514": "\twhile (i--)",
+        "515": "\t\tkfree(mem[i]);",
+        "536": "static int sunxi_rproc_map_sram(struct platform_device *pdev, const char *name,",
+        "539": "\tstruct device *dev = &pdev->dev;",
+        "540": "\tstruct sunxi_rproc *priv = platform_get_drvdata(pdev);",
+        "541": "\tstruct resource *res;",
+        "542": "\tu64 da;",
+        "544": "\tres = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);",
+        "545": "\t*va = devm_ioremap_resource_wc(dev, res);",
+        "546": "\tif (IS_ERR(*va))",
+        "547": "\t\treturn dev_err_probe(dev, PTR_ERR(*va), \"failed to map '%s'\\n\", name);",
+        "550": "\tif (sunxi_rproc_sys_to_da(priv->cfg, res->start, resource_size(res), &da))",
+        "551": "\t\treturn dev_err_probe(dev, -EINVAL, \"'%s' %pR is not in the %s address map\\n\",",
+        "552": "\t\t\t\t     name, res, priv->cfg->name);",
+        "554": "\t*phys = res->start;",
+        "555": "\t*size = resource_size(res);",
+        "557": "\treturn 0;",
+        "560": "static int sunxi_rproc_register_mem(struct platform_device *pdev, struct sunxi_rproc *priv)",
+        "562": "\tstruct device *dev = &pdev->dev;",
+        "563": "\tstruct resource *res;",
+        "564": "\tint ret;",
+        "566": "\tpriv->cfg_va = devm_platform_ioremap_resource_byname(pdev, \"cfg\");",
+        "567": "\tif (IS_ERR(priv->cfg_va))",
+        "568": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->cfg_va), \"failed to map 'cfg'\\n\");",
+        "570": "\tret = sunxi_rproc_map_sram(pdev, \"sram-a3-0\", &priv->sram0_va, &priv->sram0_phys,",
+        "572": "\tif (ret)",
+        "575": "\tret = sunxi_rproc_map_sram(pdev, \"sram-a3-1\", &priv->sram1_va, &priv->sram1_phys,",
+        "577": "\tif (ret)",
+        "584": "\tres = platform_get_resource_byname(pdev, IORESOURCE_MEM, \"remap\");",
+        "585": "\tif (!res)",
+        "586": "\t\treturn dev_err_probe(dev, -EINVAL, \"missing 'remap' register\\n\");",
+        "587": "\tpriv->remap_va = devm_ioremap(dev, res->start, resource_size(res));",
+        "588": "\tif (!priv->remap_va)",
+        "589": "\t\treturn dev_err_probe(dev, -ENOMEM, \"failed to map 'remap'\\n\");",
+        "601": "\tstruct device *dev = priv->dev;",
+        "602": "\tstruct device_node *np = dev->of_node;",
+        "605": "\tcount = of_reserved_mem_region_count(np);",
+        "672": "static void sunxi_rproc_free_mbox(struct sunxi_rproc *priv)",
+        "674": "\tif (priv->mbox_chan)",
+        "675": "\t\tmbox_free_channel(priv->mbox_chan);",
+        "676": "\tpriv->mbox_chan = NULL;",
+        "679": "\tcancel_work_sync(&priv->vq_work);",
+        "680": "}",
+        "682": "static int sunxi_rproc_probe(struct platform_device *pdev)",
+        "684": "\tstatic const char * const pd_names[] = { \"riscv\", \"sram\" };",
+        "685": "\tstatic const struct dev_pm_domain_attach_data pd_data = {",
+        "689": "\tstruct device *dev = &pdev->dev;",
+        "690": "\tconst char *fw_name = \"riscv-firmware.elf\";",
+        "691": "\tstruct dev_pm_domain_list *pd_list;",
+        "692": "\tstruct sunxi_rproc *priv;",
+        "693": "\tstruct rproc *rproc;",
+        "694": "\tint crash_irq;",
+        "695": "\tint ret;",
+        "698": "\tret = rproc_of_parse_firmware(dev, 0, &fw_name);",
+        "699": "\tif (ret && ret != -EINVAL)",
+        "700": "\t\treturn dev_err_probe(dev, ret, \"invalid firmware-name\\n\");",
+        "702": "\trproc = devm_rproc_alloc(dev, dev_name(dev), &sunxi_rproc_ops,",
+        "704": "\tif (!rproc)",
+        "707": "\tret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));",
+        "708": "\tif (ret)",
+        "709": "\t\treturn dev_err_probe(dev, ret, \"failed to set 32-bit DMA coherent mask\\n\");",
+        "711": "\tpriv = rproc->priv;",
+        "712": "\tpriv->rproc = rproc;",
+        "713": "\tpriv->dev = dev;",
+        "714": "\tpriv->cfg = device_get_match_data(dev);",
+        "715": "\tif (!priv->cfg)",
+        "717": "\tplatform_set_drvdata(pdev, priv);",
+        "720": "\trproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_RISCV);",
+        "727": "\tret = devm_pm_domain_attach_list(dev, &pd_data, &pd_list);",
+        "728": "\tif (ret < 0)",
+        "729": "\t\treturn dev_err_probe(dev, ret, \"failed to attach power domains\\n\");",
+        "731": "\tret = devm_pm_runtime_enable(dev);",
+        "732": "\tif (ret)",
+        "735": "\tpriv->clk_bus = devm_clk_get(dev, \"bus\");",
+        "736": "\tif (IS_ERR(priv->clk_bus))",
+        "737": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->clk_bus), \"failed to get 'bus' clock\\n\");",
+        "739": "\tpriv->clk_core = devm_clk_get(dev, \"core\");",
+        "740": "\tif (IS_ERR(priv->clk_core))",
+        "741": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->clk_core), \"failed to get 'core' clock\\n\");",
+        "743": "\tpriv->clk_sram = devm_clk_get(dev, \"sram\");",
+        "744": "\tif (IS_ERR(priv->clk_sram))",
+        "745": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->clk_sram), \"failed to get 'sram' clock\\n\");",
+        "747": "\tpriv->rst_cfg = devm_reset_control_get_exclusive(dev, \"cfg\");",
+        "748": "\tif (IS_ERR(priv->rst_cfg))",
+        "749": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->rst_cfg), \"failed to get 'cfg' reset\\n\");",
+        "751": "\tpriv->rst_core = devm_reset_control_get_exclusive(dev, \"core\");",
+        "752": "\tif (IS_ERR(priv->rst_core))",
+        "753": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->rst_core), \"failed to get 'core' reset\\n\");",
+        "755": "\tpriv->rst_sram = devm_reset_control_get_exclusive(dev, \"sram\");",
+        "756": "\tif (IS_ERR(priv->rst_sram))",
+        "757": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->rst_sram), \"failed to get 'sram' reset\\n\");",
+        "759": "\tpriv->rst_debug = devm_reset_control_get_exclusive(dev, \"debug\");",
+        "760": "\tif (IS_ERR(priv->rst_debug))",
+        "761": "\t\treturn dev_err_probe(dev, PTR_ERR(priv->rst_debug),",
+        "765": "\tret = sunxi_rproc_register_mem(pdev, priv);",
+        "766": "\tif (ret)",
+        "770": "\tret = sunxi_rproc_parse_memory_regions(priv);",
+        "771": "\tif (ret)",
+        "775": "\tcrash_irq = platform_get_irq_optional(pdev, 0);",
+        "776": "\tif (crash_irq > 0) {",
+        "777": "\t\tret = devm_request_threaded_irq(dev, crash_irq, NULL,",
+        "782": "\t\tif (ret)",
+        "783": "\t\t\treturn dev_err_probe(dev, ret, \"failed to request crash IRQ\\n\");",
+        "784": "\t\tpriv->crash_irq = crash_irq;",
+        "785": "\t} else if (crash_irq != -ENXIO) {",
+        "786": "\t\treturn dev_err_probe(dev, crash_irq, \"failed to get crash IRQ\\n\");",
+        "790": "\tINIT_WORK(&priv->vq_work, sunxi_rproc_vq_work);",
+        "792": "\tif (of_property_present(dev->of_node, \"mboxes\")) {",
+        "814": "\tret = rproc_add(rproc);",
+        "815": "\tif (ret) {",
+        "816": "\t\tsunxi_rproc_free_mbox(priv);",
+        "817": "\t\treturn dev_err_probe(dev, ret, \"failed to register rproc device\\n\");",
+        "823": "static void sunxi_rproc_remove(struct platform_device *pdev)",
+        "825": "\tstruct sunxi_rproc *priv = platform_get_drvdata(pdev);",
+        "831": "\trproc_del(priv->rproc);",
+        "833": "\tsunxi_rproc_free_mbox(priv);",
+        "834": "}",
+        "851": "module_platform_driver(sunxi_rproc_driver);"
+      }
+    }
+  }
+}

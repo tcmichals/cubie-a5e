@@ -726,7 +726,70 @@ def extract_key_metrics(report_bundle):
                 elif "ping_uio.py" in name or "Python UIO" in name:
                     metrics["p3_uio_py_rtt_us"] = m.get("avg_lat_us")
                     metrics["p3_uio_py_rate_msgs_s"] = m.get("throughput_msgs_s")
+
+    # Message box TX completion benchmarks, timer and write-IRQ mode
+    for mode, benches in (report_bundle.get("msgbox_tx_modes") or {}).items():
+        for key, m in (benches or {}).items():
+            if m.get("status") != "PASS":
+                continue
+            # Stress latency is queueing time; only its rate is a measurement
+            if key != "stress":
+                metrics[f"mbx_{mode}_{key}_rtt_us"] = m.get("avg_us")
+                metrics[f"mbx_{mode}_{key}_p99_us"] = m.get("p99_us")
+            metrics[f"mbx_{mode}_{key}_rate_msgs_s"] = m.get("msgs_s")
     return metrics
+
+
+# Range check against earlier runs: each metric against the median of the last
+# HISTORY_WINDOW passing runs. The band is the larger of 4 robust standard
+# deviations (1.4826 * MAD), HISTORY_REL_FLOOR of the median, and 2 µs for
+# latencies, so run-to-run jitter does not fail a sweep. Only the bad direction
+# (slower, lower rate) fails; faster than history is reported, not failed.
+HISTORY_WINDOW = 10
+HISTORY_MIN_RUNS = 3
+HISTORY_REL_FLOOR = 0.10
+
+
+def check_history_ranges(cur_metrics, history):
+    """[(metric, value, median, lo, hi, n, verdict)], verdict OK / SLOW / FAST / NEW."""
+    passing = [r for r in history if r.get("overall_status") == "PASS"]
+    out = []
+    for key in sorted(cur_metrics):
+        val = cur_metrics[key]
+        if key.startswith("kunit_") or not isinstance(val, (int, float)):
+            continue
+        xs = [r["metrics"][key] for r in passing
+              if isinstance(r.get("metrics", {}).get(key), (int, float))][-HISTORY_WINDOW:]
+        if len(xs) < HISTORY_MIN_RUNS:
+            out.append((key, val, None, None, None, len(xs), "NEW"))
+            continue
+        xs_sorted = sorted(xs)
+        med = xs_sorted[len(xs) // 2] if len(xs) % 2 else (xs_sorted[len(xs) // 2 - 1] + xs_sorted[len(xs) // 2]) / 2
+        devs = sorted(abs(x - med) for x in xs)
+        mad = devs[len(devs) // 2] if len(devs) % 2 else (devs[len(devs) // 2 - 1] + devs[len(devs) // 2]) / 2
+        band = max(4 * 1.4826 * mad, HISTORY_REL_FLOOR * abs(med), 2.0 if key.endswith("_us") else 0.0)
+        lo, hi = med - band, med + band
+        lower_is_better = key.endswith("_us")
+        if lo <= val <= hi:
+            verdict = "OK"
+        elif (val > hi) == lower_is_better:
+            verdict = "SLOW"
+        else:
+            verdict = "FAST"
+        out.append((key, val, med, lo, hi, len(xs), verdict))
+    return out
+
+
+def print_history_ranges(ranges):
+    print("\n" + "=" * 76)
+    print(f"  RANGE CHECK: each metric vs the last {HISTORY_WINDOW} passing runs (median, band)")
+    print("=" * 76)
+    for key, val, med, lo, hi, n, verdict in ranges:
+        color = "\033[91m" if verdict == "SLOW" else ("\033[92m" if verdict == "OK" else "\033[93m")
+        if med is None:
+            print(f"  {key:<32} {val:>11.2f}   (only {n} earlier runs: baseline)")
+        else:
+            print(f"  {key:<32} {val:>11.2f}   median {med:>10.2f}  [{lo:.2f} .. {hi:.2f}] n={n}  {color}{verdict}\033[0m")
 
 def audit_engineering_invariants():
     """
@@ -799,6 +862,16 @@ def audit_engineering_invariants():
         
     return audit_results
 
+def load_history(history_json_file):
+    """Earlier sweep runs, oldest first; [] if there are none."""
+    try:
+        with open(history_json_file, "r") as f:
+            history = json.load(f)
+        return history if isinstance(history, list) else []
+    except Exception:
+        return []
+
+
 def record_and_compare_history(report_bundle, history_json_file, history_md_file):
     """
     Appends the current sweep run to persistent test history and computes
@@ -816,16 +889,7 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
     # Audit engineering invariants (no sleeps, no polling hacks)
     audit_results = audit_engineering_invariants()
 
-    # Load existing history
-    history = []
-    if os.path.exists(history_json_file):
-        try:
-            with open(history_json_file, "r") as f:
-                history = json.load(f)
-                if not isinstance(history, list):
-                    history = []
-        except Exception:
-            history = []
+    history = load_history(history_json_file)
 
     prev_run = history[-1] if history else None
     prev_metrics = prev_run.get("metrics", {}) if prev_run else {}
@@ -930,7 +994,8 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
         "overall_status": overall_status,
         "engineering_invariants": audit_results,
         "metrics": cur_metrics,
-        "deltas": {k: v["delta_str"] for k, v in deltas.items()}
+        "deltas": {k: v["delta_str"] for k, v in deltas.items()},
+        "range_check": {k: v for k, _, _, _, _, _, v in check_history_ranges(cur_metrics, history)},
     }
     history.append(run_record)
 
@@ -970,6 +1035,16 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
                 f.write("\n")
             else:
                 f.write("### 🟢 Performance is Statistically Invariant & Stable\n\n")
+
+            f.write(f"## Range Check Against the Last {HISTORY_WINDOW} Passing Runs\n\n")
+            f.write("SLOW fails the sweep; FAST is reported only; NEW has fewer than "
+                    f"{HISTORY_MIN_RUNS} earlier runs.\n\n")
+            f.write("| Metric | Current | Median | Range | Runs | Verdict |\n")
+            f.write("| :--- | ---: | ---: | :---: | :---: | :---: |\n")
+            for key, val, med, lo, hi, n, verdict in check_history_ranges(cur_metrics, history[:-1]):
+                rng = "-" if med is None else f"{lo:.2f} .. {hi:.2f}"
+                f.write(f"| {key} | {val:.2f} | {'-' if med is None else f'{med:.2f}'} | {rng} | {n} | **{verdict}** |\n")
+            f.write("\n")
 
             f.write("## Comparison Against Preceding Run\n\n")
             f.write("| Metric | Previous Run | Current Run | Delta | Statistical Assessment |\n")
@@ -1026,7 +1101,19 @@ def main():
                              "collects driver line coverage (see tools/sweep_gcov.py)")
     parser.add_argument("--gcov-tool", default=os.environ.get("GCOV_TOOL"),
                         help="Cross gcov of the compiler that built the kernel (default: Buildroot's)")
+    parser.add_argument("--check-history", metavar="RESULTS_JSON",
+                        help="Only run the range check: a saved results JSON against the history, no board")
     args = parser.parse_args()
+
+    if args.check_history:
+        with open(args.check_history) as f:
+            bundle = json.load(f)
+        # The results file may already be the newest history entry: leave it out
+        history = [r for r in load_history(args.history_json)
+                   if r.get("timestamp") != bundle.get("timestamp")]
+        ranges = check_history_ranges(extract_key_metrics(bundle), history)
+        print_history_ranges(ranges)
+        return 1 if any(v == "SLOW" for *_, v in ranges) else 0
 
     TARGET_IP = args.ip
     TARGET_USER = args.user
@@ -1267,6 +1354,18 @@ def main():
     # -------------------------------------------------------------------------
     print("\n" + "=" * 76)
     print("             FINAL 3-PROFILE UNATTENDED SILICON SWEEP REPORT")
+    # Out of range against earlier runs fails the sweep
+    history_ranges = check_history_ranges(
+        extract_key_metrics({"kunit_tests": kunit_summary, "profiles": aggregated_profile_data,
+                             "msgbox_tx_modes": msgbox_tx_modes}),
+        load_history(args.history_json))
+    print_history_ranges(history_ranges)
+    slow = [k for k, _, _, _, _, _, v in history_ranges if v == "SLOW"]
+    results.append(("History", f"Metrics in range of last {HISTORY_WINDOW} PASS runs",
+                    "FAIL" if slow else "PASS"))
+    for k in slow:
+        print(f"  \033[91m[FAIL] {k} out of range\033[0m")
+
     print("=" * 76)
     print(f"  {'Profile':<12} | {'Test / Tool':<42} | {'Result'}")
     print("  " + "-" * 12 + "-+-" + "-" * 42 + "-+--------")

@@ -22,8 +22,16 @@ Only those two objects are instrumented. Then run the sweep with
     --gcov-build-dir $O [--gcov-tool <cross gcov of the same gcc>]
 (or GCOV_BUILD_DIR / GCOV_TOOL in .cubie.env).
 
-Coverage from UML KUnit and from the board, combined line by line (same source):
+Coverage from UML KUnit and from the board, combined line by line (same source).
+UML needs two workarounds, applied in a scratch worktree, never in cubie-linux-7.1
+(tools/uml-gcov-workarounds.patch): UML's linker script keeps only .fini_array,
+so the generic DISCARDS drop GCC's .fini_array.00100 gcov exit hooks and no .gcda
+is written; and libgcov's mangle_path() clashes with fs/seq_file.c at link time.
 
+    git -C linux-cubie worktree add --detach ../linux-uml-gcov HEAD
+    git -C linux-uml-gcov apply ../cubie-a5e/tools/uml-gcov-workarounds.patch
+    mkdir ../kunit-uml-gcov && cp tools/uml-gcov.kunitconfig ../kunit-uml-gcov/.kunitconfig
+    (cd linux-uml-gcov && ./tools/testing/kunit/kunit.py run --build_dir=../kunit-uml-gcov)
     sweep_gcov.py uml --build-dir <kunit.py build dir> --out uml_coverage.json
     sweep_gcov.py merge test_sweep_results.json uml_coverage.json
 """
