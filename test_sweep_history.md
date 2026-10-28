@@ -1,8 +1,8 @@
 # Silicon Sweep Performance History & Regression Tracking
 
-- **Total Recorded Runs**: 20
-- **Latest Run**: Run #20 (2026-10-20 21:59:02)
-- **Kernel Commit**: `d64ff2579e08` | **Firmware/Tools Commit**: `28eb1ce`
+- **Total Recorded Runs**: 22
+- **Latest Run**: Run #22 (2026-10-27 18:51:35)
+- **Kernel Commit**: `b19a950e320c` | **Firmware/Tools Commit**: `bf729e7`
 - **Latest Overall Status**: **PASS**
 
 ## Engineering Invariants & Code Hygiene Audit
@@ -12,28 +12,32 @@
 | **RemoteProc VirtIO Doorbell Contract** | `priv->cl.knows_txdone = false, no mbox_client_txdone() (controller paces TX)` | `drivers/remoteproc/sunxi_rproc.c` | **PASS** |
 | **Mailbox TX Completion** | `last_tx_done returns count < SUN55I_FIFO_MAX (FIFO has room); DT selects timer or ISR when full` | `drivers/mailbox/sun55i-msgbox.c` | **FAIL** |
 | **Zero-Sleep Benchmark Protocol** | `ping_rpmsg: blocking write, inotify for the node, no sleeps except optional -D (default 0)` | `apps/testPingRpmsg/linux/ping_rpmsg.cpp` | **PASS** |
-| **PREEMPT_RT Hardirq Execution Bound** | `sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX` | `drivers/mailbox/sun55i-msgbox.c` | **PASS** |
+| **PREEMPT_RT Hardirq Execution Bound** | `sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX` | `drivers/mailbox/sun55i-msgbox.c` | **FAIL** |
 
-### 🟢 Performance is Statistically Invariant & Stable
+### ⚠️ Statistically Significant Regressions (Exceeding Jitter Floor)
+
+- 🔴 **KUnit In-Kernel Tests (Passed): 61/63 passed**
 
 ## Comparison Against Preceding Run
 
 | Metric | Previous Run | Current Run | Delta | Statistical Assessment |
 | :--- | :---: | :---: | :---: | :---: |
-| KUnit In-Kernel Tests (Passed) | 51 tests | 54 tests | `+3 tests` | 🟢 100% Pass (Test Set Changed: 51 -> 54) |
-| Profile 1 C++ Rpmsg RTT | 165.90 µs | 166.14 µs | `+0.25 µs (+0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 1 C++ Rpmsg Jitter | 9.65 µs | 10.98 µs | `+1.32 µs (+13.7%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 1 C++ Rpmsg Rate | 6001.60 msgs/s | 5990.70 msgs/s | `-10.90 msgs/s (-0.2%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 2 C++ Rpmsg RTT | 128.88 µs | 129.68 µs | `+0.80 µs (+0.6%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Direct SRAM RTT | 13.93 µs | 13.71 µs | `-0.22 µs (-1.6%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Throughput | 8980.70 msgs/s | 8987.60 msgs/s | `+6.90 msgs/s (+0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Bandwidth | 8.77 MB/s | 8.78 MB/s | `+0.01 MB/s (+0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 Python UIO RTT | 32.04 µs | 32.37 µs | `+0.34 µs (+1.0%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| KUnit In-Kernel Tests (Passed) | 61 tests | 61 tests | `+0 tests` | 🔴 REGRESSION (Tests Failed or Missing!) |
+| Profile 1 C++ Rpmsg RTT | 168.29 µs | 167.52 µs | `-0.77 µs (-0.5%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Jitter | 8.40 µs | 8.20 µs | `-0.21 µs (-2.4%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Rate | 5916.50 msgs/s | 5944.80 msgs/s | `+28.30 msgs/s (+0.5%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 2 C++ Rpmsg RTT | 130.39 µs | 131.31 µs | `+0.92 µs (+0.7%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Direct SRAM RTT | N/A | 13.73 µs | `N/A` | ⚪ Baseline |
+| Profile 3 C++ UIO Throughput | N/A | 8794.90 msgs/s | `N/A` | ⚪ Baseline |
+| Profile 3 C++ UIO Bandwidth | N/A | 8.59 MB/s | `N/A` | ⚪ Baseline |
+| Profile 3 Python UIO RTT | N/A | 35.53 µs | `N/A` | ⚪ Baseline |
 
 ## Historical Runs Timeline
 
 | Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| #22 | 2026-10-27 18:51:35 | `b19a950e320c` | `bf729e7` | **PASS** | 61/63 | 167.52 µs | 13.73 µs | 8,795/s |
+| #21 | 2026-10-27 18:38:08 | `b19a950e320c` | `bf729e7` | **FAIL** | 61/63 | 168.29 µs | N/A | N/A |
 | #20 | 2026-10-20 21:59:02 | `d64ff2579e08` | `28eb1ce` | **PASS** | 54/54 | 166.14 µs | 13.71 µs | 8,988/s |
 | #19 | 2026-10-20 21:23:31 | `d64ff2579e08` | `28eb1ce` | **PASS** | 51/51 | 165.90 µs | 13.93 µs | 8,981/s |
 | #18 | 2026-10-17 14:43:43 | `82b64e947b5b` | `eb598cb` | **PASS** | 51/51 | 161.84 µs | 14.08 µs | 8,985/s |
@@ -52,6 +56,4 @@
 | #5 | 2026-10-14 18:12:06 | `64c3c511452a` | `e676b78` | **FAIL** | 47/67 | 1242.68 µs | N/A | N/A |
 | #4 | 2026-10-03 00:04:23 | `b861276e3e76` | `c347362` | **PASS** | 67/67 | 517.75 µs | 13.74 µs | 66,009/s |
 | #3 | 2026-10-02 23:51:54 | `b861276e3e76` | `c347362` | **PASS** | 67/67 | 189.88 µs | 13.70 µs | 66,305/s |
-| #2 | 2026-10-02 23:46:04 | `b861276e3e76` | `c347362` | **PASS** | 67/67 | 1242.43 µs | 13.75 µs | 66,138/s |
-| #1 | 2026-10-02 23:38:50 | `b861276e3e76` | `c347362` | **PASS** | 67/67 | 200.16 µs | 13.85 µs | 65,244/s |
 

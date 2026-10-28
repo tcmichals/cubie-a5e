@@ -92,6 +92,8 @@ class BoardCoverage:
             if self.skip_reason:
                 print(f"  [COVERAGE] skipped: {self.skip_reason}")
                 return
+        # A reboot unmounts debugfs, and not every profile mounts it again
+        self.run_ssh("mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug")
         data = {}
         for drv, path in self.board_paths.items():
             code, out, _ = self.run_ssh(f"base64 '{path}'", timeout=30)

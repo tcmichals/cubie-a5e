@@ -332,6 +332,10 @@ def dmesg_drain():
 def mbox_queue_overflows(new_lines):
     return sum(1 for line in new_lines.splitlines() if "MBOX_TX_QUEUE_LEN" in line)
 
+# TX-done lines, named after the remote bank (sun55i-msgbox.c routes)
+MSGBOX_TX_LINES = ("3003000.mailbox-cpus", "3003000.mailbox-dsp", "3003000.mailbox-rv")
+MSGBOX_RV_LINE = "3003000.mailbox-rv"
+
 MSGBOX_TX_BENCH = [
     # (key, label, firmware, command, expected messages)
     ("ping", "ping_rpmsg 10k, -D 0", "testPingRpmsg.elf", "/usr/bin/ping_rpmsg -n 10000 -D 0", 10000),
@@ -352,13 +356,13 @@ def run_msgbox_tx_bench(mode, results):
 
     lines = mailbox_irq_counts()
     if mode == "timer":
-        bad = [n for n in lines if "-tx" in n]
+        bad = [n for n in lines if n in MSGBOX_TX_LINES]
         ok = "3003000.mailbox" in lines and not bad
         why = f"TX-done lines requested in timer mode: {bad}" if bad else "RX line (SPI 0) missing"
     else:
         # Only the E906 bank's line is requested, and only while channel 9 is in use
-        ok = "3003000.mailbox-tx3" in lines and not any(n in lines for n in ("3003000.mailbox-tx1", "3003000.mailbox-tx2"))
-        why = f"expected only mailbox-tx3 besides SPI 0, got {sorted(lines)}"
+        ok = MSGBOX_RV_LINE in lines and not any(n in lines for n in MSGBOX_TX_LINES if n != MSGBOX_RV_LINE)
+        why = f"expected only {MSGBOX_RV_LINE} besides SPI 0, got {sorted(lines)}"
     if not ok:
         print(f"  \033[91m[FAIL] {why}\033[0m")
     results.append((prof, f"Msgbox {tag}: lines held ({', '.join(sorted(lines)) or 'none'})", "PASS" if ok else "FAIL"))
@@ -376,7 +380,7 @@ def run_msgbox_tx_bench(mode, results):
         rx = irq1.get("3003000.mailbox", 0) - irq0.get("3003000.mailbox", 0)
         m["rx_irqs"] = rx
         m["rx_irqs_per_msg"] = round(rx / expected, 3)
-        m["tx_irqs"] = irq1.get("3003000.mailbox-tx3", 0) - irq0.get("3003000.mailbox-tx3", 0)
+        m["tx_irqs"] = irq1.get(MSGBOX_RV_LINE, 0) - irq0.get(MSGBOX_RV_LINE, 0)
         m["queue_overflows"] = mbox_queue_overflows(new_log)
         status = ping_exchanged(c, o, expected=expected)
         if m["queue_overflows"]:
@@ -390,7 +394,7 @@ def run_msgbox_tx_bench(mode, results):
 MSGBOX_WRIRQ_TEST = r"""
 R=/sys/class/remoteproc/remoteproc0
 WEN=0x07136230; WST=0x07136234; CNT=0x0713626C; FIFO=0x0713627C; THR=0x0713628C; BLK=0x072B0000
-tx3() { grep mailbox-tx3 /proc/interrupts | awk '{s=0; for(i=2;i<=9;i++) s+=$i; print s+0}'; }
+tx3() { grep mailbox-rv /proc/interrupts | awk '{s=0; for(i=2;i<=9;i++) s+=$i; print s+0}'; }
 pop() { devmem $((BLK+0x0c)) 32 3; s=$(( $(devmem $((BLK+0x04)) 32) + 1 )); devmem $((BLK+0x04)) 32 $s
 	for i in $(seq 1 100); do [ $(( $(devmem $((BLK+0x08)) 32) )) -eq $s ] && break; usleep 1000; done; }
 echo stop > $R/state 2>/dev/null; echo testMsgboxStep.elf > $R/firmware; echo start > $R/state
@@ -446,6 +450,9 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
     """Inspect dmesg for kernel errors, oopses, panics, or call traces."""
     if allowed_patterns is None:
         allowed_patterns = []
+    # KUnit fixtures fill the mailbox queue on purpose (test_kick_payload_outlives_call);
+    # the KUnit stage checks the tests themselves
+    allowed_patterns = list(allowed_patterns) + ["sunxi-rproc-test"]
 
     # BusyBox dmesg has no -l, so the fallback grep is what runs on the board
     # Includes the lines dmesg_drain() moved into SWEEP_DMESG_LOG during this boot

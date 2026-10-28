@@ -7,7 +7,7 @@ CNT=0x0713626C      # MSG_STATUS p=3
 FIFO=0x0713627C     # MSG_FIFO   p=3
 THR=0x0713628C      # WRITE_IRQ_THRESHOLD p=3
 BLK=0x072B0000      # testMsgboxStep command block
-tx3() { grep "mailbox-tx3" /proc/interrupts | awk '{s=0; for(i=2;i<=9;i++) s+=$i; print s}'; }
+tx3() { grep "mailbox-rv" /proc/interrupts | awk '{s=0; for(i=2;i<=9;i++) s+=$i; print s}'; }
 pop() {   # ask the E906 to pop one message from p=3
 	devmem $((BLK+0x0c)) 32 3
 	s=$(( $(devmem $((BLK+0x04)) 32) + 1 ))
