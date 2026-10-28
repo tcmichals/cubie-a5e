@@ -777,9 +777,14 @@ def comparable_since(key):
     return since
 
 
-def check_history_ranges(cur_metrics, history):
-    """[(metric, value, median, lo, hi, n, verdict)], verdict OK / SLOW / FAST / NEW."""
-    passing = [r for r in history if r.get("overall_status") == "PASS"]
+def check_history_ranges(cur_metrics, history, flavor="rt"):
+    """[(metric, value, median, lo, hi, n, verdict)], verdict OK / SLOW / FAST / NEW.
+
+    Only passing runs of the same kernel flavor are a baseline: a non-RT kernel takes
+    interrupts in hard IRQ context and lockdep slows every lock. Runs recorded before
+    the flavor was kept are all PREEMPT_RT."""
+    passing = [r for r in history if r.get("overall_status") == "PASS"
+               and r.get("kernel_flavor", "rt") == flavor]
     out = []
     for key in sorted(cur_metrics):
         val = cur_metrics[key]
@@ -895,18 +900,25 @@ def audit_engineering_invariants():
 def compare_all_runs(history, out=sys.stdout):
     """Each recorded run against the passing runs before it; 1 if any run has a SLOW metric."""
     any_slow = False
-    out.write(f"| Run | Date | Kernel | Status | In range | Out of range (value vs median of last {HISTORY_WINDOW} PASS) |\n")
-    out.write("| ---: | :--- | :--- | :---: | ---: | :--- |\n")
+    out.write(f"| Run | Date | Kernel | Flavor | Status | In range | Out of range (value vs median of last {HISTORY_WINDOW} PASS) |\n")
+    out.write("| ---: | :--- | :--- | :--- | :---: | ---: | :--- |\n")
     for i, run in enumerate(history):
-        ranges = check_history_ranges(run.get("metrics", {}), history[:i])
+        ranges = check_history_ranges(run.get("metrics", {}), history[:i], run.get("kernel_flavor", "rt"))
         checked = [r for r in ranges if r[6] != "NEW"]
         bad = [f"{k} {v:.1f} vs {med:.1f} ({verdict})" for k, v, med, _, _, _, verdict in checked
                if verdict in ("SLOW", "FAST")]
         any_slow |= any(r[6] == "SLOW" for r in checked)
         ok = sum(1 for r in checked if r[6] == "OK")
-        out.write(f"| #{run.get('run_id')} | {str(run.get('timestamp'))[:16]} | `{str(run.get('git_kernel'))[:12]}` | "
+        out.write(f"| #{run.get('run_id')} | {str(run.get('timestamp'))[:16]} | `{str(run.get('git_kernel'))[:12]}` | {run.get('kernel_flavor', 'rt')} | "
                   f"{run.get('overall_status')} | {ok}/{len(checked)} | {'; '.join(bad) or '-'} |\n")
     return 1 if any_slow else 0
+
+
+def kernel_flavor():
+    """rt or preempt, +lockdep when PROVE_LOCKING is on: the history keeps them apart."""
+    _, out, _ = run_ssh("uname -v; test -e /proc/lockdep_stats && echo LOCKDEP", timeout=10)
+    flavor = "rt" if "PREEMPT_RT" in out else "preempt"
+    return flavor + ("+lockdep" if "LOCKDEP" in out else "")
 
 
 def load_history(history_json_file):
@@ -938,7 +950,9 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
 
     history = load_history(history_json_file)
 
-    prev_run = history[-1] if history else None
+    # The preceding run of the same kernel flavor (see check_history_ranges())
+    flavor = report_bundle.get("kernel_flavor", "rt")
+    prev_run = next((r for r in reversed(history) if r.get("kernel_flavor", "rt") == flavor), None)
     prev_metrics = prev_run.get("metrics", {}) if prev_run else {}
 
     # Compute deltas with statistical jitter tolerance
@@ -1042,7 +1056,9 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
         "engineering_invariants": audit_results,
         "metrics": cur_metrics,
         "deltas": {k: v["delta_str"] for k, v in deltas.items()},
-        "range_check": {k: v for k, _, _, _, _, _, v in check_history_ranges(cur_metrics, history)},
+        "kernel_flavor": report_bundle.get("kernel_flavor", "rt"),
+        "range_check": {k: v for k, _, _, _, _, _, v in check_history_ranges(
+            cur_metrics, history, report_bundle.get("kernel_flavor", "rt"))},
     }
     history.append(run_record)
 
@@ -1088,7 +1104,7 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
                     f"{HISTORY_MIN_RUNS} earlier runs.\n\n")
             f.write("| Metric | Current | Median | Range | Runs | Verdict |\n")
             f.write("| :--- | ---: | ---: | :---: | :---: | :---: |\n")
-            for key, val, med, lo, hi, n, verdict in check_history_ranges(cur_metrics, history[:-1]):
+            for key, val, med, lo, hi, n, verdict in check_history_ranges(cur_metrics, history[:-1], run_record["kernel_flavor"]):
                 rng = "-" if med is None else f"{lo:.2f} .. {hi:.2f}"
                 f.write(f"| {key} | {val:.2f} | {'-' if med is None else f'{med:.2f}'} | {rng} | {n} | **{verdict}** |\n")
             f.write("\n")
@@ -1169,7 +1185,7 @@ def main():
         # The results file may already be the newest history entry: leave it out
         history = [r for r in load_history(args.history_json)
                    if r.get("timestamp") != bundle.get("timestamp")]
-        ranges = check_history_ranges(extract_key_metrics(bundle), history)
+        ranges = check_history_ranges(extract_key_metrics(bundle), history, bundle.get("kernel_flavor", "rt"))
         print_history_ranges(ranges)
         return 1 if any(v == "SLOW" for *_, v in ranges) else 0
 
@@ -1435,13 +1451,14 @@ def main():
     print("\n" + "=" * 76)
     print("             FINAL 3-PROFILE UNATTENDED SILICON SWEEP REPORT")
     # Out of range against earlier runs fails the sweep
+    flavor = kernel_flavor()
     history_ranges = check_history_ranges(
         extract_key_metrics({"kunit_tests": kunit_summary, "profiles": aggregated_profile_data,
                              "msgbox_tx_modes": msgbox_tx_modes}),
-        load_history(args.history_json))
+        load_history(args.history_json), flavor)
     print_history_ranges(history_ranges)
     slow = [k for k, _, _, _, _, _, v in history_ranges if v == "SLOW"]
-    results.append(("History", f"Metrics in range of last {HISTORY_WINDOW} PASS runs",
+    results.append(("History", f"Metrics in range of last {HISTORY_WINDOW} PASS runs ({flavor})",
                     "FAIL" if slow else "PASS"))
     for k in slow:
         print(f"  \033[91m[FAIL] {k} out of range\033[0m")
@@ -1472,6 +1489,7 @@ def main():
         "msgbox_tx_modes": msgbox_tx_modes,
         "profiles": aggregated_profile_data,
         "driver_coverage": driver_coverage,
+        "kernel_flavor": flavor,
     }
     try:
         with open(args.json_out, "w") as f:
