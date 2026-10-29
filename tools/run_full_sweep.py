@@ -1594,6 +1594,12 @@ def main():
     except Exception as e:
         print(f"[WARN] Failed to build the performance page: {e}")
 
+    # Wiki page (wiki/Full-Sweep-Tests.md); tools/push_wiki.sh publishes it
+    try:
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "make_sweep_wiki.py")], check=True)
+    except Exception as e:
+        print(f"[WARN] Failed to build the wiki page: {e}")
+
     if g_serial_logger:
         g_serial_logger.stop()
         print(f"[SERIAL] Serial console logging saved to: {args.serial_log}")
