@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-28 17:31:20",
+  "timestamp": "2026-10-28 19:21:13",
   "target": "root@192.168.3.3",
   "kunit_tests": {
     "status": "PASS",
@@ -239,7 +239,7 @@
     ],
     [
       "History",
-      "Metrics in range of last 10 PASS runs",
+      "Metrics in range of last 10 PASS runs (preempt+lockdep)",
       "PASS"
     ]
   ],
@@ -247,12 +247,12 @@
     "timer": {
       "ping": {
         "recv": 10000.0,
-        "avg_us": 167.156,
-        "min_us": 158.292,
-        "max_us": 252.125,
-        "jitter_us": 8.257,
-        "p99_us": 194.75,
-        "msgs_s": 5958.8,
+        "avg_us": 365.732,
+        "min_us": 334.75,
+        "max_us": 1151.084,
+        "jitter_us": 30.44,
+        "p99_us": 443.292,
+        "msgs_s": 2726.2,
         "rx_irqs": 10000,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 0,
@@ -261,12 +261,12 @@
       },
       "stress": {
         "recv": 100000.0,
-        "avg_us": 1373.61,
-        "min_us": 254.458,
-        "max_us": 1492.5,
+        "avg_us": 1567.174,
+        "min_us": 520.292,
+        "max_us": 2010.083,
         "jitter_us": null,
-        "p99_us": 1405.0,
-        "msgs_s": 11415.4,
+        "p99_us": 1699.917,
+        "msgs_s": 9886.1,
         "rx_irqs": 99999,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 0,
@@ -275,12 +275,12 @@
       },
       "freertos": {
         "recv": 2000.0,
-        "avg_us": 195.116,
-        "min_us": 186.0,
-        "max_us": 287.209,
-        "jitter_us": 9.883,
-        "p99_us": 230.25,
-        "msgs_s": 5104.1,
+        "avg_us": 399.896,
+        "min_us": 342.0,
+        "max_us": 1157.375,
+        "jitter_us": 34.605,
+        "p99_us": 469.416,
+        "msgs_s": 2493.8,
         "rx_irqs": 2000,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 0,
@@ -291,12 +291,12 @@
     "isr": {
       "ping": {
         "recv": 10000.0,
-        "avg_us": 166.57,
-        "min_us": 156.959,
-        "max_us": 259.958,
-        "jitter_us": 9.388,
-        "p99_us": 195.0,
-        "msgs_s": 5980.0,
+        "avg_us": 373.495,
+        "min_us": 341.125,
+        "max_us": 904.792,
+        "jitter_us": 32.04,
+        "p99_us": 449.75,
+        "msgs_s": 2670.0,
         "rx_irqs": 10000,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 0,
@@ -305,13 +305,13 @@
       },
       "stress": {
         "recv": 100000.0,
-        "avg_us": 1354.912,
-        "min_us": 238.709,
-        "max_us": 1654.958,
+        "avg_us": 1612.293,
+        "min_us": 510.541,
+        "max_us": 2724.75,
         "jitter_us": null,
-        "p99_us": 1385.875,
-        "msgs_s": 11569.7,
-        "rx_irqs": 100000,
+        "p99_us": 2364.958,
+        "msgs_s": 9596.1,
+        "rx_irqs": 99993,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 0,
         "queue_overflows": 0,
@@ -319,12 +319,12 @@
       },
       "freertos": {
         "recv": 2000.0,
-        "avg_us": 187.637,
-        "min_us": 177.959,
-        "max_us": 263.333,
-        "jitter_us": 9.521,
-        "p99_us": 221.334,
-        "msgs_s": 5308.9,
+        "avg_us": 408.824,
+        "min_us": 355.125,
+        "max_us": 570.667,
+        "jitter_us": 29.998,
+        "p99_us": 494.458,
+        "msgs_s": 2438.9,
         "rx_irqs": 2000,
         "rx_irqs_per_msg": 1.0,
         "tx_irqs": 2000,
@@ -335,7 +335,7 @@
   },
   "profiles": [
     {
-      "timestamp": "1970-01-02 23:46:11",
+      "timestamp": "1970-01-03 01:35:04",
       "profile": "Profile 1 (Standard DDR VirtIO & Carveout)",
       "node_desc": "DDR DRAM Carveout / vdev@48000000",
       "results": [
@@ -365,7 +365,7 @@
           "metrics": {
             "mcause": "0x30000002",
             "registers_captured": 31,
-            "host_stability": "loadavg 0.30 0.08 0.02 2/198 534"
+            "host_stability": "loadavg 0.46 0.14 0.05 1/134 404"
           },
           "details": "mcause=0x30000002, 31 GPRs dumped, host stable"
         },
@@ -377,14 +377,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 167.774,
-            "min_lat_us": 158.875,
-            "max_lat_us": 225.792,
-            "jitter_us": 8.607,
-            "throughput_msgs_s": 5933.4,
-            "bandwidth": "5.61 MB/s (bi-directional)"
+            "avg_lat_us": 364.938,
+            "min_lat_us": 335.209,
+            "max_lat_us": 906.542,
+            "jitter_us": 34.693,
+            "throughput_msgs_s": 2729.9,
+            "bandwidth": "2.58 MB/s (bi-directional)"
           },
-          "details": "Avg=167.774us, Rate=5933.4msgs/s, BW=5.61 MB/s (bi-directional)"
+          "details": "Avg=364.938us, Rate=2729.9msgs/s, BW=2.58 MB/s (bi-directional)"
         },
         {
           "name": "stress_rpmsg (C++ VirtIO, 16 in flight)",
@@ -394,14 +394,14 @@
             "packets_recv": 100000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 malformed / duplicate / late)",
-            "avg_lat_us": 1373.503,
-            "min_lat_us": 237.042,
-            "max_lat_us": 1467.791,
+            "avg_lat_us": 1543.844,
+            "min_lat_us": 451.083,
+            "max_lat_us": 1854.292,
             "jitter_us": null,
-            "throughput_msgs_s": 11415.3,
-            "bandwidth": "10.80 MB/s (bi-directional)"
+            "throughput_msgs_s": 10012.5,
+            "bandwidth": "9.47 MB/s (bi-directional)"
           },
-          "details": "Avg=1373.503us, Rate=11415.3msgs/s, BW=10.80 MB/s (bi-directional)"
+          "details": "Avg=1543.844us, Rate=10012.5msgs/s, BW=9.47 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python VirtIO)",
@@ -411,14 +411,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 115.33,
-            "min_lat_us": 107.0,
-            "max_lat_us": 212.96,
-            "jitter_us": 10.3,
-            "throughput_msgs_s": 6431.2,
-            "bandwidth": "803.9 KB/s (bidirectional)"
+            "avg_lat_us": 306.17,
+            "min_lat_us": 247.38,
+            "max_lat_us": 988.17,
+            "jitter_us": 40.26,
+            "throughput_msgs_s": 2678.1,
+            "bandwidth": "334.8 KB/s (bidirectional)"
           },
-          "details": "Avg=115.33us, Rate=6431.2msgs/s, BW=803.9 KB/s (bidirectional)"
+          "details": "Avg=306.17us, Rate=2678.1msgs/s, BW=334.8 KB/s (bidirectional)"
         },
         {
           "name": "ping_dram (C++ Hybrid DDR)",
@@ -428,14 +428,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 201.835,
-            "min_lat_us": 200.834,
-            "max_lat_us": 261.208,
-            "jitter_us": 2.255,
-            "throughput_msgs_s": 3259.9,
-            "bandwidth": "3.18 MB/sec (Bidirectional)"
+            "avg_lat_us": 193.298,
+            "min_lat_us": 189.667,
+            "max_lat_us": 297.125,
+            "jitter_us": 7.434,
+            "throughput_msgs_s": 3292.2,
+            "bandwidth": "3.22 MB/sec (Bidirectional)"
           },
-          "details": "Avg=201.835us, Rate=3259.9msgs/s, BW=3.18 MB/sec (Bidirectional)"
+          "details": "Avg=193.298us, Rate=3292.2msgs/s, BW=3.22 MB/sec (Bidirectional)"
         },
         {
           "name": "ping_dram (C++ Hybrid DDR, 16 in flight)",
@@ -445,19 +445,19 @@
             "packets_recv": 100000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 3093.206,
-            "min_lat_us": 340.334,
-            "max_lat_us": 3220.334,
-            "jitter_us": 22.598,
-            "throughput_msgs_s": 5002.0,
-            "bandwidth": "4.88 MB/sec (Bidirectional)"
+            "avg_lat_us": 3013.56,
+            "min_lat_us": 640.834,
+            "max_lat_us": 3624.5,
+            "jitter_us": 31.176,
+            "throughput_msgs_s": 5119.3,
+            "bandwidth": "5.00 MB/sec (Bidirectional)"
           },
-          "details": "Avg=3093.206us, Rate=5002.0msgs/s, BW=4.88 MB/sec (Bidirectional)"
+          "details": "Avg=3013.56us, Rate=5119.3msgs/s, BW=5.00 MB/sec (Bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 23:49:43",
+      "timestamp": "1970-01-03 01:39:20",
       "profile": "Profile 2 (Pure On-Chip SRAM VirtIO)",
       "node_desc": "On-Chip SRAM Space 1 / sram1@72c0000",
       "results": [
@@ -489,14 +489,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 130.731,
-            "min_lat_us": 123.792,
-            "max_lat_us": 176.042,
-            "jitter_us": 8.334,
-            "throughput_msgs_s": 7606.9,
-            "bandwidth": "7.20 MB/s (bi-directional)"
+            "avg_lat_us": 334.866,
+            "min_lat_us": 304.084,
+            "max_lat_us": 911.75,
+            "jitter_us": 32.936,
+            "throughput_msgs_s": 2974.5,
+            "bandwidth": "2.81 MB/s (bi-directional)"
           },
-          "details": "Avg=130.731us, Rate=7606.9msgs/s, BW=7.20 MB/s (bi-directional)"
+          "details": "Avg=334.866us, Rate=2974.5msgs/s, BW=2.81 MB/s (bi-directional)"
         },
         {
           "name": "stress_rpmsg (C++ SRAM VirtIO, 16 in flight)",
@@ -506,14 +506,14 @@
             "packets_recv": 100000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 malformed / duplicate / late)",
-            "avg_lat_us": 762.714,
-            "min_lat_us": 205.708,
-            "max_lat_us": 1065.958,
+            "avg_lat_us": 1654.55,
+            "min_lat_us": 436.5,
+            "max_lat_us": 3590.375,
             "jitter_us": null,
-            "throughput_msgs_s": 20397.2,
-            "bandwidth": "19.30 MB/s (bi-directional)"
+            "throughput_msgs_s": 9370.2,
+            "bandwidth": "8.86 MB/s (bi-directional)"
           },
-          "details": "Avg=762.714us, Rate=20397.2msgs/s, BW=19.30 MB/s (bi-directional)"
+          "details": "Avg=1654.55us, Rate=9370.2msgs/s, BW=8.86 MB/s (bi-directional)"
         },
         {
           "name": "ping_rpmsg.py (Python SRAM VirtIO)",
@@ -523,19 +523,19 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 102.18,
-            "min_lat_us": 93.54,
-            "max_lat_us": 173.83,
-            "jitter_us": 11.28,
-            "throughput_msgs_s": 7034.3,
-            "bandwidth": "879.3 KB/s (bidirectional)"
+            "avg_lat_us": 303.65,
+            "min_lat_us": 221.33,
+            "max_lat_us": 890.83,
+            "jitter_us": 40.8,
+            "throughput_msgs_s": 2668.6,
+            "bandwidth": "333.6 KB/s (bidirectional)"
           },
-          "details": "Avg=102.18us, Rate=7034.3msgs/s, BW=879.3 KB/s (bidirectional)"
+          "details": "Avg=303.65us, Rate=2668.6msgs/s, BW=333.6 KB/s (bidirectional)"
         }
       ]
     },
     {
-      "timestamp": "1970-01-02 23:50:31",
+      "timestamp": "1970-01-03 01:40:20",
       "profile": "Profile 3 (Userspace UIO Direct Mailbox)",
       "node_desc": "Message box bound to sun55i-msgbox-uio (/dev/uio0)",
       "results": [
@@ -547,14 +547,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 13.91,
-            "min_lat_us": 13.167,
-            "max_lat_us": 54.542,
-            "jitter_us": 2.574,
-            "throughput_msgs_s": 8981.9,
-            "bandwidth": "8.77 MB/sec (Bidirectional)"
+            "avg_lat_us": 14.204,
+            "min_lat_us": 13.125,
+            "max_lat_us": 76.792,
+            "jitter_us": 5.709,
+            "throughput_msgs_s": 8415.2,
+            "bandwidth": "8.22 MB/sec (Bidirectional)"
           },
-          "details": "Avg=13.91us, Rate=8981.9msgs/s, BW=8.77 MB/sec (Bidirectional)"
+          "details": "Avg=14.204us, Rate=8415.2msgs/s, BW=8.22 MB/sec (Bidirectional)"
         },
         {
           "name": "ping_uio (C++ UIO Doorbell)",
@@ -564,14 +564,14 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 59.757,
-            "min_lat_us": 14.583,
-            "max_lat_us": 122.917,
-            "jitter_us": 6.993,
-            "throughput_msgs_s": 6319.7,
+            "avg_lat_us": 27.244,
+            "min_lat_us": 25.25,
+            "max_lat_us": 164.417,
+            "jitter_us": 7.576,
+            "throughput_msgs_s": 7484.0,
             "bandwidth": null
           },
-          "details": "Avg=59.757us, Rate=6319.7msgs/s, BW=None"
+          "details": "Avg=27.244us, Rate=7484.0msgs/s, BW=None"
         },
         {
           "name": "ping_uio.py (Python UIO Doorbell)",
@@ -581,17 +581,18 @@
             "packets_recv": 1000,
             "success_rate_pct": 100.0,
             "data_integrity": "PASS (0 corrupted / mismatched packets)",
-            "avg_lat_us": 32.57,
-            "min_lat_us": 29.541,
-            "max_lat_us": 56.042,
-            "jitter_us": 2.996,
-            "throughput_msgs_s": 160.1,
+            "avg_lat_us": 66.202,
+            "min_lat_us": 59.958,
+            "max_lat_us": 159.5,
+            "jitter_us": 16.718,
+            "throughput_msgs_s": 151.6,
             "bandwidth": null
           },
-          "details": "Avg=32.57us, Rate=160.1msgs/s, BW=None"
+          "details": "Avg=66.202us, Rate=151.6msgs/s, BW=None"
         }
       ]
     }
   ],
-  "driver_coverage": null
+  "driver_coverage": null,
+  "kernel_flavor": "preempt+lockdep"
 }
