@@ -1,4 +1,4 @@
-From 8e7235bdd91d52ac7f7364acf715726473528b80 Mon Sep 17 00:00:00 2001
+From 92e106df75a6b2020d50c1e00600b7734e03d7f8 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:21 -0500
 Subject: [PATCH v3 6/7] mailbox: sun55i: Add KUnit tests

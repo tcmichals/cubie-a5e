@@ -1,4 +1,4 @@
-From 509e9af4ec4432f0bbf8c700173130ca80f08586 Mon Sep 17 00:00:00 2001
+From 31c30c8e150c562e9b012bce9ea81d279363e1a3 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V
@@ -44,7 +44,7 @@ Changes in v3:
 
 diff --git a/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 new file mode 100644
-index 000000000000..ffb32d391b4f
+index 000000000000..b119acaa2df6
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/remoteproc/allwinner,sun55i-a523-rproc.yaml
 @@ -0,0 +1,146 @@
@@ -64,9 +64,9 @@ index 000000000000..ffb32d391b4f
 +  E906 RISC-V core next to the Cortex-A55 cluster. The core runs from a
 +  dedicated 256 KiB SRAM, can also use a second 256 KiB SRAM and DRAM,
 +  and a remap register shared with the HiFi4 DSP shares a further 512 KiB
-+  SRAM (SRAM A3_2) with the core's subsystem. Its reset
-+  vector is set in a register of its configuration block, and it exchanges
-+  notifications with the Cortex-A55 host through the message box.
++  SRAM (SRAM A3_2) with the core's subsystem. Its reset vector is set in a
++  register of its configuration block, and it exchanges notifications with
++  the Cortex-A55 host through the message box.
 +
 +properties:
 +  compatible:

@@ -1200,6 +1200,13 @@ def main():
         print("        Please install sshpass (e.g. `sudo apt install sshpass`) or use SSH keys.", file=sys.stderr)
         sys.exit(1)
 
+    # An unreachable board fails every row and would be recorded as a run
+    rc, out, err = run_ssh("uname -v", timeout=15)
+    if rc != 0:
+        print(f"[ERROR] cannot reach {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} ({err or rc}); "
+              "nothing run or recorded. Wrong --ip?", file=sys.stderr)
+        sys.exit(2)
+
     if args.gcov_build_dir:
         g_coverage = sweep_gcov.BoardCoverage(run_ssh, args.gcov_build_dir, args.gcov_tool)
         if g_coverage.skip_reason:

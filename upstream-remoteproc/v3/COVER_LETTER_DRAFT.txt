@@ -53,22 +53,23 @@ Notes for review:
     for remoteproc, and 5 for sunxi. Patch 5 needs the bindings in
     patches 1 and 3.
 
-Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT with the same
-driver and test files:
-  - KUnit at boot: 37/37 message box, 26/26 remoteproc. Under UML on
-    x86_64 one message box test is skipped (it needs SMP or spinlock
-    debugging).
+Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT and PREEMPT
+with the same driver and test files:
+  - KUnit: 37/37 message box, 26/26 remoteproc, built in and as
+    modules. Under UML on x86_64 one message box test is skipped (it
+    needs SMP or spinlock debugging).
   - rpmsg ping (10000 messages, about 167 us round trip) and stress
     (100000 messages, 16 in flight, no loss), with vrings in DRAM and in
     SRAM, TX done by poll and by write interrupt, and message box
     unbind/bind with the remoteproc driver unbound. One interrupt per
     message.
-  - The same tests with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP: no lockdep
-    or sleep-in-atomic report.
-  - On next-20261027: W=1 build of each patch, dt_binding_check and
-    dtbs_check are clean; checkpatch --strict reports only "does
-    MAINTAINERS need updating?" for the new files, which the entries
-    added in patches 2 and 4 cover.
+  - The same tests with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP (and
+    PROVE_RAW_LOCK_NESTING on PREEMPT): no lockdep or sleep-in-atomic
+    report.
+  - On next-20261027: W=1 build of each patch with GCC and clang, built
+    in and as modules, dt_binding_check and dtbs_check are clean;
+    checkpatch --strict reports only "does MAINTAINERS need updating?"
+    for the new files, which the entries added in patches 2 and 4 cover.
 
 Tools: I used Claude Code (Anthropic) to help review the code against
 the v2 comments, write the KUnit tests, run the board tests and draft

@@ -397,6 +397,8 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] Every `interrupts` and `interrupt-names` uses positional `items:`; lines that exist in the silicon are required, no `minItems` (Lesson 1.2).
 - [ ] `make dt_binding_check` passes with **0 errors, 0 warnings**.
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
+  Its SPDX check needs Python `ply`; without it `spdxcheck.py` prints a traceback and the
+  check is skipped. Run with `PATH=~/projects/cubie/.venv-kernel-tools/bin:$PATH` (2026-10-29).
 - [ ] Mailbox TX: timer mode `last_tx_done()` = `count < 8`; ISR mode (`allwinner,tx-done-irq`) `txdone_irq`, write IRQ armed after every send (OMAP model); never write a full FIFO (DESIGN_DECISIONS.md).
 - [ ] RemoteProc kick uses `cl.knows_txdone = false`, `tx_block = false`, immutable per-vring payloads; never calls `mbox_client_txdone()`.
 - [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.

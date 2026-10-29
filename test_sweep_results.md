@@ -1,6 +1,6 @@
 # Autonomous 3-Profile Silicon Sweep Results
 
-- **Timestamp**: 2026-10-28 19:21:13
+- **Timestamp**: 2026-10-29 06:29:10
 - **Target**: 192.168.3.3 (Linux 7.1 PREEMPT_RT)
 - **Co-Processor**: XuanTie E906 RISC-V
 
@@ -71,7 +71,7 @@
 | Profile 3 | C++ ping_uio (1000 pkts, IRQ) | **PASS** |
 | Profile 3 | Python ping_uio.py (1000 pkts) | **PASS** |
 | Profile 3 | Kernel Health (dmesg clean) | **PASS** |
-| History | Metrics in range of last 10 PASS runs (preempt+lockdep) | **PASS** |
+| History | Metrics in range of last 10 PASS runs (rt) | **PASS** |
 
 ## Message Box TX Completion: Timer vs ISR
 
@@ -79,12 +79,12 @@ Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay `cub
 
 | Benchmark | Mode | Status | Avg (µs) | Max (µs) | Jitter (µs) | p99 (µs) | msgs/s | RX IRQ/msg | TX IRQs | Queue overflows |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ping_rpmsg 10k, -D 0 | timer | **PASS** | 365.7 | 1,151.1 | 30.4 | 443.3 | 2,726.2 | 1.0 | 0 | 0 |
-| ping_rpmsg 10k, -D 0 | isr | **PASS** | 373.5 | 904.8 | 32.0 | 449.8 | 2,670.0 | 1.0 | 0 | 0 |
-| stress_rpmsg 100k, 16 in flight | timer | **PASS** | 1,567.2 | 2,010.1 | - | 1,699.9 | 9,886.1 | 1.0 | 0 | 0 |
-| stress_rpmsg 100k, 16 in flight | isr | **PASS** | 1,612.3 | 2,724.8 | - | 2,365.0 | 9,596.1 | 1.0 | 0 | 0 |
-| FreeRTOS ping_rpmsg 2k (ISR wake) | timer | **PASS** | 399.9 | 1,157.4 | 34.6 | 469.4 | 2,493.8 | 1.0 | 0 | 0 |
-| FreeRTOS ping_rpmsg 2k (ISR wake) | isr | **PASS** | 408.8 | 570.7 | 30.0 | 494.5 | 2,438.9 | 1.0 | 2000 | 0 |
+| ping_rpmsg 10k, -D 0 | timer | **PASS** | 166.6 | 243.7 | 8.5 | 193.2 | 5,977.6 | 1.0 | 0 | 0 |
+| ping_rpmsg 10k, -D 0 | isr | **PASS** | 167.0 | 274.4 | 8.2 | 192.3 | 5,965.4 | 1.0 | 0 | 0 |
+| stress_rpmsg 100k, 16 in flight | timer | **PASS** | 1,354.6 | 1,482.9 | - | 1,386.1 | 11,570.3 | 1.0 | 0 | 0 |
+| stress_rpmsg 100k, 16 in flight | isr | **PASS** | 1,360.5 | 1,456.0 | - | 1,391.5 | 11,521.4 | 1.0 | 0 | 0 |
+| FreeRTOS ping_rpmsg 2k (ISR wake) | timer | **PASS** | 191.5 | 260.9 | 9.2 | 227.5 | 5,201.0 | 1.0 | 0 | 0 |
+| FreeRTOS ping_rpmsg 2k (ISR wake) | isr | **PASS** | 187.5 | 265.8 | 9.1 | 217.9 | 5,313.0 | 1.0 | 2000 | 0 |
 
 
 ## Detailed Quantitative Metrics per Profile
@@ -98,11 +98,11 @@ Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay `cub
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
 | testCrash.elf (Autopsy) | **PASS** | N/A | 0x30000002 | N/A | N/A | Verified |
-| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 364.94 µs | 2,729.9 msgs/s | 2.58 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1543.84 µs | 10,012.5 msgs/s | 9.47 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 306.17 µs | 2,678.1 msgs/s | 334.8 KB/s | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 193.30 µs | 3,292.2 msgs/s | 3.22 MB/sec | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 3013.56 µs | 5,119.3 msgs/s | 5.00 MB/sec | PASS (0 errors) |
+| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 166.78 µs | 5,966.7 msgs/s | 5.64 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1354.63 µs | 11,571.0 msgs/s | 10.95 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 119.18 µs | 6,164.9 msgs/s | 770.6 KB/s | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 192.20 µs | 3,361.4 msgs/s | 3.28 MB/sec | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 3017.18 µs | 5,123.0 msgs/s | 5.00 MB/sec | PASS (0 errors) |
 
 ### Profile 2 (Pure On-Chip SRAM VirtIO)
 
@@ -112,9 +112,9 @@ Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay `cub
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
-| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 334.87 µs | 2,974.5 msgs/s | 2.81 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1654.55 µs | 9,370.2 msgs/s | 8.86 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 303.65 µs | 2,668.6 msgs/s | 333.6 KB/s | PASS (0 errors) |
+| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 129.99 µs | 7,652.9 msgs/s | 7.24 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 761.20 µs | 20,447.2 msgs/s | 19.34 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 105.01 µs | 6,803.6 msgs/s | 850.4 KB/s | PASS (0 errors) |
 
 ### Profile 3 (Userspace UIO Direct Mailbox)
 
@@ -122,7 +122,7 @@ Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay `cub
 
 | Test / Application | Status | Packets | Avg RTT | Throughput | Bandwidth | Data Integrity |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 14.20 µs | 8,415.2 msgs/s | 8.22 MB/sec | PASS (0 errors) |
-| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 27.24 µs | 7,484.0 msgs/s | None | PASS (0 errors) |
-| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 66.20 µs | 151.6 msgs/s | None | PASS (0 errors) |
+| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 13.59 µs | 8,983.6 msgs/s | 8.77 MB/sec | PASS (0 errors) |
+| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 60.12 µs | 6,297.4 msgs/s | None | PASS (0 errors) |
+| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 35.53 µs | 158.7 msgs/s | None | PASS (0 errors) |
 
