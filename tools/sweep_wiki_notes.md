@@ -9,9 +9,9 @@
 
 ## Why runs failed
 
-The result counts only the summary rows (functional tests, KUnit, dmesg, history range); the
-source "invariant" checks are reported but never fail a run. Causes from the sweep output kept in
-the session logs:
+Every row must pass. Up to #27 the result counted the functional, KUnit, dmesg and history rows,
+while the source "invariant" checks were only reported; since 10-29 they are rows too and fail the
+sweep. Causes from the sweep output kept in the session logs:
 
 | Run | Date | Failed rows | Cause | Fixed by |
 |---|---|---|---|---|
@@ -29,8 +29,8 @@ No run failed because of a driver regression. Five of the ten were the tests or 
 others found real firmware or integration problems that were then fixed.
 
 From #21 to #27 two source checks (TX completion, drain bound) reported FAIL on correct code: they
-matched text the 10-26 refactor changed. They do not count toward the result; fixed on 10-29
-(`b44a031`).
+matched text the 10-26 refactor changed and did not count toward the result then. Fixed on 10-29
+(`b44a031`), and they now fail the sweep like every other row.
 
 ## Reading the numbers
 

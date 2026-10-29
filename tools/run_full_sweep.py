@@ -1475,6 +1475,12 @@ def main():
     for k in slow:
         print(f"  \033[91m[FAIL] {k} out of range\033[0m")
 
+    # A source check that fails fails the sweep, like every other row
+    for inv in audit_engineering_invariants():
+        results.append(("Source", inv["invariant"], inv["status"]))
+        if inv["status"] != "PASS":
+            print(f"  \033[91m[FAIL] {inv['invariant']}: {inv['details']}\033[0m")
+
     print("=" * 76)
     print(f"  {'Profile':<12} | {'Test / Tool':<42} | {'Result'}")
     print("  " + "-" * 12 + "-+-" + "-" * 42 + "-+--------")
