@@ -1,4 +1,4 @@
-From c4a65c934ef79557de2efd21fe56e54c97c0e685 Mon Sep 17 00:00:00 2001
+From 509e9af4ec4432f0bbf8c700173130ca80f08586 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 3/7] dt-bindings: remoteproc: Add Allwinner A523 RISC-V

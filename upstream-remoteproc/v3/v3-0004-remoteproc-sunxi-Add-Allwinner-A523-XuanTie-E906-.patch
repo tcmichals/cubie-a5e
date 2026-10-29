@@ -1,4 +1,4 @@
-From e5f9c730beab56f2234b0038bc380b9b53049fd2 Mon Sep 17 00:00:00 2001
+From 96826bddf7df0453fb67eac0d25c1472cf07af34 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906
