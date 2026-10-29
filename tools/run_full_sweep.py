@@ -857,7 +857,9 @@ def audit_engineering_invariants():
         with open(msgbox_file, "r") as f:
             content = f.read()
         m = re.search(r'static bool sun55i_msgbox_last_tx_done\(.*?\n}\n', content, re.S)
-        has_room = bool(m and re.search(r'count\s*<\s*SUN55I_FIFO_MAX', m.group(0)))
+        # Every "done = <FIFO count> < SUN55I_FIFO_MAX", however the count is read
+        dones = re.findall(r'\bdone\s*=\s*([^;]*);', m.group(0)) if m else []
+        has_room = bool(dones) and all(re.search(r'\)\s*<\s*SUN55I_FIFO_MAX$', d.strip()) for d in dones)
         audit_results.append({
             "invariant": "Mailbox TX Completion",
             "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (FIFO has room); DT selects timer or ISR when full",
@@ -886,7 +888,10 @@ def audit_engineering_invariants():
     if os.path.exists(msgbox_file):
         with open(msgbox_file, "r") as f:
             content = f.read()
-        has_bounded_loop = "for (i = 0; i < SUN55I_FIFO_MAX; i++)" in content
+        # Every loop in the receive drain is capped by the FIFO depth
+        m = re.search(r'static int sun55i_msgbox_rx_drain\(.*?\n}\n', content, re.S)
+        loops = re.findall(r'\b(?:while|for)\s*\(([^{;]*(?:;[^{;]*){0,2})\)', m.group(0)) if m else []
+        has_bounded_loop = bool(loops) and all("SUN55I_FIFO_MAX" in l for l in loops)
         audit_results.append({
             "invariant": "PREEMPT_RT Hardirq Execution Bound",
             "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
