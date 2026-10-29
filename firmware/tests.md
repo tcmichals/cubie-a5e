@@ -418,7 +418,7 @@ both signatures.
 
 ## 5. IPC Architecture Comparison Matrix (Verified Silicon Benchmarks)
 
-The following table summarizes the three validated IPC mechanisms on physical Radxa Cubie A5E silicon (`192.168.1.19`, Linux `7.1.0 PREEMPT_RT`), tested with a **standardized 512-byte buffer length** for a true apples-to-apples performance comparison:
+The following table summarizes the three validated IPC mechanisms on physical Radxa Cubie A5E silicon (`192.168.3.3`, Linux `7.1.0 PREEMPT_RT`), tested with a **standardized 512-byte buffer length** for a true apples-to-apples performance comparison:
 
 | IPC Mechanism | **[STANDARDS-BASED]**<br>Standard VirtIO RPMsg (`testPingRpmsg`) | **[CUSTOM STREAMING]**<br>Hybrid SRAM / DDR (`testDRAMMsg`) | **[CUSTOM LOW-LATENCY]**<br>Direct SRAM SPSC (`testPing`) |
 | :--- | :--- | :--- | :--- |
@@ -441,7 +441,7 @@ This section provides an explicit, step-by-step manual testing procedure to inde
 
 ### 6.1 Prerequisites & Target Environment Setup
 
-On the Radxa Cubie A5E target terminal (or via `ssh root@192.168.1.19`):
+On the Radxa Cubie A5E target terminal (or via `ssh root@192.168.3.3`):
 
 ```bash
 # 1. Mount debugfs if not already mounted:

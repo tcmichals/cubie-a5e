@@ -59,7 +59,7 @@ def load_env_file():
 
 load_env_file()
 
-TARGET_IP = os.environ.get("TARGET_IP", "192.168.1.19")
+TARGET_IP = os.environ.get("TARGET_IP", "192.168.3.3")
 TARGET_USER = os.environ.get("TARGET_USER", "root")
 TARGET_PORT = int(os.environ.get("TARGET_PORT", 22))
 TARGET_PASSWORD = os.environ.get("TARGET_PASSWORD", None)
