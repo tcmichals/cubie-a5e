@@ -25,6 +25,7 @@ import sys
 import time
 import subprocess
 import re
+import fcntl
 import json
 import os
 import shutil
@@ -1204,6 +1205,22 @@ def main():
         print("[ERROR] A password was specified via --password, but 'sshpass' is not installed on the host.", file=sys.stderr)
         print("        Please install sshpass (e.g. `sudo apt install sshpass`) or use SSH keys.", file=sys.stderr)
         sys.exit(1)
+
+    # Two sweeps on one board reboot it and swap its firmware under each other
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".board-sweep.lock")
+    global g_sweep_lock
+    g_sweep_lock = open(lock_path, "a+")
+    try:
+        fcntl.flock(g_sweep_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        g_sweep_lock.seek(0)
+        print(f"[ERROR] another sweep holds {os.path.abspath(lock_path)} ({g_sweep_lock.read().strip()}); "
+              "nothing run or recorded", file=sys.stderr)
+        sys.exit(2)
+    g_sweep_lock.seek(0)
+    g_sweep_lock.truncate()
+    g_sweep_lock.write(f"pid {os.getpid()}, started {time.strftime('%Y-%m-%d %H:%M:%S')}, {TARGET_USER}@{TARGET_IP}\n")
+    g_sweep_lock.flush()
 
     # An unreachable board fails every row and would be recorded as a run
     rc, out, err = run_ssh("uname -v", timeout=15)
