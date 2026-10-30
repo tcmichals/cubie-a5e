@@ -2,57 +2,57 @@
 
 Every full sweep (`tools/run_full_sweep.py`) on the Radxa Cubie A5E, from the first run to now: the E906 remoteproc, message box, rpmsg and UIO paths, KUnit on the board, and the performance of each IPC path. Generated from [`test_sweep_history.json`](https://github.com/tcmichals/cubie-a5e/blob/main/test_sweep_history.json) by `tools/make_sweep_wiki.py`; do not edit by hand.
 
-**27 runs** from 2026-10-02 to 2026-10-29: 17 PASS, 10 FAIL. Kernel flavors: `preempt`, `preempt+lockdep`, `rt`. Latest: run #27 on `0a77050147bd` (rt), **PASS**, KUnit 63/63.
+**28 runs** from 2026-10-02 to 2026-10-29: 18 PASS, 10 FAIL. Kernel flavors: `preempt`, `preempt+lockdep`, `rt`. Latest: run #28 on `0a77050147bd` (rt), **PASS**, KUnit 63/63.
 
 ## Current performance (PREEMPT_RT)
 
-Median and range over the last 10 passing RT runs (#10–#27).
+Median and range over the last 10 passing RT runs (#11–#28).
 
 | Path | Median | Min | Max | Spread | Latest |
 |---|---:|---:|---:|---:|---:|
-| rpmsg ping round trip, vrings in DRAM (Profile 1) | 167.0 µs | 161.8 | 172.0 | 6% | 166.8 |
-| rpmsg ping jitter, DRAM | 8.8 µs | 7.9 | 22.3 | 163% | 9.3 |
-| rpmsg ping rate, DRAM | 5,956 msg/s | 5,786 | 6,151 | 6% | 5,967 |
-| rpmsg ping round trip, vrings in SRAM (Profile 2) | 130.4 µs | 126.1 | 138.2 | 9% | 130.0 |
-| rpmsg ping rate, SRAM | 7,618 msg/s | 7,187 | 7,885 | 9% | 7,653 |
-| rpmsg stress, DRAM, 16 in flight | 11,519 msg/s | 11,144 | 11,580 | 4% | 11,571 |
-| rpmsg stress, SRAM, 16 in flight | 20,395 msg/s | 18,361 | 20,450 | 10% | 20,447 |
-| ping, firmware in DRAM | 194.2 µs | 189.6 | 201.8 | 6% | 192.2 |
-| ping rate, firmware in DRAM, 16 in flight | 5,090 msg/s | 5,002 | 5,155 | 3% | 5,123 |
-| UIO direct to SRAM, polling (Profile 3) | 13.7 µs | 13.5 | 14.7 | 9% | 13.6 |
-| UIO direct, rate | 8,983 msg/s | 8,789 | 8,995 | 2% | 8,984 |
-| UIO direct, bandwidth | 8.8 MB/s | 8.6 | 8.8 | 2% | 8.8 |
-| UIO with the mailbox interrupt | 59.3 µs | 58.0 | 60.1 | 3% | 60.1 |
-| UIO from Python | 32.5 µs | 32.0 | 35.9 | 12% | 35.5 |
-| message box ping, TX done by poll | 167.2 µs | 166.6 | 167.2 | 0% | 166.6 |
-| message box ping p99, poll | 194.5 µs | 193.2 | 194.8 | 1% | 193.2 |
-| message box ping, TX done by write interrupt | 167.0 µs | 166.6 | 167.3 | 0% | 167.0 |
-| message box ping p99, write interrupt | 195.0 µs | 192.3 | 195.9 | 2% | 192.3 |
-| FreeRTOS firmware ping, poll | 193.6 µs | 191.5 | 195.1 | 2% | 191.5 |
-| FreeRTOS firmware ping, write interrupt | 187.6 µs | 187.5 | 191.0 | 2% | 187.5 |
+| rpmsg ping round trip, vrings in DRAM (Profile 1) | 167.0 µs | 161.8 | 172.0 | 6% | 167.4 |
+| rpmsg ping jitter, DRAM | 9.1 µs | 8.2 | 22.3 | 155% | 10.1 |
+| rpmsg ping rate, DRAM | 5,957 msg/s | 5,786 | 6,151 | 6% | 5,947 |
+| rpmsg ping round trip, vrings in SRAM (Profile 2) | 130.4 µs | 126.1 | 138.2 | 9% | 131.3 |
+| rpmsg ping rate, SRAM | 7,618 msg/s | 7,187 | 7,885 | 9% | 7,571 |
+| rpmsg stress, DRAM, 16 in flight | 11,544 msg/s | 11,144 | 11,652 | 4% | 11,652 |
+| rpmsg stress, SRAM, 16 in flight | 20,397 msg/s | 18,749 | 20,450 | 8% | 20,397 |
+| ping, firmware in DRAM | 192.9 µs | 184.1 | 201.8 | 9% | 184.1 |
+| ping rate, firmware in DRAM, 16 in flight | 5,108 msg/s | 5,002 | 5,218 | 4% | 5,218 |
+| UIO direct to SRAM, polling (Profile 3) | 13.7 µs | 13.6 | 14.7 | 8% | 13.6 |
+| UIO direct, rate | 8,981 msg/s | 8,789 | 8,995 | 2% | 8,793 |
+| UIO direct, bandwidth | 8.8 MB/s | 8.6 | 8.8 | 2% | 8.6 |
+| UIO with the mailbox interrupt | 59.3 µs | 58.8 | 60.1 | 2% | 59.3 |
+| UIO from Python | 32.6 µs | 32.0 | 35.9 | 12% | 35.9 |
+| message box ping, TX done by poll | 166.9 µs | 166.3 | 167.2 | 1% | 166.3 |
+| message box ping p99, poll | 194.6 µs | 193.2 | 195.2 | 1% | 195.2 |
+| message box ping, TX done by write interrupt | 167.0 µs | 166.6 | 167.3 | 0% | 167.1 |
+| message box ping p99, write interrupt | 195.5 µs | 192.3 | 197.0 | 2% | 197.0 |
+| FreeRTOS firmware ping, poll | 192.5 µs | 188.7 | 195.1 | 3% | 188.7 |
+| FreeRTOS firmware ping, write interrupt | 187.6 µs | 186.2 | 191.0 | 3% | 186.2 |
 
 ## Kernel flavors
 
 Latest passing run of each flavor.
 
-| Path | `rt` (#27) | `preempt` (#25) | `preempt+lockdep` (#26) |
+| Path | `rt` (#28) | `preempt` (#25) | `preempt+lockdep` (#26) |
 |---|---:|---:|---:|
-| rpmsg ping round trip, vrings in DRAM (Profile 1) | 166.8 µs | 147.0 µs | 364.9 µs |
-| rpmsg ping round trip, vrings in SRAM (Profile 2) | 130.0 µs | 112.8 µs | 334.9 µs |
-| rpmsg ping rate, DRAM | 5,967 msg/s | 6,772 msg/s | 2,730 msg/s |
-| rpmsg stress, SRAM, 16 in flight | 20,447 msg/s | 20,481 msg/s | 9,370 msg/s |
-| UIO with the mailbox interrupt | 60.1 µs | 27.9 µs | 27.2 µs |
-| UIO from Python | 35.5 µs | 49.8 µs | 66.2 µs |
-| message box ping p99, write interrupt | 192.3 µs | 165.8 µs | 449.8 µs |
+| rpmsg ping round trip, vrings in DRAM (Profile 1) | 167.4 µs | 147.0 µs | 364.9 µs |
+| rpmsg ping round trip, vrings in SRAM (Profile 2) | 131.3 µs | 112.8 µs | 334.9 µs |
+| rpmsg ping rate, DRAM | 5,947 msg/s | 6,772 msg/s | 2,730 msg/s |
+| rpmsg stress, SRAM, 16 in flight | 20,397 msg/s | 20,481 msg/s | 9,370 msg/s |
+| UIO with the mailbox interrupt | 59.3 µs | 27.9 µs | 27.2 µs |
+| UIO from Python | 35.9 µs | 49.8 µs | 66.2 µs |
+| message box ping p99, write interrupt | 197.0 µs | 165.8 µs | 449.8 µs |
 
 ## Trends (PREEMPT_RT, passing runs)
 
 ```mermaid
 xychart-beta
     title "rpmsg round trip, DRAM vrings"
-    x-axis ["#1", "#2", "#3", "#4", "#7", "#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27"]
+    x-axis ["#1", "#2", "#3", "#4", "#7", "#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27", "#28"]
     y-axis "µs" 0 --> 1459
-    line [200.2, 1242.4, 189.9, 517.8, 193.9, 169.7, 167.2, 172.0, 162.7, 161.8, 165.9, 166.1, 167.5, 167.8, 166.8]
+    line [200.2, 1242.4, 189.9, 517.8, 193.9, 169.7, 167.2, 172.0, 162.7, 161.8, 165.9, 166.1, 167.5, 167.8, 166.8, 167.4]
 ```
 
 Runs before #8 used TX done by the 1 ms poll with the old FIFO pacing; the spikes are messages that waited a full poll period.
@@ -60,25 +60,25 @@ Runs before #8 used TX done by the 1 ms poll with the old FIFO pacing; the spike
 ```mermaid
 xychart-beta
     title "rpmsg round trip, SRAM vrings"
-    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27"]
+    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27", "#28"]
     y-axis "µs" 123 --> 141
-    line [133.0, 130.5, 138.2, 126.1, 130.3, 128.9, 129.7, 131.3, 130.7, 130.0]
+    line [133.0, 130.5, 138.2, 126.1, 130.3, 128.9, 129.7, 131.3, 130.7, 130.0, 131.3]
 ```
 
 ```mermaid
 xychart-beta
     title "rpmsg stress, SRAM vrings"
-    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27"]
+    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27", "#28"]
     y-axis "msg/s" 17943 --> 20868
-    line [18361.0, 18749.0, 20204.9, 20391.7, 20443.7, 20393.0, 20441.3, 20450.2, 20397.2, 20447.2]
+    line [18361.0, 18749.0, 20204.9, 20391.7, 20443.7, 20393.0, 20441.3, 20450.2, 20397.2, 20447.2, 20396.8]
 ```
 
 ```mermaid
 xychart-beta
     title "UIO with the mailbox interrupt"
-    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27"]
+    x-axis ["#10", "#11", "#12", "#17", "#18", "#19", "#20", "#22", "#24", "#27", "#28"]
     y-axis "µs" 57 --> 61
-    line [58.0, 59.6, 59.5, 58.8, 58.9, 59.3, 59.2, 59.4, 59.8, 60.1]
+    line [58.0, 59.6, 59.5, 58.8, 58.9, 59.3, 59.2, 59.4, 59.8, 60.1, 59.3]
 ```
 
 ## Phases
@@ -125,6 +125,7 @@ matched text the 10-26 refactor changed and did not count toward the result then
 
 | Run | Date | Kernel | Flavor | Result | KUnit | DRAM RTT | SRAM RTT | SRAM stress | UIO IRQ |
 |---:|---|---|---|---|---:|---:|---:|---:|---:|
+| #28 | 2026-10-29 19:20 | `0a77050147bd` | rt | PASS | 63/63 | 167.4 | 131.3 | 20,397 | 59.3 |
 | #27 | 2026-10-29 06:29 | `0a77050147bd` | rt | PASS | 63/63 | 166.8 | 130.0 | 20,447 | 60.1 |
 | #26 | 2026-10-28 19:21 | `8671beca6667` | preempt+lockdep | PASS | 63/63 | 364.9 | 334.9 | 9,370 | 27.2 |
 | #25 | 2026-10-28 18:50 | `8671beca6667` | preempt | PASS | 63/63 | 147.0 | 112.8 | 20,481 | 27.9 |
