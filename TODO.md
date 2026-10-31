@@ -58,13 +58,24 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 
 * **Goal**: Capture live camera streams from an OmniVision OV5647 sensor over 2-lane MIPI CSI-2, process through the onboard Allwinner Hardware ISP 5.22, and encode to H.264 video using the hardware Video Engine (VE / Cedar) with **zero CPU memcpy overhead** via standard Linux `dma-buf` memory sharing.
 
-- [ ] **Camera Sensor Interface Bring-Up (OmniVision OV5647)**:
-  - [ ] Enable `CONFIG_VIDEO_OV5647=m` in `project-cubie-a5e/board/radxa/cubie_a5e/linux.config`.
-  - [ ] Implement Device Tree Overlay `cubie-a5e-ov5647.dtso` with 25 MHz `camera-clk`, I2C3 at address `0x36`, and 2-lane MIPI CSI-2 OF-graph endpoints (`mipi_csi0` @ `0x05810100` -> `csi0` @ `0x05820000`).
-  - [ ] Compile overlay to `.dtbo` and integrate into Buildroot rootfs deployment.
+- [x] **Camera Sensor Interface Bring-Up (OmniVision OV5647 on Connector J7)**:
+  - [x] Hardware verification on Connector J7 (`CAM_31P`) via Radxa AC008 cable.
+  - [x] I2C3 communication (`PE3`/`PE4`) at `0x36`, power-down `PE8` (`CM-PDN0`), reset `PE9`. Sensor chip ID `0x5647` read successfully on target.
+  - [x] Enabled `CONFIG_VIDEO_OV5647=y`, `CONFIG_VIDEO_SUN6I_CSI=y`, `CONFIG_VIDEO_SUN6I_MIPI_CSI2=y`, `CONFIG_PHY_SUN55I_A523_MIPI_DPHY=y` in kernel config.
+  - [x] Ported mainline A523/A733 MIPI CSI-2 receiver, combo D-PHY, and CSIC DMA engine drivers to `linux-cubie`.
+  - [x] Fixed `sun6i_csi_bridge` active-state initialization (uninitialized source pad `0x0000`).
+  - [x] Audited A733 User Manual V1.00 Table 12-1: identified `CSI_DMA0` interrupt as vector 149 (`GIC_SPI 117`), resolving difference from T527 (`GIC_SPI 122`).
+  - [x] Audited A733 User Manual V1.00 PK_CFG1: verified pinmux function `mcsib` (mux 2) on pins `PK10`..`PK15`.
+  - [x] Silicon-verified CCU register gating on live A7A (`0x020025E4` bit 8 MBUS_CSI, `0x02003840` bit 31 CSI_TOP, `0x02003844` bit 0/16 CSI_BUS/RST_BUS_CSI). Added CCU clocks to `ccu-sun60i-a733.c`.
+  - [x] Integrated base DT nodes (`dphy1`, `mipi1`, `csi`) into `sun60i-a733-cubie-a7a.dts` and compiled base DTB.
+  - [x] Preprocessed and compiled `cubie-a7a-ov5647.dtbo` overlay.
+- [ ] **Kernel Deployment & Target Capture Verification**:
+  - [ ] Deploy new kernel `Image`, modules, DTB, and overlay to target rootfs (`/boot/`).
+  - [ ] Verify `/dev/media0` and `/dev/video0` appear.
   - [ ] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
   - [ ] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `BA10`):
     `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=BA10 --stream-mmap --stream-count=10`.
+  - [ ] Test userspace camera capture with `rpicam-still -o /tmp/test.jpg`.
 - [ ] **Allwinner Hardware ISP 5.22 Integration**:
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/vin/vin-isp/` (`isp522/`, `sunxi_isp.c`, and default hardware tables in `isp_default_tbl.h`).

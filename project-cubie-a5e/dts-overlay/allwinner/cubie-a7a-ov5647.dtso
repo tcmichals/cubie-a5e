@@ -13,6 +13,7 @@
  * - Master Clock: 25 MHz fixed camera-clk
  * - Power Down Pin: PE8 (CM-PDN0)
  * - Reset Pin: PE9 (RESET)
+ * - MIPI Receiver: MCSIB (D0: PK10/PK11, D1: PK12/PK13, CLK: PK14/PK15) -> MIPI1 -> CSI DMA
  */
 
 /dts-v1/;
@@ -50,9 +51,21 @@
 
 				port {
 					ov5647_ep: endpoint {
+						remote-endpoint = <&mipi1_in_ov5647>;
 						clock-noncontinuous;
+						data-lanes = <1 2>;
 					};
 				};
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&mipi1_in>;
+		__overlay__ {
+			mipi1_in_ov5647: endpoint {
+				remote-endpoint = <&ov5647_ep>;
+				data-lanes = <1 2>;
 			};
 		};
 	};

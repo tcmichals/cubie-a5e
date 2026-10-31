@@ -1699,5 +1699,33 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - [Blueprint 1: Mainline Camera Capture & Media Controller Linkage](file:///home/tcmichals/projects/cubie/workspace_prompts/prompt1_mainline_camera.md)
   - [Blueprint 2: Direct VEU Hardware Encoding Engine via Cedrus Extension](file:///home/tcmichals/projects/cubie/workspace_prompts/prompt2_mainline_veu_encoder.md)
 
+#### 5. Silicon-Verified Hardware Specifications & Manual Audit (No Guessing)
+* **A733 vs T527 GIC Interrupt Verification**:
+  - Audited `A733_User_Manual_V1.00.txt` Section 12.2.3.1 Table 12-1 (*Interrupt Sources in CPU Subsystem*, line 33360):
+    - `149: CSI_DMA0` $\rightarrow$ GIC SPI `149 - 32 = 117` (`GIC_SPI 117 IRQ_TYPE_LEVEL_HIGH`).
+    - `150: CSI_DMA1` $\rightarrow$ GIC SPI `150 - 32 = 118`.
+    - `158: CSI_PARSER1` $\rightarrow$ GIC SPI `158 - 32 = 126`.
+    - **Critical Silicon Difference**: On T527/A523 (`T527_User_Manual_V0.94.txt` line 16191), `CSI_DMA0` is vector 154 (`GIC_SPI 122`). A733 re-indexes the vectors, shifting `CSI_DMA0` to vector 149 (`GIC_SPI 117`). Setting `GIC_SPI 117` in `sun60i-a733-cubie-a7a.dts` ensures frame completion and VSYNC interrupts properly route to CPUX.
+* **A733 Pinmux & Routing (Manual Section 16.1)**:
+  - Audited register `PK_CFG1` (`0x0584` from PIO base `0x02000000`, lines 94930–95020 in user manual):
+    - `PK10`: bits [11:8] = `0x2` $\rightarrow$ `MCSIB-D0N`
+    - `PK11`: bits [15:12] = `0x2` $\rightarrow$ `MCSIB-D0P`
+    - `PK12`: bits [19:16] = `0x2` $\rightarrow$ `MCSIB-D1N`
+    - `PK13`: bits [23:20] = `0x2` $\rightarrow$ `MCSIB-D1P`
+    - `PK14`: bits [27:24] = `0x2` $\rightarrow$ `MCSIB-CKN`
+    - `PK15`: bits [31:28] = `0x2` $\rightarrow$ `MCSIB-CKP`
+* **Silicon-Verified CCU Clock & Reset Registers (Live devmem on Radxa Cubie A7A)**:
+  - CCU base at `0x02002000`:
+    - `0x020025E4` (`0x05E4`): `MBUS_GATE_EN` — bit 8 is `CLK_MBUS_CSI` (reads `0x0000182D`, probe sets `BIT(8)`).
+    - `0x02003840` (`0x1840`): `CLK_CSI_TOP` — bit 31 gate (reads `0x00000003`, unmasked to `0x80000003`).
+    - `0x02003844` (`0x1844`): bit 0 `CLK_BUS_CSI`, bit 16 `RST_BUS_CSI` (reads `0x00000000`, unmasked to `0x00010001`).
+  - Tested live silicon access to peripheral registers after CCU un-gating:
+    - `0x05810200` (D-PHY1): responds with `0x00000000` (no bus stall).
+    - `0x05811400` (MIPI1 CSI-2): responds with `0x00000000`.
+    - `0x05800800` (CSI Top): responds with `0x00000000`.
+    - `0x05821000` (CSI Parser 1): responds with `0x00000000`.
+    - `0x05830000` (CSI DMA 0): responds with `0x00000000`.
+
+
 
 
