@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2026 Radxa Computer Co., Ltd.
+ * Author: Tim Michals <tcmichals@gmail.com>
+ *
+ * Device Tree Overlay for OmniVision OV5647 Camera Sensor on Radxa Cubie A7A
+ *
+ * Hardware Connectivity:
+ * - Board Connector: J7 (CAM_31P) via Radxa AC008 31-pin to 15-pin FPC cable
+ * - Sensor: OmniVision OV5647 (5MP Raspberry Pi Camera v1)
+ * - I2C Control Bus: TWI3 at 0x02513000 (PE3 SCL, PE4 SDA)
+ * - Sensor Address: 0x36
+ * - Master Clock: 25 MHz fixed camera-clk
+ * - Power Down Pin: PE8 (CM-PDN0)
+ * - Reset Pin: PE9 (RESET)
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "radxa,cubie-a7a", "allwinner,sun60i-a733";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			cam_xclk: camera-clk {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <25000000>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&i2c3>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			ov5647: camera@36 {
+				compatible = "ovti,ov5647";
+				reg = <0x36>;
+				clocks = <&cam_xclk>;
+				pwdn-gpios = <&pio 4 8 GPIO_ACTIVE_HIGH>; /* PE8 */
+				status = "okay";
+
+				port {
+					ov5647_ep: endpoint {
+						clock-noncontinuous;
+					};
+				};
+			};
+		};
+	};
+};

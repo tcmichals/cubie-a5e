@@ -1605,3 +1605,27 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - `docs/articles/media/dcache_coherency_hazard.svg`: Detailed visualization of SRAM Data Cache coherency hazard across non-coherent bus interconnects, explaining why Tina FreeRTOS mandates `dcache.cpa`/`dcache.iva` and why non-cached execution guarantees zero-copy determinism.
   - `docs/articles/media/remoteproc_ipc_flow.svg`: Full-stack RemoteProc and VirtIO RPMsg interaction flow from Linux `/dev/rpmsg0` across SRAM vrings into co-processor Machine ISRs.
 * Authored `docs/articles/part5_a733_e902_remoteproc_and_heterogeneous_comparison.md` providing an exhaustive technical comparison, detailed repository workspace layout, toolchain configuration, multi-core compilation recipes, and sweep execution guide.
+
+---
+
+### Milestone 16: MIPI CSI Camera Subsystem Bring-Up — OmniVision OV5647 (Oct 31, 2026)
+* **Objective**: Interface an OmniVision OV5647 5MP raw Bayer camera sensor (Raspberry Pi Camera v1) to the Radxa Cubie A7A over MIPI CSI-2 via the Radxa AC008 31-pin to 15-pin FPC adapter cable.
+* **Physical Hardware Mapping (from official A7A v1.10 schematic)**:
+  - **Connector**: `J7` (`CAM_31P`, 31-pin 0.3mm pitch FPC).
+  - **Cable**: Radxa AC008 (31-pin same-side to 15-pin 1.0mm pitch).
+  - **Camera Control Bus (CCI)**: `twi3` at `0x02513000` via pins `PE3` (SCL) and `PE4` (SDA) with 2.2 kΩ pull-ups.
+  - **Sensor Address**: `0x36` (7-bit I2C).
+  - **Powerdown / Standby**: `PE8` (`CM-PDN0`, Active High).
+  - **Reset Pin**: `PE9` (`RESET`, Active Low).
+  - **Power Rails**: 3.3V (`3V3_CAM1` from DCDC1 via FB1) and 5V (`5V_CAM1` from VCC5V0_SYS via R132).
+  - **MIPI Data Lanes**: 2 data lanes (`MCSIB-D0`, `MCSIB-D1`) + 1 clock lane (`MCSIB-CK`).
+* **Kernel & Device Tree Enablement**:
+  - `project-cubie-a5e/board/radxa/cubie_a7a/linux.config`: Enabled `CONFIG_MEDIA_SUPPORT=y`, `CONFIG_MEDIA_CAMERA_SUPPORT=y`, `CONFIG_VIDEO_DEV=y`, `CONFIG_VIDEO_V4L2_SUBDEV_API=y`, and `CONFIG_VIDEO_OV5647=m`.
+  - `arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts`: Added `i2c3` hardware node (`0x02513000`, GIC_SPI 14) and `i2c3_pins` (`PE3`, `PE4`, `allwinner,pinmux = <2>`).
+  - `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-ov5647.dtso`: Authored dynamic overlay defining `camera-clk` (25 MHz fixed-clock) and `ovti,ov5647` at `0x36` on `i2c3`.
+  - Compiled `cubie-a7a-ov5647.dtbo` (1,228 bytes).
+* **Silicon Smoke Test Procedure**:
+  - Boot Radxa Cubie A7A with `overlays=cubie-a7a-rproc.dtbo cubie-a7a-ov5647.dtbo` in `/boot/uEnv.txt`.
+  - Run `i2cdetect -y 3` to verify physical hardware ACK at address `0x36`.
+  - Inspect `dmesg | grep ov5647` to confirm V4L2 subdevice registration.
+
