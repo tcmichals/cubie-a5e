@@ -1624,8 +1624,20 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - `arch/arm64/boot/dts/allwinner/sun60i-a733-cubie-a7a.dts`: Added `i2c3` hardware node (`0x02513000`, GIC_SPI 14) and `i2c3_pins` (`PE3`, `PE4`, `allwinner,pinmux = <2>`).
   - `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-ov5647.dtso`: Authored dynamic overlay defining `camera-clk` (25 MHz fixed-clock) and `ovti,ov5647` at `0x36` on `i2c3`.
   - Compiled `cubie-a7a-ov5647.dtbo` (1,228 bytes).
-* **Silicon Smoke Test Procedure**:
-  - Boot Radxa Cubie A7A with `overlays=cubie-a7a-rproc.dtbo cubie-a7a-ov5647.dtbo` in `/boot/uEnv.txt`.
-  - Run `i2cdetect -y 3` to verify physical hardware ACK at address `0x36`.
-  - Inspect `dmesg | grep ov5647` to confirm V4L2 subdevice registration.
+* **Silicon Smoke Test & Verification (Oct 31, 2026)**:
+  - **Dynamic Multi-Overlay Application**: U-Boot successfully imported `/boot/config.txt` with `dtoverlay=cubie-a7a-rproc cubie-a7a-ov5647` and merged both overlays at `0x4fe00000` into the active flattened device tree buffer.
+  - **I2C Bus & Sensor Probe**:
+    - `i2c3` initialized cleanly at MMIO `0x02513000` via pins `PE3`/`PE4`.
+    - Executed `i2cdetect -y 3` on live silicon: Address `0x36` responded with an active ACK on the bus.
+    - Executed `i2ctransfer -y 3 w2@0x36 0x30 0x0a r2` to read the chip identification registers (`0x300A`/`0x300B`): read back exact hex sequence `0x56 0x47` confirming true OmniVision OV5647 silicon.
+  - **Driver Binding**:
+    - Loaded `v4l2_cci.ko` and `ov5647.ko`.
+    - Driver successfully bound to device node `3-0036` (`/sys/bus/i2c/devices/3-0036/driver -> ov5647`).
+  - **Wi-Fi Subsystem Resiliency & Vermagic Alignment**:
+    - Restored full alignment between the running kernel Image and `/lib/modules/7.1.0/` under clean `7.1.0` vermagic.
+    - Configured `/etc/network/interfaces` with `auto wlan0` and `/etc/modules` with `aic_load_fw`, `aic8800_fdrv`, `v4l2_cci`, `ov5647`.
+    - Silicon verified simultaneous dual-network operation: Gigabit Ethernet (`eth0`, 1 Gbps Full, 0.23 ms RTT) and AIC8800 Wi-Fi 6 (`wlan0`, 5 GHz, 80 MHz, 1.1 ms RTT, 0% packet loss).
+  - **Hardware Reset Verification**:
+    - Verified `sunxi-wdt 2050000.watchdog` is built-in (`CONFIG_SUNXI_WATCHDOG=y`) and registered at kernel boot (`0.137s`), ensuring automatic hardware restart upon reboot.
+
 
