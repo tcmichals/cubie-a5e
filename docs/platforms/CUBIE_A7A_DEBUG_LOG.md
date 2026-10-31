@@ -1640,4 +1640,64 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - **Hardware Reset Verification**:
     - Verified `sunxi-wdt 2050000.watchdog` is built-in (`CONFIG_SUNXI_WATCHDOG=y`) and registered at kernel boot (`0.137s`), ensuring automatic hardware restart upon reboot.
 
+---
+
+### Milestone 17: Mainline Camera Pipeline (MIPI CSI-2 / D-PHY / CSI DMA) & Video Compression Architecture (Oct 31, 2026)
+* **Objective**: Establish the complete mainline capture and video compression pipeline for the Radxa Cubie A7A (Allwinner A733) with OmniVision OV5647 raw Bayer sensor over connector J7, resolving all known vendor and community issues identified on Radxa A733 and Allwinner T527/A523 platforms.
+
+#### 1. Hardware Architecture & Signal Routing
+* **Sensor & Control Bus**:
+  - Sensor: OmniVision OV5647 5MP raw Bayer sensor (`0x36` on `i2c3` @ `0x02513000`, pins `PE3`/`PE4`).
+  - Standby / Reset: `PE8` (`CM-PDN0`, Active High) / `PE9` (`RESET`, Active Low).
+  - External Clock: 25 MHz fixed camera oscillator (`cam_xclk`).
+* **MIPI CSI-2 & CSI DMA Subsystem**:
+  - Connector `J7` is hardwired to **MCSIB** (pins `PK10`–`PK19`, pinmux function `mcsib`):
+    - `PK10`/`PK11`: `MCSIB-D0N` / `MCSIB-D0P` (MIPI Data Lane 0)
+    - `PK12`/`PK13`: `MCSIB-D1N` / `MCSIB-D1P` (MIPI Data Lane 1)
+    - `PK14`/`PK15`: `MCSIB-CKN` / `MCSIB-CKP` (MIPI Clock Lane)
+  - **MIPI D-PHY Receiver**: Controller at `0x05810200` + Top Configuration at `0x05810000` (`dphy1`).
+  - **MIPI CSI-2 Receiver Port**: `0x05811400` (`mipi1`).
+  - **CSI DMA Capture Engine**: Top routing at `0x05800800`, Parser at `0x05821000` (`csi1`), DMA at `0x05830000`, CCU clock gating at `0x05800000`.
+
+#### 2. Root Cause Analysis & Resolutions for Known Platform Bugs
+
+| Bug & Reference | Observed Failure in Vendor / Stock Builds | Mainline Engineering Resolution |
+| :--- | :--- | :--- |
+| **CSI Clock Overflow**<br>(Radxa Issue #40) | `tdm0 rx0 frame error!` — CSI/ISP clocked at an unstable 704 MHz causing FIFO overflows and dropped frame lines. | Locked to a stable **360 MHz** (`CLK_CSI`) via the upstream `ccu-sun55i-a523` clock tree, eliminating clock jitter and FIFO drops. |
+| **Bridge Subdev 0x0000 Bug**<br>(T527 / Armbian Handoff) | `unsupported bridge format 0x0000` — cold-boot capture fails because the `sun6i-csi` bridge active SOURCE pad is uninitialized. | **Fixed in `sun6i_csi_bridge.c`**: Both SINK and SOURCE pads are consistently mirrored during `init_state` and propagated across `set_fmt`. |
+| **Unpowered MIPI Receiver D-PHY**<br>(T527 D-PHY Bring-Up) | Sensor streams correctly, but receiver D-PHY stays in `LP-11` idle; no clock or data transitions detected. | **Fixed in `phy-sun55i-a523-mipi-dphy.c`**: Programs `combo-top` at `0x05810000` to enable internal LDO, reference voltage (`VREF`), and auto-calibrate termination resistance (`TRESCAL`). |
+| **CSI Subsystem Clock Gating**<br>(A733 / T527 `vind` CCU) | Capture engine hangs waiting for start-of-frame interrupt; parser clocks gated off. | **Fixed in `sun55i_a523_csi.c`**: Actively un-gates internal CSI CCU registers at `0x05800000` (`MCSI_COMBO_CLK_EN` and `PARSER_CLK_EN`). |
+| **Hardware Encoder Hang**<br>(Radxa Issue #35) | `h264 encoder wait interrupt overtime` — `cedar_dev_ve2` IRQ never fires in vendor `vencoderdemo`. | **Phase 1**: Software JPEG/H.264 encoding via GStreamer / FFmpeg provides immediate 100% reliable compression.<br>**Phase 2**: Map hardware VEU via clean `v4l2_m2m` kernel driver with verified GIC interrupt bindings. |
+| **DMA Buffer Memory Faults** | IOMMU page faults and dropped frames during zero-copy transfers. | Driver uses **`vb2_dma_contig`** with dedicated CMA memory pool (`size = <0x10000000>`), guaranteeing physically contiguous zero-copy buffers. |
+
+#### 3. Userspace Application Stack
+* **`libcamera-apps`**: Installed via Buildroot (`BR2_PACKAGE_LIBCAMERA_APPS=y`):
+  - Provides standard command-line tools: `libcamera-still`, `libcamera-vid`, `libcamera-hello`, `libcamera-raw`, `libcamera-jpeg`.
+* **GStreamer (`gst-launch-1.0`)**: Installed with core, base, and good plugins:
+  - Synthetic NV12 pipeline verification:
+    ```bash
+    gst-launch-1.0 -e videotestsrc num-buffers=10 \
+      ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 \
+      ! filesink location=/tmp/test_nv12.yuv
+    ```
+  - Live capture from `/dev/video0` with JPEG encoding:
+    ```bash
+    gst-launch-1.0 -v v4l2src device=/dev/video0 \
+      ! video/x-bayer,format=bggr10,width=1920,height=1080 \
+      ! bayer2rgb ! videoconvert ! jpegenc ! multifilesink location=/tmp/frame_%03d.jpg
+    ```
+* **`v4l-utils`**: Installed via `BR2_PACKAGE_LIBV4L_UTILS=y`:
+  - `media-ctl` for media graph entity topology querying and linking.
+  - `v4l2-ctl` for direct memory-mapped frame capture (`--stream-mmap --stream-to=frame.raw`).
+
+#### 4. Reference Documentation Links
+* Official Vendor Documents in repository:
+  - [Allwinner Developer Guide: Linux Video Encoder](file:///home/tcmichals/projects/cubie/tina-source/docs/Software%20软件类文档/SDK模块开发指南/VIDEO/Allwinner_Developer_Guide_Linux_Encoder_zh.pdf)
+  - [Allwinner Developer Guide: CedarE](file:///home/tcmichals/projects/cubie/tina-source/docs/Software%20软件类文档/基础组件开发指南/Multimedia/Allwinner_Developer_Guide_Linux_CedarE_zh.pdf)
+  - [Allwinner Developer Guide: CedarX](file:///home/tcmichals/projects/cubie/tina-source/docs/Software%20软件类文档/基础组件开发指南/Multimedia/Allwinner_Developer_Guide_CedarX_zh.pdf)
+* Architectural Blueprints:
+  - [Blueprint 1: Mainline Camera Capture & Media Controller Linkage](file:///home/tcmichals/projects/cubie/workspace_prompts/prompt1_mainline_camera.md)
+  - [Blueprint 2: Direct VEU Hardware Encoding Engine via Cedrus Extension](file:///home/tcmichals/projects/cubie/workspace_prompts/prompt2_mainline_veu_encoder.md)
+
+
 
