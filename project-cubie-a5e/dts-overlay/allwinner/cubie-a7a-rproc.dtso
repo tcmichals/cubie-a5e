@@ -47,9 +47,8 @@
 				clocks = <&r_ccu 27>,  /* CLK_RISCV */
 				         <&r_ccu 26>;  /* CLK_RISCV_CFG */
 				clock-names = "core", "bus";
-				resets = <&r_ccu 12>,  /* RST_BUS_RISCV_CFG */
-				         <&r_ccu 13>;  /* RST_BUS_R_CPUCFG */
-				reset-names = "cfg", "core";
+				resets = <&r_ccu 12>;  /* RST_BUS_RISCV_CFG (E902 reset) */
+				reset-names = "core";
 				mboxes = <&msgbox 0>;
 				memory-region = <&rproc_carveout>;
 				firmware-name = "e902-firmware.elf";

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 640" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="550" y="38" fill="#f0f6fc" font-size="22" font-weight="700" text-anchor="middle">Linux RemoteProc &amp; VirtIO RPMsg Architecture</text>
+  <text x="550" y="62" fill="#8b949e" font-size="13" text-anchor="middle">Full-Stack Data Flow: Linux Kernel Host $\leftrightarrow$ Hardware Mailbox Doorbell $\leftrightarrow$ XuanTie RISC-V Core</text>
+
+  <!-- ==================== LEFT: LINUX HOST (ARM64) ==================== -->
+  <g transform="translate(30, 85)" filter="url(#shadow)">
+    <rect width="320" height="520" rx="10" fill="#161b22" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="320" height="38" rx="10" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect y="26" width="320" height="12" fill="#0d1f38"/>
+    <text x="160" y="24" fill="#58a6ff" font-size="14" font-weight="700" text-anchor="middle">Linux Host Subsystem (ARM64)</text>
+
+    <!-- Userspace Apps -->
+    <rect x="20" y="55" width="280" height="60" rx="6" fill="#1c2128" stroke="#30363d" stroke-width="1.2"/>
+    <text x="160" y="78" fill="#f0f6fc" font-size="13" font-weight="600" text-anchor="middle">Linux Userspace Applications</text>
+    <text x="160" y="98" fill="#8b949e" font-size="11" text-anchor="middle">`ping_rpmsg` • `stress_rpmsg` • ROS2 / Flight Stack</text>
+
+    <!-- Dev rpmsg0 -->
+    <rect x="20" y="130" width="280" height="42" rx="6" fill="#0d1f38" stroke="#388bfd" stroke-width="1"/>
+    <text x="160" y="156" fill="#79c0ff" font-size="12" font-weight="600" text-anchor="middle">/dev/rpmsg0 (Character Device Driver)</text>
+
+    <!-- VirtIO Framework -->
+    <rect x="20" y="187" width="280" height="55" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
+    <text x="160" y="210" fill="#c9d1d9" font-size="12" font-weight="600" text-anchor="middle">VirtIO RPMsg Framework (`virtio_rpmsg_bus.c`)</text>
+    <text x="160" y="228" fill="#8b949e" font-size="10" text-anchor="middle">Vring Descriptors • Avail/Used Rings • Buffers</text>
+
+    <!-- Linux RemoteProc -->
+    <rect x="20" y="257" width="280" height="70" rx="6" fill="#1c2128" stroke="#388bfd" stroke-width="1.2"/>
+    <text x="160" y="278" fill="#58a6ff" font-size="12" font-weight="600" text-anchor="middle">RemoteProc Core &amp; `sunxi_rproc.c`</text>
+    <text x="160" y="296" fill="#c9d1d9" font-size="10" text-anchor="middle">• ELF Loader: validates segments &amp; resource table</text>
+    <text x="160" y="312" fill="#c9d1d9" font-size="10" text-anchor="middle">• Lifecycle: `start` / `stop` / `crash_handler`</text>
+
+    <!-- Mailbox Client -->
+    <rect x="20" y="342" width="280" height="45" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
+    <text x="160" y="369" fill="#c9d1d9" font-size="11" font-weight="600" text-anchor="middle">Linux Mailbox Framework Client API</text>
+
+    <!-- Sunxi Mailbox Driver -->
+    <rect x="20" y="402" width="280" height="60" rx="6" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.2"/>
+    <text x="160" y="424" fill="#58a6ff" font-size="12" font-weight="600" text-anchor="middle">`sun55i-msgbox.c` Driver</text>
+    <text x="160" y="442" fill="#8b949e" font-size="10" text-anchor="middle">A5E: 0x03003000 / 0x07136000 • A7A: 0x07090000</text>
+    <text x="160" y="455" fill="#8b949e" font-size="10" text-anchor="middle">Threshold 8 • ISR / Timer TX Completion</text>
+
+    <!-- GIC -->
+    <rect x="20" y="475" width="280" height="30" rx="4" fill="#161b22" stroke="#30363d"/>
+    <text x="160" y="495" fill="#8b949e" font-size="10" text-anchor="middle">ARM GIC IRQ Handler (SPI 169 on A5E / SPI 135 on A7A)</text>
+  </g>
+
+  <!-- ==================== CENTER: SHARED MEMORY & MAILBOX ==================== -->
+  <g transform="translate(385, 85)" filter="url(#shadow)">
+    <rect width="330" height="520" rx="10" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+    <rect width="330" height="38" rx="10" fill="#2b1a0d" stroke="#d29922" stroke-width="1.5"/>
+    <rect y="26" width="330" height="12" fill="#2b1a0d"/>
+    <text x="165" y="24" fill="#e3b341" font-size="14" font-weight="700" text-anchor="middle">Shared Interconnect &amp; Memory</text>
+
+    <!-- Resource Table -->
+    <rect x="20" y="55" width="290" height="65" rx="6" fill="#21262d" stroke="#d29922" stroke-width="1"/>
+    <text x="35" y="78" fill="#f0883e" font-size="12" font-weight="600">RemoteProc Resource Table</text>
+    <text x="35" y="96" fill="#c9d1d9" font-size="10">• `RSC_CARVEOUT` (DDR payload window)</text>
+    <text x="35" y="110" fill="#c9d1d9" font-size="10">• `RSC_VDEV` (VirtIO RPMsg devices &amp; rings)</text>
+
+    <!-- VirtIO Vrings -->
+    <rect x="20" y="135" width="290" height="105" rx="6" fill="#1c2128" stroke="#3fb950" stroke-width="1"/>
+    <text x="35" y="158" fill="#3fb950" font-size="12" font-weight="600">Zero-Copy VirtIO Vrings (SRAM)</text>
+    <text x="35" y="178" fill="#c9d1d9" font-size="10">• <tspan fill="#58a6ff">Vring 0 (TX):</tspan> 16 buffers × 512B</text>
+    <text x="35" y="195" fill="#c9d1d9" font-size="10">• <tspan fill="#3fb950">Vring 1 (RX):</tspan> 16 buffers × 512B</text>
+    <text x="35" y="212" fill="#8b949e" font-size="10">• Placed in SRAM A3 (A5E) or SRAM A2 (A7A)</text>
+    <text x="35" y="227" fill="#56d364" font-size="10" font-weight="600">Round-trip latency: 18.5 µs (A5E) / 24.2 µs (A7A)</text>
+
+    <!-- Hardware Mailbox FIFO -->
+    <rect x="20" y="255" width="290" height="135" rx="6" fill="#1f1830" stroke="#8957e5" stroke-width="1.2"/>
+    <text x="35" y="278" fill="#d2a8ff" font-size="12" font-weight="600">Hardware Mailbox (Msgbox Doorbell)</text>
+    <rect x="35" y="290" width="260" height="35" rx="4" fill="#2d1d3d" stroke="#a371f7" stroke-width="1"/>
+    <text x="165" y="312" fill="#e3b341" font-size="11" font-weight="600" text-anchor="middle">ARM $\rightarrow$ RISC-V FIFO (Ch 0 / Ch 9)</text>
+    <rect x="35" y="335" width="260" height="35" rx="4" fill="#2d1d3d" stroke="#a371f7" stroke-width="1"/>
+    <text x="165" y="357" fill="#3fb950" font-size="11" font-weight="600" text-anchor="middle">RISC-V $\rightarrow$ ARM FIFO (Ch 0 / Ch 8)</text>
+    <text x="35" y="383" fill="#8b949e" font-size="9" text-anchor="middle">4-Byte Value Handshake • Zero Kernel Jitter</text>
+
+    <!-- Trace Buffer -->
+    <rect x="20" y="405" width="290" height="98" rx="6" fill="#21262d" stroke="#58a6ff" stroke-width="1"/>
+    <text x="35" y="428" fill="#58a6ff" font-size="12" font-weight="600">RemoteProc Trace Buffer (`trace0`)</text>
+    <text x="35" y="448" fill="#c9d1d9" font-size="10">• 4 KB circular ASCII/binary log buffer in SRAM</text>
+    <text x="35" y="465" fill="#c9d1d9" font-size="10">• Exposed to Linux: `/sys/kernel/debug/.../trace0`</text>
+    <text x="35" y="482" fill="#c9d1d9" font-size="10">• Preserves crash autopsy registers (`0xDEADF00D`)</text>
+    <text x="35" y="495" fill="#8b949e" font-size="9">• Zero wait states, survives DDR controllers halts</text>
+  </g>
+
+  <!-- ==================== RIGHT: XUANTIE RISC-V FIRMWARE ==================== -->
+  <g transform="translate(750, 85)" filter="url(#shadow)">
+    <rect width="320" height="520" rx="10" fill="#161b22" stroke="#238636" stroke-width="1.5"/>
+    <rect width="320" height="38" rx="10" fill="#0d2d1d" stroke="#238636" stroke-width="1.5"/>
+    <rect y="26" width="320" height="12" fill="#0d2d1d"/>
+    <text x="160" y="24" fill="#3fb950" font-size="14" font-weight="700" text-anchor="middle">XuanTie RISC-V Co-Processor</text>
+
+    <!-- Target Apps -->
+    <rect x="20" y="55" width="280" height="70" rx="6" fill="#1c2128" stroke="#30363d" stroke-width="1.2"/>
+    <text x="160" y="78" fill="#f0f6fc" font-size="13" font-weight="600" text-anchor="middle">Firmware Application Layer</text>
+    <text x="160" y="98" fill="#56d364" font-size="11" text-anchor="middle">`testPingRpmsg` • `testFreeRTOS` • `testBasic`</text>
+    <text x="160" y="114" fill="#8b949e" font-size="10" text-anchor="middle">C++20 Coroutines • Bare-Metal Real-Time Loop</text>
+
+    <!-- FreeRTOS / RTOS Kernel -->
+    <rect x="20" y="140" width="280" height="60" rx="6" fill="#0d2d1d" stroke="#2ea043" stroke-width="1"/>
+    <text x="160" y="163" fill="#56d364" font-size="12" font-weight="600" text-anchor="middle">FreeRTOS / Bare-Metal Runtime</text>
+    <text x="160" y="180" fill="#c9d1d9" font-size="10" text-anchor="middle">Unified `portASM_e90x.S` • Stack Context</text>
+    <text x="160" y="193" fill="#8b949e" font-size="9" text-anchor="middle">E906: 31 regs (124B) • E902: 15 regs (60B)</text>
+
+    <!-- OpenAMP / RPMsg Core -->
+    <rect x="20" y="215" width="280" height="70" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
+    <text x="160" y="238" fill="#c9d1d9" font-size="12" font-weight="600" text-anchor="middle">Embedded RPMsg Stack (`rpmsg.cpp`)</text>
+    <text x="160" y="258" fill="#8b949e" font-size="10" text-anchor="middle">• VirtIO queue parsing (`vq_ring.h`)</text>
+    <text x="160" y="272" fill="#8b949e" font-size="10" text-anchor="middle">• Name Service ("rpmsg-client-sample")</text>
+
+    <!-- Hardware Abstraction Layer -->
+    <rect x="20" y="300" width="280" height="65" rx="6" fill="#1c2128" stroke="#3fb950" stroke-width="1.2"/>
+    <text x="160" y="322" fill="#3fb950" font-size="12" font-weight="600" text-anchor="middle">Hardware Abstraction Layer (HAL)</text>
+    <text x="160" y="340" fill="#c9d1d9" font-size="10" text-anchor="middle">• `hal::Msgbox`: Doorbell IRQ &amp; FIFO handling</text>
+    <text x="160" y="354" fill="#c9d1d9" font-size="10" text-anchor="middle">• `hal::Timer`: 24 MHz microsecond timestamps</text>
+
+    <!-- Interrupt Service Routine -->
+    <rect x="20" y="380" width="280" height="65" rx="6" fill="#0d2d1d" stroke="#238636" stroke-width="1.2"/>
+    <text x="160" y="402" fill="#56d364" font-size="12" font-weight="600" text-anchor="middle">PLIC / CLINT Machine Interrupts</text>
+    <text x="160" y="420" fill="#8b949e" font-size="10" text-anchor="middle">Dispatches Mailbox Rx IRQ in &lt; 3.0 µs</text>
+    <text x="160" y="434" fill="#8b949e" font-size="10" text-anchor="middle">Clears pending bit after FIFO drain</text>
+
+    <!-- Core Pipeline Specs -->
+    <rect x="20" y="460" width="280" height="45" rx="4" fill="#161b22" stroke="#30363d"/>
+    <text x="160" y="478" fill="#c9d1d9" font-size="10" font-weight="600" text-anchor="middle">Target Architecture Selection</text>
+    <text x="160" y="495" fill="#8b949e" font-size="9" text-anchor="middle">A5E: -march=rv32imac • A7A: -march=rv32emc -mabi=ilp32e</text>
+  </g>
+</svg>

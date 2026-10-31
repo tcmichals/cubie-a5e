@@ -33,6 +33,8 @@ SECTIONS
         . = ALIGN(4);
         *(.text)
         *(.text.*)
+        *(.fastcode)
+        *(.fastcode.*)
         . = ALIGN(4);
     } > SRAM_A2
 
@@ -60,9 +62,12 @@ SECTIONS
         PROVIDE(__global_pointer$ = . + 0x800);
         *(.data)
         *(.data.*)
+        *(.sdata)
+        *(.sdata.*)
         . = ALIGN(4);
         _edata = .;
     } > SRAM_A2
+    _sidata = LOADADDR(.data);
 
     .bss (NOLOAD) :
     {
@@ -70,20 +75,37 @@ SECTIONS
         _sbss = .;
         *(.bss)
         *(.bss.*)
+        *(.sbss)
+        *(.sbss.*)
         *(COMMON)
         . = ALIGN(4);
         _ebss = .;
     } > SRAM_A2
 
-    /* Stack allocation at the end of SRAM A2 */
+    /* Execution Stack (16 KB) */
     .stack (NOLOAD) :
     {
         . = ALIGN(16);
-        _sstack = .;
-        . = . + 4K;
-        . = ALIGN(16);
-        _estack = .;
+        _stack_bottom = .;
+        . += 0x4000;
+        _stack_top = .;
         PROVIDE(_sp = .);
+    } > SRAM_A2
+
+    /* Scratchpad / Compatibility Memory */
+    .dtcm_scratch (NOLOAD) :
+    {
+        . = ALIGN(4);
+        __dtcm_scratch_start = .;
+        *(.dtcm_scratch)
+        *(.dtcm_scratch.*)
+    } > SRAM_A2
+
+    /* RemoteProc trace buffer (for debugfs trace0) */
+    .trace_buffer (NOLOAD) : ALIGN(4)
+    {
+        KEEP(*(.trace_buffer))
+        KEEP(*(.trace_buffer.*))
     } > SRAM_A2
 
     /DISCARD/ :

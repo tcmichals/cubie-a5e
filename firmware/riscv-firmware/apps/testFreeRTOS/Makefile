@@ -18,7 +18,7 @@ APP_SRCS_C = \
     $(FREERTOS_DIR)/portable/GCC/RISC-V/port.c
 
 APP_SRCS_S = \
-    portASM_e906.S
+    portASM_e90x.S
 
 INCLUDES += -I. -I$(FREERTOS_DIR)/include \
             -I$(FREERTOS_DIR)/portable/GCC/RISC-V \

@@ -50,6 +50,7 @@ PROFILE_2 = 2  # Pure On-Chip SRAM VirtIO
 PROFILE_3 = 3  # Userspace UIO Mode
 PROFILE_4 = 4  # Hardware Mailbox Isolation & Dual-Core Test
 PROFILE_5 = 5  # Cadence HiFi4 DSP Mailbox Isolation
+PROFILE_A7A = 10 # Radxa Cubie A7A E902 RemoteProc (SRAM A2 + DDR Carveout)
 
 PROFILE_INFO = {
     PROFILE_1: {
@@ -86,6 +87,13 @@ PROFILE_INFO = {
         "test_overlays": ["cubie-a5e-dsp-mailbox-test"],
         "node_desc": "HiFi4 DSP Hardware Mailbox (/sys/kernel/debug/mailbox-test-dsp)",
         "compatible_tests": ["dsp-msgbox"],
+    },
+    PROFILE_A7A: {
+        "name": "Radxa Cubie A7A E902 RemoteProc (SRAM A2 + DDR Carveout)",
+        "overlay_config": "dtoverlay=cubie-a7a-rproc",
+        "test_overlays": ["cubie-a7a-rproc"],
+        "node_desc": "System SRAM A2 (0x00040000, 208 KB) + DDR Carveout (0x4E000000, 16 MB)",
+        "compatible_tests": ["basic", "trace", "crash", "rpmsg", "dram", "example"],
     },
 }
 
@@ -333,6 +341,17 @@ def detect_active_dt_profile():
     Inspects /sys/firmware/devicetree/base to determine the active hardware profile.
     Returns: (profile_id, details_str)
     """
+    # Check if running on Allwinner A733 / Radxa Cubie A7A (XuanTie E902)
+    for p in [os.path.join(DT_BASE, "compatible"), "/proc/device-tree/compatible"]:
+        if os.path.exists(p):
+            try:
+                with open(p, "rb") as f:
+                    compat_str = f.read().decode("latin1", errors="replace").lower()
+                if "a733" in compat_str or "sun60i" in compat_str or "cubie-a7a" in compat_str or "cubie_a7a" in compat_str:
+                    return PROFILE_A7A, "System SRAM A2 (0x00040000, 208 KB) + DDR Carveout (0x4E000000, 16 MB)"
+            except Exception:
+                pass
+
     # Profile 5 check: Standalone DSP mailbox test overlay without E906 mailbox
     if (os.path.exists(os.path.join(DT_BASE, "mailbox-test-dsp")) or os.path.exists("/sys/kernel/debug/mailbox-test-dsp")) and \
        not (os.path.exists(os.path.join(DT_BASE, "mailbox-test-e906")) or os.path.exists("/sys/kernel/debug/mailbox-test-e906")):
@@ -382,6 +401,12 @@ def verify_profile_or_halt(test_id, allowed_profiles):
         allowed_profiles = [allowed_profiles]
 
     active_profile, active_detail = detect_active_dt_profile()
+
+    # Special handling for A7A Profile: allows basic, trace, crash, rpmsg, dram, example
+    if active_profile == PROFILE_A7A:
+        if test_id in ["testBasic", "testStringBinaryTrace0", "testCrash", "testPingRpmsg", "testPingRpmsgSram", "testDRAMMsg", "exampleRiscv"]:
+            return
+
     if active_profile not in allowed_profiles:
         primary_req = allowed_profiles[0]
         req_info = PROFILE_INFO[primary_req]
@@ -1226,7 +1251,7 @@ def main():
             all_test_results.append(res)
 
     if canon_test == "all":
-        if active_profile == PROFILE_1:
+        if active_profile in (PROFILE_1, PROFILE_A7A):
             append_results(test_basic())
             append_results(test_string_binary_trace0())
             append_results(test_crash())

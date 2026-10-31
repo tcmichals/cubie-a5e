@@ -1162,12 +1162,12 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
   - Scanning with `iw dev wlan0 scan` timed out with `aic8800_fdrv: command timeout (6300 ms)` and returned error `-16` (`-EBUSY`).
   - *Fix*: Mapped Interface 2 endpoints (`ep_01`/`ep_81` for data, `ep_02`/`ep_82` for control messages). Created `aicwf_process_msg_rxframes()` in `aicwf_usb.c` and connected `msg_rx_work` to `rwnx_rx_handle_msg()`. Firmware command confirmations now complete in **17 ms** (down from 6,300 ms).
 - **Problem 2: Silent Outgoing Data & EAPOL Drop (`TX: 0 bytes`)**:
-  - Scanning succeeded and discovered nearby SSIDs (`NETGEAR69-5G`, `HeathRockStar`, etc.), but `wpa_supplicant` timed out during 4-way handshake (`reason 15: 4WAY_HANDSHAKE_TIMEOUT`).
+  - Scanning succeeded and discovered nearby SSIDs, but `wpa_supplicant` timed out during 4-way handshake (`reason 15: 4WAY_HANDSHAKE_TIMEOUT`).
   - *Fix*: Restored missing `#elif defined(AICWF_USB_SUPPORT)` branch in `rwnx_tx.c::rwnx_tx_push()`. Linked outgoing skbs with host descriptors in `rwnx_hw->usb_env` and dispatched to `aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb)`.
 - **Problem 3: Dynamic Memory Buffer Sizing**:
   - *Fix*: Corrected `need_cfm` buffer allocation size in `aicwf_usb.c::aicwf_usb_bus_txdata()` and pruned unsafe raw skb pointer dereferences.
 - **Silicon Verification (Cubie A7A Target)**:
-  - Associated with `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9).
+  - Associated with 5 GHz access point (80 MHz, VHT-MCS 9).
   - Leased IP `192.168.1.14` from gateway `192.168.1.1` via `udhcpc -i wlan0`.
   - Achieved **433.3 Mbps RX** and **234.0 Mbps TX** sustained throughput with **0% packet loss** to gateway (0.58 ms RTT) and `8.8.8.8` (14.2 ms RTT).
 
@@ -1177,7 +1177,7 @@ In an attempt to align with vendor BSP DTS (`maximum-speed = "super-speed-plus"`
 - **Silicon Retest on Cubie A5E**:
   - Booted physical Cubie A5E (`192.168.3.4`) running mainline Linux 7.1.0 PREEMPT_RT.
   - Rebuilt and loaded `aic8800_bsp.ko` + `aic8800_fdrv.ko` (SDIO mode with OOB GPIO IRQ 180).
-  - Associated with `NETGEAR69-5G` and leased IP `192.168.1.15`.
+  - Associated with 5 GHz access point and leased IP `192.168.1.15`.
   - Transferred 50 MB payload over `wlan0`: **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
   - Cumulative traffic: 65,835,902 bytes RX (43,775 pkts), 1,164,097 bytes TX (22,238 pkts); 0% packet loss, -47 dBm RSSI, -89 dBm noise floor, 0 kernel errors.
 - **Git Checkpoints & Release Tags**:
@@ -1447,3 +1447,161 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - Partition 1 (`boot.vfat`) packed with updated `Image`, `sun60i-a733-cubie-a7a.dtb`, `cubie-a7a-rproc.dtbo`, `config.txt` (`dtoverlay=cubie-a7a-rproc`), and `boot.scr`.
   - Partition 2 (`rootfs.ext4`) contains `/lib/firmware/exampleRiscv.elf`.
   - Generated output: `bld.a7a/images/sdcard.img` (620,756,992 bytes).
+
+---
+
+### Milestone 13: Wi-Fi 6 Bootstrap, E902 RemoteProc Silicon Verification, Stop Trap Resolution, and Hardware Reset Discovery
+
+#### 1. Wi-Fi 6 (AIC8800) Silicon Verification & Persistence Architecture
+* **Discovery of 2-Stage Bootstrap**:
+  - The AIC8800 Wi-Fi 6 / BT 5.4 module powers up in BootROM mode with USB PID `a69c:8d80`.
+  - In this state, `aic8800_fdrv.ko` cannot bind. The module strictly requires `aic_load_fw.ko` to upload 5 firmware images into chip RAM:
+    1. `/lib/firmware/aic8800D80/fw_patch_table_8800d80_u02.bin` (1,384 bytes)
+    2. `/lib/firmware/aic8800D80/fw_adid_8800d80_u02.bin` (1,708 bytes)
+    3. `/lib/firmware/aic8800D80/fw_patch_8800d80_u02.bin` (32,700 bytes)
+    4. `/lib/firmware/aic8800D80/fw_patch_8800d80_u02_ext0.bin` (16,136 bytes)
+    5. `/lib/firmware/aic8800D80/fmacfw_8800d80_u02.bin` (358,072 bytes)
+  - After upload, the chip resets and re-enumerates on the USB bus as `Bus 001 Device 004: ID a69c:8d81 AICSemi AIC 8800D80`.
+  - `aic8800_fdrv.ko` automatically binds to `8d81`, initializes `phy0`, and registers network interface `wlan0` (`link/ether 18:ce:df:6d:ad:05`).
+* **Live Target Test**:
+  - Live scan `iw dev wlan0 scan` succeeded, detecting 2.4 GHz and 5 GHz SSIDs.
+  - Configured persistent auto-loading: created `/etc/modules-load.d/aic.conf` and registered `updates/aic_load_fw/aic_load_fw.ko` in `/lib/modules/7.1.0/modules.dep`.
+
+#### 2. E902 RemoteProc Silicon Verification
+* **Root Cause of Overlay Loading Failure**:
+  - Base DTB `sun60i-a733-cubie-a7a.dtb` was originally built without symbol metadata (`-@`).
+  - U-Boot loaded `cubie-a7a-rproc.dtbo`, but `fdt apply` silently failed because symbols for `&r_ccu` and `&msgbox` were absent. U-Boot then discarded the overlay and booted the un-modified DTB.
+  - Rebuilt base DTB with `DTC_FLAGS += -@` and deployed to `/boot/sun60i-a733-cubie-a7a.dtb`.
+* **Live RemoteProc Boot**:
+  - Transferred `exampleRiscv.elf` to `/lib/firmware/e902-firmware.elf`.
+  - Started coprocessor: `echo start > /sys/class/remoteproc/remoteproc0/state`.
+  - Dmesg confirmation:
+    ```
+    [  228.050109] remoteproc remoteproc0: powering up 7032000.remoteproc
+    [  228.050179] remoteproc remoteproc0: Booting fw image e902-firmware.elf, size 8444
+    [  228.051117] remoteproc remoteproc0: remote processor 7032000.remoteproc is now up
+    ```
+  - State verified: `running` with execution entry vector at SRAM A2 `0x00040000`.
+
+#### 3. Resolution of the E902 Stop Trap
+* **Symptom**: Issuing `echo stop > /sys/class/remoteproc/remoteproc0/state` caused an immediate hard lockup of the Linux host.
+* **Root Cause**:
+  - In `cubie-a7a-rproc.dtso`, `core` reset was mapped to `<&r_ccu 13>`.
+  - Cross-referencing `ccu-sun55i-a523-r.c` line 221 and A733 User Manual §4.2.5 revealed that reset index 13 is `RST_BUS_R_CPUCFG` (`0x022C` bit 16), which controls the CPU Configuration domain of the SoC.
+  - When `sunxi_rproc_stop` invoked `reset_control_assert(priv->rst_core)`, it placed `R_CPUCFG` into reset, immediately disabling the ARM CPU complex.
+* **Resolution**:
+  - According to [A733 User Manual §4.2.5.24](file:///home/tcmichals/projects/cubie/tina-source/manuals-text/A733_User_Manual_V1.00.txt#L13651), the RISC-V block has only one reset: `RISCV_CFG_RST` at `0x021C` bit 16 (`r_ccu` index 12).
+  - Updated [`cubie-a7a-rproc.dtso`](file:///home/tcmichals/projects/cubie/cubie-a5e/project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-rproc.dtso) to map `core` reset to `<&r_ccu 12>` and recompiled `cubie-a7a-rproc.dtbo`.
+
+#### 4. Hardware Watchdog / System Reset Architecture
+* **Hardware Register Map**:
+  - Confirmed via [A733 User Manual V1.00 §8.3.6.3](file:///home/tcmichals/projects/cubie/tina-source/manuals-text/A733_User_Manual_V1.00.txt#L21785) and ATF `sunxi_native_pm.c`:
+    - Base address: `0x02050000` (`WDT0_CPUX`).
+    - Dedicated soft reset register: `WDT_SRST_REG` at offset `0x0008`.
+    - Key field: `0x16AA` in bits [31:16], bit 0 = Soft Reset Enable (`1 = Reset System`).
+  - Writing `0x16aa0001` to `0x02050008` triggers immediate, synchronous SoC hardware reset.
+* **Driver Patch**:
+  - Updated `drivers/watchdog/sunxi_wdt.c` in `sunxi_wdt_restart()`:
+    ```c
+    if (regs->wdt_key_val == 0x16aa0000) {
+        writel(0x16aa0001, wdt_base + 0x08);
+        mdelay(500);
+    }
+    ```
+  - Recompiled `sunxi_wdt.ko` on branch `feature/a733-e902-remoteproc`.
+
+#### 5. Serial Console Hardware Reset Limitations
+* `/dev/ttyUSB1` was audited via `udevadm`: device is an FTDI FT232R USB-to-UART adapter (`0403:6001`).
+* The cable only routes standard 3-wire TTL UART (TX, RX, GND) to SoC UART0. It has no physical connection between DTR/RTS and the SoC hardware `RESET_N` line or board power supply.
+* Consequently, when the SoC enters a post-shutdown halt or CPUCFG reset trap, it cannot be reset via software serial signals (DTR, RTS, Break). A physical power cycle (unplugging and replugging USB-C power) is required.
+
+---
+
+### Milestone 14: Dual XuanTie E906 / E902 Firmware Architecture & Autonomous Full Sweep for Cubie A7A
+
+#### 1. Dual E906 / E902 Multi-Core Architecture in `firmware/riscv-firmware`
+* **Architecture & ISA Differentiation**:
+  - **E906 (Allwinner T527 / A527, Radxa Cubie A5E)**:
+    - Target flags: `-march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany`
+    - GPRs: 32 integer registers (`x0`–`x31`), hardware single-precision FPU (`rv32imafc`).
+    - Memory: On-chip SRAM A3 (Space 0 @ `0x3FFC0000`, Space 1 @ `0x40000000`, 256 KB each).
+    - Linker script: `firmware/common/arch_riscv/e906_sram.ld`.
+  - **E902 (Allwinner A733, Radxa Cubie A7A)**:
+    - Target flags: `-march=rv32emc_zicsr_zifencei -mabi=ilp32e -mcmodel=medany`
+    - GPRs: 16 integer registers (`x0`–`x15`), soft-float ABI, no hardware FPU, no hardware atomic extensions (no 'A' extension).
+    - Memory: Shared System SRAM A2 (`0x00040000`, 208 KB).
+    - Linker script: `firmware/common/arch_riscv/e902_sram.ld`.
+* **Universal Startup Routine (`firmware/common/arch_riscv/startup.S`)**:
+  - Guarded context frame save/restore against missing upper registers (`x16`–`x31` / `a6`, `a7`, `s2`–`s11`, `t3`–`t6`) using `#ifndef __riscv_32e`.
+  - For RV32E, upper register slots in `CrashFrame` are cleared with `sw zero, offset(sp)`, guaranteeing deterministic 144-byte autopsy memory layout.
+  - Guarded FPU initialization (`csrs mstatus`, `csrw fcsr`) with `#if defined(__riscv_flen)` to prevent illegal instruction exceptions on E902.
+  - Diagnostic reset signature write uses `.weak __sram_c_start` to safeguard against undefined memory symbols.
+* **Software Atomic Primitives (`firmware/common/arch_riscv/atomics.c`)**:
+  - Because E902 lacks hardware atomic extensions ('A'), GCC generates calls to `__atomic_fetch_add_4`, `__atomic_fetch_sub_4`, `__atomic_exchange_4`, and `__atomic_compare_exchange_4`.
+  - Implemented lightweight software atomics using Machine Interrupt Enable (`mstatus.MIE`, bit 3) masking, guaranteeing atomic read-modify-write safety on single-core embedded execution.
+* **Multi-Target Makefile Architecture**:
+  - `firmware/common/common.mk`: Automatically configures compiler flags and linker scripts based on `CORE=e906` (default) or `CORE=e902` (alias `BOARD=a7a`).
+  - `firmware/riscv-firmware/apps/Makefile`: Added targets `e906`, `e902`, and `all-cores`. Stages binaries into dedicated directories `bin/e906/` and `bin/e902/`, with root `bin/` mirrored for backwards compatibility.
+  - Verified 10 out of 10 test applications compiling cleanly for E902 (`testBasic`, `testCrash`, `testPing`, `testPingRpmsg`, `testPingRpmsgSram`, `testDRAMMsg`, `testMsgbox`, `testMsgboxStep`, `testStringBinaryTrace0`, `exampleRiscv`).
+* **Buildroot Integration**:
+  - Updated `project-cubie-a5e/package/riscv-firmware/Config.in` with `BR2_PACKAGE_RISCV_FIRMWARE_CORE_E902`.
+  - Updated `riscv-firmware.mk` to build with `CORE=$(RISCV_FIRMWARE_CORE)` and automatically stage `/lib/firmware/e902-firmware.elf` symlink.
+  - Enabled in `project-cubie-a5e/configs/cubie_a7a_defconfig`.
+
+#### 2. Autonomous Test Sweep Automation for Radxa Cubie A7A
+* **Device Tree Aware Test Runner (`firmware/riscv-firmware/tools/run_tests.py`)**:
+  - Added `PROFILE_A7A` profile mapping: detects Allwinner A733 / `sun60i` / `cubie-a7a` from device tree compatible string.
+  - Maps System SRAM A2 (`0x00040000`, 208 KB) and DDR Carveout (`0x4E000000`, 16 MB).
+  - Validates firmware applications against the A7A RemoteProc framework without requiring manual profile overrides.
+* **Autonomous Silicon Sweep Runner (`tools/run_full_sweep.py`)**:
+  - Added `--target {a5e, a7a}` (or `--board {a5e, a7a}`).
+  - Automatically selects serial console `/dev/ttyUSB1` for A7A.
+  - Implemented `run_sweep_a7a()` executing:
+    1. Base DTB (`sun60i-a733-cubie-a7a.dtb`) and overlay (`cubie-a7a-rproc`) verification.
+    2. RemoteProc lifecycle validation (`stop` -> `start` -> `stop`).
+    3. Automated test suite execution (`python3 /usr/bin/run_tests.py`).
+    4. C++ `ping_rpmsg` (1,000 pings) & `stress_rpmsg` (100,000 messages, 16 in flight).
+    5. Python `ping_rpmsg.py` (1,000 pings).
+    6. C++ `ping_dram` (1,000 pings).
+    7. Python `monitor_trace.py` live stream verification.
+    8. Diagnostic baseline execution (`exampleRiscv.elf`).
+    9. Linux kernel dmesg health check.
+    10. Report generation: writes `test_sweep_results_a7a.json` and `test_sweep_results_a7a.md`.
+
+### Milestone 15: Unified FreeRTOS Port (`portASM_e90x.S`), Vector SVG Architecture Diagrams, and Complete Build Pipeline
+
+#### 1. Unified FreeRTOS Co-Processor Porting (`portASM_e90x.S`)
+* **Unified Assembly**: Renamed `firmware/riscv-firmware/apps/testFreeRTOS/portASM_e906.S` to `portASM_e90x.S`.
+* **Universal Register Usage**: All context switching and `mcause` custom mirror masking use register `t0` (`x5`), guaranteed to exist on both RV32I and RV32E.
+* **Dynamic Stack Frame Sizing**: Uses FreeRTOS `#ifndef __riscv_32e` conditional compilation to scale stack frames from 124 bytes (E906) down to 60 bytes (E902).
+* **Multi-Core Build Staging**: Staged `testFreeRTOS.elf` for E902 (size 271 KB), verified clean compilation via `make -C firmware/riscv-firmware all-cores` (12 E906 ELFs and 11 E902 ELFs).
+
+#### 2. Reset Architecture & Kernel Driver Refinement
+* **Single Reset Line Architecture**: Confirmed A733 co-processor contains only `RISCV_CFG_RST` at `0x021C` bit 16 (`r_ccu` index 12).
+* **Driver Hardening**: Updated `sunxi_rproc.c` on branch `feature/a733-e902-remoteproc` to make `priv->rst_cfg` optional exclusive (`devm_reset_control_get_optional_exclusive`), preventing `-EBUSY` when only `core` reset is defined in DTS.
+* **Overlay Alignment**: Updated `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-rproc.dtso` to specify a single reset `<&r_ccu 12>` (`reset-names = "core"`). Recompiled `cubie-a7a-rproc.dtbo` (1,402 bytes) and deployed to `/boot/cubie-a7a-rproc.dtbo` on physical target via serial base64 stream with verified MD5 checksum (`d56231c3b571fc7c26732ca10ba52dbe`).
+
+#### 3. Full-Stack Boot Chain Enablement (TF-A BL31, U-Boot, and Linux Kernel)
+* **ARM Trusted Firmware (TF-A BL31) TrustZone Un-Gating**:
+  - The XuanTie E902 start vector register (`E902_STA_ADD_REG` @ `0x07032204`) sits within the Always-On CPUS address domain.
+  - In stock vendor BL31 images, the Security Peripheral Controller (`R_SPC`) and TrustZone Memory Adapter (`R_TZMA`) lock down Port 3 to Secure EL3 access only. Reads or writes from Linux Non-Secure EL1 result in immediate external aborts (SError).
+  - Reverse engineering identified the BL31 security configuration routine. We patched the security initialization trampoline at sector 2804 (byte offset `0x15e96c` on `/dev/mmcblk0`) from `0x140008ea` to `0x48015570`. This un-gates `R_SPC` Port 3 during early EL3 boot, permitting standard Linux Non-Secure EL1 driver execution without requiring custom runtime SMC traps.
+* **Das U-Boot Dynamic Multi-Overlay Architecture**:
+  - Confirmed that U-Boot source code requires **zero modifications** for A7A RemoteProc.
+  - U-Boot's `boot.cmd` script dynamically reads `/boot/uEnv.txt`, allocates buffer space for the live Flattened Device Tree (`fdt resize 0x10000`), loads `cubie-a7a-rproc.dtbo` into `fdtoverlay_addr_r` (`0x4fe00000`), and merges it via `fdt apply`.
+  - Configured `/boot/uEnv.txt` on the target root filesystem with `overlays=cubie-a7a-rproc.dtbo`.
+* **Linux Kernel Driver Refinement**:
+  - `drivers/remoteproc/sunxi_rproc.c`: Converted `priv->rst_cfg` to `devm_reset_control_get_optional_exclusive()`, resolving the `-EBUSY` (error -16) collision on A733 where only a single hardware reset (`r_ccu 12`) exists.
+  - `drivers/watchdog/sunxi_wdt.c`: Implemented soft reset via `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`), resolving userspace `reboot` freeze.
+* **High-Speed Network Deployment & Target Synchronization**:
+  - Associated AIC8800 Wi-Fi 6 module with the lab access point (`wpa_state=COMPLETED`, 80 MHz channel width, 5 GHz band) and acquired IP `192.168.1.12` via DHCP.
+  - Deployed the newly built 28 MB kernel `Image` (`8a60ee1c68364025bda797918d5f379c`) over SCP in 23 seconds.
+  - Deployed all 11 staged E902 firmware binaries to `/lib/firmware/` with `/lib/firmware/e902-firmware.elf -> exampleRiscv.elf` symlink.
+  - Deployed host diagnostic binaries (`ping_rpmsg`, `stress_rpmsg`, `ping_dram`, `ping_shm`) to `/usr/bin/`.
+
+#### 4. Vector Architecture Diagrams & Technical Publication
+* Authored three production vector SVG diagrams:
+  - `docs/articles/media/soc_comparison_a5e_vs_a7a.svg`: Architectural side-by-side comparison between Allwinner T527 (E906 + HiFi4 DSP) and A733 (E902).
+  - `docs/articles/media/dcache_coherency_hazard.svg`: Detailed visualization of SRAM Data Cache coherency hazard across non-coherent bus interconnects, explaining why Tina FreeRTOS mandates `dcache.cpa`/`dcache.iva` and why non-cached execution guarantees zero-copy determinism.
+  - `docs/articles/media/remoteproc_ipc_flow.svg`: Full-stack RemoteProc and VirtIO RPMsg interaction flow from Linux `/dev/rpmsg0` across SRAM vrings into co-processor Machine ISRs.
+* Authored `docs/articles/part5_a733_e902_remoteproc_and_heterogeneous_comparison.md` providing an exhaustive technical comparison, detailed repository workspace layout, toolchain configuration, multi-core compilation recipes, and sweep execution guide.

@@ -19,8 +19,27 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 SIZE    = $(CROSS_COMPILE)size
 GDB     = $(CROSS_COMPILE)gdb
 
-# 2. Target Architecture Flags (Allwinner T527 XuanTie E906: RV32IMAFCX)
-ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany
+# 2. Target Core & Architecture Selection
+# Supported cores:
+#   CORE=e906 (default, Allwinner T527 / A527: RV32IMAFCX, 32 GPRs)
+#   CORE=e902 (Allwinner A733: RV32EMC, 16 GPRs)
+# Aliases via BOARD: BOARD=a5e -> CORE=e906, BOARD=a7a -> CORE=e902
+ifeq ($(BOARD),a7a)
+  CORE ?= e902
+else ifeq ($(BOARD),a5e)
+  CORE ?= e906
+endif
+
+CORE ?= e906
+
+ifeq ($(CORE),e902)
+  ARCH_FLAGS ?= -march=rv32emc_zicsr_zifencei -mabi=ilp32e -mcmodel=medany
+  DEFINES    += -DCORE_E902
+else
+  ARCH_FLAGS ?= -march=rv32imac_zicsr_zifencei_zihintpause -mabi=ilp32 -mcmodel=medany
+  DEFINES    += -DCORE_E906
+endif
+
 OPT_FLAGS  ?= -Og -g
 
 # 3. Include Directories
@@ -35,7 +54,7 @@ CXXFLAGS += $(COMMON_FLAGS) -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-t
 
 # 5. Linker Script & Memory Layout Selection
 # Supported configurations (via MEM= or TARGET_MEM=):
-#   MEM=sram   (default) -> On-chip SRAM (0x40000000 / 0x3FFC0000): e906_sram.ld
+#   MEM=sram   (default) -> On-chip SRAM: e906_sram.ld or e902_sram.ld
 #   MEM=ddr              -> Multi-bank SRAM & DDR Carveout: e906_ddr.ld
 #   MEM=qemu             -> QEMU virt machine (0x80000000): qemu.ld
 # Shortcut: 'make QEMU=1' sets MEM=qemu
@@ -46,22 +65,32 @@ endif
 
 MEM ?= sram
 
-ifeq ($(MEM),sram)
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
-else ifeq ($(MEM),ddr)
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_ddr.ld
-else ifeq ($(MEM),qemu)
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/qemu.ld
+ifeq ($(CORE),e902)
+  ifeq ($(MEM),sram)
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e902_sram.ld
+  else ifeq ($(MEM),qemu)
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/qemu.ld
+  else
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e902_sram.ld
+  endif
 else
-  # Custom path specified in LDSCRIPT
-  LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
+  ifeq ($(MEM),sram)
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
+  else ifeq ($(MEM),ddr)
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_ddr.ld
+  else ifeq ($(MEM),qemu)
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/qemu.ld
+  else
+    LDSCRIPT ?= $(COMMON_DIR)/arch_riscv/e906_sram.ld
+  endif
 endif
 
 LDFLAGS  ?= $(ARCH_FLAGS) -T $(LDSCRIPT) -Wl,-Map=firmware.map -Wl,--gc-sections -nostartfiles -lm
 
 # 6. Default HAL Sources
 COMMON_SRCS_S   ?= $(COMMON_DIR)/arch_riscv/startup.S
-COMMON_SRCS_C   ?= $(COMMON_DIR)/resource_table.c
+COMMON_SRCS_C   ?= $(COMMON_DIR)/resource_table.c \
+                   $(COMMON_DIR)/arch_riscv/atomics.c
 COMMON_SRCS_CPP ?= $(COMMON_DIR)/hal/trace.cpp \
                    $(COMMON_DIR)/hal/timer.cpp \
                    $(COMMON_DIR)/hal/crash.cpp \
@@ -76,7 +105,7 @@ ALL_SRCS_S   = $(COMMON_SRCS_S) $(APP_SRCS_S)
 ALL_SRCS_C   = $(COMMON_SRCS_C) $(APP_SRCS_C)
 ALL_SRCS_CPP = $(COMMON_SRCS_CPP) $(APP_SRCS_CPP)
 
-BUILD_DIR ?= build
+BUILD_DIR ?= build/$(CORE)
 
 OBJS = $(patsubst %.S, $(BUILD_DIR)/%.o, $(notdir $(ALL_SRCS_S))) \
        $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(ALL_SRCS_C))) \
@@ -130,7 +159,7 @@ gdb: $(ELF)
 	$(GDB) -ex "target remote localhost:1234" $(ELF)
 
 clean:
-	rm -rf $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
+	rm -rf build build/e906 build/e902 $(BUILD_DIR) $(ELF) $(BIN) $(MAP) firmware.elf firmware.bin firmware.map
 
 .PHONY: all clean qemu qemu-run gdb
 

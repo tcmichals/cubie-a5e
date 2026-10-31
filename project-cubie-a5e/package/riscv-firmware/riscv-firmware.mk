@@ -8,10 +8,16 @@ RISCV_FIRMWARE_VERSION = 1.0
 RISCV_FIRMWARE_SITE = $(BR2_EXTERNAL_CUBIE_A5E_PATH)/../firmware
 RISCV_FIRMWARE_SITE_METHOD = local
 
+ifeq ($(BR2_PACKAGE_RISCV_FIRMWARE_CORE_E902),y)
+RISCV_FIRMWARE_CORE = e902
+else
+RISCV_FIRMWARE_CORE = e906
+endif
+
 define RISCV_FIRMWARE_BUILD_CMDS
 	if [ -f $(@D)/riscv-firmware/apps/Makefile ]; then \
 		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/riscv-firmware/apps clean && \
-		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/riscv-firmware/apps all HOST_CXX="$(TARGET_CXX)"; \
+		$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/riscv-firmware/apps all CORE=$(RISCV_FIRMWARE_CORE) HOST_CXX="$(TARGET_CXX)"; \
 	fi
 	$(TARGET_CC) $(TARGET_CFLAGS) $(@D)/riscv-firmware/tools/riscv-load.c -o $(@D)/riscv-firmware/tools/riscv-load
 endef
@@ -21,14 +27,28 @@ define RISCV_FIRMWARE_INSTALL_TARGET_CMDS
 	mkdir -p $(TARGET_DIR)/usr/bin
 	mkdir -p $(TARGET_DIR)/usr/share/riscv-firmware
 
-	# Install all compiled RISC-V firmware ELFs and binaries
-	if [ -d $(@D)/riscv-firmware/bin ]; then \
+	# Install all compiled RISC-V firmware ELFs and binaries for active core
+	if [ -d $(@D)/riscv-firmware/bin/$(RISCV_FIRMWARE_CORE) ]; then \
+		for elf in $(@D)/riscv-firmware/bin/$(RISCV_FIRMWARE_CORE)/*.elf; do \
+			[ -f "$$elf" ] && $(INSTALL) -D -m 0644 "$$elf" $(TARGET_DIR)/lib/firmware/$$(basename "$$elf"); \
+		done; \
+		for bin in $(@D)/riscv-firmware/bin/$(RISCV_FIRMWARE_CORE)/*.bin; do \
+			[ -f "$$bin" ] && $(INSTALL) -D -m 0644 "$$bin" $(TARGET_DIR)/lib/firmware/$$(basename "$$bin"); \
+		done; \
+	elif [ -d $(@D)/riscv-firmware/bin ]; then \
 		for elf in $(@D)/riscv-firmware/bin/*.elf; do \
 			[ -f "$$elf" ] && $(INSTALL) -D -m 0644 "$$elf" $(TARGET_DIR)/lib/firmware/$$(basename "$$elf"); \
 		done; \
 		for bin in $(@D)/riscv-firmware/bin/*.bin; do \
 			[ -f "$$bin" ] && $(INSTALL) -D -m 0644 "$$bin" $(TARGET_DIR)/lib/firmware/$$(basename "$$bin"); \
 		done; \
+	fi
+
+	# Active firmware names
+	if [ "$(RISCV_FIRMWARE_CORE)" = "e902" ]; then \
+		if [ -f $(TARGET_DIR)/lib/firmware/exampleRiscv.elf ]; then \
+			ln -sf exampleRiscv.elf $(TARGET_DIR)/lib/firmware/e902-firmware.elf; \
+		fi; \
 	fi
 
 	# Default active firmware loaded at boot by /etc/init.d/S60riscv

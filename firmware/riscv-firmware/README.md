@@ -1,10 +1,12 @@
-# RISC-V Co-Processor Firmware Overview & Architecture
+# XuanTie RISC-V Co-Processor Firmware Overview & Architecture
 
-This directory contains bare-metal firmware, runtime drivers, test applications, and Linux host companion tools for the **XuanTie E906 RISC-V Co-Processor (up to 200 MHz)** on the **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**.
+This directory contains bare-metal firmware, runtime drivers, test applications, and Linux host companion tools for the **XuanTie RISC-V Co-Processors (up to 200 MHz)** across Allwinner platforms:
+- **XuanTie E906** (RV32IMAFCX, single-precision FPU, 32 GPRs) on **Radxa Cubie A5E (Allwinner A527 / T527 / `sun55i`)**
+- **XuanTie E902** (RV32EMC, soft-float, 16 GPRs) on **Radxa Cubie A7A (Allwinner A733 / `sun60iw2`)**
 
 > [!TIP]
 > ### 📖 THE SOURCE GO-TO GUIDE FOR TESTS: [`tests.md`](tests.md)
-> If you are building, running, debugging, or benchmarking the RISC-V firmware tests (`testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPing`, `testPingRpmsg`, `testDRAMMsg`), **use [`tests.md`](tests.md) as your primary source go-to guide**.
+> If you are building, running, debugging, or benchmarking the RISC-V firmware tests (`testBasic`, `testStringBinaryTrace0`, `testCrash`, `testPing`, `testPingRpmsg`, `testDRAMMsg`, `testFreeRTOS`), **use [`tests.md`](tests.md) as your primary source go-to guide**.
 >
 > While this `README.md` covers the broader architectural background and SoC interconnect overview, **[`tests.md`](tests.md)** provides the direct, concrete developer reference: exact memory maps, build commands, step-by-step target execution commands (`devmem2`, `trace0`, `ping_shm`, `ping_uio.py`), and crash dump forensics.
 
@@ -15,7 +17,29 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 
 ---
 
-## 1. Hardware Architecture (Allwinner T527 XuanTie E906)
+## 1. Hardware Architecture & Multi-Core Co-Processor Comparison
+
+```text
++-----------------------------------------------------------------------------------------------------------------+
+|                                    HETEROGENEOUS RISC-V CO-PROCESSOR COMPARISON                                 |
++-----------------------------------------------------------------------------------------------------------------+
+| Feature / Characteristic    | Allwinner T527 / A527 (Radxa Cubie A5E)    | Allwinner A733 (Radxa Cubie A7A)             |
+|-----------------------------|--------------------------------------------|----------------------------------------------|
+| Co-Processor Core IP        | XuanTie E906 (RV32IMAFCX)                  | XuanTie E902 (RV32EMC)                       |
+| General Purpose Registers   | 32 Integer Registers (x0–x31)              | 16 Integer Registers (x0–x15)                |
+| Hardware Floating Point     | Single-Precision IEEE 754 FPU (rv32imafc)  | None (Soft-float ABI: -mabi=ilp32e)          |
+| Hardware Atomics            | Yes ('A' extension: lr.w / sc.w / amo*)    | None (Software atomic emulation via MIE)     |
+| Pipeline Architecture       | 5-stage dual-issue in-order                | 2-stage single-issue in-order                |
+| L1 Cache Architecture       | Configurable L1 I-Cache & L1 D-Cache       | Optional Instruction Cache, NO Data Cache    |
+| Dedicated RISC-V SRAM       | 512 KB (SRAM A3: Space 0 & Space 1)        | None                                         |
+| Shared System SRAM          | 160 KB (System SRAM A2 @ 0x00040000)       | 208 KB (System SRAM A2 @ 0x00040000)         |
+| Audio DSP Local RAM Access  | 128 KB (HiFi4 DSP RAM @ 0x00020000)        | None (No DSP block on A733)                  |
+| Total On-Chip Fast Memory   | Up to 640 KB (SRAM A3 + DSP RAM)           | 208 KB (System SRAM A2)                      |
+| Boot Vector Register        | 0x07130204 (MCU_CFG STA_ADD)               | 0x07032204 (E902_CFG STA_ADD)                |
+| Hardware Mailbox Block      | Dual-bank: ARM 0x03003000 / MCU 0x07136000 | CPUS Shared Msgbox 0x07090000 (4 channels)   |
+| Default Target Build        | make CORE=e906 (stages to bin/e906/ & bin/)| make CORE=e902 (stages to bin/e902/)         |
++-----------------------------------------------------------------------------------------------------------------+
+```
 
 ```text
 +-----------------------------------------------------------------------------------------+

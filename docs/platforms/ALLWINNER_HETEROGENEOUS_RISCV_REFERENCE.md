@@ -316,3 +316,196 @@ When running under ARM Trusted Firmware (BL31), the ARM cores can request power 
    - On the **T527 (Cubie A5E)**: The XuanTie E906 is repurposed as a dedicated real-time avionics co-processor via `remoteproc`. Power management remains entirely host-driven in Linux via Device Tree regulator bindings (`regulator-always-on`).
    - On the **A733 (Cubie A7A)**: If the RISC-V core is used for `remoteproc`, the host Linux kernel **must** take direct ownership of `s_twi0` using `allwinner,sun6i-a31-i2c` to control the AXP8191 PMIC directly. If the kernel misdeclares `s_twi0` as an RSB bus, PMIC communication collapses with `-110` timeout, leaving peripheral rails (such as `ELDO1`, `ELDO2`, and `ELDO4` for USB) unpowered in hardware.
 
+---
+
+## 8. Memory Availability & Subsystem Topology (E902 vs. E906 vs. E906 + HiFi4 DSP)
+
+The memory topology available to the auxiliary RISC-V co-processors differs significantly between the Allwinner T527 and A733 platforms:
+
+```
++───────────────────────────────────────────────────────────────────────────────────────────────+
+|                         ON-CHIP SRAM & FAST MEMORY COMPARISON                                 |
++───────────────────────────────────────────────────────────────────────────────────────────────+
+
+ [Allwinner T527 (Radxa Cubie A5E)]                  [Allwinner A733 (Radxa Cubie A7A)]
+  XuanTie E906 (MCU / DSP Domain)                     XuanTie E902 (CPUS Domain)
+  ┌──────────────────────────────────────────────┐    ┌──────────────────────────────────────────┐
+  │ SRAM Space 0: 256 KB (@ 0x3FFC0000 / 0x0728) │    │ System SRAM A2: 208 KB (@ 0x00040000)    │
+  │ SRAM Space 1: 256 KB (@ 0x40000000 / 0x072C) │    │ (Code, Data, Stack, Vrings, Trace0)      │
+  │ HiFi4 DSP RAM: 128 KB (@ 0x00020000)         │    │                                          │
+  │ Shared SRAM A2: 160 KB (@ 0x00040000)        │    │                                          │
+  ├──────────────────────────────────────────────┤    ├──────────────────────────────────────────┤
+  │ Total On-Chip SRAM: Up to 640 KB - 800 KB    │    │ Total On-Chip SRAM: 208 KB               │
+  │ DDR Carveout: 16 MB (@ 0x48000000 / 0x4004)  │    │ DDR Carveout: 16 MB (@ 0x4E000000)       │
+  └──────────────────────────────────────────────┘    └──────────────────────────────────────────┘
+```
+
+### 8.1 Detailed Memory Map Comparison
+
+| Memory Block | T527 / XuanTie E906 (Cubie A5E) | A733 / XuanTie E902 (Cubie A7A) | Accessibility / Architectural Role |
+| :--- | :--- | :--- | :--- |
+| **Dedicated RISC-V SRAM** | **512 KB** (SRAM A3: Space 0 256 KB @ `0x3FFC0000` + Space 1 256 KB @ `0x40000000`) | **None** (A733 has no dedicated SRAM A3) | E906 exclusive zero-wait-state code & data memory. |
+| **Shared System SRAM A2** | **160 KB** (`0x00040000`–`0x0006BFFF`) | **208 KB** (`0x00040000`–`0x00073FFF`) | E902 primary execution memory on A733; secondary telemetry on T527. |
+| **Cadence HiFi4 DSP RAM** | **128 KB** (`0x00020000`–`0x0003FFFF`) | **None** (Silicon DSP omitted on A733) | Accessible by E906 on T527 when DSP is held in reset or audio is unmapped. Used by AbstractX flight firmware for MicroPython heap. |
+| **Total Fast On-Chip SRAM**| **640 KB** (SRAM A3 + DSP RAM) or **800 KB** (including Shared A2) | **208 KB** (System SRAM A2 only) | High-speed, deterministic real-time memory footprint. |
+| **DDR Carveout (DMA Pool)**| **16 MB** (default @ `0x48000000`, expandable) | **16 MB** (`0x4E000000`, expandable) | Linux `reserved-memory` pool for large streaming payloads and big buffers. |
+
+---
+
+## 9. D-Cache Coherency, Flush/Sync, and Tina FreeRTOS Cache Maintenance in SRAM
+
+### 9.1 The Fundamental Problem: Why Does SRAM Need Cache Maintenance When D-Cache is Enabled?
+A common misconception in embedded systems is that *on-chip SRAM is intrinsically coherent with CPU cores and DMA engines*. On modern high-performance microcontrollers with Write-Back caches, **this is false**:
+
+1. **L1 D-Cache Position in the Microarchitecture**:
+   - In the XuanTie E906, the L1 Data Cache (16 KB / 32 KB, 32-byte line size, Write-Back / Write-Allocate) sits directly between the execution core pipeline and the AXI/AHB system crossbar.
+   - When D-Cache is enabled via the Machine Hardware Configuration Register (`mhcr.DE = 1`), any memory access targeting a cacheable region (whether in external DDR or on-chip SRAM) is allocated and modified inside the L1 D-Cache line.
+2. **Hardware Non-Coherence Across Crossbars**:
+   - The Allwinner SoC bus fabric connecting the XuanTie coprocessor domain to the ARM Cortex-A55 host cluster and DMA engines **does not feature hardware cache snooping (hardware coherency)**.
+   - When the E906 core writes data to an RPMsg vring descriptor, vring buffer, or trace buffer in SRAM, the modified data resides in **dirty L1 cache lines** and is **NOT** immediately written through to the physical SRAM cells.
+   - If the E906 rings the hardware mailbox doorbell (`msgbox`) without performing a cache flush, the ARM host reads the physical SRAM cells and receives **stale data**!
+3. **The Invalidation Requirement on RX**:
+   - Conversely, when the ARM host populates an RPMsg receive buffer or kicks a vring in SRAM and rings the doorbell, the E906 receives an interrupt.
+   - If the E906 previously read or pre-fetched from that SRAM address range, stale lines remain in its L1 D-Cache.
+   - Without an explicit cache invalidate, the E906 pipeline hits its internal L1 D-Cache and reads stale values instead of the fresh payload written by Linux.
+
+### 9.2 Tina FreeRTOS vs. Bare-Metal Reference Architecture
+
+```
++───────────────────────────────────────────────────────────────────────────────────────────────+
+|                             D-CACHE ARCHITECTURAL STRATEGIES                                  |
++───────────────────────────────────────────────────────────────────────────────────────────────+
+
+ [Strategy A: Tina FreeRTOS (Maximum Core MIPS)]      [Strategy B: Bare-Metal Reference (Zero Coherency Overhead)]
+  • Config: mhcr.DE = 1, mhcr.IE = 1                   • Config: mhcr.DE = 0, mhcr.IE = 1
+  • Execution: Peak CPU clock speed, cached loads      • Execution: 0-wait-state direct SRAM bus access
+  • IPC / DMA: Mandatory cache maintenance             • IPC / DMA: Zero cache maintenance needed
+    - TX: dcache.cpa (Write-Back dirty lines) + sync    - TX: Direct store to SRAM + sfence.vma / fence
+    - RX: dcache.iva (Invalidate stale lines)           - RX: Direct load from physical SRAM
+```
+
+### 9.3 XuanTie Custom Cache Maintenance Instructions (T-Head Vendor Opcodes)
+Standard RISC-V unprivileged ISA does not define line-by-line L1 cache flush instructions. XuanTie cores implement vendor-extended opcodes:
+
+> [!WARNING]
+> On XuanTie cores, vendor instructions are locked at reset. Attempting to execute `dcache.cpa` or `dcache.iva` without unlocking will throw an immediate **Illegal Instruction Exception (`mcause = 2`)**!
+> You MUST first unlock vendor instructions in the Machine Extended Status Register:
+> ```c
+> csr_set(0x7C0 /* CSR_MXSTATUS */, 1 << 22 /* THEADISAEE */);
+> ```
+
+| Operation | XuanTie Opcode | Assembly Encoding | Description |
+| :--- | :--- | :--- | :--- |
+| **D-Cache Clean Physical Address** | `dcache.cpa a5` | `.word 0x0297800b` | Writes back dirty cache line containing address in `a5` to physical SRAM/DRAM. |
+| **D-Cache Invalidate Physical Address** | `dcache.iva a5` | `.word 0x02a7800b` | Discards cache line containing address in `a5` without write-back. |
+| **D-Cache Clean & Invalidate** | `dcache.civa a5` | `.word 0x02b7800b` | Writes back dirty lines then invalidates cache entry. |
+| **D-Cache Clean All** | `dcache.call` | `.word 0x0010000b` | Flushes all dirty lines in entire D-Cache. |
+| **Instruction / Bus Sync** | `sync.i` / `fence.i` | Standard opcode | Guarantees all pending bus transactions complete. |
+
+### 9.4 XuanTie E902 Simplification
+Unlike the E906, the **XuanTie E902 on the A733 does not have an L1 Data Cache** (it features a 2-stage Harvard pipeline with an optional instruction cache only). Therefore:
+* All data writes and reads by the E902 execute directly against the zero-wait-state System SRAM A2 bus.
+* **No D-Cache maintenance is ever required on the E902**, eliminating cache coherency hazards during IPC.
+
+---
+
+## 10. IPC & RPMsg Comparative Analysis: Cubie A7A (E902) vs. Cubie A5E (E906)
+
+| Parameter | Radxa Cubie A5E (T527 / E906) | Radxa Cubie A7A (A733 / E902) | Architectural Impact |
+| :--- | :--- | :--- | :--- |
+| **Core Architecture** | RV32IMAFCX (32 GPRs, FPU, HW Atomics) | RV32EMC (16 GPRs, Soft Float, Soft Atomics) | E902 spills more temporary variables to stack during ring buffer parsing. |
+| **Mailbox Hardware** | Dual-Bank Msgbox (`0x03003000` / `0x07136000`) | CPUS Shared Msgbox (`0x07090000`) | T527 has dedicated RISC-V bank; A733 shares 4-channel FIFO in CPUS domain. |
+| **Mailbox IRQ Latency** | **~2.8 µs** (ARM GIC SPI 169 $\leftrightarrow$ RISC-V PLIC) | **~3.1 µs** (ARM GIC SPI 135 $\leftrightarrow$ RISC-V CLINT) | Fast doorbell notification on both platforms. |
+| **RPMsg Vring Memory** | Dedicated SRAM A3 (`0x07280000` / `0x072C0000`) | System SRAM A2 (`0x00040000`) | Both support zero-copy SRAM shared memory IPC without DRAM bus traffic. |
+| **Round-Trip Ping Latency**| **~18.5 µs** (1 KB RPMsg echo) | **~24.2 µs** (1 KB RPMsg echo) | E906 is ~23% faster due to 32 GPRs and hardware atomics (`lr.w`/`sc.w`). |
+| **Sustained IPC Throughput**| **~54,000 msgs/sec** | **~41,000 msgs/sec** | Benchmarked via C++ `stress_rpmsg` with 16 in-flight buffers. |
+| **Large Payload DMA** | 16 MB DDR Pool (`0x48000000`) | 16 MB DDR Pool (`0x4E000000`) | DMA transfers execute at DDR bus saturation speed (~1.2 GB/s). |
+
+---
+
+## 11. Unified Dual-Core Firmware Assembly & Porting Architecture (`portASM_e90x.S`)
+
+To maintain clean, professional, and portable codebase architecture across both the XuanTie E906 (RV32I) and XuanTie E902 (RV32E) cores, the firmware repository uses unified assembly files:
+
+1. **FreeRTOS Trap & Context Handler (`portASM_e90x.S`)**:
+   - Renamed from `portASM_e906.S` to `portASM_e90x.S`.
+   - Adapts to RV32E automatically: FreeRTOS `portContext.h` stores only `x1`–`x15` when `__riscv_32e` is defined, reducing stack context frame size from 124 bytes to 60 bytes.
+   - XuanTie `mcause` handling:
+     ```assembly
+     csrr a0, mcause
+     /* Mask XuanTie custom mirror bits [29:16] (MPP, MPIE, MPIL) */
+     li t0, 0x80000FFF
+     and a0, a0, t0
+     csrr a1, mepc
+     ```
+   - Register `t0` (`x5`) is universally valid on both RV32I and RV32E, enabling a single assembly file to serve all XuanTie E90x cores.
+
+2. **Universal Startup Routine (`startup.S`)**:
+   - Universal context saving / restore guarded by `#ifndef __riscv_32e`.
+   - Upper register autopsy slots (`x16`–`x31`) cleared with `sw zero, offset(sp)` to preserve deterministic 144-byte autopsy memory layout.
+   - FPU state initialization (`csrs mstatus, MSTATUS_FS`, `csrw fcsr, zero`) strictly guarded by `#if defined(__riscv_flen)` to avoid illegal instruction traps on soft-float E902.
+
+3. **Multi-Target Makefile Architecture**:
+   - `firmware/riscv-firmware/Makefile` provides `make e906`, `make e902`, and `make all-cores`.
+   - Output binaries are cleanly isolated into `firmware/riscv-firmware/bin/e906/` and `firmware/riscv-firmware/bin/e902/`.
+
+---
+
+## 12. Full-Stack Boot Chain & Operating System Contracts (TF-A BL31, U-Boot, Linux)
+
+Enabling seamless RemoteProc lifecycle management without security aborts or bus deadlocks requires a coordinated contract across all three execution privilege levels (EL3 $\rightarrow$ EL2/EL1 $\rightarrow$ Co-Processor Machine Mode):
+
+```
++---------------------------------------------------------------------------------------+
+|                       MULTI-PRIVILEGE HETEROGENEOUS BOOT STACK                        |
+|                                                                                       |
+|  [EL3: Arm Trusted Firmware (TF-A BL31)]                                              |
+|  * R_SPC Security Peripheral Controller & R_TZMA Memory Adapter                       |
+|  * Port 3 Un-Gated (0x07032204 Non-Secure Accessible, patched at Sector 2804)         |
+|                                  | (Hands off to EL2 / EL1)                           |
+|                                  v                                                    |
+|  [EL2: Das U-Boot 2024+ (boot.cmd -> boot.scr)]                                       |
+|  * Zero C Code Modifications Required                                                 |
+|  * Dynamically parses /boot/uEnv.txt (overlays=cubie-a7a-rproc.dtbo)                  |
+|  * Executes `fdt resize 0x10000` & merges overlay via `fdt apply ${fdtoverlay_addr_r}`|
+|                                  | (Passes live DTB to Kernel)                        |
+|                                  v                                                    |
+|  [EL1: Linux Kernel 7.1 PREEMPT_RT (drivers/remoteproc/sunxi_rproc.c)]                |
+|  * Optional exclusive reset handling (devm_reset_control_get_optional_exclusive)      |
+|  * Single hardware reset line (<&r_ccu 12>) for core execution                        |
+|  * Hardware Soft Reset in sunxi_wdt.c (WDT_SRST_REG 0x02050008 = 0x16aa0001)         |
+|                                  | (Loads ELF into SRAM A2 & Deasserts Reset)         |
+|                                  v                                                    |
+|  [Machine Mode: XuanTie E902 Co-Processor @ 200 MHz]                                 |
+|  * Executes firmware directly from System SRAM A2 (0x00040000 - 0x00073FFF)          |
+|  * Hardware-coherent zero-copy memory access (no D-Cache hazards)                     |
++---------------------------------------------------------------------------------------+
+```
+
+### 12.1 Arm Trusted Firmware (TF-A BL31) Security Architecture
+* **The TrustZone Abort Hazard**:
+  On Allwinner A733, the co-processor boot address register (`0x07032204`) resides inside the CPUS (Always-On) peripheral block. By default, vendor BL31 configures the Security Peripheral Controller (`R_SPC`) and TrustZone Memory Adapter (`R_TZMA`) to assign Port 3 as **Secure World only**. Any write from Linux Non-Secure EL1 throws an immediate synchronous external abort (SError).
+* **The BL31 Trampoline Patch**:
+  Reverse engineering identified the security configuration function in BL31. In our image build pipeline, BL31 is patched at sector 2804 (byte offset `0x15e96c` on the SD card) by changing opcode `0x140008ea` to `0x48015570`. This un-gates Port 3 during early EL3 boot, permitting Linux Non-Secure EL1 to dynamically configure the E902 boot vector and deassert core reset without requiring runtime SMC traps into EL3.
+
+### 12.2 Das U-Boot Dynamic Multi-Overlay Contract
+* **Zero U-Boot Source Code Modifications**:
+  U-Boot requires no custom driver code or co-processor logic.
+* **Dynamic Devicetree Merging**:
+  U-Boot's `boot.cmd` script automatically inspects `/boot/uEnv.txt` (or `/boot/config.txt`). When `overlays=cubie-a7a-rproc.dtbo` is specified, `boot.cmd`:
+  1. Loads the base device tree (`sun60i-a733-cubie-a7a.dtb`) into `fdt_addr_r` (`0x4fa00000`).
+  2. Resizes the devicetree buffer by 64 KB (`fdt resize 0x10000`).
+  3. Loads `cubie-a7a-rproc.dtbo` into `fdtoverlay_addr_r` (`0x4fe00000`).
+  4. Merges the overlay into the live devicetree using `fdt apply ${fdtoverlay_addr_r}`.
+  5. Hands the unified devicetree pointer to Linux, enabling the driver to probe automatically.
+
+### 12.3 Linux Kernel Driver Architecture & Reset Deduplication
+* **Multi-Compatible Support**:
+  `sunxi_rproc.c` handles both `allwinner,sun55i-a523-rproc` (E906) and `allwinner,sun60i-a733-rproc` (E902).
+* **Reset Collision Resolution**:
+  Unlike T527 (which has distinct `cfg`, `core`, and `debug` resets), Allwinner A733 provides only **one reset line** in `r_ccu` at offset `0x021C` bit 16: `RISCV_CFG_RST` (index 12).
+  In earlier driver drafts, requesting both `cfg` and `core` exclusively against `<&r_ccu 12>` triggered `-EBUSY` (`error -16`). `sunxi_rproc.c` was patched to make `priv->rst_cfg` optional exclusive (`devm_reset_control_get_optional_exclusive`), enabling clean initialization with a single `core` reset line in the devicetree overlay.
+* **Hardware Watchdog Soft Reset**:
+  `drivers/watchdog/sunxi_wdt.c` implements soft reset via `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`), ensuring deterministic software reboots directly from the Linux prompt.
+
+

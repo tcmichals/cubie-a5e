@@ -1155,20 +1155,169 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
             print(f"  {label:<35} | {prev_val:<12} | {cur_val:<12} | {badge} ({delta_str})")
         print("=" * 76)
 
+def run_sweep_a7a(args):
+    global g_active_overlay
+    results = []
+    aggregated_profile_data = []
+
+    # 1.0 RemoteProc & Lifecycle Check on A7A
+    log_banner(1, "Testing Radxa Cubie A7A E902 RemoteProc", "Overlay: cubie-a7a-rproc, Base DTB: sun60i-a733-cubie-a7a.dtb")
+    rproc_ok = report_remoteproc_presence()
+    if not rproc_ok:
+        print("[CONFIG] Ensuring cubie-a7a-rproc overlay is active...")
+        set_overlay_and_reboot("cubie-a7a-rproc", base_dtb="sun60i-a733-cubie-a7a.dtb")
+
+    # 1.0b Kernel KUnit Driver Tests (if present)
+    kunit_summary = validate_kunit_tests()
+    for suite_name, s in kunit_summary.get("suites", {}).items():
+        results.append(("A7A", f"KUnit: {s['title']} ({s['passed']}/{s['total']} tests)", s["status"]))
+
+    # 1.1 run_tests.py on Target
+    print("\n--- 1.1 Running automated test suite (run_tests.py) ---")
+    c, out, _ = run_ssh("python3 /usr/bin/run_tests.py", timeout=300)
+    print(out)
+    results.append(("A7A", "run_tests.py (A7A Suite)", "PASS" if c == 0 else "FAIL"))
+    prof_data = parse_target_json_report()
+    if prof_data:
+        aggregated_profile_data.append(prof_data)
+
+    # 1.2 C++ ping_rpmsg
+    print("\n--- 1.2 Running C++ ping_rpmsg (1,000 pings) ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testPingRpmsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 2')
+    c, out, _ = run_ssh("/usr/bin/ping_rpmsg -n 1000 -D 0", timeout=30)
+    print(out)
+    results.append(("A7A", "C++ ping_rpmsg (1000 pkts)", ping_exchanged(c, out)))
+
+    print("\n--- 1.2b Running C++ stress_rpmsg (100,000 msgs, 16 in flight) ---")
+    c, out, _ = run_ssh("/usr/bin/stress_rpmsg -n 100000 -w 16", timeout=120)
+    print(out)
+    results.append(("A7A", "C++ stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
+
+    # 1.3 Python ping_rpmsg.py
+    print("\n--- 1.3 Running Python ping_rpmsg.py (1,000 pings) ---")
+    c, out, _ = run_ssh("python3 /usr/bin/ping_rpmsg.py -n 1000 -d 0", timeout=30)
+    print(out)
+    results.append(("A7A", "Python ping_rpmsg.py (1000 pkts)", ping_exchanged(c, out)))
+
+    # 1.4 C++ ping_dram
+    print("\n--- 1.4 Running C++ ping_dram (1,000 pings) ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testDRAMMsg.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
+    c, out, _ = run_ssh("/usr/bin/ping_dram -n 1000 -s 512", timeout=30)
+    print(out)
+    results.append(("A7A", "C++ ping_dram (1000 pkts)", ping_exchanged(c, out)))
+
+    # 1.5 Python monitor_trace.py
+    print("\n--- 1.5 Running Python monitor_trace.py ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testStringBinaryTrace0.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
+    c, out, _ = run_ssh("python3 /usr/bin/monitor_trace.py -n 3", timeout=15)
+    print(out)
+    results.append(("A7A", "Python monitor_trace.py", "PASS" if c == 0 else "FAIL"))
+
+    # 1.6 exampleRiscv baseline lifecycle
+    print("\n--- 1.6 Running exampleRiscv (Diagnostic Baseline) ---")
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "exampleRiscv.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 1')
+    _, state, _ = run_ssh("cat /sys/class/remoteproc/remoteproc0/state", timeout=5)
+    state = state.strip()
+    run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null')
+    results.append(("A7A", "exampleRiscv lifecycle (start/running/stop)", "PASS" if state == "running" else "FAIL"))
+
+    # 1.7 Kernel dmesg health check
+    dmesg_ok, dmesg_err = check_kernel_dmesg_health("A7A E902", allowed_patterns=["testCrash"])
+    results.append(("A7A", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
+
+    # -------------------------------------------------------------------------
+    # FINAL SUMMARY REPORT FOR A7A
+    # -------------------------------------------------------------------------
+    print("\n" + "=" * 76)
+    print("             RADXA CUBIE A7A E902 SILICON SWEEP REPORT")
+    print("=" * 76)
+    print(f"  {'Profile':<12} | {'Test / Tool':<42} | {'Result'}")
+    print("  " + "-" * 12 + "-+-" + "-" * 42 + "-+--------")
+    all_pass = True
+    for prof, test, status in results:
+        color = "\033[92m" if status == "PASS" else "\033[91m"
+        reset = "\033[0m"
+        print(f"  {prof:<12} | {test:<42} | {color}{status}{reset}")
+        if status != "PASS":
+            all_pass = False
+
+    flavor = kernel_flavor()
+    report_bundle = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "target": f"{TARGET_USER}@{TARGET_IP}",
+        "board": "Radxa Cubie A7A (Allwinner A733)",
+        "coprocessor": "XuanTie E902 RISC-V (RV32EMC)",
+        "kunit_tests": kunit_summary,
+        "sweep_summary": results,
+        "profiles": aggregated_profile_data,
+        "kernel_flavor": flavor,
+        "overall_status": "PASS" if all_pass else "FAIL"
+    }
+
+    try:
+        with open(args.json_out, "w") as f:
+            json.dump(report_bundle, f, indent=2)
+        print(f"[REPORT] Saved A7A sweep JSON results to: {args.json_out}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {args.json_out}: {e}")
+
+    try:
+        with open(args.report_out, "w") as f:
+            f.write("# Radxa Cubie A7A Silicon Sweep Results\n\n")
+            f.write(f"- **Timestamp**: {report_bundle['timestamp']}\n")
+            f.write(f"- **Target**: {TARGET_IP} (Linux 7.1 PREEMPT_RT)\n")
+            f.write(f"- **Board**: Radxa Cubie A7A (Allwinner A733)\n")
+            f.write(f"- **Co-Processor**: XuanTie E902 RISC-V (RV32EMC @ 200 MHz, 208 KB SRAM A2)\n")
+            f.write(f"- **Overall Status**: **{report_bundle['overall_status']}**\n\n")
+
+            f.write("## Overall Test Summary\n\n")
+            f.write("| Platform | Test / Tool | Status |\n")
+            f.write("| :--- | :--- | :---: |\n")
+            for prof, test, status in results:
+                f.write(f"| {prof} | {test} | **{status}** |\n")
+
+            if aggregated_profile_data:
+                f.write("\n## Detailed Quantitative Metrics\n\n")
+                for prof in aggregated_profile_data:
+                    f.write(f"### {prof.get('profile')}\n\n")
+                    f.write(f"- **Node Mapping**: {prof.get('node_desc')}\n\n")
+                    f.write("| Test / Application | Status | Packets | Avg RTT | Throughput | Bandwidth | Data Integrity |\n")
+                    f.write("| :--- | :---: | :---: | :---: | :---: | :---: | :--- |\n")
+                    for r in prof.get("results", []):
+                        m = r.get("metrics", {})
+                        pkts = f"{m.get('packets_recv')}/{m.get('packets_sent')}" if m.get("packets_sent") else (m.get("heartbeat_count") and f"{m['heartbeat_count']} beats" or "N/A")
+                        avg_rtt = f"{m.get('avg_lat_us'):.2f} µs" if m.get("avg_lat_us") is not None else (m.get("mcause") or "N/A")
+                        rate = f"{m.get('throughput_msgs_s'):,.1f} msgs/s" if m.get("throughput_msgs_s") is not None else "N/A"
+                        bw = str(m.get("bandwidth", "N/A")).split("(")[0].strip()
+                        integ = "PASS (0 errors)" if m.get("data_integrity") and "PASS" in m.get("data_integrity") else (m.get("data_integrity") or "Verified")
+                        f.write(f"| {r.get('name')} | **{r.get('status')}** | {pkts} | {avg_rtt} | {rate} | {bw} | {integ} |\n")
+                    f.write("\n")
+        print(f"[REPORT] Saved A7A sweep Markdown results to: {args.report_out}")
+    except Exception as e:
+        print(f"[WARN] Failed to write {args.report_out}: {e}")
+
+    if g_serial_logger:
+        g_serial_logger.stop()
+        print(f"[SERIAL] Serial console logging saved to: {args.serial_log}")
+
+    return 0 if all_pass else 1
+
 def main():
     global TARGET_IP, TARGET_USER, TARGET_PORT, TARGET_PASSWORD, TARGET_KEY, g_serial_logger, g_coverage
     import argparse
-    parser = argparse.ArgumentParser(description="Autonomous 3-Profile Silicon Sweep for Radxa Cubie A5E (E906 RISC-V)")
+    parser = argparse.ArgumentParser(description="Autonomous Silicon Sweep for Radxa Cubie (E906 / E902 RISC-V)")
+    parser.add_argument("--target", "--board", choices=["a5e", "a7a"], default=os.environ.get("TARGET_BOARD", "a5e"),
+                        help="Target board: 'a5e' (Allwinner T527 / E906) or 'a7a' (Allwinner A733 / E902)")
     parser.add_argument("--ip", default=os.environ.get("TARGET_IP", TARGET_IP), help=f"Target board IP address (default: {TARGET_IP})")
     parser.add_argument("--user", default=os.environ.get("TARGET_USER", TARGET_USER), help=f"Target SSH user (default: {TARGET_USER})")
     parser.add_argument("--password", "-p", default=os.environ.get("TARGET_PASSWORD", None), help="SSH password for target board authentication")
     parser.add_argument("--port", "-P", type=int, default=int(os.environ.get("TARGET_PORT", 22)), help="SSH port (default: 22)")
     parser.add_argument("--key", "-i", default=os.environ.get("TARGET_KEY", None), help="Path to SSH private key file")
-    parser.add_argument("--serial", default=SERIAL_PORT, help=f"Serial console device (default: {SERIAL_PORT})")
+    parser.add_argument("--serial", default=None, help="Serial console device (auto-selected per target if omitted)")
     parser.add_argument("--serial-baud", type=int, default=115200, help="Serial console baud rate (default: 115200)")
-    parser.add_argument("--serial-log", default=SERIAL_LOG_OUT, help=f"Path for output serial console log (default: {SERIAL_LOG_OUT})")
-    parser.add_argument("--json-out", default=SWEEP_JSON_OUT, help=f"Path for output JSON sweep results (default: {SWEEP_JSON_OUT})")
-    parser.add_argument("--report-out", default=SWEEP_MD_OUT, help=f"Path for output Markdown sweep report (default: {SWEEP_MD_OUT})")
+    parser.add_argument("--serial-log", default=None, help="Path for output serial console log (auto-selected per target)")
+    parser.add_argument("--json-out", default=None, help="Path for output JSON sweep results (auto-selected per target)")
+    parser.add_argument("--report-out", default=None, help="Path for output Markdown sweep report (auto-selected per target)")
     parser.add_argument("--history-json", default=SWEEP_HISTORY_JSON, help=f"Path for cumulative JSON history (default: {SWEEP_HISTORY_JSON})")
     parser.add_argument("--history-md", default=SWEEP_HISTORY_MD, help=f"Path for historical Markdown report (default: {SWEEP_HISTORY_MD})")
     parser.add_argument("--gcov-build-dir", default=os.environ.get("GCOV_BUILD_DIR"),
@@ -1181,6 +1330,26 @@ def main():
     parser.add_argument("--compare-all", action="store_true",
                         help="Only replay the range check for every recorded run against the passing runs before it")
     args = parser.parse_args()
+
+    # Per-target defaults
+    if args.target == "a7a":
+        if not args.json_out:
+            args.json_out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results_a7a.json"))
+        if not args.report_out:
+            args.report_out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_sweep_results_a7a.md"))
+        if not args.serial:
+            args.serial = "/dev/ttyUSB1" if os.path.exists("/dev/ttyUSB1") else SERIAL_PORT
+        if not args.serial_log:
+            args.serial_log = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "serial_console_a7a.log"))
+    else:
+        if not args.json_out:
+            args.json_out = SWEEP_JSON_OUT
+        if not args.report_out:
+            args.report_out = SWEEP_MD_OUT
+        if not args.serial:
+            args.serial = SERIAL_PORT
+        if not args.serial_log:
+            args.serial_log = SERIAL_LOG_OUT
 
     if args.compare_all:
         return compare_all_runs(load_history(args.history_json))
@@ -1237,6 +1406,16 @@ def main():
     if args.serial:
         g_serial_logger = SerialLogger(args.serial, baud=args.serial_baud, log_path=args.serial_log)
         g_serial_logger.start()
+
+    if args.target == "a7a":
+        print("========================================================================")
+        print("  Autonomous Silicon Sweep (Radxa Cubie A7A)")
+        print("  Co-Processor: XuanTie E902 RISC-V (RV32EMC @ 200 MHz, 208 KB SRAM A2)")
+        print(f"  Target: {TARGET_USER}@{TARGET_IP}:{TARGET_PORT} (Linux 7.1 PREEMPT_RT)")
+        if args.serial:
+            print(f"  Serial Console: {args.serial} @ {args.serial_baud} baud -> {args.serial_log}")
+        print("========================================================================\n")
+        return run_sweep_a7a(args)
 
     print("========================================================================")
     print("  Autonomous 3-Profile Silicon Sweep (Radxa Cubie A5E)")

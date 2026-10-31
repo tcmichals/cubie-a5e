@@ -1,12 +1,30 @@
 config BR2_PACKAGE_RISCV_FIRMWARE
-	bool "riscv-firmware (Allwinner XuanTie E906 RISC-V)"
+	bool "riscv-firmware (Allwinner XuanTie E906/E902 RISC-V)"
 	help
-	  XuanTie RISC-V co-processor bare-metal ingestion firmware.
+	  XuanTie RISC-V co-processor bare-metal firmware.
 	  Compiles the firmware from the local source directory and
 	  installs binary payloads into target `/lib/firmware/` and
 	  images directory.
 
 if BR2_PACKAGE_RISCV_FIRMWARE
+
+choice
+	prompt "Target RISC-V Core"
+	default BR2_PACKAGE_RISCV_FIRMWARE_CORE_E906
+	help
+	  Select the target RISC-V processor architecture.
+
+config BR2_PACKAGE_RISCV_FIRMWARE_CORE_E906
+	bool "XuanTie E906 (Allwinner T527 / A527 / Radxa Cubie A5E)"
+	help
+	  XuanTie E906 32-bit RISC-V core (RV32IMAFCX @ 200 MHz, 32 registers).
+
+config BR2_PACKAGE_RISCV_FIRMWARE_CORE_E902
+	bool "XuanTie E902 (Allwinner A733 / Radxa Cubie A7A)"
+	help
+	  XuanTie E902 32-bit RISC-V core (RV32EMC @ 200 MHz, 16 registers).
+
+endchoice
 
 choice
 	prompt "Default Active Boot Firmware"

@@ -54,6 +54,7 @@ default_trap_entry:
     sw a3,  48(sp)
     sw a4,  52(sp)
     sw a5,  56(sp)
+#ifndef __riscv_32e
     sw a6,  60(sp)
     sw a7,  64(sp)
     sw s2,  68(sp)
@@ -70,6 +71,24 @@ default_trap_entry:
     sw t4,  112(sp)
     sw t5,  116(sp)
     sw t6,  120(sp)
+#else
+    sw zero, 60(sp)
+    sw zero, 64(sp)
+    sw zero, 68(sp)
+    sw zero, 72(sp)
+    sw zero, 76(sp)
+    sw zero, 80(sp)
+    sw zero, 84(sp)
+    sw zero, 88(sp)
+    sw zero, 92(sp)
+    sw zero, 96(sp)
+    sw zero, 100(sp)
+    sw zero, 104(sp)
+    sw zero, 108(sp)
+    sw zero, 112(sp)
+    sw zero, 116(sp)
+    sw zero, 120(sp)
+#endif
 
     /* Save RISC-V Machine Control and Status Registers (CSRs) */
     csrr t0, mepc
@@ -119,6 +138,7 @@ default_trap_entry:
     lw a3,  48(sp)
     lw a4,  52(sp)
     lw a5,  56(sp)
+#ifndef __riscv_32e
     lw a6,  60(sp)
     lw a7,  64(sp)
     lw s2,  68(sp)
@@ -135,6 +155,7 @@ default_trap_entry:
     lw t4,  112(sp)
     lw t5,  116(sp)
     lw t6,  120(sp)
+#endif
 
     /* Deallocate stack frame and return from trap */
     addi sp, sp, 144
@@ -170,9 +191,12 @@ _start:
 
     /* 3. Write diagnostic signature (0xDEADBEEF) directly from ASM */
     /* This proves the core is executing instructions at reset */
+    .weak __sram_c_start
     la t0, __sram_c_start
+    beqz t0, 1f
     li t1, 0xdeadbeef
     sw t1, 0(t0)
+1:
 
     /* 4. Setup Hardware Stack Pointer in SRAM */
     la sp, _stack_top
@@ -183,10 +207,12 @@ _start:
     la gp, __global_pointer$
 .option pop
 
+#if defined(__riscv_flen)
     /* 5b. Enable FPU in mstatus (mstatus.FS = 0b01 Initial) */
     li t0, (1 << 13) | (1 << 14)
     csrs mstatus, t0
     csrw fcsr, zero
+#endif
 
     /* 6. Copy .data from LMA to VMA if separate */
     la a0, _sdata

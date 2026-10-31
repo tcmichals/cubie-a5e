@@ -18,6 +18,8 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
    * **Topics**: Deploying the open-source `AbstractX` framework on bare-metal RISC-V, triggering HALO (Heap Allocation eLision Optimization) for zero-cost coroutines, benchmarks vs FreeRTOS (19x speedup, <400 B RAM for 8 tasks), and non-blocking hardware awaiters.
 5. **[Part 5: Experiment First, Compile Later: Python on Both Processors of the Allwinner T527](https://github.com/tcmichals/AbstractX/blob/main/docs/articles/micropython-on-e906/README.md)** (in the AbstractX repository)
    * **Topics**: How the device-tree overlay and U-Boot hand UART3, I²C1 and DMA channels to the E906; remoteproc; RPMsg explained layer by layer (doorbell, vrings, addressed messages, endpoints, `/dev/rpmsgN`) and the three streams built on it; MicroPython running inside AbstractX on the E906; Python on Linux driving Python on the E906; live CPU, profiler and timeline views; sharing the DMA controller with Linux; board measurements.
+6. **[Part 6: Heterogeneous RISC-V RemoteProc Across Allwinner Silicon: Cubie A7A (E902) vs. Cubie A5E (E906)](part5_a733_e902_remoteproc_and_heterogeneous_comparison.md)**
+   * **Topics**: Bringing up Linux RemoteProc on Allwinner A733 (Radxa Cubie A7A) with XuanTie E902 (RV32EMC); comprehensive comparison with Allwinner T527 (Cubie A5E) XuanTie E906; memory models (SRAM A3 + HiFi4 DSP RAM vs System SRAM A2); D-cache coherency hazards in shared SRAM; apples-to-apples RPMsg benchmarks; and unified multi-core firmware architecture (`portASM_e90x.S`).
 
 ---
 

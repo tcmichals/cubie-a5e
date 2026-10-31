@@ -1372,7 +1372,7 @@ Both platforms were benchmarked on physical hardware with live bidirectional tra
 | :--- | :--- | :--- |
 | **Physical Bus** | USB 2.0 High-Speed (`1a40:0101` Hub Port 4) | SDIO 3.0 (`mmc1`, OOB GPIO IRQ 180) |
 | **Linux Kernel** | 7.1.0 `PREEMPT_RT` | 7.1.0 `PREEMPT_RT` |
-| **Wi-Fi Network** | `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9) | `NETGEAR69-5G` (5 GHz, 80 MHz, VHT-MCS 9) |
+| **Wi-Fi Network** | `5GHz-Access-Point` (5 GHz, 80 MHz, VHT-MCS 9) | `5GHz-Access-Point` (5 GHz, 80 MHz, VHT-MCS 9) |
 | **DHCP Address** | `192.168.1.14` | `192.168.1.15` |
 | **Gateway Ping RTT**| **0.58 ms** (0% loss) | **0.93 ms min / 1.25 ms avg** (0% loss) |
 | **Internet Ping RTT**| **14.2 ms** (0% loss) | **13.8 ms min / 15.8 ms avg** (0% loss) |

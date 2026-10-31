@@ -127,7 +127,7 @@ The unified driver has been verified on physical hardware across both platforms 
 | **SoC / Bus** | Allwinner A733 / High-Speed USB 2.0 | Allwinner T527 / SDIO 3.0 (OOB IRQ 180) |
 | **PHY Device ID** | `0xA69C:0x8D80` (Downstream Hub Port 4) | `mmc1` SDIO Function 1 (`0xA69C:0x8D80`) |
 | **Firmware Bootstrap** | Instant (~100 ms) | Fast (~300 ms) |
-| **Wi-Fi Association** | WPA2-PSK (`NETGEAR69-5G`, 5 GHz, 80 MHz) | WPA2-PSK (`NETGEAR69-5G`, 5 GHz, 80 MHz) |
+| **Wi-Fi Association** | WPA2-PSK (5 GHz, 80 MHz) | WPA2-PSK (5 GHz, 80 MHz) |
 | **PHY Link Rate** | **433.3 Mbps RX** / **234.0 Mbps TX** | **433.3 Mbps RX** / **351.0 Mbps TX** |
 | **Gateway Ping RTT** | **0.58 ms avg** (0% loss) | **0.93 ms min / 1.25 ms avg** (0% loss) |
 | **Internet Ping RTT** | **14.2 ms avg** (0% loss to 8.8.8.8) | **13.8 ms min / 15.8 ms avg** (0% loss to 8.8.8.8) |

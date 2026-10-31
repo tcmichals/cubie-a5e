@@ -22,7 +22,7 @@ import argparse
 # -----------------------------------------------------------------------------
 SOC_MAPS = {
     "a527": {
-        "name": "Allwinner A527 / A523 (Radxa Cubie A5E)",
+        "name": "Allwinner A527 / A523 (Radxa Cubie A5E, XuanTie E906)",
         "sram0_phys": 0x07280000,
         "sram0_da":   0x3FFC0000,
         "sram0_size": 256 * 1024,
@@ -37,7 +37,7 @@ SOC_MAPS = {
         "dma_size":   1024 * 1024,
     },
     "t527": {
-        "name": "Allwinner T527 / A733",
+        "name": "Allwinner T527 (XuanTie E906)",
         "sram0_phys": 0x07280000,
         "sram0_da":   0x3FFC0000,
         "sram0_size": 256 * 1024,
@@ -50,6 +50,21 @@ SOC_MAPS = {
         "dma_phys":   0x48100000,
         "dma_da":     0x48100000,
         "dma_size":   1024 * 1024,
+    },
+    "a733": {
+        "name": "Allwinner A733 (Radxa Cubie A7A, XuanTie E902)",
+        "sram0_phys": 0x00040000,
+        "sram0_da":   0x00040000,
+        "sram0_size": 208 * 1024,
+        "sram1_phys": None,
+        "sram1_da":   None,
+        "sram1_size": 0,
+        "cfg_phys":   0x07032000,
+        "cfg_da":     0x07032000,
+        "cfg_size":   1024,
+        "dma_phys":   0x4E000000,
+        "dma_da":     0x4E000000,
+        "dma_size":   16 * 1024 * 1024,
     }
 }
 
@@ -76,7 +91,9 @@ def detect_soc():
             try:
                 with open(p, "rb") as f:
                     compat = f.read().decode("latin-1", errors="ignore").lower()
-                if "t527" in compat or "a733" in compat:
+                if "a733" in compat or "sun60i" in compat or "cubie-a7a" in compat or "cubie_a7a" in compat:
+                    return "a733"
+                if "t527" in compat:
                     return "t527"
                 if "a527" in compat or "a523" in compat or "cubie_a5e" in compat or "cubie-a5e" in compat:
                     return "a527"
@@ -85,10 +102,22 @@ def detect_soc():
     return "a527" # Default to Cubie A5E
 
 def da_to_phys(da, soc_key="a527"):
-    """Translate E906 Core DA to Host Physical Address."""
+    """Translate RISC-V Core DA to Host Physical Address."""
     soc = SOC_MAPS[soc_key]
 
-    # Forbidden Zones
+    if soc_key == "a733":
+        # E902 SRAM A2: 0x00040000..0x00074000 (1:1 mapped)
+        if 0x00040000 <= da < 0x00074000:
+            return da, f"SRAM_A2 (offset +0x{da - 0x00040000:X})"
+        # CFG Registers
+        if 0x07032000 <= da < 0x07032400:
+            return da, f"E902 CFG Block (offset +0x{da - 0x07032000:X})"
+        # DDR Carveout
+        if 0x4E000000 <= da < 0x4F000000:
+            return da, f"DDR Carveout (offset +0x{da - 0x4E000000:X})"
+        return None, "UNMAPPED"
+
+    # Forbidden Zones for E906 (T527 / A527)
     if da < 0x00020000:
         return None, "FORBIDDEN (BootROM)"
     if 0x00020000 <= da < 0x00040000:
@@ -97,44 +126,53 @@ def da_to_phys(da, soc_key="a527"):
         return None, "FORBIDDEN (Secure OP-TEE / TrustZone SRAM A2)"
 
     # Space 0 (r_sram)
-    if soc["sram0_da"] <= da < (soc["sram0_da"] + soc["sram0_size"]):
+    if soc["sram0_da"] and soc["sram0_da"] <= da < (soc["sram0_da"] + soc["sram0_size"]):
         offset = da - soc["sram0_da"]
         return soc["sram0_phys"] + offset, f"SRAM_A3 Space 0 (offset +0x{offset:X})"
 
     # Space 1 (r_sram1)
-    if soc["sram1_da"] <= da < (soc["sram1_da"] + soc["sram1_size"]):
+    if soc["sram1_da"] and soc["sram1_da"] <= da < (soc["sram1_da"] + soc["sram1_size"]):
         offset = da - soc["sram1_da"]
         return soc["sram1_phys"] + offset, f"SRAM_A3 Space 1 (offset +0x{offset:X})"
 
     # CFG Registers
-    if soc["cfg_da"] <= da < (soc["cfg_da"] + soc["cfg_size"]):
+    if soc["cfg_da"] and soc["cfg_da"] <= da < (soc["cfg_da"] + soc["cfg_size"]):
         offset = da - soc["cfg_da"]
         return soc["cfg_phys"] + offset, f"RISC-V CFG Block (offset +0x{offset:X})"
 
     # DDR DMA Pool
-    if soc["dma_da"] <= da < (soc["dma_da"] + soc["dma_size"]):
+    if soc["dma_da"] and soc["dma_da"] <= da < (soc["dma_da"] + soc["dma_size"]):
         offset = da - soc["dma_da"]
         return soc["dma_phys"] + offset, f"DDR DMA Carveout (offset +0x{offset:X})"
 
     return None, "UNMAPPED"
 
 def phys_to_da(phys, soc_key="a527"):
-    """Translate Host Physical Address to E906 Core DA."""
+    """Translate Host Physical Address to RISC-V Core DA."""
     soc = SOC_MAPS[soc_key]
 
-    if soc["sram0_phys"] <= phys < (soc["sram0_phys"] + soc["sram0_size"]):
+    if soc_key == "a733":
+        if 0x00040000 <= phys < 0x00074000:
+            return phys, f"SRAM_A2 (offset +0x{phys - 0x00040000:X})"
+        if 0x07032000 <= phys < 0x07032400:
+            return phys, f"E902 CFG Block (offset +0x{phys - 0x07032000:X})"
+        if 0x4E000000 <= phys < 0x4F000000:
+            return phys, f"DDR Carveout (offset +0x{phys - 0x4E000000:X})"
+        return None, "UNMAPPED"
+
+    if soc["sram0_phys"] and soc["sram0_phys"] <= phys < (soc["sram0_phys"] + soc["sram0_size"]):
         offset = phys - soc["sram0_phys"]
         return soc["sram0_da"] + offset, f"SRAM_A3 Space 0 (offset +0x{offset:X})"
 
-    if soc["sram1_phys"] <= phys < (soc["sram1_phys"] + soc["sram1_size"]):
+    if soc["sram1_phys"] and soc["sram1_phys"] <= phys < (soc["sram1_phys"] + soc["sram1_size"]):
         offset = phys - soc["sram1_phys"]
         return soc["sram1_da"] + offset, f"SRAM_A3 Space 1 (offset +0x{offset:X})"
 
-    if soc["cfg_phys"] <= phys < (soc["cfg_phys"] + soc["cfg_size"]):
+    if soc["cfg_phys"] and soc["cfg_phys"] <= phys < (soc["cfg_phys"] + soc["cfg_size"]):
         offset = phys - soc["cfg_phys"]
         return soc["cfg_da"] + offset, f"RISC-V CFG Block (offset +0x{offset:X})"
 
-    if soc["dma_phys"] <= phys < (soc["dma_phys"] + soc["dma_size"]):
+    if soc["dma_phys"] and soc["dma_phys"] <= phys < (soc["dma_phys"] + soc["dma_size"]):
         offset = phys - soc["dma_phys"]
         return soc["dma_da"] + offset, f"DDR DMA Carveout (offset +0x{offset:X})"
 

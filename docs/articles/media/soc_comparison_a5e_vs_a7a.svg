@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 620" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <linearGradient id="gradA5E" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#1f242c"/>
+    </linearGradient>
+    <linearGradient id="gradA7A" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#21262d"/>
+    </linearGradient>
+    <filter id="drop-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="550" y="42" fill="#f0f6fc" font-size="22" font-weight="700" text-anchor="middle" letter-spacing="0.5">Heterogeneous SoC Topology Comparison</text>
+  <text x="550" y="68" fill="#8b949e" font-size="14" text-anchor="middle">Radxa Cubie A5E (Allwinner T527 / sun55i) vs. Radxa Cubie A7A (Allwinner A733 / sun60iw2)</text>
+
+  <!-- ==================== LEFT: CUBIE A5E ==================== -->
+  <g transform="translate(30, 95)" filter="url(#drop-shadow)">
+    <!-- Container Card -->
+    <rect width="505" height="495" rx="12" fill="url(#gradA5E)" stroke="#30363d" stroke-width="1.5"/>
+    
+    <!-- Header -->
+    <rect width="505" height="48" rx="12" fill="#1f2937" stroke="#388bfd" stroke-width="1.5"/>
+    <rect y="36" width="505" height="12" fill="#1f2937"/>
+    <text x="20" y="30" fill="#58a6ff" font-size="16" font-weight="700">Radxa Cubie A5E</text>
+    <text x="485" y="30" fill="#8b949e" font-size="13" text-anchor="end">Allwinner T527 (sun55i)</text>
+
+    <!-- Host ARM Subsystem -->
+    <rect x="20" y="65" width="465" height="92" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.2"/>
+    <text x="35" y="88" fill="#58a6ff" font-size="14" font-weight="600">ARM Host Cluster (CPUX)</text>
+    <text x="35" y="110" fill="#c9d1d9" font-size="12">8× ARM Cortex-A55 @ 1.80 GHz (DynamIQ Cluster)</text>
+    <text x="35" y="130" fill="#8b949e" font-size="12">Linux 7.1 PREEMPT_RT • GICv2 (SPI 169) • Standard PSCI v1.0</text>
+    <rect x="375" y="80" width="95" height="24" rx="4" fill="#1f6feb" fill-opacity="0.25"/>
+    <text x="422" y="96" fill="#79c0ff" font-size="11" font-weight="600" text-anchor="middle">Octa-Core A55</text>
+
+    <!-- Co-Processor Subsystem -->
+    <rect x="20" y="172" width="465" height="152" rx="8" fill="#0d2d1d" stroke="#238636" stroke-width="1.2"/>
+    <text x="35" y="195" fill="#3fb950" font-size="14" font-weight="600">MCU &amp; DSP Domain (0x07100000+)</text>
+    
+    <!-- E906 Core Box -->
+    <rect x="35" y="208" width="210" height="102" rx="6" fill="#163824" stroke="#2ea043" stroke-width="1"/>
+    <text x="45" y="228" fill="#56d364" font-size="13" font-weight="600">XuanTie E906 RISC-V</text>
+    <text x="45" y="247" fill="#c9d1d9" font-size="11">• RV32IMAFCX @ 200 MHz</text>
+    <text x="45" y="264" fill="#c9d1d9" font-size="11">• 32 GPRs (x0–x31) + FPU</text>
+    <text x="45" y="281" fill="#c9d1d9" font-size="11">• Hardware Atomics (lr.w/sc.w)</text>
+    <text x="45" y="298" fill="#8b949e" font-size="11">• 5-Stage Dual-Issue Pipeline</text>
+
+    <!-- HiFi4 DSP Box -->
+    <rect x="260" y="208" width="210" height="102" rx="6" fill="#2d1d3d" stroke="#8957e5" stroke-width="1"/>
+    <text x="270" y="228" fill="#d2a8ff" font-size="13" font-weight="600">Cadence HiFi4 Audio DSP</text>
+    <text x="270" y="247" fill="#c9d1d9" font-size="11">• Clock: 600 MHz (PLL_AUDIO)</text>
+    <text x="270" y="264" fill="#c9d1d9" font-size="11">• 128 KB Local DSP RAM</text>
+    <text x="270" y="281" fill="#c9d1d9" font-size="11">• Decoupled for Flight Compute</text>
+    <text x="270" y="298" fill="#8b949e" font-size="11">• E906 can access 0x00020000</text>
+
+    <!-- Memory Hierarchy Box -->
+    <rect x="20" y="340" width="465" height="135" rx="8" fill="#2b1a0d" stroke="#d29922" stroke-width="1.2"/>
+    <text x="35" y="363" fill="#e3b341" font-size="14" font-weight="600">Memory &amp; Interconnect Hierarchy</text>
+    <text x="35" y="386" fill="#f0883e" font-size="12" font-weight="600">• 512 KB Dedicated SRAM A3:</text>
+    <text x="210" y="386" fill="#c9d1d9" font-size="12">Space 0 (256 KB) + Space 1 (256 KB)</text>
+    <text x="35" y="406" fill="#d2a8ff" font-size="12" font-weight="600">• 128 KB HiFi4 DSP RAM:</text>
+    <text x="210" y="406" fill="#c9d1d9" font-size="12">0x00020000 (Available to E906)</text>
+    <text x="35" y="426" fill="#58a6ff" font-size="12" font-weight="600">• 160 KB Shared SRAM A2:</text>
+    <text x="210" y="426" fill="#c9d1d9" font-size="12">0x00040000 (Telemetry &amp; Bootloader)</text>
+    <text x="35" y="446" fill="#3fb950" font-size="12" font-weight="600">• Total Fast On-Chip SRAM:</text>
+    <text x="210" y="446" fill="#56d364" font-size="12" font-weight="700">Up to 640 KB (SRAM A3 + DSP RAM)</text>
+    <text x="35" y="465" fill="#8b949e" font-size="11">• Mailbox: Dual-Bank ARM (0x03003000) / RISC-V (0x07136000)</text>
+  </g>
+
+  <!-- ==================== RIGHT: CUBIE A7A ==================== -->
+  <g transform="translate(565, 95)" filter="url(#drop-shadow)">
+    <!-- Container Card -->
+    <rect width="505" height="495" rx="12" fill="url(#gradA7A)" stroke="#30363d" stroke-width="1.5"/>
+    
+    <!-- Header -->
+    <rect width="505" height="48" rx="12" fill="#2d2215" stroke="#f0883e" stroke-width="1.5"/>
+    <rect y="36" width="505" height="12" fill="#2d2215"/>
+    <text x="20" y="30" fill="#f0883e" font-size="16" font-weight="700">Radxa Cubie A7A</text>
+    <text x="485" y="30" fill="#8b949e" font-size="13" text-anchor="end">Allwinner A733 (sun60iw2)</text>
+
+    <!-- Host ARM Subsystem -->
+    <rect x="20" y="65" width="465" height="92" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.2"/>
+    <text x="35" y="88" fill="#58a6ff" font-size="14" font-weight="600">ARM Host Cluster (CPUX)</text>
+    <text x="35" y="110" fill="#c9d1d9" font-size="12">4× Cortex-A76 @ 2.0 GHz + 4× Cortex-A55 @ 1.8 GHz (big.LITTLE)</text>
+    <text x="35" y="130" fill="#8b949e" font-size="12">Linux 7.1 PREEMPT_RT • GICv3 (SPI 135) • PSCIv1.1 / TF-A BL31</text>
+    <rect x="365" y="80" width="105" height="24" rx="4" fill="#f0883e" fill-opacity="0.25"/>
+    <text x="417" y="96" fill="#f0883e" font-size="11" font-weight="600" text-anchor="middle">Octa big.LITTLE</text>
+
+    <!-- Co-Processor Subsystem -->
+    <rect x="20" y="172" width="465" height="152" rx="8" fill="#1f1830" stroke="#a371f7" stroke-width="1.2"/>
+    <text x="35" y="195" fill="#d2a8ff" font-size="14" font-weight="600">CPUS / Always-On Domain (0x07000000+)</text>
+    
+    <!-- E902 Core Box -->
+    <rect x="35" y="208" width="210" height="102" rx="6" fill="#241a38" stroke="#8957e5" stroke-width="1"/>
+    <text x="45" y="228" fill="#d2a8ff" font-size="13" font-weight="600">XuanTie E902 RISC-V</text>
+    <text x="45" y="247" fill="#c9d1d9" font-size="11">• RV32EMC @ 200 MHz</text>
+    <text x="45" y="264" fill="#c9d1d9" font-size="11">• 16 GPRs (x0–x15), Soft-Float</text>
+    <text x="45" y="281" fill="#c9d1d9" font-size="11">• Software Atomics (MIE Mask)</text>
+    <text x="45" y="298" fill="#8b949e" font-size="11">• 2-Stage Single-Issue Pipeline</text>
+
+    <!-- DSP Omission Box -->
+    <rect x="260" y="208" width="210" height="102" rx="6" fill="#1b1f24" stroke="#484f58" stroke-dasharray="4,4" stroke-width="1"/>
+    <text x="270" y="228" fill="#8b949e" font-size="13" font-weight="600">Audio DSP Core</text>
+    <text x="270" y="252" fill="#da3633" font-size="12" font-weight="600">NOT PRESENT IN SILICON</text>
+    <text x="270" y="272" fill="#8b949e" font-size="11">• Omitted from A733 die</text>
+    <text x="270" y="291" fill="#8b949e" font-size="11">• No DSP RAM available</text>
+
+    <!-- Memory Hierarchy Box -->
+    <rect x="20" y="340" width="465" height="135" rx="8" fill="#2b1a0d" stroke="#d29922" stroke-width="1.2"/>
+    <text x="35" y="363" fill="#e3b341" font-size="14" font-weight="600">Memory &amp; Interconnect Hierarchy</text>
+    <text x="35" y="386" fill="#f0883e" font-size="12" font-weight="600">• 208 KB System SRAM A2:</text>
+    <text x="210" y="386" fill="#c9d1d9" font-size="12">0x00040000–0x00073FFF</text>
+    <text x="35" y="406" fill="#8b949e" font-size="12">• Dedicated SRAM A3:</text>
+    <text x="210" y="406" fill="#da3633" font-size="12">None (Executes from SRAM A2)</text>
+    <text x="35" y="426" fill="#8b949e" font-size="12">• DSP Local RAM:</text>
+    <text x="210" y="426" fill="#da3633" font-size="12">None (Silicon omitted)</text>
+    <text x="35" y="446" fill="#3fb950" font-size="12" font-weight="600">• Total Fast On-Chip SRAM:</text>
+    <text x="210" y="446" fill="#56d364" font-size="12" font-weight="700">208 KB (System SRAM A2)</text>
+    <text x="35" y="465" fill="#8b949e" font-size="11">• Mailbox: CPUS Shared Msgbox 0x07090000 (4 Bidirectional Channels)</text>
+  </g>
+</svg>

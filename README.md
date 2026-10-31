@@ -26,8 +26,8 @@ See [`upstream-remoteproc/README.md`](upstream-remoteproc/README.md), [`upstream
 
 | Board | Done | Next |
 | :--- | :--- | :--- |
-| **Cubie A5E**<br>(A527 / T527) | Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A)<br>E906 remoteproc + message box: start/stop, trace, crash capture<br>RPMsg and UIO IPC, ping benchmarks, KUnit on board<br>Wi-Fi 6 AIC8800 (SDIO) | Board-test the v3 message box fixes, then send v3 upstream<br>Camera: OV5647 over MIPI CSI-2 (cable in hand)<br>E906 D-cache<br>ISP / VPU, NPU |
-| **Cubie A7A**<br>(A733) | Linux 7.1 boot<br>USB 2.0 host + FE1.1S hub<br>Wi-Fi 6 AIC8800 (USB), 433 Mbps<br>E902 remoteproc: driver branch, BL31 patch, overlay, image builds (**not run on the board yet**) | E902: rebase onto the v3 fixes, E902 firmware, first boot on the board<br>Fix reboot (watchdog reset hangs)<br>Fix Ethernet TX DMA timeout<br>Audit the USB changes |
+| **Cubie A5E**<br>(A527 / T527) | • Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A)<br>• XuanTie E906 remoteproc + message box: start/stop dynamic lifecycle, trace0 debugfs streaming, exception autopsy capture (`0xDEADF00D`)<br>• VirtIO RPMsg and UIO IPC passing across 3 hardware profiles (DDR DRAM, SRAM A3, Userspace UIO)<br>• Automated silicon test sweep runner passing 100% via `tools/run_full_sweep.py --target a5e`<br>• Upstream v3 patch series prepared: all 17 Sashiko review items resolved, 68 KUnit tests, 0 checkpatch errors<br>• Wi-Fi 6 AIC8800 (SDIO) | • Board-test the v3 message box fixes, then submit v3 upstream<br>• Camera: OV5647 over MIPI CSI-2<br>• E906 D-cache coherency maintenance<br>• Cadence HiFi4 Audio DSP applications |
+| **Cubie A7A**<br>(A733) | • Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A)<br>• USB 2.0 host + FE1.1S 4-port hub operating at High-Speed (480 Mbps)<br>• Wi-Fi 6 AIC8800 (USB) fully functional with active DHCP lease<br>• TF-A BL31 security un-gating verified on physical SD card (`R_SPC` Port 3 un-gated for E902 boot vector)<br>• XuanTie E902 remoteproc: running out of System SRAM A2 (`0x00040000`, 208 KB), dynamic sysfs lifecycle verified<br>• E902 stop trap resolved: mapped `core` reset to `<&r_ccu 12>` (`RISCV_CFG_RST`) instead of CPU configuration reset<br>• Hardware watchdog soft reset verified via `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`) in `sunxi_wdt.c`<br>• Multi-core firmware pipeline: unified `portASM_e90x.S`, software atomics (`atomics.c`), 11 E902 ELFs staged (incl. `testFreeRTOS`)<br>• Autonomous silicon sweep runner implemented (`tools/run_full_sweep.py --target a7a`) | • Execute automated silicon sweep on physical board<br>• Verify userspace reboot after new kernel Image boot<br>• GMAC210 Ethernet TX DMA watchdog fix<br>• Upstream A733 remoteproc compatible series |
 
 Not working on either board yet: MIPI CSI cameras, display / HDMI, hardware video codec.
 Task details: [TODO.md](TODO.md). A7A history: [docs/platforms/CUBIE_A7A_DEBUG_LOG.md](docs/platforms/CUBIE_A7A_DEBUG_LOG.md).
@@ -40,7 +40,7 @@ Task details: [TODO.md](TODO.md). A7A history: [docs/platforms/CUBIE_A7A_DEBUG_L
 | :--- | :--- | :--- | :--- | :--- |
 | **SoC** | Allwinner A527 / T527 | Allwinner A527 / T527 | Allwinner A733 | Allwinner A733 |
 | **Form Factor** | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Standard SBC (85×56 mm) | Ultra-Compact Zero (65×30 mm) |
-| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 2× Cortex-A76 + 6× Cortex-A55 | 2× Cortex-A76 + 6× Cortex-A55 |
+| **CPU Architecture** | 8× Arm Cortex-A55 @ 1.8 GHz | 8× Arm Cortex-A55 @ 1.8 GHz | 4× Cortex-A76 + 4× Cortex-A55 | 4× Cortex-A76 + 4× Cortex-A55 |
 | **Co-Processors** | XuanTie E906 RISC-V + HiFi4 DSP | XuanTie E906 RISC-V + HiFi4 DSP | XuanTie E902 RISC-V | XuanTie E902 RISC-V |
 | **System RAM** | 2 GiB / 4 GiB LPDDR4X | 2 GiB / 4 GiB LPDDR4X | 4 GiB / 6 GiB LPDDR5 | 2 GiB / 4 GiB LPDDR5 |
 | **Wi-Fi / BT** | AIC8800D80 (SDIO) | AIC8800D80 (SDIO) | AIC8800D80 (USB) | AIC8800D80 (SDIO) |
