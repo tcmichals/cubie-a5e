@@ -1,5 +1,5 @@
 # Heterogeneous RISC-V RemoteProc Across Allwinner Silicon: Cubie A7A (E902) vs. Cubie A5E (E906)
-### Part 5: Multi-Core Architecture, SRAM Topology, and Silicon Bring-Up
+### Part 6: Multi-Core Architecture, SRAM Topology, and Silicon Bring-Up
 
 Heterogeneous multi-core SoCs—combining high-performance 64-bit ARM Cortex-A application cores with deterministic auxiliary microcontrollers—have become standard in modern avionics, robotics, and edge compute. While our earlier articles documented bringing up the **XuanTie E906 core** on the **Radxa Cubie A5E (Allwinner T527 / `sun55i`)**, modern embedded engineering rarely targets a single platform. 
 

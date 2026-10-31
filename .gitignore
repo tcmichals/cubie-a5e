@@ -42,3 +42,6 @@ __pycache__/
 # Logs
 *.log
 serial_console.log
+
+# Generated article HTML
+docs/articles/*.html
