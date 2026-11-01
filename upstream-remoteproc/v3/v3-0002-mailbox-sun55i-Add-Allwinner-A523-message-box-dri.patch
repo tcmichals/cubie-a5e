@@ -1,4 +1,4 @@
-From 546bad3df4e90371b13bb660686e637fbf88b78d Mon Sep 17 00:00:00 2001
+From 6b76d532cbbe4eaff9c6d93eba61c4a1083cd0f7 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box driver
@@ -75,7 +75,7 @@ Changes in v3:
  create mode 100644 drivers/mailbox/sun55i-msgbox.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 365bec8eb7fb..3e66a30747d6 100644
+index aaf2825ac945..890092a1e7a4 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -947,6 +947,13 @@ S:	Maintained

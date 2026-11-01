@@ -1,6 +1,6 @@
-From 6c779567f9f9d16d933d112d534b2350979ad343 Mon Sep 17 00:00:00 2001
+From b47352fa3f974e6fa3b8d2e499efc3862db55427 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
-Date: Thu, 29 Oct 2026 06:12:06 -0500
+Date: Sat, 31 Oct 2026 19:39:15 -0500
 Subject: [PATCH v3 0/7] Add Allwinner A523 message box and XuanTie E906 remoteproc support
 
 This series adds a driver for the message box of the Allwinner A523,
@@ -36,7 +36,7 @@ Changes in v3 (details in each patch):
     access with static stubs to mocks, so they run on any architecture,
     UML included. Patches 6 and 7 only add tests and can be dropped or
     taken separately.
-  - Rebased on next-20261027.
+  - Rebased on next-20261030.
 
 Notes for review:
   - The remap register (0x07010364, PRCM) is shared with the DSP: bit 1
@@ -69,7 +69,7 @@ with the same driver and test files:
   - The same tests with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP (and
     PROVE_RAW_LOCK_NESTING on PREEMPT): no lockdep or sleep-in-atomic
     report.
-  - On next-20261027: W=1 build of each patch with GCC and clang, built
+  - On next-20261030: W=1 build of each patch with GCC and clang, built
     in and as modules, dt_binding_check and dtbs_check are clean;
     checkpatch --strict reports only "does MAINTAINERS need updating?"
     for the new files, which the entries added in patches 2 and 4 cover.
@@ -116,7 +116,7 @@ Tim Michals (7):
  create mode 100644 drivers/remoteproc/sunxi_rproc_kunit.c
 
 
-base-commit: 151a134a4e6ec66f69db8750c66006f5207f7a9d
+base-commit: 7649ba73f9e7e1e04d0b46213e39c79ae09dd55c
 -- 
 2.53.0
 

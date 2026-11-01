@@ -1,4 +1,4 @@
-From 37099b097c05fc8936edc8ae0c4ac97b8ef8a3b7 Mon Sep 17 00:00:00 2001
+From faa6f6180af1e4272b7eaecf61483b9a2da34305 Mon Sep 17 00:00:00 2001
 From: Tim Michals <tcmichals@gmail.com>
 Date: Thu, 15 Oct 2026 19:46:20 -0500
 Subject: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906
@@ -84,7 +84,7 @@ Changes in v3:
  create mode 100644 drivers/remoteproc/sunxi_rproc.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 3e66a30747d6..c4034980aab1 100644
+index 890092a1e7a4..785baf0fba61 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -954,6 +954,14 @@ S:	Maintained
