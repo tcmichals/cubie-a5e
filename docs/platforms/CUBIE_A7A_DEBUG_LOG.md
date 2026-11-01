@@ -1724,7 +1724,11 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
     - `0x05811400` (MIPI1 CSI-2): responds with `0x00000000`.
     - `0x05800800` (CSI Top): responds with `0x00000000`.
     - `0x05821000` (CSI Parser 1): responds with `0x00000000`.
-    - `0x05830000` (CSI DMA 0): responds with `0x00000000`.
+* **Early Boot Freeze & Missing Console Diagnostics**:
+  - **Issue**: On reboot with the camera drivers compiled in, the kernel halted at `Starting kernel ...` with zero console output.
+  - **Root Cause 1 (CCU Clock Freeze)**: Section 4.1.6.244 (`0x1840 CSI_CLK_REG`) of `A733_User_Manual_V1.00.txt` specifies that bits [26:24] `CLK_SRC_SEL` default to `000`: `VIDEO2PLL4X`. Forcefully writing bit 31 (`CSI_CLK_GATING = 1`) inside `sun60i_a733_ccu_probe()` while `VIDEO2PLL4X` was powered off stalled the clock tree and locked the core before serial initialization. Reverted blind register write in commit `ce747fed491f`; clocks are now managed dynamically by the driver lifecycle.
+  - **Root Cause 2 (Missing DW Serial Console Driver)**: In `linux.config`, `CONFIG_SERIAL_8250=y`, `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_SERIAL_8250_DW=y`, and `CONFIG_SERIAL_EARLYCON=y` were missing, causing Kconfig to silently omit the Synopsys DesignWare 8250 serial driver for `serial@2500000` (`uart0`).
+  - **Status**: Both fixes committed; clean `Image` compiled with DesignWare UART and earlycon. Ready to write to SD card via PC reader.
 
 
 

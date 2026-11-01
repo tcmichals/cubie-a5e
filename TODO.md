@@ -70,7 +70,11 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Integrated base DT nodes (`dphy1`, `mipi1`, `csi`) into `sun60i-a733-cubie-a7a.dts` and compiled base DTB.
   - [x] Preprocessed and compiled `cubie-a7a-ov5647.dtbo` overlay.
 - [ ] **Kernel Deployment & Target Capture Verification**:
-  - [ ] Deploy new kernel `Image`, modules, DTB, and overlay to target rootfs (`/boot/`).
+  - [x] Identified early-boot freeze root cause: `0x1840 CSI_CLK_REG` gate with unclocked `VIDEO2PLL4X` reverted in CCU driver.
+  - [x] Fixed silent console: added `CONFIG_SERIAL_8250_DW=y`, `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_SERIAL_EARLYCON=y` to `linux.config`.
+  - [x] Rebuilt clean kernel `Image` (`arch/arm64/boot/Image`) with DesignWare serial driver and instant watchdog reset.
+  - [ ] Write new `Image` to target MicroSD card via PC card reader (`/dev/sdc`).
+  - [ ] Boot A7A board and verify clean console + earlycon output.
   - [ ] Verify `/dev/media0` and `/dev/video0` appear.
   - [ ] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
   - [ ] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `BA10`):
