@@ -25,8 +25,7 @@ const int nx_tid_prio[NX_NB_TID_PER_STA] = {7, 6, 5, 4, 3, 0, 2, 1};
 static inline int rwnx_txq_sta_idx(struct rwnx_sta *sta, u8 tid)
 {
 	if (is_multicast_sta(sta->sta_idx)) {
-		struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-		if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+		if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 			return NX_FIRST_VIF_TXQ_IDX_FOR_OLD_IC + sta->vif_idx;
 
 		return NX_FIRST_VIF_TXQ_IDX + sta->vif_idx;
@@ -37,8 +36,7 @@ static inline int rwnx_txq_sta_idx(struct rwnx_sta *sta, u8 tid)
 
 static inline int rwnx_txq_vif_idx(struct rwnx_vif *vif, u8 type)
 {
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		return NX_FIRST_VIF_TXQ_IDX_FOR_OLD_IC + master_vif_idx(vif) +
 		       (type * NX_VIRT_DEV_MAX);
 
@@ -97,8 +95,7 @@ static void rwnx_txq_init(struct rwnx_txq *txq, int idx, u8 status,
 	int nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX;
 	int nx_first_vif_txq_idx = NX_FIRST_VIF_TXQ_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic) {
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic) {
 		nx_first_unk_txq_idx = NX_FIRST_UNK_TXQ_IDX_FOR_OLD_IC;
 		nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX_FOR_OLD_IC;
 		nx_first_vif_txq_idx = NX_FIRST_VIF_TXQ_IDX_FOR_OLD_IC;
@@ -357,8 +354,7 @@ void rwnx_txq_offchan_init(struct rwnx_vif *rwnx_vif)
 	struct rwnx_txq *txq;
 	int nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX_FOR_OLD_IC;
 
 	txq = &rwnx_hw->txq[nx_off_chan_txq_idx];
@@ -379,8 +375,7 @@ void rwnx_txq_offchan_deinit(struct rwnx_vif *rwnx_vif)
 
 	int nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX_FOR_OLD_IC;
 
 	txq = &rwnx_vif->rwnx_hw->txq[nx_off_chan_txq_idx];
@@ -646,14 +641,17 @@ rwnx_txq_vif_for_each_sta(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 			  void (*f)(struct rwnx_sta *, u16, struct rwnx_hw *),
 			  u16 reason) {
 	switch (RWNX_VIF_TYPE(rwnx_vif)) {
-	case NL80211_IFTYPE_STATION:
-	case NL80211_IFTYPE_P2P_CLIENT: {
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
+	case NL80211_IFTYPE_P2P_CLIENT:
+#endif
+	case NL80211_IFTYPE_STATION: {
 		if (rwnx_vif->tdls_status == TDLS_LINK_ACTIVE)
 			f(rwnx_vif->sta.tdls_sta, reason, rwnx_hw);
 		if (!WARN_ON(!rwnx_vif->sta.ap))
 			f(rwnx_vif->sta.ap, reason, rwnx_hw);
 		break;
 	}
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_AP_VLAN:
 		rwnx_vif = rwnx_vif->ap_vlan.master;
 		fallthrough;
@@ -667,6 +665,7 @@ rwnx_txq_vif_for_each_sta(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 		}
 		break;
 	}
+#endif
 	default:
 		//WARN_ON_ONCE();
 		break;
@@ -767,8 +766,7 @@ void rwnx_txq_offchan_start(struct rwnx_hw *rwnx_hw)
 	struct rwnx_txq *txq;
 	int nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX_FOR_OLD_IC;
 
 	txq = &rwnx_hw->txq[nx_off_chan_txq_idx];
@@ -847,11 +845,7 @@ int rwnx_txq_queue_skb(struct sk_buff *skb, struct rwnx_txq *txq,
 		skb_queue_tail(&txq->sk_list, skb);
 	} else {
 		if (txq->last_retry_skb)
-#ifdef CONFIG_AIC8800_GKI
-			rwnx_skb_append(txq->last_retry_skb, skb, &txq->sk_list);
-#else
 			skb_append(txq->last_retry_skb, skb, &txq->sk_list);
-#endif
 		else
 			skb_queue_head(&txq->sk_list, skb);
 

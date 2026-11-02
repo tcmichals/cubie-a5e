@@ -13,7 +13,6 @@
 #include "aic_bsp_driver.h"
 #include <linux/atomic.h>
 #include <linux/completion.h>
-#include <linux/debugfs.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/netdevice.h>

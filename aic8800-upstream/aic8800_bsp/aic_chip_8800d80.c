@@ -17,9 +17,17 @@
 
 static int aic8800d80_wifi_init(struct aic_sdio_dev *sdiodev, int testmode)
 {
-	const char *fw_path = aicbsp_firmware_list[aicbsp_info.cpmode].wl_fw;
+	const char *fw_path = fw_8800d80_u02[AICBSP_CPMODE_WORK].wl_fw;
 
 	aicwf_sdio_wakeup(sdiodev);
+
+	(void)testmode;
+	aicbsp_firmware_list = fw_8800d80_u02;
+	aicbsp_info.cpmode = AICBSP_CPMODE_WORK;
+	if (!fw_path)
+		return -ENOENT;
+
+	pr_info("aicbsp 8800d80 u02 wifi firmware: %s\n", fw_path);
 
 	if (rwnx_plat_bin_fw_upload(sdiodev, RAM_FMAC_FW_ADDR,
 				    fw_path)) {
@@ -44,28 +52,6 @@ static int aic8800d80_wifi_init(struct aic_sdio_dev *sdiodev, int testmode)
 	return 0;
 }
 
-static int aic8800d80_set_patch_info(struct aic_sdio_dev *sdiodev,
-				     struct aicbt_patch_info_t *patch_info,
-				     struct aicbsp_info_t *aicbsp_info,
-				     struct aicbt_patch_table *head)
-{
-	if (aicbsp_info->chip_rev == CHIP_REV_U01) {
-		patch_info->addr_adid = FW_RAM_ADID_BASE_ADDR_8800D80;
-		patch_info->addr_patch = FW_RAM_PATCH_BASE_ADDR_8800D80;
-	} else if (aicbsp_info->chip_rev == CHIP_REV_U02 ||
-				aicbsp_info->chip_rev == CHIP_REV_U03) {
-		patch_info->addr_adid = FW_RAM_ADID_BASE_ADDR_8800D80_U02;
-		patch_info->addr_patch = FW_RAM_PATCH_BASE_ADDR_8800D80_U02;
-	}
-	aicbt_patch_info_unpack(patch_info, head);
-	if (patch_info->info_len == 0) {
-		pr_err("aicbsp %s, aicbt_patch_info_unpack fail\n", __func__);
-		return -1;
-	}
-
-	return 0;
-}
-
 static int aic8800d80_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable,
 				     struct aicbsp_info_t *aicbsp_info,
 				     const struct aicbsp_firmware **aicbsp_firmware_list)
@@ -73,6 +59,7 @@ static int aic8800d80_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable
 	u32 mem_addr;
 	struct dbg_mem_read_cfm rd_mem_addr_cfm;
 	u8 is_chip_id_h = 0;
+
 	int ret;
 
 	aicwf_sdio_wakeup(sdiodev);
@@ -81,24 +68,21 @@ static int aic8800d80_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable
 
 	ret = rwnx_send_dbg_mem_read_req(sdiodev, mem_addr, &rd_mem_addr_cfm);
 	if (ret) {
-		pr_warn("aicbsp: 0x40500000 read failed (%d), defaulting to AIC8800D80 U02\n", ret);
+		pr_warn("%s: read 0x40500000 failed (%d), defaulting to U02 rev\n", __func__, ret);
 		aicbsp_info->chip_rev = CHIP_REV_U02;
 		is_chip_id_h = 0;
 	} else {
 		aicbsp_info->chip_rev = (u8)((rd_mem_addr_cfm.memdata >> 16) & 0x3F);
 		is_chip_id_h = (u8)(((rd_mem_addr_cfm.memdata >> 16) & 0xC0) == 0xC0);
 	}
-	*btenable = 1;
-	if (is_chip_id_h) {
-		AICWFDBG(LOGINFO, "IS_CHIP_ID_H\n");
-		*aicbsp_firmware_list = fw_8800d80_h_u02;
-	} else {
-		if (aicbsp_info->chip_rev == CHIP_REV_U01)
-			*aicbsp_firmware_list = fw_8800d80_u01;
-		if (aicbsp_info->chip_rev == CHIP_REV_U02 ||
-		    aicbsp_info->chip_rev == CHIP_REV_U03)
-			*aicbsp_firmware_list = fw_8800d80_u02;
+	if (is_chip_id_h || aicbsp_info->chip_rev != CHIP_REV_U02) {
+		pr_err("aicbsp: AIC8800D80 U02 is required (revision %u)\n",
+		       aicbsp_info->chip_rev);
+		return -ENODEV;
 	}
+
+	*btenable = 0;
+	*aicbsp_firmware_list = fw_8800d80_u02;
 	if (aicbsp_system_config_8800d80(sdiodev))
 		return -1;
 
@@ -120,7 +104,6 @@ const struct aic_chip_ops aic_chip_aic8800d80_ops = {
 	.use_func2					= false,
 	.sdio_clock					= FEATURE_SDIO_CLOCK_V3,
 	.wifi_init					= aic8800d80_wifi_init,
-	.set_patch_info				= aic8800d80_set_patch_info,
 	.driver_fw_init				= aic8800d80_driver_fw_init,
 
 };

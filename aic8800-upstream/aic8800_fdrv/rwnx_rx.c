@@ -102,7 +102,7 @@ static void rwnx_rx_vector_convert(struct rwnx_hw *rwnx_hw,
 {
 	struct rx_vector_1_old rx_vect1_leg;
 	struct rx_vector_2_old rx_vect2_leg;
-	u32_l phy_vers = rwnx_hw->version_cfm.version_phy_2;
+	u32 phy_vers = rwnx_hw->version_cfm.version_phy_2;
 
 	// Check if we need to do the conversion. Only if old modem is used
 	if (__MDM_MAJOR_VERSION(phy_vers) > 0) {
@@ -333,23 +333,6 @@ static void rwnx_rx_data_skb_forward(struct rwnx_hw *rwnx_hw,
 	rx_skb->dev = rwnx_vif->ndev;
 	skb_reset_mac_header(rx_skb);
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	void *br_port = NULL;
-
-	rcu_read_lock();
-	br_port = rcu_dereference(rwnx_vif->ndev->rx_handler_data);
-	rcu_read_unlock();
-
-	if (br_port) {
-		if (nat25_handle_frame(rwnx_vif, rx_skb) == -1) {
-			/* priv->ext_stats.rx_data_drops++; */
-			/* DEBUG_ERR("RX DROP: nat25_handle_frame fail!\n"); */
-			/* return FAIL; */
-		}
-	}
-
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	/* Update statistics */
 	rwnx_vif->net_stats.rx_packets++;
 	rwnx_vif->net_stats.rx_bytes += rx_skb->len;
@@ -497,23 +480,6 @@ bool rwnx_rx_data_skb(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 
 		/* forward pkt to upper layer */
 		if (forward) {
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-			void *br_port = NULL;
-
-			/* Insert NAT2.5 RX here! */
-			rcu_read_lock();
-			br_port = rcu_dereference(rwnx_vif->ndev->rx_handler_data);
-			rcu_read_unlock();
-
-			if (br_port) {
-				if (nat25_handle_frame(rwnx_vif, rx_skb) == -1) {
-					/* priv->ext_stats.rx_data_drops++; */
-					/* DEBUG_ERR("RX DROP: nat25_handle_frame fail!\n"); */
-					/* return FAIL; */
-				}
-			}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 			/* Update statistics */
 			rwnx_vif->net_stats.rx_packets++;
 			rwnx_vif->net_stats.rx_bytes += rx_skb->len;
@@ -557,10 +523,6 @@ bool rwnx_rx_data_skb(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 	return forward;
 }
 
-#ifdef CONFIG_AIC8800_HE_FOR_OLD_KERNEL
-
-#endif
-
 /*
  * rwnx_rx_mgmt - Process one 802.11 management frame
  *
@@ -576,52 +538,6 @@ static void rwnx_rx_mgmt(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 {
 	struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)skb->data;
 	struct rx_vector_1 *rxvect = &hw_rxhdr->hwvect.rx_vect1;
-
-#if (defined CONFIG_AIC8800_HE_FOR_OLD_KERNEL) || (defined CONFIG_AIC8800_VHT_FOR_OLD_KERNEL)
-	struct aic_sta *sta = &rwnx_hw->aic_table[rwnx_vif->ap.aic_index];
-	const u8 *ie;
-	u32 len;
-
-	if (skb->data[0] != 0x80)
-		AICWFDBG(LOGDEBUG, "rxmgmt:%x,%x\n", skb->data[0], skb->data[1]);
-
-	if (ieee80211_is_assoc_req(mgmt->frame_control) &&
-	    rwnx_vif->wdev.iftype == NL80211_IFTYPE_AP) {
-		AICWFDBG(LOGDEBUG, "ASSOC_REQ: sta_idx %d MAC %pM\n", rwnx_vif->ap.aic_index,
-			 mgmt->sa);
-		sta->sta_idx = rwnx_vif->ap.aic_index;
-		len = skb->len - (mgmt->u.assoc_req.variable - skb->data);
-
-#ifdef CONFIG_AIC8800_HE_FOR_OLD_KERNEL
-		struct ieee80211_he_cap_elem *he;
-
-		ie = cfg80211_find_ext_ie(WLAN_EID_EXT_HE_CAPABILITY,
-					  mgmt->u.assoc_req.variable, len);
-		if (ie && ie[1] >= sizeof(*he) + 1) {
-			AICWFDBG(LOGDEBUG, "assoc_req: find he\n");
-			sta->he = true;
-		} else {
-			AICWFDBG(LOGDEBUG, "assoc_req: no find he\n");
-			sta->he = false;
-		}
-#endif
-
-#ifdef CONFIG_AIC8800_VHT_FOR_OLD_KERNEL
-		struct ieee80211_vht_cap *vht;
-
-		ie = cfg80211_find_ie(WLAN_EID_VHT_CAPABILITY,
-				      mgmt->u.assoc_req.variable, len);
-		if (ie && ie[1] >= sizeof(*vht)) {
-			AICWFDBG(LOGDEBUG, "assoc_req: find vht\n");
-			sta->vht = true;
-		} else {
-			AICWFDBG(LOGDEBUG, "assoc_req: no find vht\n");
-			sta->vht = false;
-		}
-#endif
-	}
-#endif
-
 	if (ieee80211_is_mgmt(mgmt->frame_control) &&
 	    (skb->len <= 24 || skb->len > 768)) {
 		AICWFDBG(LOGDEBUG, "mgmt err\n");
@@ -630,29 +546,15 @@ static void rwnx_rx_mgmt(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 	if (ieee80211_is_beacon(mgmt->frame_control)) {
 		if ((RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_MESH_POINT) &&
 		    hw_rxhdr->flags_new_peer) {
-#ifdef CONFIG_AIC8800_GKI
-			/* TODO: the value of parameter sig_dbm need to be confirmed */
-			rwnx_cfg80211_notify_new_peer_candidate
-			(rwnx_vif->ndev, mgmt->sa, mgmt->u.beacon.variable,
-			 skb->len - offsetof(struct ieee80211_mgmt, u.beacon.variable),
-			 rxvect->rssi1, GFP_ATOMIC);
-#else
 			/* TODO: the value of parameter sig_dbm need to be confirmed */
 			cfg80211_notify_new_peer_candidate
 			(rwnx_vif->ndev, mgmt->sa, mgmt->u.beacon.variable,
 			 skb->len - offsetof(struct ieee80211_mgmt, u.beacon.variable),
 			 rxvect->rssi1, GFP_ATOMIC);
-#endif
 		} else {
-#ifdef CONFIG_AIC8800_GKI
-			rwnx_cfg80211_report_obss_beacon
-			(rwnx_hw->wiphy, skb->data, skb->len,
-			 hw_rxhdr->phy_info.phy_prim20_freq, rxvect->rssi1);
-#else
 			cfg80211_report_obss_beacon(rwnx_hw->wiphy, skb->data, skb->len,
 						    hw_rxhdr->phy_info.phy_prim20_freq,
 						    rxvect->rssi1);
-#endif
 		}
 	} else if ((ieee80211_is_deauth(mgmt->frame_control) ||
 				ieee80211_is_disassoc(mgmt->frame_control)) &&
@@ -1255,11 +1157,9 @@ struct reord_ctrl_info *reord_init_sta(struct aicwf_rx_priv *rx_priv,
 	struct reord_ctrl *preorder_ctrl = NULL;
 	struct reord_ctrl_info *reord_info;
 #ifdef AICWF_SDIO_SUPPORT
-	struct aicwf_bus *bus_if = rx_priv->sdiodev ? rx_priv->sdiodev->bus_if : NULL;
-#elif defined(AICWF_USB_SUPPORT)
-	struct aicwf_bus *bus_if = rx_priv->usbdev ? rx_priv->usbdev->bus_if : NULL;
+	struct aicwf_bus *bus_if = rx_priv->sdiodev->bus_if;
 #else
-	struct aicwf_bus *bus_if = NULL;
+	struct aicwf_bus *bus_if = rx_priv->usbdev->bus_if;
 #endif
 
 	if (bus_if->state == BUS_DOWN_ST || !rx_priv) {
@@ -1396,23 +1296,6 @@ int reord_single_frame_ind(struct aicwf_rx_priv *rx_priv,
 
 	rxframes_freequeue = &rx_priv->rxframes_freequeue;
 	skb = prframe->pkt;
-
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	void *br_port = NULL;
-
-	/* Insert NAT2.5 RX here! */
-	rcu_read_lock();
-	br_port = rcu_dereference(rwnx_vif->ndev->rx_handler_data);
-	rcu_read_unlock();
-
-	if (br_port) {
-		if (nat25_handle_frame(rwnx_vif, skb) == -1) {
-			/* priv->ext_stats.rx_data_drops++; */
-			/* DEBUG_ERR("RX DROP: nat25_handle_frame fail!\n"); */
-			/* return FAIL; */
-		}
-	}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
 
 	if (!skb) {
 		txrx_err("skb is NULL\n");
@@ -1996,7 +1879,7 @@ u8 rwnx_rxdataind_aicwf(struct rwnx_hw *rwnx_hw, void *hostid, void *rx_priv)
 	struct rwnx_vif *rwnx_vif;
 	struct sk_buff *skb = hostid;
 	int msdu_offset = sizeof(struct hw_rxhdr) + 2;
-	u16_l status = 0;
+	u16 status = 0;
 	struct aicwf_rx_priv *rx_priv_tmp;
 	u8 hdr_len = 24;
 	u8 ra[MAC_ADDR_LEN] = {0};
@@ -2004,7 +1887,7 @@ u8 rwnx_rxdataind_aicwf(struct rwnx_hw *rwnx_hw, void *hostid, void *rx_priv)
 	u8 ether_type[2] = {0};
 	u8 pull_len = 0;
 	u16 seq_num = 0;
-	u8_l frag_num = 0;
+	u8 frag_num = 0;
 	u8 tid = 0;
 	u8 is_qos = 0;
 	u8 is_frag = 0;
@@ -2012,7 +1895,7 @@ u8 rwnx_rxdataind_aicwf(struct rwnx_hw *rwnx_hw, void *hostid, void *rx_priv)
 	struct defrag_ctrl_info *defrag_info_tmp = NULL;
 	struct sk_buff *skb_tmp = NULL;
 	u8 sta_idx = 0;
-	u16_l frame_ctrl;
+	u16 frame_ctrl;
 	u8 is_amsdu = 0;
 	bool resend = false, forward = true;
 	const struct ethhdr *eth;
@@ -2144,13 +2027,8 @@ check_len_update:
 		hdr = (struct ieee80211_hdr *)(skb->data + msdu_offset);
 		rwnx_vif = rwnx_rx_get_vif(rwnx_hw, hw_rxhdr->flags_vif_idx);
 		if (rwnx_vif) {
-#ifdef CONFIG_AIC8800_GKI
-			rwnx_cfg80211_rx_spurious_frame(rwnx_vif->ndev, hdr->addr2,
-							GFP_ATOMIC);
-#else
 			cfg80211_rx_spurious_frame(rwnx_vif->ndev, hdr->addr2, 0,
 						   GFP_ATOMIC);
-#endif
 		}
 		goto end;
 	}
@@ -2342,14 +2220,9 @@ check_len_update:
 				}
 
 				if (hw_rxhdr->flags_is_4addr && !rwnx_vif->use_4addr) {
-#ifdef CONFIG_AIC8800_GKI
-					rwnx_cfg80211_rx_unexpected_4addr_frame
-						(rwnx_vif->ndev, sta->mac_addr, GFP_ATOMIC);
-#else
 					cfg80211_rx_unexpected_4addr_frame
 						(rwnx_vif->ndev, sta->mac_addr, 0,
 						 GFP_ATOMIC);
-#endif
 				}
 			}
 

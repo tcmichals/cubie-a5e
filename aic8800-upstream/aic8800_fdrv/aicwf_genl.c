@@ -16,13 +16,13 @@ int aic_debug_lvl = LOG_INFO;
 module_param(aic_debug_lvl, int, 0660);
 
 static struct genl_family aicwf_genl_family;
-static struct pkt_filter_list pkt_list;
 static struct rwnx_hw *aicwf_genl_hw;
 static bool aicwf_genl_registered;
 static DEFINE_MUTEX(aicwf_genl_cmd_lock);
 
 #define AICWF_GENL_MAX_ARGS    224
 #define AICWF_GENL_MAX_CMD_LEN 1024
+#define AICWF_GENL_REPLY_MAX_LEN 1024
 #define RF_MODE_ERR            (-127)
 
 static int genl_parse_sep(char *dst[], size_t dst_len, char *src,
@@ -42,7 +42,7 @@ static int genl_parse_sep(char *dst[], size_t dst_len, char *src,
 	return count;
 }
 
-static int genl_parse_u8(const char *str, unsigned int base, u8_l *value)
+static int genl_parse_u8(const char *str, unsigned int base, u8 *value)
 {
 	u8 parsed;
 	int ret;
@@ -56,230 +56,6 @@ static int genl_parse_u8(const char *str, unsigned int base, u8_l *value)
 
 	*value = parsed;
 	return 0;
-}
-
-static int genl_parse_u16(const char *str, unsigned int base, u16_l *value)
-{
-	u16 parsed;
-	int ret;
-
-	if (!str || !str[0])
-		return -EINVAL;
-
-	ret = kstrtou16(str, base, &parsed);
-	if (ret)
-		return ret;
-
-	*value = parsed;
-	return 0;
-}
-
-int cmd_pktfilter_set(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		      char *r_buf, unsigned long *r_len)
-{
-	struct pkt_filter filter = {};
-	u16_l param[256] = {0};
-	int expected_len, i, ret;
-
-	if (len < 4) {
-		genl_debug(LOG_INFO, "%s param err\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = genl_parse_u16(s_buf[0], 16, &filter.id);
-	if (ret)
-		return ret;
-	ret = genl_parse_u16(s_buf[1], 16, &filter.offset);
-	if (ret)
-		return ret;
-	ret = genl_parse_u16(s_buf[2], 16, &filter.length);
-	if (ret)
-		return ret;
-
-	if (filter.id >= AICWF_PKT_FILTER_MAX || !filter.length ||
-	    filter.length > AICWF_PKT_FILTER_PATTERN_MAX)
-		return -ERANGE;
-
-	expected_len = 4 + 2 * filter.length;
-	if (len != expected_len || expected_len > ARRAY_SIZE(param))
-		return -EINVAL;
-
-	param[0] = filter.id;
-	param[1] = filter.offset;
-	param[2] = filter.length;
-	for (i = 0; i < filter.length; i++) {
-		ret = genl_parse_u8(s_buf[3 + i], 16, &filter.mask[i]);
-		if (ret)
-			return ret;
-		param[3 + i] = filter.mask[i];
-	}
-	for (i = 0; i < filter.length; i++) {
-		ret = genl_parse_u8(s_buf[3 + filter.length + i], 16,
-				    &filter.pattern[i]);
-		if (ret)
-			return ret;
-		param[3 + filter.length + i] = filter.pattern[i];
-	}
-	i = 3 + 2 * filter.length;
-	ret = genl_parse_u16(s_buf[i], 16, &filter.total_len);
-	if (ret)
-		return ret;
-	param[i] = filter.total_len;
-
-	if (filter.total_len && filter.total_len < filter.length) {
-		genl_debug(LOG_ERROR, "%s total_len param err\n", __func__);
-		return -EINVAL;
-	}
-
-	filter.enable = 1;
-	ret = rwnx_send_set_pkt_filter_req(rwnx_hw, param);
-	if (!ret)
-		pkt_list.filter[filter.id] = filter;
-
-	return ret;
-}
-
-int cmd_pktfilter_del(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		      char *r_buf, unsigned long *r_len)
-{
-	u8_l id;
-	int ret;
-
-	if (len != 1) {
-		genl_debug(LOG_INFO, "%s param err\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = genl_parse_u8(s_buf[0], 16, &id);
-	if (ret)
-		return ret;
-	if (id >= AICWF_PKT_FILTER_MAX)
-		return -ERANGE;
-
-	if (pkt_list.filter[id].length == 0) {
-		genl_debug(LOG_INFO, "%s, id does not exist\n", __func__);
-		return -ENOENT;
-	}
-
-	ret = rwnx_send_del_pkt_filter_req(rwnx_hw, id);
-	if (!ret)
-		memset(&pkt_list.filter[id], 0, sizeof(pkt_list.filter[id]));
-
-	return ret;
-}
-
-int cmd_pktfilter_delall(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-			 char *r_buf, unsigned long *r_len)
-{
-	int i, ret;
-
-	if (len)
-		return -EINVAL;
-
-	for (i = 0; i < AICWF_PKT_FILTER_MAX; i++)
-		if (pkt_list.filter[i].length)
-			break;
-
-	if (i == AICWF_PKT_FILTER_MAX)
-		return 0;
-
-	ret = rwnx_send_del_pkt_filter_req(rwnx_hw, 0xffff);
-	if (!ret)
-		memset(&pkt_list, 0, sizeof(pkt_list));
-
-	return ret;
-}
-
-int cmd_pktfilter_list(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		       char *r_buf, unsigned long *r_len)
-{
-	u16_l num = 0;
-	size_t filter_len;
-	u8_l val;
-	int i, ret;
-
-	filter_len = sizeof(pkt_list.filter[0]);
-
-	if (len != 1 || !r_buf || !r_len) {
-		genl_debug(LOG_INFO, "%s param err\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = genl_parse_u8(s_buf[0], 10, &val);
-	if (ret)
-		return ret;
-	if (val > 1)
-		return -ERANGE;
-
-	for (i = 0; i < AICWF_PKT_FILTER_MAX; i++) {
-		if (pkt_list.filter[i].length != 0 &&
-		    pkt_list.filter[i].enable == val) {
-			memcpy(r_buf + sizeof(num) + filter_len * num,
-			       &pkt_list.filter[i],
-			       filter_len);
-			num++;
-		}
-	}
-	memcpy(r_buf, &num, sizeof(num));
-	*r_len = sizeof(num) + filter_len * num;
-
-	return 0;
-}
-
-int cmd_pktfilter_enable(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-			 char *r_buf, unsigned long *r_len)
-{
-	u8_l id, val;
-	u16_l param[256] = {0};
-	int i, ret;
-
-	if (len != 2) {
-		genl_debug(LOG_INFO, "%s param err\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = genl_parse_u8(s_buf[0], 16, &id);
-	if (ret)
-		return ret;
-	ret = genl_parse_u8(s_buf[1], 16, &val);
-	if (ret)
-		return ret;
-	if (id >= AICWF_PKT_FILTER_MAX || val > 1)
-		return -ERANGE;
-
-	if (pkt_list.filter[id].length == 0) {
-		genl_debug(LOG_INFO, "%s, id does not exist\n", __func__);
-		return -ENOENT;
-	}
-	if (val == 1) {
-		if (pkt_list.filter[id].enable == 1) {
-			genl_debug(LOG_INFO, "%s, id already enable\n", __func__);
-			return 0;
-		}
-		param[0] = pkt_list.filter[id].id;
-		param[1] = pkt_list.filter[id].offset;
-		param[2] = pkt_list.filter[id].length;
-		for (i = 0; i < param[2]; i++)
-			param[3 + i] = pkt_list.filter[id].mask[i];
-		for (i = 0; i < param[2]; i++)
-			param[3 + param[2] + i] = pkt_list.filter[id].pattern[i];
-		param[3 + 2 * param[2]] = pkt_list.filter[id].total_len;
-
-		ret = rwnx_send_set_pkt_filter_req(rwnx_hw, param);
-		if (!ret)
-			pkt_list.filter[id].enable = 1;
-
-	} else if (val == 0) {
-		if (pkt_list.filter[id].enable == 0) {
-			genl_debug(LOG_INFO, "%s, id already disable\n", __func__);
-			return 0;
-		}
-		ret = rwnx_send_del_pkt_filter_req(rwnx_hw, pkt_list.filter[id].id);
-		if (!ret)
-			pkt_list.filter[id].enable = 0;
-	}
-
-	return ret;
 }
 
 #ifdef CONFIG_AIC8800_AUTO_CUSTREG
@@ -331,7 +107,7 @@ int cmd_country_get(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 {
 	const struct ieee80211_regdomain *regd;
 	int ret = 0;
-	u8_l buf[3];
+	u8 buf[3];
 
 	if (len)
 		return -EINVAL;
@@ -363,6 +139,7 @@ int cmd_temp_get(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 	if (len)
 		return -EINVAL;
 
+#ifdef CONFIG_AIC8800_TEMP_CONTROL
 	if (timer_pending(&rwnx_hw->sdiodev->tp_ctrl.tp_ctrl_timer)) {
 		if (jiffies_to_msecs(jiffies - rwnx_hw->started_jiffies) < 5000) {
 			genl_debug(LOG_INFO, "tp_get temp_1: %d\n", rwnx_hw->temp);
@@ -376,7 +153,9 @@ int cmd_temp_get(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 				tp_cfm.temp_comp_get_cfm.degree;
 			memcpy(r_buf, &tp_cfm.temp_comp_get_cfm.degree, 1);
 		}
-	} else {
+	} else
+#endif
+	{
 		if (rwnx_send_get_temp_req(rwnx_hw, &tp_cfm))
 			return -1;
 		genl_debug(LOGINFO, "tp_get temp_3: %d\n",
@@ -456,7 +235,7 @@ int cmd_get_auth_type(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 		      char *r_buf, unsigned long *r_len)
 {
 	struct rwnx_vif *rwnx_vif = NULL;
-	s32_l val = -1;
+	s32 val = -1;
 
 	if (len)
 		return -EINVAL;
@@ -478,7 +257,7 @@ int cmd_set_suspend_mode(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 			 char *r_buf, unsigned long *r_len)
 {
 #ifndef CONFIG_AIC8800_AUTO_POWERSAVE
-	u8_l val;
+	u8 val;
 #endif
 	int ret = 0;
 
@@ -515,7 +294,7 @@ int cmd_set_suspend_mode(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 	}
 
 	if (ret == 0) {
-		r_buf[0] = (u8_l)val;
+		r_buf[0] = (u8)val;
 		*r_len = 1;
 	}
 #else
@@ -529,7 +308,7 @@ int cmd_set_suspend_mode(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 int cmd_set_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 		     char *r_buf, unsigned long *r_len)
 {
-	u8_l mac_addr[6];
+	u8 mac_addr[6];
 	int i, ret;
 
 	if (!rwnx_hw->testmode) {
@@ -553,14 +332,14 @@ int cmd_set_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 	genl_debug(LOG_INFO, "set macaddr:%x,%x,%x,%x,%x,%x\n", mac_addr[5],
 		   mac_addr[4], mac_addr[3], mac_addr[2], mac_addr[1], mac_addr[0]);
 	ret = rwnx_send_rftest_req(rwnx_hw, SET_MAC_ADDR, sizeof(mac_addr),
-				   (u8_l *)&mac_addr, NULL);
+				   (u8 *)&mac_addr, NULL);
 	return ret;
 }
 
 int cmd_get_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 		     char *r_buf, unsigned long *r_len)
 {
-	u32_l addr0, addr1;
+	u32 addr0, addr1;
 	int ret = 0;
 
 	if (len)
@@ -585,7 +364,7 @@ int cmd_get_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 int cmd_set_bt_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 			char *r_buf, unsigned long *r_len)
 {
-	u8_l mac_addr[6];
+	u8 mac_addr[6];
 	int i, ret;
 
 	if (!rwnx_hw->testmode) {
@@ -609,14 +388,14 @@ int cmd_set_bt_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 	genl_debug(LOG_INFO, "set bt macaddr:%x,%x,%x,%x,%x,%x\n", mac_addr[5],
 		   mac_addr[4], mac_addr[3], mac_addr[2], mac_addr[1], mac_addr[0]);
 	ret = rwnx_send_rftest_req(rwnx_hw, SET_BT_MAC_ADDR, sizeof(mac_addr),
-				   (u8_l *)&mac_addr, NULL);
+				   (u8 *)&mac_addr, NULL);
 	return ret;
 }
 
 int cmd_get_bt_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 			char *r_buf, unsigned long *r_len)
 {
-	u32_l addr0, addr1;
+	u32 addr0, addr1;
 	int ret = 0;
 
 	if (len)
@@ -639,26 +418,6 @@ int cmd_get_bt_mac_addr(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 }
 
 static const struct cmd_table_ops g_cmd_table[] = {
-	{
-		.name = "pkt_filter_set",
-		.func = cmd_pktfilter_set,
-	},
-	{
-		.name = "pkt_filter_del",
-		.func = cmd_pktfilter_del,
-	},
-	{
-		.name = "pkt_filter_delall",
-		.func = cmd_pktfilter_delall,
-	},
-	{
-		.name = "pkt_filter_list",
-		.func = cmd_pktfilter_list,
-	},
-	{
-		.name = "pkt_filter_enable",
-		.func = cmd_pktfilter_enable,
-	},
 #ifdef CONFIG_AIC8800_AUTO_CUSTREG
 	{
 		.name = "country_set",
@@ -801,7 +560,7 @@ static int aicwf_genl_cmd_handler(struct sk_buff *skb, struct genl_info *info)
 	if (!s_buf)
 		return -ENOMEM;
 
-	r_buf = kzalloc_objs(*r_buf, sizeof(pkt_list), GFP_KERNEL);
+	r_buf = kzalloc_objs(*r_buf, AICWF_GENL_REPLY_MAX_LEN, GFP_KERNEL);
 	if (!r_buf) {
 		ret = -ENOMEM;
 		goto out_free_cmd;
@@ -819,7 +578,7 @@ static int aicwf_genl_cmd_handler(struct sk_buff *skb, struct genl_info *info)
 	if (ret) {
 		if (ret == RF_MODE_ERR) {
 			strscpy(r_buf, "aic: cmd_error, enter this cmd in testmode",
-				sizeof(pkt_list));
+				AICWF_GENL_REPLY_MAX_LEN);
 			r_len = strlen(r_buf) + 1;
 		} else {
 			genl_debug(LOG_ERROR, "%s handler fail\n", __func__);
@@ -828,10 +587,11 @@ static int aicwf_genl_cmd_handler(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (r_len == 0) {
-		strscpy(r_buf, "aic genl_msg send ok", sizeof(pkt_list));
+		strscpy(r_buf, "aic genl_msg send ok",
+			AICWF_GENL_REPLY_MAX_LEN);
 		r_len = strlen(r_buf) + 1;
 	}
-	if (r_len > sizeof(pkt_list)) {
+	if (r_len > AICWF_GENL_REPLY_MAX_LEN) {
 		ret = -EMSGSIZE;
 		goto out_free_reply;
 	}
@@ -903,7 +663,6 @@ int aicwf_init_genl(struct rwnx_hw *rwnx_hw)
 	if (aicwf_genl_registered)
 		return -EALREADY;
 
-	memset(&pkt_list, 0, sizeof(pkt_list));
 	WRITE_ONCE(aicwf_genl_hw, rwnx_hw);
 	ret = genl_register_family(&aicwf_genl_family);
 	if (ret) {
@@ -936,6 +695,5 @@ void aicwf_deinit_genl(struct rwnx_hw *rwnx_hw)
 	mutex_lock(&aicwf_genl_cmd_lock);
 	aicwf_genl_registered = false;
 	WRITE_ONCE(aicwf_genl_hw, NULL);
-	memset(&pkt_list, 0, sizeof(pkt_list));
 	mutex_unlock(&aicwf_genl_cmd_lock);
 }

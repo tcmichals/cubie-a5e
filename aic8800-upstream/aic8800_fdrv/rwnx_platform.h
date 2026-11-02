@@ -15,12 +15,8 @@
 
 #define RWNX_MAC_FW_BASE_NAME "fmacfw"
 
-#ifdef CONFIG_RWNX_TL4
-#define RWNX_MAC_FW_NAME RWNX_MAC_FW_BASE_NAME ".hex"
-#else
 #define RWNX_MAC_FW_NAME  RWNX_MAC_FW_BASE_NAME ".ihex"
 #define RWNX_MAC_FW_NAME2 RWNX_MAC_FW_BASE_NAME ".bin"
-#endif
 
 #define RWNX_FCU_FW_NAME "fcuram.bin"
 #if (defined(CONFIG_DPD) && !defined(CONFIG_FORCE_DPD_CALIB))
@@ -83,9 +79,6 @@ struct rwnx_plat {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	struct aic_usb_dev *usbdev;
-#endif
 
 	bool enabled;
 
@@ -135,8 +128,8 @@ void rwnx_platform_unregister_drv(void);
 void get_userconfig_txpwr_idx(struct txpwr_idx_conf *txpwr_idx);
 void get_userconfig_txpwr_ofst(struct txpwr_ofst_conf *txpwr_ofst);
 void get_userconfig_xtal_cap(struct xtal_cap_conf *xtal_cap);
-s8_l get_txpwr_max(s8_l power);
-void set_txpwr_loss_ofst(s8_l value);
+s8 get_txpwr_max(s8 power);
+void set_txpwr_loss_ofst(s8 value);
 
 int get_ccode_region(char *ccode);
 
@@ -166,13 +159,12 @@ int parse_qualified_string(char *in, u32 *start, char *out, char left_qualifier,
 int get_u1_byte_integer_from_string_in_decimal(char *str, u8 *p_int);
 int get_s1_byte_integer_from_string_in_decimal(char *str, s8 *val);
 void rwnx_plat_powerlimit_parsing(char *buffer, int size, char *cc);
-s8_l get_powerlimit_by_freq(u8_l band, u16_l freq, u8_l *enable);
-s8_l get_powerlimit_by_chnum(u8_l chnum, u8_l *enable);
-u16_l phy_channel_to_freq(u8_l band, int channel);
+s8 get_powerlimit_by_freq(u8 band, u16 freq, u8 *enable);
+s8 get_powerlimit_by_chnum(u8 chnum, u8 *enable);
+u16 phy_channel_to_freq(u8 band, int channel);
 #endif
 
 struct device *rwnx_platform_get_dev(struct rwnx_plat *rwnx_plat);
-struct rwnx_hw *rwnx_platform_get_hw(struct rwnx_plat *rwnx_plat);
 
 int rwnx_request_firmware_common(struct rwnx_hw *rwnx_hw, u32 **buffer,
 				 const char *filename);

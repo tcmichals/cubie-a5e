@@ -10,6 +10,7 @@
  */
 
 #include <linux/delay.h>
+#include <crypto/md5.h>
 #include <linux/firmware.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -23,7 +24,6 @@
 #include "aic_bsp_driver.h"
 #include "aicsdio.h"
 #include "aicsdio_txrxif.h"
-#include "md5.h"
 #include "aic_chip_ops.h"
 #include <linux/fs.h>
 
@@ -503,8 +503,7 @@ int rwnx_load_firmware(u32 **fw_buf, const char *name, struct device *device)
 	u32 *dst = NULL;
 	void *buffer = NULL;
 #ifdef CONFIG_TEDIOUS_PRT
-	struct MD5_CTX md5;
-	unsigned char decrypt[16];
+	u8 digest[MD5_DIGEST_SIZE];
 #endif
 	int size = 0;
 	int ret = 0;
@@ -538,10 +537,8 @@ int rwnx_load_firmware(u32 **fw_buf, const char *name, struct device *device)
 	*fw_buf = buffer;
 
 #ifdef CONFIG_TEDIOUS_PRT
-	md5_init(&md5);
-	md5_update(&md5, (unsigned char *)buffer, size);
-	md5_final(&md5, decrypt);
-	print_md5(decrypt);
+	md5(buffer, size, digest);
+	print_md5(digest);
 #endif
 
 	release_firmware(fw);
@@ -1534,8 +1531,9 @@ int aicbsp_driver_fw_init(struct aic_sdio_dev *sdiodev)
 	u32 btenable = 0;
 	int ret = 0;
 
-	testmode = aicbsp_info.cpmode;
-	cur_mode = aicbsp_info.cpmode;
+	aicbsp_info.cpmode = AICBSP_CPMODE_WORK;
+	testmode = AICBSP_CPMODE_WORK;
+	cur_mode = AICBSP_CPMODE_WORK;
 
 	ret = aic_chip_driver_fw_init(sdiodev, &btenable, &aicbsp_info, &aicbsp_firmware_list);
 	if (ret) {
@@ -1545,13 +1543,6 @@ int aicbsp_driver_fw_init(struct aic_sdio_dev *sdiodev)
 
 	AICWFDBG(LOGINFO, "aicbsp: %s, chip rev: %d\n", __func__,
 		 aicbsp_info.chip_rev);
-
-	if (testmode != 4) {
-		if (btenable == 1) {
-			if (aicbt_init(sdiodev))
-				return -1;
-		}
-	}
 
 	ret = aicwifi_init(sdiodev);
 	if (ret)

@@ -20,8 +20,9 @@
 
 #ifndef _RWNX_COMPAT_H_
 #define _RWNX_COMPAT_H_
-
 #include <linux/version.h>
+
+#include <linux/bitfield.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
 #ifndef netif_rx_ni
@@ -51,19 +52,6 @@
 #define NX_TXQ_CNT 5
 #else
 #define NX_TXQ_CNT 4
-#endif
-
-// because android kernel 5.15 uses kernel 6.0 or 6.1 kernel api
-#ifdef ANDROID_PLATFORM
-#define HIGH_KERNEL_VERSION  KERNEL_VERSION(5, 15, 41)
-#define HIGH_KERNEL_VERSION2 KERNEL_VERSION(5, 15, 41)
-#define HIGH_KERNEL_VERSION3 KERNEL_VERSION(5, 15, 104)
-#define HIGH_KERNEL_VERSION4 KERNEL_VERSION(6, 1, 0)
-#else
-#define HIGH_KERNEL_VERSION  KERNEL_VERSION(6, 0, 0)
-#define HIGH_KERNEL_VERSION2 KERNEL_VERSION(6, 1, 0)
-#define HIGH_KERNEL_VERSION3 KERNEL_VERSION(6, 3, 0)
-#define HIGH_KERNEL_VERSION4 KERNEL_VERSION(6, 3, 0)
 #endif
 
 #define IEEE80211_MAX_AMPDU_BUF IEEE80211_MAX_AMPDU_BUF_HE

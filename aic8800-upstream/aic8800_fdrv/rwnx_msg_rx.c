@@ -19,24 +19,18 @@
 #include "rwnx_bfmer.h"
 #endif //(CONFIG_RWNX_BFMER)
 #ifdef CONFIG_RWNX_FULLMAC
-#include "rwnx_debugfs.h"
 #include "rwnx_msg_tx.h"
 #include "rwnx_tdls.h"
 #endif /* CONFIG_RWNX_FULLMAC */
 #include "aicwf_txrxif.h"
+#include "aicwf_sdio.h"
 #include "rwnx_compat.h"
 #include "rwnx_events.h"
 #include "rwnx_msg_rx.h"
-#ifdef CONFIG_SDIO_BT
-#include "aic_btsdio.h"
-#endif
 #include "rwnx_mod_params.h"
-#include "rwnx_wakelock.h"
+#include <linux/pm.h>
 #ifdef CONFIG_AIC8800_POWER_LIMIT
 #include "aicwf_compat_8800d80.h"
-#endif
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-#include "aicwf_wext_linux.h"
 #endif
 
 void rwnx_cfg80211_unlink_bss(struct rwnx_hw *rwnx_hw,
@@ -401,7 +395,7 @@ static inline int rwnx_apm_staloss_ind(struct rwnx_hw *rwnx_hw,
 	return 0;
 }
 
-static struct sk_buff *arp_80211_to_8023(struct sk_buff *skb, u8_l hdrlen)
+static struct sk_buff *arp_80211_to_8023(struct sk_buff *skb, u8 hdrlen)
 {
 	struct ethhdr *eth;
 	size_t payload_len;
@@ -520,18 +514,6 @@ static inline int rwnx_arp_announcement_ind(struct rwnx_hw *rwnx_hw,
 	dev_kfree_skb(skb);
 	return 0;
 }
-
-#ifdef CONFIG_SDIO_BT
-static inline int rwnx_bt_recv_ind(struct rwnx_hw *rwnx_hw,
-				   struct rwnx_cmd *cmd,
-				   struct ipc_e2a_msg *msg)
-{
-	struct mm_bt_recv_ind *ind = (struct mm_bt_recv_ind *)msg->param;
-
-	bt_sdio_recv(ind->bt_data, ind->data_len);
-	return 0;
-}
-#endif
 
 static inline int rwnx_rx_csa_counter_ind(struct rwnx_hw *rwnx_hw,
 					  struct rwnx_cmd *cmd,
@@ -705,11 +687,7 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
 #ifdef CONFIG_AIC8800_SCHED_SCAN
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	if (rwnx_hw->scan_request && !rwnx_hw->is_sched_scan && !rwnx_hw->wext_scan)
-#else
 	if (rwnx_hw->scan_request && !rwnx_hw->is_sched_scan)
-#endif
 #endif // CONFIG_AIC8800_SCHED_SCAN
 	{
 		struct cfg80211_scan_info info = {
@@ -718,16 +696,6 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 
 		cfg80211_scan_done(rwnx_hw->scan_request, &info);
 	}
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	else if (rwnx_hw->wext_scan) {
-		rwnx_hw->wext_scan = 0;
-		AICWFDBG(LOGDEBUG, "%s rwnx_hw->wext_scan done!!\r\n", __func__);
-		kfree(rwnx_hw->scan_request->ssids);
-		if (rwnx_hw->scan_request)
-			vfree(rwnx_hw->scan_request);
-		complete(&rwnx_hw->wext_scan_com);
-	}
-#endif
 
 #ifdef CONFIG_AIC8800_SCHED_SCAN
 	if (rwnx_hw->is_sched_scan) {
@@ -758,7 +726,7 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 
 	rwnx_hw->scan_request = NULL;
 	rwnx_hw->scanning = 0;
-	rwnx_wakeup_unlock(rwnx_hw->ws_scan);
+	aicwf_sdio_scan_activity_put(rwnx_hw);
 
 	return 0;
 }
@@ -827,13 +795,10 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 	const u8 *country_id;
 	const u8 *ssid_id;
 	char ssid_name[33];
-	u8_l ssid_len;
+	u8 ssid_len;
 	const struct ieee80211_regdomain *regdomain;
 #endif
 
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	struct scanu_result_wext *scan_re_wext;
-#endif
 
 	// RWNX_DBG(RWNX_FN_ENTRY_STR); //debug trace
 
@@ -900,39 +865,6 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 					  (struct ieee80211_mgmt *)ind->payload,
 					  ind->length, ind->rssi * 100, GFP_ATOMIC);
 
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-		if (rwnx_hw->wext_scan) {
-			list_for_each_entry(scan_re_wext,
-					    &rwnx_hw->wext_scanre_list, scanu_re_list) {
-				if (!memcmp(scan_re_wext->bss->bssid, bss->bssid, ETH_ALEN)) {
-					AICWFDBG(LOGDEBUG,
-						 "%s: BSSID already exists, no need to add again\r\n",
-						 __func__);
-					if (bss)
-						cfg80211_put_bss(rwnx_hw->wiphy, bss);
-					return 0;
-				}
-			}
-			scan_re_wext =
-				vmalloc(sizeof(struct scanu_result_wext));
-			scan_re_wext->ind =
-				vmalloc(sizeof(struct scanu_result_ind));
-
-			scan_re_wext->payload = vmalloc(sizeof(u32_l) * ind->length);
-
-			memset(scan_re_wext->ind, 0, sizeof(struct scanu_result_ind));
-			memset(scan_re_wext->payload, 0, ind->length);
-
-			memcpy(scan_re_wext->ind, ind, sizeof(struct scanu_result_ind));
-			memcpy(scan_re_wext->payload, ind->payload, ind->length);
-
-			scan_re_wext->bss = bss;
-
-			INIT_LIST_HEAD(&scan_re_wext->scanu_re_list);
-			list_add_tail(&scan_re_wext->scanu_re_list, &rwnx_hw->wext_scanre_list);
-			return 0;
-		}
-#endif
 	}
 	if (bss)
 		cfg80211_put_bss(rwnx_hw->wiphy, bss);
@@ -1043,9 +975,6 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
 		memcpy(sta->ac_param, ind->ac_param, sizeof(sta->ac_param));
 		rwnx_txq_sta_init(rwnx_hw, sta, txq_status);
 		rwnx_txq_tdls_vif_init(rwnx_vif);
-#ifdef CONFIG_RWNX_DEBUGFS
-		rwnx_dbgfs_register_rc_stat(rwnx_hw, sta);
-#endif
 		rwnx_mu_group_sta_init(sta, NULL);
 		/* Look for TDLS Channel Switch Prohibited flag in the Extended
 		 * Capability Information Element
@@ -1244,16 +1173,6 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
 	else
 		AICWFDBG(LOGINFO, "%s roaming no rwnx_cfg80211_unlink_bss \r\n",
 			 __func__);
-
-#ifdef CONFIG_RWNX_DEBUGFS
-	rwnx_dbgfs_unregister_rc_stat(rwnx_hw, rwnx_vif->sta.ap);
-#endif
-
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	/* clear bridge database */
-	nat25_db_cleanup(rwnx_vif);
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT)
 		rwnx_hw->is_p2p_connected = 0;
 	/* if vif is not up, rwnx_close has already been called */
@@ -1430,9 +1349,6 @@ static inline int rwnx_rx_mesh_peer_update_ind(struct rwnx_hw *rwnx_hw,
 					txq_status = RWNX_TXQ_STOP_CHAN;
 
 				rwnx_txq_sta_init(rwnx_hw, rwnx_sta, txq_status);
-#ifdef CONFIG_RWNX_DEBUGFS
-				rwnx_dbgfs_register_rc_stat(rwnx_hw, rwnx_sta);
-#endif
 #ifdef CONFIG_RWNX_BFMER
 				// TODO: update indication to contains vht capabilities
 				if (rwnx_hw->mod_params->bfmer)
@@ -1453,9 +1369,6 @@ static inline int rwnx_rx_mesh_peer_update_ind(struct rwnx_hw *rwnx_hw,
 				list_del_init(&rwnx_sta->list);
 
 				rwnx_txq_sta_deinit(rwnx_hw, rwnx_sta);
-#ifdef CONFIG_RWNX_DEBUGFS
-				rwnx_dbgfs_unregister_rc_stat(rwnx_hw, rwnx_sta);
-#endif
 			} else {
 				WARN_ON(0);
 			}
@@ -1472,9 +1385,6 @@ static inline int rwnx_rx_mesh_peer_update_ind(struct rwnx_hw *rwnx_hw,
 			list_del_init(&rwnx_sta->list);
 
 			rwnx_txq_sta_deinit(rwnx_hw, rwnx_sta);
-#ifdef CONFIG_RWNX_DEBUGFS
-			rwnx_dbgfs_unregister_rc_stat(rwnx_hw, rwnx_sta);
-#endif
 		} else {
 			WARN_ON(0);
 		}
@@ -1675,9 +1585,6 @@ static msg_cb_fct tdls_hdlrs[MSG_I(TDLS_MAX)] = {
 	[MSG_I(TDLS_CHAN_SWITCH_IND)] = rwnx_rx_tdls_chan_switch_ind,
 	[MSG_I(TDLS_CHAN_SWITCH_BASE_IND)] = rwnx_rx_tdls_chan_switch_base_ind,
 	[MSG_I(TDLS_PEER_PS_IND)] = rwnx_rx_tdls_peer_ps_ind,
-#ifdef CONFIG_SDIO_BT
-	[MSG_I(TDLS_SDIO_BT_RECV_IND)] = rwnx_bt_recv_ind,
-#endif
 };
 
 static msg_cb_fct *msg_hdlrs[] = {
@@ -1702,8 +1609,7 @@ void rwnx_rx_handle_msg(struct rwnx_hw *rwnx_hw, struct ipc_e2a_msg *msg)
 
 void rwnx_rx_handle_print(struct rwnx_hw *rwnx_hw, u8 *msg, u32 len)
 {
-	u8 *data_end = NULL;
-	(void)data_end;
+	(void)len;
 
 	if (!rwnx_hw || !rwnx_hw->fwlog_en) {
 		pr_err("FWLOG-OVFL: %s", msg);
@@ -1711,34 +1617,4 @@ void rwnx_rx_handle_print(struct rwnx_hw *rwnx_hw, u8 *msg, u32 len)
 	}
 
 	AICWFDBG(LOGDEBUG, "FWLOG: %s", msg);
-
-#ifdef CONFIG_RWNX_DEBUGFS
-	data_end = rwnx_hw->debugfs.fw_log.buf.dataend;
-
-	if (!rwnx_hw->debugfs.fw_log.buf.data)
-		return;
-
-	// AICWFDBG(LOGDEBUG, "end=%lx, len=%d\n", (unsigned
-	// long)rwnx_hw->debugfs.fw_log.buf.end, len);
-
-	spin_lock_bh(&rwnx_hw->debugfs.fw_log.lock);
-
-	if (rwnx_hw->debugfs.fw_log.buf.end + len > data_end) {
-		int rem = data_end - rwnx_hw->debugfs.fw_log.buf.end;
-
-		memcpy(rwnx_hw->debugfs.fw_log.buf.end, msg, rem);
-		memcpy(rwnx_hw->debugfs.fw_log.buf.data, &msg[rem], len - rem);
-		rwnx_hw->debugfs.fw_log.buf.end =
-			rwnx_hw->debugfs.fw_log.buf.data + (len - rem);
-	} else {
-		memcpy(rwnx_hw->debugfs.fw_log.buf.end, msg, len);
-		rwnx_hw->debugfs.fw_log.buf.end += len;
-	}
-
-	rwnx_hw->debugfs.fw_log.buf.size += len;
-	if (rwnx_hw->debugfs.fw_log.buf.size > FW_LOG_SIZE)
-		rwnx_hw->debugfs.fw_log.buf.size = FW_LOG_SIZE;
-
-	spin_unlock_bh(&rwnx_hw->debugfs.fw_log.lock);
-#endif
 }

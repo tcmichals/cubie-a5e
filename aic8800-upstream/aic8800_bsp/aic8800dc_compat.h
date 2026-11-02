@@ -2,17 +2,11 @@
 #ifndef _AIC8800DC_COMPAT_H_
 #define _AIC8800DC_COMPAT_H_
 
+#include <linux/types.h>
+
 #include "aicsdio.h"
 typedef u32 (*array2_tbl_t)[2];
 typedef u32 (*array3_tbl_t)[3];
-
-typedef u8 u8_l;
-typedef s8 s8_l;
-typedef u16 u16_l;
-typedef s16 s16_l;
-typedef u32 u32_l;
-typedef s32 s32_l;
-typedef u64 u64_l;
 
 extern u8 chip_sub_id;
 extern u8 chip_mcu_id;

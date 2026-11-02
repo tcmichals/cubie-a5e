@@ -51,8 +51,6 @@ struct aic_chip_ops {
 			      const struct aicbsp_firmware **aicbsp_firmware_list);
 };
 
-extern const struct aic_chip_ops aic_chip_aic8801_ops;
-extern const struct aic_chip_ops aic_chip_aic8800dc_ops;
 extern const struct aic_chip_ops aic_chip_aic8800d80_ops;
 
 /* Select the appropriate chip ops based on chip product ID */

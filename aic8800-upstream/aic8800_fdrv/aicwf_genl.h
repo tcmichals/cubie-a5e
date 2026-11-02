@@ -18,9 +18,6 @@
 
 #define GENL_FAMILY_NAME ("AICWF_NL")
 
-#define AICWF_PKT_FILTER_MAX         20
-#define AICWF_PKT_FILTER_PATTERN_MAX 100
-
 enum aicwf_nl_commands {
 	WL_NL_CMD_UNSPEC,
 	WL_NL_CMD_MSG,
@@ -48,21 +45,6 @@ extern struct dbg_rftest_cmd_cfm cfm;
 		}                                                                      \
 	} while (0)
 
-struct pkt_filter {
-	u16_l id;
-	u16_l offset;
-	u16_l length;
-	u16_l enable;
-	u8_l mask[AICWF_PKT_FILTER_PATTERN_MAX];
-	u8_l pattern[AICWF_PKT_FILTER_PATTERN_MAX];
-	u16_l total_len;
-};
-
-struct pkt_filter_list {
-	u16_l num;
-	struct pkt_filter filter[AICWF_PKT_FILTER_MAX];
-};
-
 typedef int (*func_cmd)(struct rwnx_hw *, char *[], int, char *,
 						unsigned long *);
 struct cmd_table_ops {
@@ -70,16 +52,6 @@ struct cmd_table_ops {
 	func_cmd func;
 };
 
-int cmd_pktfilter_set(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		      char *r_buf, unsigned long *r_len);
-int cmd_pktfilter_del(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		      char *r_buf, unsigned long *r_len);
-int cmd_pktfilter_delall(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-			 char *r_buf, unsigned long *r_len);
-int cmd_pktfilter_list(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-		       char *r_buf, unsigned long *r_len);
-int cmd_pktfilter_enable(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
-			 char *r_buf, unsigned long *r_len);
 #ifdef CONFIG_AIC8800_AUTO_CUSTREG
 int cmd_country_set(struct rwnx_hw *rwnx_hw, char *s_buf[], int len,
 		    char *r_buf, unsigned long *r_len);

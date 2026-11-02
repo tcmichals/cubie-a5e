@@ -13,22 +13,16 @@
 
 int aicwf_sdio_chipmatch(u16 vid, u16 did, u16 *chipid)
 {
-	if (vid == SDIO_VENDOR_ID_AIC8801 && did == SDIO_DEVICE_ID_AIC8801) {
-		*chipid = PRODUCT_ID_AIC8801;
-		AICWFDBG(LOGINFO, "%s USE AIC8801\r\n", __func__);
-		return 0;
-	} else if (vid == SDIO_VENDOR_ID_AIC8800DC &&
-		   did == SDIO_DEVICE_ID_AIC8800DC) {
-		*chipid = PRODUCT_ID_AIC8800DC;
-		AICWFDBG(LOGINFO, "%s USE AIC8800DC\r\n", __func__);
-		return 0;
-	} else if (vid == SDIO_VENDOR_ID_AIC8800D80 &&
-		   did == SDIO_DEVICE_ID_AIC8800D80) {
-		*chipid = PRODUCT_ID_AIC8800D80;
-		AICWFDBG(LOGINFO, "%s USE AIC8800D80\r\n", __func__);
-		return 0;
-	}
-	return -ENODEV;
+	if (vid != SDIO_VENDOR_ID_AIC8800D80)
+		return -ENODEV;
+
+	if (did != SDIO_DEVICE_ID_AIC8800D80 &&
+	    did != SDIO_DEVICE_ID_AIC8800D80_FUNC2)
+		return -ENODEV;
+
+	*chipid = PRODUCT_ID_AIC8800D80;
+	AICWFDBG(LOGINFO, "%s USE AIC8800D80\r\n", __func__);
+	return 0;
 }
 
 /*========== Chip ops wrappers ========== */
@@ -63,15 +57,8 @@ int aic_chip_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable,
 
 const struct aic_chip_ops *aic_chip_ops_select(u16 chipid)
 {
-	switch (chipid) {
-	case PRODUCT_ID_AIC8801:
-		return &aic_chip_aic8801_ops;
-	case PRODUCT_ID_AIC8800DC:
-	case PRODUCT_ID_AIC8800DW:
-		return &aic_chip_aic8800dc_ops;
-	case PRODUCT_ID_AIC8800D80:
+	if (chipid == PRODUCT_ID_AIC8800D80)
 		return &aic_chip_aic8800d80_ops;
-	default:
-		return NULL;
-	}
+
+	return NULL;
 }

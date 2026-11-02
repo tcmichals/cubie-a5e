@@ -706,7 +706,7 @@ TRACE_EVENT(skb_confirm,
 #endif
 			));
 
-TRACE_EVENT(credit_update, TP_PROTO(struct rwnx_txq *txq, s8_l cred_up),
+TRACE_EVENT(credit_update, TP_PROTO(struct rwnx_txq *txq, s8 cred_up),
 	    TP_ARGS(txq, cred_up),
 	    TP_STRUCT__entry(__field(struct sk_buff *, skb)
 			     __field(u16, txq_idx) __field(s8, sw_credit)

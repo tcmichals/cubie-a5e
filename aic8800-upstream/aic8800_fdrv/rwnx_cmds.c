@@ -17,8 +17,7 @@
 #include <linux/list.h>
 #ifdef AICWF_SDIO_SUPPORT
 #include "aicwf_sdio.h"
-#endif
-#ifdef AICWF_USB_SUPPORT
+#else
 #include "aicwf_usb.h"
 #endif
 
@@ -102,12 +101,9 @@ int cmd_mgr_queue_force_defer(struct rwnx_cmd_mgr *cmd_mgr,
 static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 {
 #ifdef AICWF_SDIO_SUPPORT
+	int ret;
 	struct aic_sdio_dev *sdiodev =
 		container_of(cmd_mgr, struct aic_sdio_dev, cmd_mgr);
-#endif
-#ifdef AICWF_USB_SUPPORT
-	struct aic_usb_dev *usbdev =
-		container_of(cmd_mgr, struct aic_usb_dev, cmd_mgr);
 #endif
 	bool defer_push = false;
 
@@ -169,7 +165,7 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 #ifdef AICWF_SDIO_SUPPORT
 		aicwf_set_cmd_tx((void *)(sdiodev), cmd->a2e_msg,
 				 sizeof(struct lmac_msg) + cmd->a2e_msg->param_len);
-#elif defined(AICWF_USB_SUPPORT)
+#else
 		aicwf_set_cmd_tx((void *)(usbdev), cmd->a2e_msg,
 				 sizeof(struct lmac_msg) + cmd->a2e_msg->param_len);
 #endif
@@ -186,7 +182,8 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 		if (!wait_for_completion_timeout(&cmd->complete, tout)) {
 			AICWFDBG(LOGDEBUG, KERN_CRIT "AICWF cmd timed-out\n");
 #ifdef AICWF_SDIO_SUPPORT
-			if (aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 2) < 0) {
+			ret = aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 2);
+			if (ret < 0) {
 				sdio_err("reg:%d write failed!\n",
 					 sdiodev->sdio_reg.wakeup_reg);
 			}
@@ -271,17 +268,13 @@ void cmd_mgr_task_process(struct work_struct *work)
 			struct aic_sdio_dev *sdiodev =
 				container_of(cmd_mgr, struct aic_sdio_dev, cmd_mgr);
 #endif
-#ifdef AICWF_USB_SUPPORT
-			struct aic_usb_dev *usbdev =
-				container_of(cmd_mgr, struct aic_usb_dev, cmd_mgr);
-#endif
 			next->flags &= ~RWNX_CMD_FLAG_WAIT_PUSH;
 
 #ifdef AICWF_SDIO_SUPPORT
 			aicwf_set_cmd_tx((void *)(sdiodev), next->a2e_msg,
 					 sizeof(struct lmac_msg) +
 						next->a2e_msg->param_len);
-#elif defined(AICWF_USB_SUPPORT)
+#else
 			aicwf_set_cmd_tx((void *)(usbdev), next->a2e_msg,
 					 sizeof(struct lmac_msg) +
 						next->a2e_msg->param_len);
@@ -334,10 +327,6 @@ static int cmd_mgr_msgind(struct rwnx_cmd_mgr *cmd_mgr,
 	struct aic_sdio_dev *sdiodev =
 		container_of(cmd_mgr, struct aic_sdio_dev, cmd_mgr);
 	struct rwnx_hw *rwnx_hw = sdiodev->rwnx_hw;
-#elif defined(AICWF_USB_SUPPORT)
-	struct aic_usb_dev *usbdev =
-		container_of(cmd_mgr, struct aic_usb_dev, cmd_mgr);
-	struct rwnx_hw *rwnx_hw = usbdev->rwnx_hw;
 #endif
 	struct rwnx_cmd *cmd, *pos;
 	bool found = false;
@@ -409,8 +398,8 @@ void rwnx_cmd_mgr_init(struct rwnx_cmd_mgr *cmd_mgr)
 {
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
-	cmd_mgr->state = RWNX_CMD_MGR_STATE_INITED;
 	INIT_LIST_HEAD(&cmd_mgr->cmds);
+	cmd_mgr->state = RWNX_CMD_MGR_STATE_INITED;
 	spin_lock_init(&cmd_mgr->lock);
 	cmd_mgr->max_queue_sz = RWNX_CMD_MAX_QUEUED;
 	cmd_mgr->queue = &cmd_mgr_queue;
@@ -441,25 +430,19 @@ void aicwf_set_cmd_tx(void *dev, struct lmac_msg *msg, uint len)
 {
 	u8 *buffer = NULL;
 	u16 index = 0;
-	struct rwnx_hw *rwnx_hw = NULL;
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev = (struct aic_sdio_dev *)dev;
-	struct aicwf_bus *bus = sdiodev ? sdiodev->bus_if : NULL;
-	rwnx_hw = sdiodev ? sdiodev->rwnx_hw : NULL;
-#elif defined(AICWF_USB_SUPPORT)
+	struct aicwf_bus *bus = sdiodev->bus_if;
+#else
 	struct aic_usb_dev *usbdev = (struct aic_usb_dev *)dev;
 	struct aicwf_bus *bus = NULL;
 
-	if (!usbdev || !usbdev->state) {
+	if (!usbdev->state) {
 		AICWFDBG(LOGDEBUG, "down msg\n");
 		return;
 	}
 	bus = usbdev->bus_if;
-	rwnx_hw = usbdev->rwnx_hw;
 #endif
-	if (!bus || !bus->cmd_buf)
-		return;
-
 	buffer = bus->cmd_buf;
 
 	memset(buffer, 0, CMD_BUF_MAX);
@@ -467,7 +450,7 @@ void aicwf_set_cmd_tx(void *dev, struct lmac_msg *msg, uint len)
 	buffer[1] = ((len + 4) >> 8) & 0x0f;
 	buffer[2] = 0x11;
 
-	buffer[3] = aic_chip_cmd_hdr_checksum(rwnx_hw, &buffer[0], 3);
+	buffer[3] = aic_chip_cmd_hdr_checksum(sdiodev->rwnx_hw, &buffer[0], 3);
 
 	index += 4;
 	// there is a dummy word

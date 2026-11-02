@@ -8,8 +8,7 @@
 #include <linux/skbuff.h>
 #ifdef AICWF_SDIO_SUPPORT
 #include "aicwf_sdio.h"
-#endif
-#ifdef AICWF_USB_SUPPORT
+#else
 #include "aicwf_usb.h"
 #endif
 #include "aic_bus.h"
@@ -94,9 +93,6 @@ struct aicwf_tx_priv {
 	spinlock_t txqlock;
 	struct semaphore txctl_sema;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	struct aic_usb_dev *usbdev;
-#endif
 	struct sk_buff *aggr_buf;
 	atomic_t aggr_count;
 	u8 *head;
@@ -149,23 +145,15 @@ struct aicwf_rx_priv {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	struct aic_usb_dev *usbdev;
-#endif
 	void *rwnx_vif;
 	atomic_t rx_cnt;
 	u32 data_len;
 	/* lock for aicwf_rx */
 	spinlock_t rxqlock;
-#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
+#ifdef CONFIG_PREALLOC_RX_SKB
 	struct rx_frame_queue rxq;
 #else
 	struct frame_queue rxq;
-#endif
-#ifdef AICWF_USB_SUPPORT
-	struct frame_queue msg_rxq;
-	spinlock_t msg_rxqlock;
-	atomic_t msg_rx_cnt;
 #endif
 
 #ifdef AICWF_RX_REORDER
@@ -177,7 +165,7 @@ struct aicwf_rx_priv {
 	spinlock_t stas_reord_lock;
 	struct recv_msdu *recv_frames;
 #endif
-#if defined(CONFIG_PREALLOC_RX_SKB) && defined(AICWF_SDIO_SUPPORT)
+#ifdef CONFIG_PREALLOC_RX_SKB
 	/* lock for rxbuff */
 	spinlock_t rxbuff_lock;
 #endif
@@ -224,11 +212,6 @@ struct rx_buff *rxbuff_dequeue(struct rx_frame_queue *pq);
 bool aicwf_rxbuff_enqueue(struct device *dev, struct rx_frame_queue *rxq,
 			  struct rx_buff *pkt);
 extern struct aicwf_rx_buff_list aic_rx_buff_list;
-#endif
-
-int aicwf_process_rxframes(struct aicwf_rx_priv *rx_priv);
-#ifdef AICWF_USB_SUPPORT
-int aicwf_process_msg_rxframes(struct aicwf_rx_priv *rx_priv);
 #endif
 
 #endif /* _AICWF_TXRXIF_H_ */

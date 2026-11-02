@@ -388,13 +388,8 @@ int aicbsp_resv_mem_deinit(void);
 #define RAM_FMAC_FW_PATCH_NAME			"fmacfw_patch.bin"
 #define RWNX_MAC_CALIB_BASE_NAME_8800DC         "fmacfw_calib_8800dc"
 #define RWNX_MAC_CALIB_NAME_8800DC_U02          RWNX_MAC_CALIB_BASE_NAME_8800DC "_u02.bin"
-#ifdef CONFIG_SDIO_BT
-#define RWNX_MAC_CALIB_NAME_8800DC_H_U02                                       \
-	RWNX_MAC_CALIB_BASE_NAME_8800DC "_hbt_u02.bin"
-#else
 #define RWNX_MAC_CALIB_NAME_8800DC_H_U02                                       \
 	RWNX_MAC_CALIB_BASE_NAME_8800DC "_h_u02.bin"
-#endif
 
 #ifdef CONFIG_DPD
 #define ROM_FMAC_CALIB_ADDR 0x00130000
@@ -413,26 +408,16 @@ int aicbsp_resv_mem_deinit(void);
 #define RWNX_MAC_PATCH_NAME2_8800DC     RWNX_MAC_PATCH_BASE_NAME_8800DC ".bin"
 #define RWNX_MAC_PATCH_NAME2_8800DC_U02                                        \
 	RWNX_MAC_PATCH_BASE_NAME_8800DC "_u02.bin"
-#ifdef CONFIG_SDIO_BT
-#define RWNX_MAC_PATCH_NAME2_8800DC_H_U02                                      \
-	RWNX_MAC_PATCH_BASE_NAME_8800DC "_hbt_u02.bin"
-#else
 #define RWNX_MAC_PATCH_NAME2_8800DC_H_U02                                      \
 	RWNX_MAC_PATCH_BASE_NAME_8800DC "_h_u02.bin"
-#endif
 #endif
 
 #define RWNX_MAC_PATCH_TABLE_NAME_8800DC "fmacfw_patch_tbl_8800dc"
 #define RWNX_MAC_PATCH_TABLE_8800DC      RWNX_MAC_PATCH_TABLE_NAME_8800DC ".bin"
 #define RWNX_MAC_PATCH_TABLE_8800DC_U02                                        \
 	RWNX_MAC_PATCH_TABLE_NAME_8800DC "_u02.bin"
-#ifdef CONFIG_SDIO_BT
-#define RWNX_MAC_PATCH_TABLE_8800DC_H_U02                                      \
-	RWNX_MAC_PATCH_TABLE_NAME_8800DC "_hbt_u02.bin"
-#else
 #define RWNX_MAC_PATCH_TABLE_8800DC_H_U02                                      \
 	RWNX_MAC_PATCH_TABLE_NAME_8800DC "_h_u02.bin"
-#endif
 
 #define RWNX_MAC_RF_PATCH_BASE_NAME_8800DC "fmacfw_rf_patch_8800dc"
 #define RWNX_MAC_RF_PATCH_NAME_8800DC      RWNX_MAC_RF_PATCH_BASE_NAME_8800DC ".bin"
@@ -529,11 +514,7 @@ enum chip_rev {
 
 #define AICBT_BTMODE_DEFAULT_8800d80 AICBT_BTMODE_BT_ONLY_COANT
 #define AICBT_BTMODE_DEFAULT         AICBT_BTMODE_BT_ONLY_SW
-#ifdef CONFIG_SDIO_BT
-#define AICBT_BTPORT_DEFAULT AICBT_BTPORT_MB
-#else
 #define AICBT_BTPORT_DEFAULT AICBT_BTPORT_UART
-#endif
 #define AICBT_UART_BAUD_DEFAULT         AICBT_UART_BAUD_1_5M
 #define AICBT_UART_FC_DEFAULT           AICBT_UART_FLOWCTRL_ENABLE
 #define AICBT_LPM_ENABLE_DEFAULT        1
@@ -597,14 +578,7 @@ extern int adap_test;
 extern struct aicbsp_info_t aicbsp_info;
 extern struct mutex aicbsp_power_lock;
 extern const struct aicbsp_firmware *aicbsp_firmware_list;
-extern const struct aicbsp_firmware fw_u02[];
-extern const struct aicbsp_firmware fw_u03[];
-extern const struct aicbsp_firmware fw_8800dc_u01[];
-extern const struct aicbsp_firmware fw_8800dc_u02[];
-extern const struct aicbsp_firmware fw_8800dc_h_u02[];
-extern const struct aicbsp_firmware fw_8800d80_u01[];
 extern const struct aicbsp_firmware fw_8800d80_u02[];
-extern const struct aicbsp_firmware fw_8800d80_h_u02[];
 
 int aicbsp_system_config(struct aic_sdio_dev *sdiodev);
 int aicwifi_patch_config(struct aic_sdio_dev *sdiodev);

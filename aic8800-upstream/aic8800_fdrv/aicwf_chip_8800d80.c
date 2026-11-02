@@ -91,8 +91,8 @@ static int aic8800d80_ic_system_init(struct rwnx_hw *rwnx_hw, struct dbg_mem_rea
 static int aic8800d80_priv_cmd_set_power(struct rwnx_hw *rwnx_hw, int argc,
 					 char *argv[], char *command)
 {
-	u8_l ana_pwr;
-	u8_l pwr;
+	u8 ana_pwr;
+	u8 pwr;
 
 	ana_pwr = command_strtoul(argv[1], NULL, 10);
 	pwr = ana_pwr;
@@ -100,14 +100,14 @@ static int aic8800d80_priv_cmd_set_power(struct rwnx_hw *rwnx_hw, int argc,
 		return -EINVAL;
 
 	AICWFDBG(LOGINFO, "pwr =%x\r\n", pwr);
-	rwnx_send_rftest_req(rwnx_hw, SET_POWER, sizeof(pwr), (u8_l *)&pwr, NULL);
+	rwnx_send_rftest_req(rwnx_hw, SET_POWER, sizeof(pwr), (u8 *)&pwr, NULL);
 	return 0;
 }
 
 static int aic8800d80_priv_cmd_get_freq_cal(struct rwnx_hw *rwnx_hw, int argc,
 					    char *argv[], char *command)
 {
-	u8_l val;
+	u8 val;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
@@ -125,7 +125,7 @@ static int aic8800d80_priv_cmd_get_freq_cal(struct rwnx_hw *rwnx_hw, int argc,
 static int aic8800d80_priv_cmd_get_mac_addr(struct rwnx_hw *rwnx_hw, int argc,
 					    char *argv[], char *command)
 {
-	u32_l addr0, addr1;
+	u32 addr0, addr1;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
@@ -142,7 +142,7 @@ static int aic8800d80_priv_cmd_get_mac_addr(struct rwnx_hw *rwnx_hw, int argc,
 static int aic8800d80_priv_cmd_get_bt_mac_addr(struct rwnx_hw *rwnx_hw, int argc,
 					       char *argv[], char *command)
 {
-	u32_l addr0, addr1;
+	u32 addr0, addr1;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
@@ -160,7 +160,7 @@ static int aic8800d80_priv_cmd_get_bt_mac_addr(struct rwnx_hw *rwnx_hw, int argc
 static int aic8800d80_priv_cmd_set_vendor_info(struct rwnx_hw *rwnx_hw, int argc,
 					       char *argv[], char *command)
 {
-	u8_l vendor_info;
+	u8 vendor_info;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
@@ -190,22 +190,22 @@ static int aic8800d80_priv_cmd_get_vendor_info(struct rwnx_hw *rwnx_hw, int argc
 static int aic8800d80_priv_cmd_rdwr_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 					    char *argv[], char *command)
 {
-	u8_l func = 0;
+	u8 func = 0;
 	int res_len = 0;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
 
 	if (argc > 1)
-		func = (u8_l)command_strtoul(argv[1], NULL, 16);
+		func = (u8)command_strtoul(argv[1], NULL, 16);
 	if (func == 0) { // read cur
 		rwnx_send_rftest_req(rwnx_hw, RDWR_PWROFST, 0, NULL, &cfm);
 	} else if (func <= 2) { // write 2.4g/5g pwr ofst
 		if (argc > 4) {
-			u8_l type = (u8_l)command_strtoul(argv[2], NULL, 16);
-			u8_l chgrp = (u8_l)command_strtoul(argv[3], NULL, 16);
-			s8_l pwrofst = (u8_l)command_strtoul(argv[4], NULL, 10);
-			u8_l buf[4] = {func, type, chgrp, (u8_l)pwrofst};
+			u8 type = (u8)command_strtoul(argv[2], NULL, 16);
+			u8 chgrp = (u8)command_strtoul(argv[3], NULL, 16);
+			s8 pwrofst = (u8)command_strtoul(argv[4], NULL, 10);
+			u8 buf[4] = {func, type, chgrp, (u8)pwrofst};
 
 			AICWFDBG(LOGINFO, "set pwrofst_%s:[%x][%x]=%d\r\n",
 				 (func == 1) ? "2.4g" : "5g", type, chgrp, pwrofst);
@@ -225,22 +225,22 @@ static int aic8800d80_priv_cmd_rdwr_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 static int aic8800d80_priv_cmd_rdwr_efuse_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 						  char *argv[], char *command)
 {
-	u8_l func = 0;
+	u8 func = 0;
 	int res_len = 0;
 	struct dbg_rftest_cmd_cfm cfm = {{
 		0,
 	}};
 
 	if (argc > 1)
-		func = (u8_l)command_strtoul(argv[1], NULL, 16);
+		func = (u8)command_strtoul(argv[1], NULL, 16);
 	if (func == 0) { // read cur
 		rwnx_send_rftest_req(rwnx_hw, RDWR_EFUSE_PWROFST, 0, NULL, &cfm);
 	} else if (func <= 2) { // write 2.4g/5g pwr ofst
 		if (argc > 4) {
-			u8_l type = (u8_l)command_strtoul(argv[2], NULL, 16);
-			u8_l chgrp = (u8_l)command_strtoul(argv[3], NULL, 16);
-			s8_l pwrofst = (u8_l)command_strtoul(argv[4], NULL, 10);
-			u8_l buf[4] = {func, type, chgrp, (u8_l)pwrofst};
+			u8 type = (u8)command_strtoul(argv[2], NULL, 16);
+			u8 chgrp = (u8)command_strtoul(argv[3], NULL, 16);
+			s8 pwrofst = (u8)command_strtoul(argv[4], NULL, 10);
+			u8 buf[4] = {func, type, chgrp, (u8)pwrofst};
 
 			AICWFDBG(LOGINFO, "set efuse pwrofst_%s:[%x][%x]=%d\r\n",
 				 (func == 1) ? "2.4g" : "5g", type, chgrp, pwrofst);

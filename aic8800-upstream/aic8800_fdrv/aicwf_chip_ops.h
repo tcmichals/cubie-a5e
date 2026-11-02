@@ -12,13 +12,6 @@
 #include "lmac_types.h"
 #include "lmac_msg.h"
 
-enum AICWF_IC {
-	PRODUCT_ID_AIC8801 = 0,
-	PRODUCT_ID_AIC8800DC,
-	PRODUCT_ID_AIC8800DW,
-	PRODUCT_ID_AIC8800D80
-};
-
 struct rwnx_hw;
 struct mm_set_rf_calib_req;
 struct mm_set_rf_calib_cfm;
@@ -37,16 +30,16 @@ struct aic_sdio_chip_hw {
 #ifdef CONFIG_AIC8800_AUTO_POWERSAVE
 	bool auto_ps_support;
 #endif
-	u8_l wakeup_reg_val;
+	u8 wakeup_reg_val;
 	bool use_hdr_checksum;
 	bool need_fix_hdr_len;
 };
 
 /* Match SDIO vendor/device IDs to a chip product ID */
-int aicwf_sdio_chipmatch(u16_l vendor, u16_l device, u16_l *chipid);
+int aicwf_sdio_chipmatch(u16 vendor, u16 device, u16 *chipid);
 
 /* Get SDIO hardware properties for a given chip product ID */
-const struct aic_sdio_chip_hw *aic_sdio_get_props(u16_l chipid);
+const struct aic_sdio_chip_hw *aic_sdio_get_props(u16 chipid);
 
 /*
  * struct aic_chip_ops - Chip-specific operations
@@ -147,8 +140,6 @@ struct aic_chip_ops {
 
 };
 
-extern const struct aic_chip_ops aic_chip_aic8801_ops;
-extern const struct aic_chip_ops aic_chip_aic8800dc_ops;
 extern const struct aic_chip_ops aic_chip_aic8800d80_ops;
 
 /* Select the appropriate chip ops based on chip product ID */
@@ -190,6 +181,4 @@ int aic_chip_priv_cmd_rdwr_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 				   char *argv[], char *command);
 int aic_chip_priv_cmd_rdwr_efuse_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 					 char *argv[], char *command);
-u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size);
-
 #endif /* _AICWF_CHIP_OPS_H_ */

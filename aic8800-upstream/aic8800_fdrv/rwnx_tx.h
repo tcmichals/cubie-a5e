@@ -164,19 +164,10 @@ void rwnx_ps_bh_traffic_req(struct rwnx_hw *rwnx_hw, struct rwnx_sta *sta,
 void rwnx_switch_vif_sta_txq(struct rwnx_sta *sta, struct rwnx_vif *old_vif,
 			     struct rwnx_vif *new_vif);
 
-int rwnx_dbgfs_print_sta(char *buf, size_t size, struct rwnx_sta *sta,
-			 struct rwnx_hw *rwnx_hw);
-
 void rwnx_txq_credit_update(struct rwnx_hw *rwnx_hw, int sta_idx, u8 tid,
 			    s8 update);
 
 void rwnx_tx_push(struct rwnx_hw *rwnx_hw, struct rwnx_txhdr *txhdr, int flags);
-
-void dhcp_flag_bcast(struct rwnx_vif *vif, struct sk_buff *skb);
-
-void *scdb_find_entry(struct rwnx_vif *vif, unsigned char *mac_addr, unsigned char *ip_addr);
-
-int nat25_db_handle(struct rwnx_vif *vif, struct sk_buff *skb, int method);
 
 #ifdef CONFIG_AIC8800_FILTER_TCP_ACK
 int intf_tx(struct rwnx_hw *priv, struct msg_buf *msg);

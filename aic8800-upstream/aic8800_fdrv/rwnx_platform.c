@@ -12,6 +12,7 @@
  */
 
 #include <linux/delay.h>
+#include <crypto/md5.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -33,7 +34,6 @@
 #include "aicwf_compat_8800d80.h"
 #include "aicwf_compat_8800dc.h"
 #include "aicwf_chip_ops.h"
-#include "md5.h"
 
 // Parser state
 #define INIT      0
@@ -397,16 +397,16 @@ static struct userconfig_info_t userconfig_info = {
 #define POWER_LIMIT_CC_MATCHED_BIT (0x1U << 0)
 
 struct txpwr_lmt_info_t {
-	u8_l ch_cnt_2g4;
-	u8_l ch_cnt_5g;
-	u8_l ch_num_2g4[MAC_DOMAINCHANNEL_24G_MAX];
-	u8_l ch_num_5g[MAC_DOMAINCHANNEL_5G_MAX];
-	s8_l max_pwr_2g4[MAC_DOMAINCHANNEL_24G_MAX];
-	s8_l max_pwr_5g[MAC_DOMAINCHANNEL_5G_MAX];
+	u8 ch_cnt_2g4;
+	u8 ch_cnt_5g;
+	u8 ch_num_2g4[MAC_DOMAINCHANNEL_24G_MAX];
+	u8 ch_num_5g[MAC_DOMAINCHANNEL_5G_MAX];
+	s8 max_pwr_2g4[MAC_DOMAINCHANNEL_24G_MAX];
+	s8 max_pwr_5g[MAC_DOMAINCHANNEL_5G_MAX];
 };
 
 struct powerlimit_info_t {
-	u32_l flags;
+	u32 flags;
 	struct txpwr_lmt_info_t txpwr_lmt;
 };
 
@@ -434,87 +434,6 @@ int aicwf_request_firmware(const struct firmware **fw, const char *name,
 	return ret;
 }
 
-#ifdef CONFIG_RWNX_TL4
-/**
- * rwnx_plat_tl4_fw_upload - Load firmware onto the embedded platform
- *
- * @rwnx_plat: pointer to platform structure
- * @fw_addr: Virtual address where the fw must be loaded
- * @filename: Name of the fw.
- *
- * Load a fw, stored as a hex file, into the specified address
- *
- * Return: 0 on success, or a negative error code.
- */
-static int rwnx_plat_tl4_fw_upload(struct rwnx_plat *rwnx_plat, u8 *fw_addr,
-				   char *filename)
-{
-	struct device *dev = rwnx_platform_get_dev(rwnx_plat);
-	const struct firmware *fw;
-	int err = 0;
-	u32 *dst;
-	u8 const *file_data;
-	char typ0, typ1;
-	u32 addr0, addr1;
-	u32 dat0, dat1;
-	int remain;
-
-	err = aicwf_request_firmware(&fw, filename, dev);
-	if (err)
-		return err;
-
-	file_data = fw->data;
-	remain = fw->size;
-
-	/* Copy the file on the Embedded side */
-	dev_dbg(dev, "\n### Now copy %s firmware, @ = %p\n", filename, fw_addr);
-
-	/* Walk through all the lines of the configuration file */
-	while (remain >= 16) {
-		u32 data, offset;
-
-		if (sscanf(file_data, "%c:%08X %04X", &typ0, &addr0, &dat0) != 3)
-			break;
-		if ((addr0 & 0x01) != 0) {
-			addr0 = addr0 - 1;
-			dat0 = 0;
-		} else {
-			file_data += 16;
-			remain -= 16;
-		}
-		if (remain < 16 ||
-		    (sscanf(file_data, "%c:%08X %04X", &typ1, &addr1, &dat1) != 3) ||
-		    typ1 != typ0 || addr1 != (addr0 + 1)) {
-			typ1 = typ0;
-			addr1 = addr0 + 1;
-			dat1 = 0;
-		} else {
-			file_data += 16;
-			remain -= 16;
-		}
-
-		if (typ0 == 'C') {
-			offset = 0x00200000;
-			if ((addr1 % 4) == 3)
-				offset += 2 * (addr1 - 3);
-			else
-				offset += 2 * (addr1 + 1);
-
-			data = dat1 | (dat0 << 16);
-		} else {
-			offset = 2 * (addr1 - 1);
-			data = dat0 | (dat1 << 16);
-		}
-		dst = (u32 *)(fw_addr + offset);
-		*dst = data;
-	}
-
-	release_firmware(fw);
-
-	return err;
-}
-#endif
-
 #define MD5PINRT                                                               \
 	"file "                                                                    \
 	"md5:%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n"
@@ -525,8 +444,7 @@ static int rwnx_load_firmware(u32 **fw_buf, const char *name,
 	const struct firmware *fw = NULL;
 	u32 *dst = NULL;
 	void *buffer = NULL;
-	struct MD5_CTX md5;
-	unsigned char decrypt[16];
+	u8 digest[MD5_DIGEST_SIZE];
 	int size = 0;
 	int ret = 0;
 
@@ -558,12 +476,10 @@ static int rwnx_load_firmware(u32 **fw_buf, const char *name,
 
 	*fw_buf = buffer;
 
-	md5_init(&md5);
-	md5_update(&md5, (unsigned char *)buffer, size);
-	md5_final(&md5, decrypt);
-	AICWFDBG(LOGDEBUG, "AICWF " MD5PINRT, decrypt[0], decrypt[1], decrypt[2], decrypt[3],
-		 decrypt[4], decrypt[5], decrypt[6], decrypt[7], decrypt[8], decrypt[9],
-		 decrypt[10], decrypt[11], decrypt[12], decrypt[13], decrypt[14], decrypt[15]);
+	md5(buffer, size, digest);
+	AICWFDBG(LOGDEBUG, "AICWF " MD5PINRT, digest[0], digest[1], digest[2], digest[3],
+		 digest[4], digest[5], digest[6], digest[7], digest[8], digest[9],
+		 digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
 
 	release_firmware(fw);
 
@@ -767,7 +683,7 @@ void get_userconfig_xtal_cap(struct xtal_cap_conf *xtal_cap)
 		 xtal_cap->xtal_cap_fine);
 }
 
-s8_l get_txpwr_max(s8_l power)
+s8 get_txpwr_max(s8 power)
 {
 	int i = 0;
 
@@ -809,7 +725,7 @@ s8_l get_txpwr_max(s8_l power)
 	return power;
 }
 
-void set_txpwr_loss_ofst(s8_l value)
+void set_txpwr_loss_ofst(s8 value)
 {
 	int i = 0;
 
@@ -1950,7 +1866,7 @@ void rwnx_plat_userconfig_parsing3(char *buffer, int size)
 	char command[64];
 	char value[100];
 	int char_counter = 0;
-	u8_l area_pw = 0;
+	u8 area_pw = 0;
 
 	memset(command, 0, 64);
 	memset(value, 0, 100);
@@ -2128,8 +2044,8 @@ static inline char *get_line_from_buffer(char **buffer)
 
 int is_all_space_or_tab(u8 *data, u8 size)
 {
-	u8_l cnt = 0;
-	u8_l num_of_space_and_tab = 0;
+	u8 cnt = 0;
+	u8 num_of_space_and_tab = 0;
 
 	while (size > cnt) {
 		if (data[cnt] == ' ' || data[cnt] == '\t' || data[cnt] == '\0')
@@ -2273,12 +2189,12 @@ void rwnx_plat_powerlimit_parsing(char *buffer, int size, char *cc)
 #define LD_STAGE_COLUMN_DEFINE 3
 #define LD_STAGE_CH_ROW        4
 
-	u8_l loading_stage = LD_STAGE_EXC_MAPPING;
-	u32_l i = 0, for_cnt = 0;
-	u32_l i_cc;
+	u8 loading_stage = LD_STAGE_EXC_MAPPING;
+	u32 i = 0, for_cnt = 0;
+	u32 i_cc;
 	char *sz_line, *ptmp;
 	char band[10], col_num_buf[10];
-	u8_l col_num = 0, col_num_cc = 255, band_cc = 0;
+	u8 col_num = 0, col_num_cc = 255, band_cc = 0;
 	bool sp_cc = false;
 	// clear powerlimit info at first
 	memset((void *)&powerlimit_info, 0, sizeof(struct powerlimit_info_t));
@@ -2494,7 +2410,7 @@ exit:
 /// 5G lower bound freq
 #define PHY_FREQ_5G 5000
 
-u16_l phy_channel_to_freq(u8_l band, int channel)
+u16 phy_channel_to_freq(u8 band, int channel)
 {
 	if (band == PHY_BAND_2G4 && channel >= 1 && channel <= 14) {
 		if (channel == 14)
@@ -2507,10 +2423,10 @@ u16_l phy_channel_to_freq(u8_l band, int channel)
 	return 0;
 }
 
-s8_l get_powerlimit_by_freq(u8_l band, u16_l freq, u8_l *enable)
+s8 get_powerlimit_by_freq(u8 band, u16 freq, u8 *enable)
 {
-	s8_l ret = POWER_LIMIT_INVALID_VAL;
-	u8_l idx;
+	s8 ret = POWER_LIMIT_INVALID_VAL;
+	u8 idx;
 
 	if ((powerlimit_info.flags & POWER_LIMIT_CC_MATCHED_BIT) == 0) {
 		*enable = 0;
@@ -2518,11 +2434,11 @@ s8_l get_powerlimit_by_freq(u8_l band, u16_l freq, u8_l *enable)
 		*enable = 1;
 
 		if (band == PHY_BAND_2G4) {
-			u8_l idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_2g4;
+			u8 idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_2g4;
 
 			for (idx = 0; idx < idx_cnt; idx++) {
 				int ch_num = powerlimit_info.txpwr_lmt.ch_num_2g4[idx];
-				u16_l freq_tmp = phy_channel_to_freq(PHY_BAND_2G4, ch_num);
+				u16 freq_tmp = phy_channel_to_freq(PHY_BAND_2G4, ch_num);
 
 				if (freq == freq_tmp) {
 					ret = powerlimit_info.txpwr_lmt.max_pwr_2g4[idx];
@@ -2537,11 +2453,11 @@ s8_l get_powerlimit_by_freq(u8_l band, u16_l freq, u8_l *enable)
 					 freq);
 			}
 		} else if (band == PHY_BAND_5G) {
-			u8_l idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_5g;
+			u8 idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_5g;
 
 			for (idx = 0; idx < idx_cnt; idx++) {
 				int ch_num = powerlimit_info.txpwr_lmt.ch_num_5g[idx];
-				u16_l freq_tmp = phy_channel_to_freq(PHY_BAND_5G, ch_num);
+				u16 freq_tmp = phy_channel_to_freq(PHY_BAND_5G, ch_num);
 
 				if (freq == freq_tmp) {
 					ret = powerlimit_info.txpwr_lmt.max_pwr_5g[idx];
@@ -2560,10 +2476,10 @@ s8_l get_powerlimit_by_freq(u8_l band, u16_l freq, u8_l *enable)
 	return ret;
 }
 
-s8_l get_powerlimit_by_chnum(u8_l chnum, u8_l *enable)
+s8 get_powerlimit_by_chnum(u8 chnum, u8 *enable)
 {
-	s8_l ret = POWER_LIMIT_INVALID_VAL;
-	u8_l idx;
+	s8 ret = POWER_LIMIT_INVALID_VAL;
+	u8 idx;
 
 	if ((powerlimit_info.flags & POWER_LIMIT_CC_MATCHED_BIT) == 0) {
 		*enable = 0;
@@ -2571,10 +2487,10 @@ s8_l get_powerlimit_by_chnum(u8_l chnum, u8_l *enable)
 		*enable = 1;
 
 		if (chnum <= 14) {
-			u8_l idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_2g4;
+			u8 idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_2g4;
 
 			for (idx = 0; idx < idx_cnt; idx++) {
-				u8_l ch_num = powerlimit_info.txpwr_lmt.ch_num_2g4[idx];
+				u8 ch_num = powerlimit_info.txpwr_lmt.ch_num_2g4[idx];
 
 				if (chnum == ch_num) {
 					ret = powerlimit_info.txpwr_lmt.max_pwr_2g4[idx];
@@ -2588,7 +2504,7 @@ s8_l get_powerlimit_by_chnum(u8_l chnum, u8_l *enable)
 					 chnum);
 			}
 		} else if (chnum <= 165) {
-			u8_l idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_5g;
+			u8 idx_cnt = powerlimit_info.txpwr_lmt.ch_cnt_5g;
 
 			for (idx = 0; idx < idx_cnt; idx++) {
 				int ch_num = powerlimit_info.txpwr_lmt.ch_num_5g[idx];
@@ -2880,10 +2796,9 @@ int rwnx_platform_on(struct rwnx_hw *rwnx_hw, void *config)
  */
 void rwnx_platform_off(struct rwnx_hw *rwnx_hw, void **config)
 {
-#if defined(AICWF_SDIO_SUPPORT) || defined(AICWF_USB_SUPPORT)
+#if defined(AICWF_SDIO_SUPPORT)
 	tasklet_kill(&rwnx_hw->task);
-	if (rwnx_hw->plat)
-		rwnx_hw->plat->enabled = false;
+	rwnx_hw->plat->enabled = false;
 	return;
 #endif
 
@@ -2941,29 +2856,8 @@ void rwnx_platform_deinit(struct rwnx_hw *rwnx_hw)
 struct device *rwnx_platform_get_dev(struct rwnx_plat *rwnx_plat)
 {
 #ifdef AICWF_SDIO_SUPPORT
-	if (rwnx_plat && rwnx_plat->sdiodev)
-		return rwnx_plat->sdiodev->dev;
+	return rwnx_plat->sdiodev->dev;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	if (rwnx_plat && rwnx_plat->usbdev)
-		return rwnx_plat->usbdev->dev;
-#endif
-	return NULL;
-}
-
-struct rwnx_hw *rwnx_platform_get_hw(struct rwnx_plat *rwnx_plat)
-{
-	if (!rwnx_plat)
-		return NULL;
-#ifdef AICWF_SDIO_SUPPORT
-	if (rwnx_plat->sdiodev)
-		return rwnx_plat->sdiodev->rwnx_hw;
-#endif
-#ifdef AICWF_USB_SUPPORT
-	if (rwnx_plat->usbdev)
-		return rwnx_plat->usbdev->rwnx_hw;
-#endif
-	return NULL;
 }
 
 MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_AGC_FW_NAME);
@@ -2971,6 +2865,4 @@ MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_FCU_FW_NAME);
 MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_LDPC_RAM_NAME);
 
 MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_MAC_FW_NAME);
-#ifndef CONFIG_RWNX_TL4
 MODULE_FIRMWARE(AIC8800_FW_DIR RWNX_MAC_FW_NAME2);
-#endif

@@ -3,7 +3,6 @@
 #define _AICWF_SDMMC_H_
 
 #ifdef AICWF_SDIO_SUPPORT
-#include "aicwf_chip_ops.h"
 #include "aicwf_rx_prealloc.h"
 #include "rwnx_cmds.h"
 #include <linux/ieee80211.h>
@@ -15,6 +14,7 @@
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/sdio_ids.h>
+#include <linux/wait.h>
 
 #define AICWF_SDIO_NAME         "aicwf_sdio"
 #define SDIOWIFI_FUNC_BLOCKSIZE 512
@@ -89,7 +89,15 @@ enum sdio_type {
 #define SDIO_DEVICE_ID_AIC8800DC  0xc08d
 #define SDIO_DEVICE_ID_AIC8800D80 0x0082
 
+enum AICWF_IC {
+	PRODUCT_ID_AIC8801 = 0,
+	PRODUCT_ID_AIC8800DC,
+	PRODUCT_ID_AIC8800DW,
+	PRODUCT_ID_AIC8800D80
+};
+
 struct rwnx_hw;
+struct wakeup_source;
 
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
 struct temp_ctrl {
@@ -99,16 +107,16 @@ struct temp_ctrl {
 	struct work_struct netif_work;
 	/* lock for temp */
 	spinlock_t tm_lock;
-	s8_l cur_temp;
+	s8 cur_temp;
 	bool net_stop;
 	bool on_off;      // for command, 0 - off, 1 - on
 	s8 get_level; // for command, 0 - 100%, 1 - 12%, 2 - 3%
 	s8 set_level; // for command, 0 - driver auto, 1 - 12%, 2 - 3%
 	int interval_t1;
 	int interval_t2;
-	u8_l cur_stat; // 0--normal temp, 1/2--buffering temp
-	s8_l tp_thd_1; // temperature threshold 1
-	s8_l tp_thd_2; // temperature threshold 2
+	u8 cur_stat; // 0--normal temp, 1/2--buffering temp
+	s8 tp_thd_1; // temperature threshold 1
+	s8 tp_thd_2; // temperature threshold 2
 	s8 tm_start; //timer start flag
 };
 #endif
@@ -162,6 +170,9 @@ struct aic_sdio_dev {
 	spinlock_t wslock;
 	bool oob_enable;
 	atomic_t is_bus_suspend;
+	atomic_t suspending;
+	atomic_t activity_count;
+	wait_queue_head_t activity_waitq;
 	/* lock for tx tp */
 	spinlock_t tx_tp_lock;
 
@@ -180,6 +191,12 @@ extern struct aicwf_rx_buff_list aic_rx_buff_list;
 int aicwf_sdio_readb(struct aic_sdio_dev *sdiodev, uint regaddr, u8 *val);
 int aicwf_sdio_writeb(struct aic_sdio_dev *sdiodev, uint regaddr, u8 val);
 void aicwf_sdio_hal_irqhandler(struct sdio_func *func);
+bool aicwf_sdio_activity_get(struct rwnx_hw *rwnx_hw,
+			     struct wakeup_source *ws);
+void aicwf_sdio_activity_put(struct rwnx_hw *rwnx_hw,
+			    struct wakeup_source *ws);
+bool aicwf_sdio_scan_activity_get(struct rwnx_hw *rwnx_hw);
+void aicwf_sdio_scan_activity_put(struct rwnx_hw *rwnx_hw);
 int aicwf_sdio_func2_readb(struct aic_sdio_dev *sdiodev, uint regaddr, u8 *val);
 int aicwf_sdio_func2_writeb(struct aic_sdio_dev *sdiodev, uint regaddr, u8 val);
 

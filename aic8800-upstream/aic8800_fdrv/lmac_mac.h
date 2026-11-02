@@ -41,7 +41,7 @@ enum mac_vif_type {
 /// MAC address structure.
 struct mac_addr {
 	/// Array of 16-bit words that make up the MAC address.
-	u16_l array[MAC_ADDR_LEN / 2];
+	u16 array[MAC_ADDR_LEN / 2];
 };
 
 /// SSID maximum length.
@@ -50,9 +50,9 @@ struct mac_addr {
 /// SSID.
 struct mac_ssid {
 	/// Actual length of the SSID.
-	u8_l length;
+	u8 length;
 	/// Array containing the SSID name.
-	u8_l array[MAC_SSID_LEN];
+	u8 array[MAC_SSID_LEN];
 };
 
 /// BSS type
@@ -107,32 +107,32 @@ enum mac_chan_flags {
 /// Primary Channel definition
 struct mac_chan_def {
 	/// Frequency of the channel (in MHz)
-	u16_l freq;
+	u16 freq;
 	/// RF band (@ref mac_chan_band)
-	u8_l band;
+	u8 band;
 	/// Additional information (@ref mac_chan_flags)
-	u8_l flags;
+	u8 flags;
 	/// Max transmit power allowed on this channel (dBm)
-	s8_l tx_power;
+	s8 tx_power;
 };
 
 /// Operating Channel
 struct mac_chan_op {
 	/// Band (@ref mac_chan_band)
-	u8_l band;
+	u8 band;
 	/// Channel type (@ref mac_chan_bandwidth)
-	u8_l type;
+	u8 type;
 	/// Frequency for Primary 20MHz channel (in MHz)
-	u16_l prim20_freq;
+	u16 prim20_freq;
 	/// Frequency center of the contiguous channel or center of Primary 80+80
 	/// (in MHz)
-	u16_l center1_freq;
+	u16 center1_freq;
 	/// Frequency center of the non-contiguous secondary 80+80 (in MHz)
-	u16_l center2_freq;
+	u16 center2_freq;
 	/// Max transmit power allowed on this channel (dBm)
-	s8_l tx_power;
+	s8 tx_power;
 	/// Additional information (@ref mac_chan_flags)
-	u8_l flags;
+	u8 flags;
 };
 
 /// Cipher suites (order is important as it is used by MACHW)
@@ -221,21 +221,21 @@ struct mac_scan_result {
 	/// Network name.
 	struct mac_ssid ssid;
 	/// Network type (@ref mac_bss_type).
-	u16_l bsstype;
+	u16 bsstype;
 	/// Network channel.
 	struct mac_chan_def *chan;
 	/// Network beacon period (in TU).
-	u16_l beacon_period;
+	u16 beacon_period;
 	/// Capability information
-	u16_l cap_info;
+	u16 cap_info;
 	/// Supported AKM (bit-field of @ref mac_akm_suite)
-	u32_l akm;
+	u32 akm;
 	/// Group cipher (bit-field of @ref mac_cipher_suite)
-	u16_l group_cipher;
+	u16 group_cipher;
 	/// Group cipher (bit-field of @ref mac_cipher_suite)
-	u16_l pairwise_cipher;
+	u16 pairwise_cipher;
 	/// RSSI of the scanned BSS (in dBm)
-	s8_l rssi;
+	s8 rssi;
 };
 
 /// Legacy rate 802.11 definitions
@@ -280,9 +280,9 @@ enum mac_bss_membership {
 /// Structure containing the legacy rateset of a station
 struct mac_rateset {
 	/// Number of legacy rates supported
-	u8_l length;
+	u8 length;
 	/// Array of legacy rates
-	u8_l array[MAC_RATESET_LEN];
+	u8 array[MAC_RATESET_LEN];
 };
 
 /// MAC Security Key maximum length
@@ -291,9 +291,9 @@ struct mac_rateset {
 /// Structure defining a security key
 struct mac_sec_key {
 	/// Key material length
-	u8_l length;
+	u8 length;
 	/// Key material
-	u32_l array[MAC_SEC_KEY_LEN / 4];
+	u32 array[MAC_SEC_KEY_LEN / 4];
 };
 
 /// Access Category enumeration
@@ -342,15 +342,15 @@ struct mac_htcapability {
 	/// HT capability information
 	__le16 ht_capa_info;
 	/// A-MPDU parameters
-	u8_l a_mpdu_param;
+	u8 a_mpdu_param;
 	/// Supported MCS
-	u8_l mcs_rate[MAX_MCS_LEN];
+	u8 mcs_rate[MAX_MCS_LEN];
 	/// HT extended capability information
 	__le16 ht_extended_capa;
 	/// Beamforming capability information
 	__le32 tx_beamforming_capa;
 	/// Antenna selection capability information
-	u8_l asel_capa;
+	u8 asel_capa;
 };
 
 /// MAC VHT capability information element
@@ -393,13 +393,13 @@ struct mac_he_mcs_nss_supp {
 /// MAC HE capability information element
 struct mac_hecapability {
 	/// MAC HE capabilities
-	u8_l mac_cap_info[MAC_HE_MAC_CAPA_LEN];
+	u8 mac_cap_info[MAC_HE_MAC_CAPA_LEN];
 	/// PHY HE capabilities
-	u8_l phy_cap_info[MAC_HE_PHY_CAPA_LEN];
+	u8 phy_cap_info[MAC_HE_PHY_CAPA_LEN];
 	/// Supported MCS combinations
 	struct mac_he_mcs_nss_supp mcs_supp;
 	/// PPE Thresholds data
-	u8_l ppe_thres[MAC_HE_PPE_THRES_MAX_LEN];
+	u8 ppe_thres[MAC_HE_PPE_THRES_MAX_LEN];
 };
 
 /// Station flags
@@ -434,37 +434,4 @@ enum mac_connection_flags {
 	REASSOCIATION = BIT(5),
 };
 
-#ifdef CONFIG_AIC8800_HE_FOR_OLD_KERNEL
-#define IEEE80211_HE_MAC_CAP2_ALL_ACK                                   0x02
-#define IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G             0x02
-#define IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G       0x04
-#define IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD                    0x20
-#define IEEE80211_HE_PHY_CAP1_HE_LTF_AND_GI_FOR_HE_PPDUS_0_8US          0x40
-#define IEEE80211_HE_PHY_CAP1_MIDAMBLE_RX_TX_MAX_NSTS                   0x80
-#define IEEE80211_HE_PHY_CAP2_MIDAMBLE_RX_TX_MAX_NSTS                   0x01
-#define IEEE80211_HE_PHY_CAP2_NDP_4x_LTF_AND_3_2US                      0x02
-#define IEEE80211_HE_PHY_CAP2_DOPPLER_RX                                0x20
-#define IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ                       0x08
-#define IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM                   0x18
-#define IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_1                          0x00
-#define IEEE80211_HE_PHY_CAP3_RX_HE_MU_PPDU_FROM_NON_AP_STA             0x40
-#define IEEE80211_HE_PHY_CAP4_SU_BEAMFORMEE                             0x01
-#define IEEE80211_HE_PHY_CAP4_BEAMFORMEE_MAX_STS_UNDER_80MHZ_4          0x0c
-#define IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK                          0x40
-#define IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK                          0x80
-#define IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU                       0x01
-#define IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU                       0x02
-#define IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMER_FB                     0x04
-#define IEEE80211_HE_PHY_CAP6_TRIG_MU_BEAMFORMER_FB                     0x08
-#define IEEE80211_HE_PHY_CAP6_PPE_THRESHOLD_PRESENT                     0x80
-#define IEEE80211_HE_PHY_CAP6_PARTIAL_BANDWIDTH_DL_MUMIMO               0x40
-#define IEEE80211_HE_PHY_CAP7_HE_SU_MU_PPDU_4XLTF_AND_08_US_GI          0x04
-#define IEEE80211_HE_PHY_CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G              0x02
-#define IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB     0x10
-#define IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB 0x20
-
-#define IEEE80211_HE_PPE_THRES_MAX_LEN 25
-
-#include <linux/ieee80211.h>
-#endif
 #endif // LMAC_MAC_H_

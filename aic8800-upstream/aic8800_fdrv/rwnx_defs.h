@@ -20,7 +20,6 @@
 #include <net/cfg80211.h>
 
 #include "rwnx_cmds.h"
-#include "rwnx_debugfs.h"
 #include "rwnx_mod_params.h"
 #include "rwnx_mu_group.h"
 #include "rwnx_platform.h"
@@ -28,9 +27,6 @@
 #include "rwnx_rx.h"
 #include "rwnx_tx.h"
 #include "rwnx_utils.h"
-#ifdef CONFIG_AIC8800_GKI
-#include "rwnx_gki.h"
-#endif
 #include "rwnx_compat.h"
 #ifdef CONFIG_AIC8800_FILTER_TCP_ACK
 #include "aicwf_tcp_ack.h"
@@ -40,14 +36,6 @@
 #include "aicwf_sdio.h"
 #include "sdio_host.h"
 #endif
-#ifdef AICWF_USB_SUPPORT
-#include "aicwf_usb.h"
-#include "usb_host.h"
-#endif
-
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-#include "aic_br_ext.h"
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
 
 #include "lmac_mac.h"
 #include "aicwf_chip_ops.h"
@@ -77,9 +65,9 @@ struct scanu_ccode {
 	/// ccode set
 	bool ccode_set;
 	/// ccode find cnt
-	u8_l ccode_cnt;
+	u8 ccode_cnt;
 	/// ccode rssi
-	s8_l ccode_rssi;
+	s8 ccode_rssi;
 	/// link scan
 	atomic_t link_scan;
 	/// record mac addr
@@ -88,18 +76,18 @@ struct scanu_ccode {
 #endif
 
 struct wf_bss_info {
-	u32_l length;
-	s8_l rssi;
-	u16_l chan;
+	u32 length;
+	s8 rssi;
+	u16 chan;
 	enum nl80211_band band; /* Band */
-	u8_l width;             /* Channel width  0/1/2--20/40/80 */
+	u8 width;             /* Channel width  0/1/2--20/40/80 */
 	u16 center_freq;        /* Center frequency */
 	u32 center_freq1;       /* Center frequency 1 */
 	u32 center_freq2;       /* Center frequency 2 */
 	bool ht;
 	bool vht;
-	u8_l bssid[ETH_ALEN];
-	u8_l ssid_len;
+	u8 bssid[ETH_ALEN];
+	u8 ssid_len;
 	unsigned char ssid[33];
 };
 
@@ -286,9 +274,9 @@ struct rwnx_vif {
 			u32 conn_owner_nlportid;
 			bool is_roam;
 			unsigned long link_time;
-			u16_l b_interval;
-			u8_l dtim_peroid;
-			u16_l capability;
+			u16 b_interval;
+			u8 dtim_peroid;
+			u16 capability;
 			enum nl80211_auth_type auth_type;
 			// connected network info end
 		} sta;
@@ -297,9 +285,6 @@ struct rwnx_vif {
 			struct list_head sta_list; /* List of STA connected to the AP */
 			struct rwnx_bcn bcn;       /* beacon */
 			u8 bcmc_index;             /* Index of the BCMC sta to use */
-#if (defined CONFIG_AIC8800_HE_FOR_OLD_KERNEL) || (defined CONFIG_AIC8800_VHT_FOR_OLD_KERNEL)
-			u8 aic_index;
-#endif
 			struct rwnx_csa *csa;
 
 			struct list_head
@@ -324,24 +309,10 @@ struct rwnx_vif {
 		} ap_vlan;
 	};
 
-	u8_l key_has_add;
-	u8_l is_p2p_vif;
+	u8 key_has_add;
+	u8 is_p2p_vif;
 	struct apm_probe_sta sta_probe;
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	spinlock_t br_ext_lock; //
-	/* unsigned int macclone_completed; */
-	struct nat25_network_db_entry *nethash[NAT25_HASH_SIZE];
-	int pppoe_connection_in_progress;
-	unsigned char pppoe_addr[MACADDRLEN];
-	unsigned char scdb_mac[MACADDRLEN];
-	unsigned char scdb_ip[4];
-	struct nat25_network_db_entry *scdb_entry;
-	unsigned char br_mac[MACADDRLEN];
-	unsigned char br_ip[4];
-
-	struct br_ext_info eth_br_ext_info;
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
 };
 
 #define RWNX_VIF_TYPE(rwnx_vif) ((rwnx_vif)->wdev.iftype)
@@ -388,14 +359,6 @@ struct rwnx_sta_stats {
 	struct hw_vect last_rx;
 	struct rwnx_rx_rate_stats rx_rate;
 };
-
-#if (defined CONFIG_AIC8800_HE_FOR_OLD_KERNEL) || (defined CONFIG_AIC8800_VHT_FOR_OLD_KERNEL)
-struct aic_sta {
-	u8 sta_idx; /* Identifier of the station */
-	bool he;    /* Flag indicating if the station supports HE */
-	bool vht;   /* Flag indicating if the station supports VHT */
-};
-#endif
 
 /*
  * Structure used to save information relative to the managed stations.
@@ -570,19 +533,15 @@ struct rwnx_hw {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	struct aic_usb_dev *usbdev;
-#endif
 	struct wiphy *wiphy;
 	struct list_head vifs;
 	struct rwnx_vif *
 		vif_table[NX_VIRT_DEV_MAX + NX_REMOTE_STA_MAX]; /* indexed with fw id */
 	struct rwnx_sta sta_table[NX_REMOTE_STA_MAX + NX_VIRT_DEV_MAX];
-#if (defined CONFIG_AIC8800_HE_FOR_OLD_KERNEL) || (defined CONFIG_AIC8800_VHT_FOR_OLD_KERNEL)
-	struct aic_sta aic_table[NX_REMOTE_STA_MAX + NX_VIRT_DEV_MAX];
-#endif
 	struct rwnx_survey_info survey[SCAN_CHANNEL_MAX];
 	struct cfg80211_scan_request *scan_request;
+	/* The normal scan path owns one SDIO activity until its terminal event. */
+	atomic_t scan_activity_held;
 #ifdef CONFIG_AIC8800_SCHED_SCAN
 	struct cfg80211_sched_scan_request *sched_scan_req;
 #endif
@@ -623,9 +582,6 @@ struct rwnx_hw {
 #ifdef AICWF_SDIO_SUPPORT
 	struct sdio_host_env_tag sdio_env;
 #endif
-#ifdef AICWF_USB_SUPPORT
-	struct usb_host_env_tag usb_env;
-#endif
 
 	struct rwnx_ipc_elem_pool e2amsgs_pool;
 	struct rwnx_ipc_elem_pool dbgmsgs_pool;
@@ -639,7 +595,6 @@ struct rwnx_hw {
 
 	struct kmem_cache *sw_txhdr_cache;
 
-	struct rwnx_debugfs debugfs;
 	struct rwnx_stats stats;
 
 #ifdef CONFIG_PREALLOC_TXQ
@@ -669,10 +624,10 @@ struct rwnx_hw {
 	struct rwnx_vif *p2p_dev_vif;
 	atomic_t p2p_alive_timer_count;
 	bool band_5g_support;
-	u8_l vendor_info;
+	u8 vendor_info;
 	bool fwlog_en;
 	int testmode;
-	u8_l scanning;
+	u8 scanning;
 	char country_abbr[4];
 	const struct aic_chip_ops *chip_ops;
 
@@ -700,7 +655,7 @@ struct rwnx_hw {
 
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
 	unsigned long started_jiffies;
-	s8_l temp;
+	s8 temp;
 #endif
 #ifdef CONFIG_AIC8800_POWER_LIMIT
 	struct work_struct pwlt_wk;
@@ -709,14 +664,6 @@ struct rwnx_hw {
 	struct work_struct region_wk;
 #endif
 	char fw_version[32];
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	bool wext_scan;
-	struct completion wext_scan_com;
-	struct list_head wext_scanre_list;
-	char wext_essid[33];
-	int support_freqs[SCAN_CHANNEL_MAX];
-	int support_freqs_number;
-#endif
 
 };
 
@@ -731,26 +678,24 @@ extern u8 chip_id;
 
 static inline bool is_multicast_sta(int sta_idx)
 {
-#ifdef AICWF_SDIO_SUPPORT
-	if (g_rwnx_plat && g_rwnx_plat->sdiodev && g_rwnx_plat->sdiodev->rwnx_hw &&
-	    g_rwnx_plat->sdiodev->rwnx_hw->chip_ops && g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
-#elif defined(AICWF_USB_SUPPORT)
-	if (g_rwnx_plat && g_rwnx_plat->usbdev && g_rwnx_plat->usbdev->rwnx_hw &&
-	    g_rwnx_plat->usbdev->rwnx_hw->chip_ops && g_rwnx_plat->usbdev->rwnx_hw->chip_ops->is_old_ic)
-		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
-#endif
-	return (sta_idx >= NX_REMOTE_STA_MAX);
+	else
+		return (sta_idx >= NX_REMOTE_STA_MAX);
 }
 
 struct rwnx_sta *rwnx_get_sta(struct rwnx_hw *rwnx_hw, const u8 *mac_addr);
 
 static inline uint8_t master_vif_idx(struct rwnx_vif *vif)
 {
+#if IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
+	return vif->vif_index;
+#else
 	if (unlikely(vif->wdev.iftype == NL80211_IFTYPE_AP_VLAN))
 		return vif->ap_vlan.master->vif_index;
 	else
 		return vif->vif_index;
+#endif
 }
 
 void rwnx_external_auth_enable(struct rwnx_vif *vif);

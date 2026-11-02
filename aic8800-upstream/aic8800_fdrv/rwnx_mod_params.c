@@ -38,7 +38,7 @@ struct rwnx_mod_params rwnx_mod_params = {
 	COMMON_PARAM(gf_rx_on, false)
 	COMMON_PARAM(phy_cfg, 2)
 	COMMON_PARAM(uapsd_timeout, 300)
-	COMMON_PARAM(ap_uapsd_on, true)
+	COMMON_PARAM(ap_uapsd_on, false)
 	COMMON_PARAM(sgi, true)
 	COMMON_PARAM(sgi80, false)
 	COMMON_PARAM(use_2040, 1)
@@ -46,7 +46,7 @@ struct rwnx_mod_params rwnx_mod_params = {
 	COMMON_PARAM(amsdu_rx_max, 2)
 	COMMON_PARAM(bfmee, true)
 	COMMON_PARAM(bfmer, false)
-	COMMON_PARAM(mesh, true)
+	COMMON_PARAM(mesh, false)
 	COMMON_PARAM(murx, true)
 	COMMON_PARAM(mutx, true)
 	COMMON_PARAM(mutx_on, true)
@@ -152,8 +152,10 @@ MODULE_PARM_DESC(uapsd_queues,
 		 "        Bit 3 = BE\n"
 		 "     -> uapsd_queues=7 will enable uapsd for VO, VI and BK queues");
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 module_param_named(ap_uapsd_on, rwnx_mod_params.ap_uapsd_on, bool, 0444);
-MODULE_PARM_DESC(ap_uapsd_on, "Enable UAPSD in AP mode (Default: 1)");
+MODULE_PARM_DESC(ap_uapsd_on, "Enable UAPSD in AP mode (Default: 0)");
+#endif
 
 module_param_named(sgi, rwnx_mod_params.sgi, bool, 0444);
 MODULE_PARM_DESC(sgi, "Advertise Short Guard Interval support (Default: 1)");
@@ -171,9 +173,11 @@ module_param_named(custregd, rwnx_mod_params.custregd, bool, 0444);
 MODULE_PARM_DESC(custregd,
 		 "Use permissive custom regulatory rules (for testing ONLY) (Default: 0)");
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 module_param_named(custchan, rwnx_mod_params.custchan, bool, 0444);
 MODULE_PARM_DESC(custchan,
 		 "Extend channel set to non-standard channels (for testing ONLY) (Default: 0)");
+#endif
 
 module_param_named(nss, rwnx_mod_params.nss, int, 0444);
 MODULE_PARM_DESC(nss,
@@ -194,8 +198,10 @@ MODULE_PARM_DESC(bfmee, "Enable Beamformee Capability (Default: 1-Enabled)");
 module_param_named(bfmer, rwnx_mod_params.bfmer, bool, 0444);
 MODULE_PARM_DESC(bfmer, "Enable Beamformer Capability (Default: 0-Disabled)");
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 module_param_named(mesh, rwnx_mod_params.mesh, bool, 0444);
-MODULE_PARM_DESC(mesh, "Enable Meshing Capability (Default: 1-Enabled)");
+MODULE_PARM_DESC(mesh, "Enable Meshing Capability (Default: 0-Disabled)");
+#endif
 
 module_param_named(murx, rwnx_mod_params.murx, bool, 0444);
 MODULE_PARM_DESC(murx, "Enable MU-MIMO RX Capability (Default: 1-Enabled)");
@@ -218,8 +224,10 @@ MODULE_PARM_DESC(listen_bcmc, "Wait for BC/MC traffic following DTIM beacon");
 module_param_named(lp_clk_ppm, rwnx_mod_params.lp_clk_ppm, int, 0444);
 MODULE_PARM_DESC(lp_clk_ppm, "Low Power Clock accuracy of the local device");
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 module_param_named(tdls, rwnx_mod_params.tdls, bool, 0444);
-MODULE_PARM_DESC(tdls, "Enable TDLS (Default: 1-Enabled)");
+MODULE_PARM_DESC(tdls, "Enable TDLS (Default: 0-Disabled)");
+#endif
 
 module_param_named(uf, rwnx_mod_params.uf, bool, 0444 | 0200);
 MODULE_PARM_DESC(uf,
@@ -279,10 +287,6 @@ void rwnx_get_countrycode_channels(struct wiphy *wiphy,
 	int end_freq = 0;
 	int center_freq = 0;
 	char channel[4];
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
-	int support_freqs_counter = 0;
-#endif
 
 	band_num = NUM_NL80211_BANDS;
 
@@ -304,10 +308,6 @@ void rwnx_get_countrycode_channels(struct wiphy *wiphy,
 				center_freq = sband->channels[channel_index].center_freq;
 				if ((center_freq - 10) >= start_freq &&
 				    (center_freq + 10) <= end_freq) {
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-					rwnx_hw->support_freqs[support_freqs_counter++] =
-						center_freq;
-#endif
 					sprintf(channel, "%d",
 						ieee80211_frequency_to_channel(center_freq));
 					memcpy(ccode_channels + index_for_channel_list, channel,
@@ -320,10 +320,6 @@ void rwnx_get_countrycode_channels(struct wiphy *wiphy,
 			}
 		}
 	}
-
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	rwnx_hw->support_freqs_number = support_freqs_counter;
-#endif
 	AICWFDBG(LOGDEBUG, "%s support channel:%s\r\n", __func__, ccode_channels);
 }
 
@@ -400,213 +396,6 @@ int rwnx_regulatory_set_wiphy_regd_sync(struct wiphy *wiphy,
 
 static void rwnx_set_vht_capa(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 {
-#ifdef CONFIG_AIC8800_VHT_FOR_OLD_KERNEL
-#ifdef AIC8800_USE_5G
-	struct ieee80211_supported_band *band_5ghz =
-		wiphy->bands[NL80211_BAND_5GHZ];
-#endif
-	struct ieee80211_supported_band *band_2ghz =
-		wiphy->bands[NL80211_BAND_2GHZ];
-
-	int i;
-	int nss = rwnx_hw->mod_params->nss;
-	int mcs_map;
-	int mcs_map_max;
-	int bw_max;
-
-	if (!rwnx_hw->mod_params->vht_on)
-		return;
-
-	rwnx_hw->vht_cap_2G.vht_supported = true;
-	if (rwnx_hw->mod_params->sgi80)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_SHORT_GI_80;
-	if (rwnx_hw->mod_params->stbc_on)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_RXSTBC_1;
-	if (rwnx_hw->mod_params->ldpc_on)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_RXLDPC;
-	if (rwnx_hw->mod_params->bfmee) {
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE;
-		rwnx_hw->vht_cap_2G.cap |= 3 << IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT;
-	}
-	if (nss > 1)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_TXSTBC;
-
-	// Update the AMSDU max RX size (not shifted as located at offset 0 of the
-	// VHT cap)
-	rwnx_hw->vht_cap_2G.cap |= rwnx_hw->mod_params->amsdu_rx_max;
-
-	if (rwnx_hw->mod_params->bfmer) {
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE;
-		/* Set number of sounding dimensions */
-		rwnx_hw->vht_cap_2G.cap |=
-			(nss - 1) << IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_SHIFT;
-	}
-	if (rwnx_hw->mod_params->murx)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE;
-	if (rwnx_hw->mod_params->mutx)
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_MU_BEAMFORMER_CAPABLE;
-
-	/*
-	 * MCS map:
-	 * This capabilities are filled according to the mcs_map module parameter.
-	 * However currently we have some limitations due to FPGA clock constraints
-	 * that prevent always using the range of MCS that is defined by the
-	 * parameter:
-	 *   - in RX, 2SS, we support up to MCS7
-	 *   - in TX, 2SS, we support up to MCS8
-	 */
-	// Get max supported BW
-	if (rwnx_hw->mod_params->use_80)
-		bw_max = PHY_CHNL_BW_80;
-	else if (rwnx_hw->mod_params->use_2040)
-		bw_max = PHY_CHNL_BW_40;
-	else
-		bw_max = PHY_CHNL_BW_20;
-
-	// Check if MCS map should be limited to MCS0_8 due to the standard. Indeed
-	// in BW20, MCS9 is not supported in 1 and 2 SS
-	if (rwnx_hw->mod_params->use_2040)
-		mcs_map_max = IEEE80211_VHT_MCS_SUPPORT_0_9;
-	else
-		mcs_map_max = IEEE80211_VHT_MCS_SUPPORT_0_8;
-
-	mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map, mcs_map_max);
-
-	nss = min_t(int, nss, 16);
-
-	rwnx_hw->vht_cap_2G.vht_mcs.rx_mcs_map = cpu_to_le16(0);
-	for (i = 0; i < nss; i++) {
-		rwnx_hw->vht_cap_2G.vht_mcs.rx_mcs_map |=
-			cpu_to_le16(mcs_map << (i * 2));
-		rwnx_hw->vht_cap_2G.vht_mcs.rx_highest =
-			MAX_VHT_RATE(mcs_map, nss, bw_max);
-		mcs_map = IEEE80211_VHT_MCS_SUPPORT_0_7;
-	}
-	for (; i < 8; i++) {
-		rwnx_hw->vht_cap_2G.vht_mcs.rx_mcs_map |=
-			cpu_to_le16(IEEE80211_VHT_MCS_NOT_SUPPORTED << (i * 2));
-	}
-
-	mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map, mcs_map_max);
-	rwnx_hw->vht_cap_2G.vht_mcs.tx_mcs_map = cpu_to_le16(0);
-	for (i = 0; i < nss; i++) {
-		rwnx_hw->vht_cap_2G.vht_mcs.tx_mcs_map |=
-			cpu_to_le16(mcs_map << (i * 2));
-		rwnx_hw->vht_cap_2G.vht_mcs.tx_highest =
-			MAX_VHT_RATE(mcs_map, nss, bw_max);
-		mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map,
-				IEEE80211_VHT_MCS_SUPPORT_0_8);
-	}
-	for (; i < 8; i++) {
-		rwnx_hw->vht_cap_2G.vht_mcs.tx_mcs_map |=
-			cpu_to_le16(IEEE80211_VHT_MCS_NOT_SUPPORTED << (i * 2));
-	}
-
-	if (!rwnx_hw->mod_params->use_80) {
-#ifdef CONFIG_VENDOR_RWNX_VHT_NO80
-		rwnx_hw->vht_cap_2G.cap |= IEEE80211_VHT_CAP_NOT_SUP_WIDTH_80;
-#endif // CONFIG_VENDOR_RWNX_VHT_NO80
-		rwnx_hw->vht_cap_2G.cap &= ~IEEE80211_VHT_CAP_SHORT_GI_80;
-	}
-
-	rwnx_hw->vht_cap_2G.cap |=
-		IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;
-	AICWFDBG(LOGDEBUG, "%s, vht_capa_info=0x%x\n", __func__, rwnx_hw->vht_cap_2G.cap);
-#ifdef AIC8800_USE_5G
-	if (rwnx_hw->band_5g_support) {
-		rwnx_hw->vht_cap_5G.vht_supported = true;
-		if (rwnx_hw->mod_params->sgi80)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_SHORT_GI_80;
-		if (rwnx_hw->mod_params->stbc_on)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_RXSTBC_1;
-		if (rwnx_hw->mod_params->ldpc_on)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_RXLDPC;
-		if (rwnx_hw->mod_params->bfmee) {
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE;
-			rwnx_hw->vht_cap_5G.cap |=
-				3 << IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT;
-		}
-		if (nss > 1)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_TXSTBC;
-
-		// Update the AMSDU max RX size (not shifted as located at offset 0 of
-		// the VHT cap)
-		rwnx_hw->vht_cap_5G.cap |= rwnx_hw->mod_params->amsdu_rx_max;
-
-		if (rwnx_hw->mod_params->bfmer) {
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE;
-			/* Set number of sounding dimensions */
-			rwnx_hw->vht_cap_5G.cap |=
-				(nss - 1) << IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_SHIFT;
-		}
-		if (rwnx_hw->mod_params->murx)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE;
-		if (rwnx_hw->mod_params->mutx)
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_MU_BEAMFORMER_CAPABLE;
-
-		/*
-		 * MCS map:
-		 * This capabilities are filled according to the mcs_map module
-		 * parameter. However currently we have some limitations due to FPGA
-		 * clock constraints that prevent always using the range of MCS that is
-		 * defined by the parameter:
-		 *   - in RX, 2SS, we support up to MCS7
-		 *   - in TX, 2SS, we support up to MCS8
-		 */
-		// Get max supported BW
-		if (rwnx_hw->mod_params->use_80)
-			bw_max = PHY_CHNL_BW_80;
-		else if (rwnx_hw->mod_params->use_2040)
-			bw_max = PHY_CHNL_BW_40;
-		else
-			bw_max = PHY_CHNL_BW_20;
-
-		// Check if MCS map should be limited to MCS0_8 due to the standard.
-		// Indeed in BW20, MCS9 is not supported in 1 and 2 SS
-		if (rwnx_hw->mod_params->use_2040)
-			mcs_map_max = IEEE80211_VHT_MCS_SUPPORT_0_9;
-		else
-			mcs_map_max = IEEE80211_VHT_MCS_SUPPORT_0_8;
-
-		mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map, mcs_map_max);
-		rwnx_hw->vht_cap_5G.vht_mcs.rx_mcs_map = cpu_to_le16(0);
-		for (i = 0; i < nss; i++) {
-			rwnx_hw->vht_cap_5G.vht_mcs.rx_mcs_map |=
-				cpu_to_le16(mcs_map << (i * 2));
-			rwnx_hw->vht_cap_5G.vht_mcs.rx_highest =
-				MAX_VHT_RATE(mcs_map, nss, bw_max);
-			mcs_map = IEEE80211_VHT_MCS_SUPPORT_0_7;
-		}
-		for (; i < 8; i++) {
-			rwnx_hw->vht_cap_5G.vht_mcs.rx_mcs_map |=
-				cpu_to_le16(IEEE80211_VHT_MCS_NOT_SUPPORTED << (i * 2));
-		}
-
-		mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map, mcs_map_max);
-		rwnx_hw->vht_cap_5G.vht_mcs.tx_mcs_map = cpu_to_le16(0);
-		for (i = 0; i < nss; i++) {
-			rwnx_hw->vht_cap_5G.vht_mcs.tx_mcs_map |=
-				cpu_to_le16(mcs_map << (i * 2));
-			rwnx_hw->vht_cap_5G.vht_mcs.tx_highest =
-				MAX_VHT_RATE(mcs_map, nss, bw_max);
-			mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map,
-					IEEE80211_VHT_MCS_SUPPORT_0_8);
-		}
-		for (; i < 8; i++) {
-			rwnx_hw->vht_cap_5G.vht_mcs.tx_mcs_map |=
-				cpu_to_le16(IEEE80211_VHT_MCS_NOT_SUPPORTED << (i * 2));
-		}
-
-		if (!rwnx_hw->mod_params->use_80) {
-#ifdef CONFIG_VENDOR_RWNX_VHT_NO80
-			rwnx_hw->vht_cap_5G.cap |= IEEE80211_VHT_CAP_NOT_SUP_WIDTH_80;
-#endif // CONFIG_VENDOR_RWNX_VHT_NO80
-			rwnx_hw->vht_cap_5G.cap &= ~IEEE80211_VHT_CAP_SHORT_GI_80;
-		}
-	}
-#endif // AIC8800_USE_5G
-	return;
-#else
 	struct ieee80211_supported_band *band_5ghz =
 		wiphy->bands[NL80211_BAND_5GHZ];
 	struct ieee80211_supported_band *band_2ghz =
@@ -617,7 +406,6 @@ static void rwnx_set_vht_capa(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 	int mcs_map;
 	int mcs_map_max;
 	int bw_max;
-#endif // CONFIG_AIC8800_VHT_FOR_OLD_KERNEL
 
 	if (!rwnx_hw->mod_params->vht_on)
 		return;
@@ -863,125 +651,6 @@ static void rwnx_set_ht_capa(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 
 static void rwnx_set_he_capa(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 {
-#ifdef CONFIG_AIC8800_HE_FOR_OLD_KERNEL
-	struct ieee80211_sta_he_cap *he_cap;
-	int i;
-	int nss = rwnx_hw->mod_params->nss;
-	int mcs_map;
-
-	he_cap = &rwnx_he_capa[0].he_cap;
-	he_cap->has_he = true;
-	he_cap->he_cap_elem.mac_cap_info[2] |= IEEE80211_HE_MAC_CAP2_ALL_ACK;
-	if (rwnx_hw->mod_params->use_2040) {
-		he_cap->he_cap_elem.phy_cap_info[0] |=
-			IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G;
-		he_cap->ppe_thres[0] |= 0x10;
-	}
-	if (rwnx_hw->mod_params->use_80) {
-		he_cap->ppe_thres[0] |= 0x20;
-		he_cap->ppe_thres[2] |= 0xc0;
-		he_cap->ppe_thres[3] |= 0x07;
-	}
-	he_cap->he_cap_elem.phy_cap_info[0] |=
-		IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G;
-
-	if (rwnx_hw->mod_params->ldpc_on) {
-		he_cap->he_cap_elem.phy_cap_info[1] |=
-			IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD;
-	} else {
-		// If no LDPC is supported, we have to limit to MCS0_9, as LDPC is
-		// mandatory for MCS 10 and 11
-		rwnx_hw->mod_params->he_mcs_map = min_t(int, rwnx_hw->mod_params->mcs_map,
-							IEEE80211_HE_MCS_SUPPORT_0_9);
-	}
-
-	he_cap->he_cap_elem.phy_cap_info[1] |=
-		IEEE80211_HE_PHY_CAP1_HE_LTF_AND_GI_FOR_HE_PPDUS_0_8US |
-		IEEE80211_HE_PHY_CAP1_MIDAMBLE_RX_TX_MAX_NSTS;
-
-	he_cap->he_cap_elem.phy_cap_info[2] |=
-		IEEE80211_HE_PHY_CAP2_MIDAMBLE_RX_TX_MAX_NSTS |
-		IEEE80211_HE_PHY_CAP2_NDP_4x_LTF_AND_3_2US |
-		IEEE80211_HE_PHY_CAP2_DOPPLER_RX;
-
-	if (rwnx_hw->mod_params->stbc_on)
-		he_cap->he_cap_elem.phy_cap_info[2] |=
-			IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ;
-	he_cap->he_cap_elem.phy_cap_info[3] |=
-		IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM |
-		IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_1 |
-		IEEE80211_HE_PHY_CAP3_RX_HE_MU_PPDU_FROM_NON_AP_STA;
-	if (rwnx_hw->mod_params->bfmee) {
-		he_cap->he_cap_elem.phy_cap_info[4] |=
-			IEEE80211_HE_PHY_CAP4_SU_BEAMFORMEE;
-		he_cap->he_cap_elem.phy_cap_info[4] |=
-			IEEE80211_HE_PHY_CAP4_BEAMFORMEE_MAX_STS_UNDER_80MHZ_4;
-	}
-	he_cap->he_cap_elem.phy_cap_info[5] |=
-		IEEE80211_HE_PHY_CAP5_NG16_SU_FEEDBACK |
-		IEEE80211_HE_PHY_CAP5_NG16_MU_FEEDBACK;
-	he_cap->he_cap_elem.phy_cap_info[6] |=
-		IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_42_SU |
-		IEEE80211_HE_PHY_CAP6_CODEBOOK_SIZE_75_MU |
-		IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMER_FB |
-		IEEE80211_HE_PHY_CAP6_TRIG_MU_BEAMFORMER_FB |
-		IEEE80211_HE_PHY_CAP6_PPE_THRESHOLD_PRESENT |
-		IEEE80211_HE_PHY_CAP6_PARTIAL_BANDWIDTH_DL_MUMIMO;
-	he_cap->he_cap_elem.phy_cap_info[7] |=
-		IEEE80211_HE_PHY_CAP7_HE_SU_MU_PPDU_4XLTF_AND_08_US_GI;
-	he_cap->he_cap_elem.phy_cap_info[8] |=
-		IEEE80211_HE_PHY_CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G;
-	he_cap->he_cap_elem.phy_cap_info[9] |=
-		IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
-		IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB;
-
-	if (rwnx_hw->chip_ops->is_old_ic) {
-		mcs_map = min_t(int, rwnx_hw->mod_params->he_mcs_map,
-				IEEE80211_HE_MCS_SUPPORT_0_9);
-	} else {
-		mcs_map = rwnx_hw->mod_params->he_mcs_map;
-	}
-
-	memset(&he_cap->he_mcs_nss_supp, 0, sizeof(he_cap->he_mcs_nss_supp));
-
-	nss = min_t(int, nss, 16);
-
-	for (i = 0; i < nss; i++) {
-		__le16 unsup_for_ss =
-			cpu_to_le16(IEEE80211_HE_MCS_NOT_SUPPORTED << (i * 2));
-		he_cap->he_mcs_nss_supp.rx_mcs_80 |= cpu_to_le16(mcs_map << (i * 2));
-		he_cap->he_mcs_nss_supp.rx_mcs_160 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.rx_mcs_80p80 |= unsup_for_ss;
-		mcs_map = IEEE80211_HE_MCS_SUPPORT_0_7;
-	}
-	for (; i < 8; i++) {
-		__le16 unsup_for_ss =
-			cpu_to_le16(IEEE80211_HE_MCS_NOT_SUPPORTED << (i * 2));
-		he_cap->he_mcs_nss_supp.rx_mcs_80 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.rx_mcs_160 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.rx_mcs_80p80 |= unsup_for_ss;
-	}
-	mcs_map = rwnx_hw->mod_params->he_mcs_map;
-	for (i = 0; i < nss; i++) {
-		__le16 unsup_for_ss =
-			cpu_to_le16(IEEE80211_HE_MCS_NOT_SUPPORTED << (i * 2));
-		he_cap->he_mcs_nss_supp.tx_mcs_80 |= cpu_to_le16(mcs_map << (i * 2));
-		he_cap->he_mcs_nss_supp.tx_mcs_160 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.tx_mcs_80p80 |= unsup_for_ss;
-		mcs_map = min_t(int, rwnx_hw->mod_params->he_mcs_map,
-				IEEE80211_HE_MCS_SUPPORT_0_7);
-	}
-	for (; i < 8; i++) {
-		__le16 unsup_for_ss =
-			cpu_to_le16(IEEE80211_HE_MCS_NOT_SUPPORTED << (i * 2));
-		he_cap->he_mcs_nss_supp.tx_mcs_80 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.tx_mcs_160 |= unsup_for_ss;
-		he_cap->he_mcs_nss_supp.tx_mcs_80p80 |= unsup_for_ss;
-	}
-
-	return;
-#endif
-
 	struct ieee80211_supported_band *band_5ghz =
 		wiphy->bands[NL80211_BAND_5GHZ];
 	struct ieee80211_supported_band *band_2ghz =
@@ -1231,6 +900,7 @@ static void rwnx_set_wiphy_params(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 	wiphy->max_scan_ie_len = SCANU_MAX_IE_LEN;
 #endif /* CONFIG_RWNX_FULLMAC */
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (rwnx_hw->mod_params->tdls) {
 		/* TDLS support */
 		wiphy->flags |= WIPHY_FLAG_SUPPORTS_TDLS;
@@ -1242,6 +912,7 @@ static void rwnx_set_wiphy_params(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 
 	if (rwnx_hw->mod_params->ap_uapsd_on)
 		wiphy->flags |= WIPHY_FLAG_AP_UAPSD;
+#endif
 
 #ifdef CONFIG_RWNX_FULLMAC
 	if (rwnx_hw->mod_params->ps_on)
@@ -1250,6 +921,7 @@ static void rwnx_set_wiphy_params(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 		wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
 #endif
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (rwnx_hw->mod_params->custregd) {
 		// Check if custom channel set shall be enabled. In such case only
 		// monitor mode is supported
@@ -1262,6 +934,7 @@ static void rwnx_set_wiphy_params(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)
 				wiphy->bands[NL80211_BAND_5GHZ]->n_channels += 59;
 		}
 	}
+#endif
 }
 
 int rwnx_handle_dynparams(struct rwnx_hw *rwnx_hw, struct wiphy *wiphy)

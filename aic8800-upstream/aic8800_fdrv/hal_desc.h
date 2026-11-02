@@ -218,17 +218,17 @@ union rwnx_hw_txstatus {
  */
 struct tx_cfm_tag {
 	/*
-	 *	u16_l pn[4];
-	 *	u16_l sn;
-	 *	u16_l timestamp;
+	 *	u16 pn[4];
+	 *	u16 sn;
+	 *	u16 timestamp;
 	 */
-	s8_l credits;
-	u8_l ampdu_size;
+	s8 credits;
+	u8 ampdu_size;
 #ifdef CONFIG_RWNX_SPLIT_TX_BUF
-	u16_l amsdu_size;
+	u16 amsdu_size;
 #endif
 	union rwnx_hw_txstatus status;
-	u32_l hostid;
+	u32 hostid;
 };
 
 /**

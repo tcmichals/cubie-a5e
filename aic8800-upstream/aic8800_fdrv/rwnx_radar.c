@@ -1703,11 +1703,6 @@ static void rwnx_radar_process_pulse(struct work_struct *ws)
 						 */
 						radar->pulses[chain].count = 0;
 					}
-				} else {
-					/*
-					 * secondary radar detection chain, simply report info in
-					 * debugfs for now
-					 */
 				}
 
 				radar->detected[chain].freq[idx] = (s16)freq + (2 * p->freq);

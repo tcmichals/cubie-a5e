@@ -15,7 +15,6 @@
 #include "aic_chip_ops.h"
 
 #include <linux/completion.h>
-#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
@@ -38,7 +37,6 @@ static struct completion *aicbsp_notify_completion;
 static struct completion *aicbsp_probe_completion;
 
 static const struct sdio_device_id aicbsp_sdmmc_ids[];
-static struct sdio_driver aicbsp_sdio_driver;
 static int bsp_init;
 static int bsp_func_init;
 
@@ -230,8 +228,18 @@ static int aicbsp_sdio_probe(struct sdio_func *func,
 	aicbsp_sdiodev = sdiodev;
 
 	err = aicwf_sdio_chipmatch(func->vendor, func->device, &chipid);
+	if (err) {
+		sdio_err("unsupported SDIO device %04x:%04x\n",
+			 func->vendor, func->device);
+		goto fail;
+	}
 	sdiodev->chipid = chipid;
 	sdiodev->chip_ops = aic_chip_ops_select(sdiodev->chipid);
+	if (!sdiodev->chip_ops) {
+		sdio_err("unsupported AIC chip id %u\n", sdiodev->chipid);
+		err = -ENODEV;
+		goto fail;
+	}
 
 	sdiodev->func = func;
 	if (sdiodev->chip_ops->use_func_msg)
@@ -266,7 +274,6 @@ static int aicbsp_sdio_probe(struct sdio_func *func,
 #endif
 
 	aicbsp_platform_init(sdiodev);
-	aicwf_sdio_wakeup(sdiodev);
 
 	complete(aicbsp_probe_completion);
 
@@ -274,6 +281,8 @@ static int aicbsp_sdio_probe(struct sdio_func *func,
 fail:
 	aicwf_sdio_func_deinit(sdiodev);
 	dev_set_drvdata(&func->dev, NULL);
+	if (aicbsp_sdiodev == sdiodev)
+		aicbsp_sdiodev = NULL;
 	kfree(sdiodev);
 	kfree(bus_if);
 	return err;
@@ -359,10 +368,6 @@ static int aicbsp_sdio_resume(struct device *dev)
 }
 
 static const struct sdio_device_id aicbsp_sdmmc_ids[] = {
-	{ SDIO_DEVICE(SDIO_VENDOR_ID_AIC8801,
-		      SDIO_DEVICE_ID_AIC8801_FUNC2) },
-	{ SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800DC,
-		      SDIO_DEVICE_ID_AIC8800DC) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_AIC8800D80,
 		      SDIO_DEVICE_ID_AIC8800D80_FUNC2) },
 	{ }
@@ -628,6 +633,7 @@ int aicwf_sdio_recv_pkt(struct aic_sdio_dev *sdiodev, struct sk_buff *skbbuf,
 	return ret;
 }
 
+#if defined(CONFIG_SDIO_PWRCTRL)
 int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 {
 	int ret = 0;
@@ -638,9 +644,7 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 	wakeup_reg_val = sdiodev->chip_ops->wakeup_reg_val;
 
 	if (sdiodev->state == SDIO_SLEEP_ST) {
-#if defined(CONFIG_SDIO_PWRCTRL)
 		down(&sdiodev->pwrctl_wakeup_sema);
-#endif
 		while (write_retry) {
 			ret = aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg,
 						wakeup_reg_val);
@@ -667,20 +671,15 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 			write_retry--;
 			usleep_range(30, 50);
 		}
-#if defined(CONFIG_SDIO_PWRCTRL)
 		up(&sdiodev->pwrctl_wakeup_sema);
-#endif
 	}
 
 	sdiodev->state = SDIO_ACTIVE_ST;
-#if defined(CONFIG_SDIO_PWRCTRL)
 	aicwf_sdio_pwrctl_timer(sdiodev, sdiodev->active_duration);
-#endif
 
 	return ret;
 }
 
-#if defined(CONFIG_SDIO_PWRCTRL)
 int aicwf_sdio_sleep_allow(struct aic_sdio_dev *sdiodev)
 {
 	int ret = 0;

@@ -233,11 +233,7 @@ static u32 wifi_rxgain_table_24g_40m_8800dcdw[64] = {
 #if (defined(CONFIG_DPD) && !defined(CONFIG_FORCE_DPD_CALIB))
 extern int is_file_exist(char *name);
 #endif
-#ifdef AICWF_SDIO_SUPPORT
 extern struct rf_misc_ram_lite_t dpd_res;
-#else
-struct rf_misc_ram_lite_t dpd_res;
-#endif
 
 int aicwf_fdrv_dpd_result_apply_8800dc(struct rwnx_hw *rwnx_hw,
 				       struct rf_misc_ram_lite_t *dpd_res)
@@ -375,38 +371,38 @@ int aicwf_set_rf_config_8800dc(struct rwnx_hw *rwnx_hw,
 	if (rwnx_hw->testmode == 0) {
 		if (IS_CHIP_ID_H()) {
 			ret = rwnx_send_rf_config_req(rwnx_hw, 0, 1,
-						      (u8_l *)wifi_txgain_table_24g_8800dcdw_h,
+						      (u8 *)wifi_txgain_table_24g_8800dcdw_h,
 						      128);
 			if (ret)
 				return -1;
 
 			ret = rwnx_send_rf_config_req(rwnx_hw, 16, 1,
-						      (u8_l *)wifi_txgain_table_24g_1_8800dcdw_h,
+						      (u8 *)wifi_txgain_table_24g_1_8800dcdw_h,
 						      128);
 			if (ret)
 				return -1;
 		} else {
 			ret = rwnx_send_rf_config_req(rwnx_hw, 0, 1,
-						      (u8_l *)wifi_txgain_table_24g_8800dcdw,
+						      (u8 *)wifi_txgain_table_24g_8800dcdw,
 						      128);
 			if (ret)
 				return -1;
 
 			ret = rwnx_send_rf_config_req(rwnx_hw, 16, 1,
-						      (u8_l *)wifi_txgain_table_24g_1_8800dcdw,
+						      (u8 *)wifi_txgain_table_24g_1_8800dcdw,
 						      128);
 			if (ret)
 				return -1;
 		}
 
 		ret = rwnx_send_rf_config_req(rwnx_hw, 0, 0,
-					      (u8_l *)wifi_rxgain_table_24g_20m_8800dcdw,
+					      (u8 *)wifi_rxgain_table_24g_20m_8800dcdw,
 					      256);
 		if (ret)
 			return -1;
 
 		ret = rwnx_send_rf_config_req(rwnx_hw, 32, 0,
-					      (u8_l *)wifi_rxgain_table_24g_40m_8800dcdw,
+					      (u8 *)wifi_rxgain_table_24g_40m_8800dcdw,
 					      256);
 		if (ret)
 			return -1;

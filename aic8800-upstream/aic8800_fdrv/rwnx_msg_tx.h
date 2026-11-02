@@ -57,22 +57,12 @@ int rwnx_send_tdls_cancel_chan_switch_req(struct rwnx_hw *rwnx_hw, struct rwnx_v
 					  struct rwnx_sta *rwnx_sta,
 					  struct tdls_cancel_chan_switch_cfm *cfm);
 
-#ifdef CONFIG_RWNX_P2P_DEBUGFS
-int rwnx_send_p2p_oppps_req(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
-			    u8 ctw, struct mm_set_p2p_oppps_cfm *cfm);
-
-int rwnx_send_p2p_noa_req(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
-			  int count, int interval, int duration, bool dyn_noa,
-			  struct mm_set_p2p_noa_cfm *cfm);
-
-#endif /* CONFIG_RWNX_P2P_DEBUGFS */
-
 #ifdef AICWF_ARP_OFFLOAD
 int rwnx_send_arpoffload_en_req(struct rwnx_hw *rwnx_hw,
-				struct rwnx_vif *rwnx_vif, u32_l ipaddr,
-				u8_l enable);
+				struct rwnx_vif *rwnx_vif, u32 ipaddr,
+				u8 enable);
 #endif
-int rwnx_send_rf_config_req(struct rwnx_hw *rwnx_hw, u8_l ofst, u8_l sel, u8_l *tbl, u16_l len);
+int rwnx_send_rf_config_req(struct rwnx_hw *rwnx_hw, u8 ofst, u8 sel, u8 *tbl, u16 len);
 
 int rwnx_send_rf_calib_req(struct rwnx_hw *rwnx_hw,
 			   struct mm_set_rf_calib_cfm *cfm);
@@ -197,8 +187,8 @@ int rwnx_send_dbg_mem_mask_write_req(struct rwnx_hw *rwnx_hw, u32 mem_addr,
 
 int rwnx_send_dbg_set_mod_filter_req(struct rwnx_hw *rwnx_hw, u32 filter);
 
-int rwnx_send_rftest_req(struct rwnx_hw *rwnx_hw, u32_l cmd, u32_l argc,
-			 u8_l *argv, struct dbg_rftest_cmd_cfm *cfm);
+int rwnx_send_rftest_req(struct rwnx_hw *rwnx_hw, u32 cmd, u32 argc,
+			 u8 *argv, struct dbg_rftest_cmd_cfm *cfm);
 
 int rwnx_send_dbg_set_sev_filter_req(struct rwnx_hw *rwnx_hw, u32 filter);
 
@@ -214,18 +204,18 @@ int rwnx_send_dbg_start_app_req(struct rwnx_hw *rwnx_hw, u32 boot_addr,
 int rwnx_send_cfg_rssi_req(struct rwnx_hw *rwnx_hw, u8 vif_index,
 			   int rssi_thold, u32 rssi_hyst);
 
-int rwnx_send_disable_agg_req(struct rwnx_hw *rwnx_hw, u8_l agg_disable,
-			      u8_l agg_disable_rx, u8_l sta_idx);
+int rwnx_send_disable_agg_req(struct rwnx_hw *rwnx_hw, u8 agg_disable,
+			      u8 agg_disable_rx, u8 sta_idx);
 
-int rwnx_send_coex_req(struct rwnx_hw *rwnx_hw, u8_l disable_coexnull,
-		       u8_l enable_nullcts);
+int rwnx_send_coex_req(struct rwnx_hw *rwnx_hw, u8 disable_coexnull,
+		       u8 enable_nullcts);
 
-int rwnx_send_get_sta_info_req(struct rwnx_hw *rwnx_hw, u8_l sta_idx,
+int rwnx_send_get_sta_info_req(struct rwnx_hw *rwnx_hw, u8 sta_idx,
 			       struct mm_get_sta_info_cfm *cfm);
 
-int rwnx_send_set_stack_start_req(struct rwnx_hw *rwnx_hw, u8_l on,
-				  u8_l efuse_valid, u8_l set_vendor_info,
-				  u8_l fwtrace_redir_en,
+int rwnx_send_set_stack_start_req(struct rwnx_hw *rwnx_hw, u8 on,
+				  u8 efuse_valid, u8 set_vendor_info,
+				  u8 fwtrace_redir_en,
 				  struct mm_set_stack_start_cfm *cfm);
 
 int rwnx_send_get_temp_req(struct rwnx_hw *rwnx_hw,
@@ -237,21 +227,17 @@ int rwnx_send_get_temp_hwconfig_req(struct rwnx_hw *rwnx_hw,
 int rwnx_send_set_temp_comp_req(struct rwnx_hw *rwnx_hw,
 				struct mm_set_vendor_swconfig_cfm *cfm);
 
-int rwnx_send_set_pkt_filter_req(struct rwnx_hw *rwnx_hw, u16_l *param);
-
-int rwnx_send_del_pkt_filter_req(struct rwnx_hw *rwnx_hw, u16_l code);
-
 int rwnx_send_txop_req(struct rwnx_hw *rwnx_hw, uint16_t *txop,
-		       u8_l long_nav_en, u8_l cfe_en);
+		       u8 long_nav_en, u8 cfe_en);
 
-int rwnx_send_vendor_hwconfig_req(struct rwnx_hw *rwnx_hw, u32_l hwconfig_id,
-				  s32_l *param, s32_l *param_out);
+int rwnx_send_vendor_hwconfig_req(struct rwnx_hw *rwnx_hw, u32 hwconfig_id,
+				  s32 *param, s32 *param_out);
 
-int rwnx_send_vendor_swconfig_req(struct rwnx_hw *rwnx_hw, u32_l swconfig_id,
-				  s32_l *param_in, s32_l *param_out);
+int rwnx_send_vendor_swconfig_req(struct rwnx_hw *rwnx_hw, u32 swconfig_id,
+				  s32 *param_in, s32 *param_out);
 
 int rwnx_send_mask_set_ext_flags_req(struct rwnx_hw *rwnx_hw,
-				     u32_l flags_mask, u32_l flags_val,
+				     u32 flags_mask, u32 flags_val,
 				     struct mm_set_vendor_swconfig_cfm *cfm);
 
 int rwnx_send_get_fw_version_req(struct rwnx_hw *rwnx_hw,
@@ -276,10 +262,5 @@ void rwnx_cmd_free(struct rwnx_cmd *cmd);
 int rwnx_init_cmd_array(void);
 
 void rwnx_free_cmd_array(void);
-
-#ifdef CONFIG_SDIO_BT
-int rwnx_sdio_bt_send_req(struct rwnx_hw *rwnx_hw, uint32_t len,
-			  struct sk_buff *skb);
-#endif
 
 #endif /* _RWNX_MSG_TX_H_ */

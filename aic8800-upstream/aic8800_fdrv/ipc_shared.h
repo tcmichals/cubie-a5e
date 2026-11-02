@@ -80,12 +80,7 @@
 #define IPC_E2A_MSG_SIZE_BASE 256 // size in 4-byte words
 #endif
 
-#ifdef CONFIG_RWNX_TL4
-#define IPC_E2A_MSG_PARAM_SIZE                                                 \
-	(IPC_E2A_MSG_SIZE_BASE + (IPC_E2A_MSG_SIZE_BASE / 2))
-#else
 #define IPC_E2A_MSG_PARAM_SIZE IPC_E2A_MSG_SIZE_BASE
-#endif
 
 /*
  * Debug messages buffers size (in bytes)
@@ -138,16 +133,16 @@
 /// Descriptor filled by the Host
 struct hostdesc {
 	/// Pointer to packet payload
-	// u32_l packet_addr;
+	// u32 packet_addr;
 	/// Size of the payload
-	u16_l packet_len;
-	u16_l flags_ext;
+	u16 packet_len;
+	u16 flags_ext;
 
-	u32_l hostid;
+	u32 hostid;
 #ifdef CONFIG_RWNX_FULLMAC
 	/// Address of the status descriptor in host memory (used for confirmation
 	/// upload)
-	// u32_l status_desc_addr;
+	// u32 status_desc_addr;
 	/// Destination Address
 	struct mac_addr eth_dest_addr;
 	/// Source Address
@@ -158,27 +153,27 @@ struct hostdesc {
 #ifdef CONFIG_RWNX_AGG_TX
 	/// Sequence Number for AMPDU MPDUs - for quick check if it's allowed within
 	/// window
-	u16_l sn;
+	u16 sn;
 #endif /* CONFIG_RWNX_AGG_TX */
 	/// Padding between the buffer control structure and the MPDU in host memory
-	u8_l padding;
+	u8 padding;
 #endif /* CONFIG_RWNX_FULLMAC */
-	u8_l ac;
+	u8 ac;
 	/// Packet TID (0xFF if not a QoS frame)
-	u8_l tid;
+	u8 tid;
 	/// Interface Id
-	u8_l vif_idx;
+	u8 vif_idx;
 	/// Station Id (0xFF if station is unknown)
-	u8_l staid;
+	u8 staid;
 #ifdef CONFIG_RWNX_MUMIMO_TX
 	/// MU-MIMO information (GroupId and User Position in the group) - The
 	/// GroupId is located on bits 0-5 and the User Position on bits 6-7. The
 	/// GroupId value is set to 63 if MU-MIMO shall not be used
-	u8_l mumimo_info;
+	u8 mumimo_info;
 #endif /* CONFIG_RWNX_MUMIMO_TX */
 #ifdef CONFIG_RWNX_FULLMAC
 	/// TX flags
-	u16_l flags;
+	u16 flags;
 #endif /* CONFIG_RWNX_FULLMAC */
 };
 
@@ -186,11 +181,11 @@ struct hostdesc {
 struct umacdesc {
 #ifdef CONFIG_RWNX_AGG_TX
 	/// First Sequence Number of the BlockAck window
-	u16_l sn_win;
+	u16 sn_win;
 	/// Flags from UMAC (match tx_hd.macctrlinfo2 format)
-	u32_l flags;
+	u32 flags;
 	/// PHY related flags field - rate, GI type, BW type - filled by driver
-	u32_l phy_flags;
+	u32 phy_flags;
 #endif //(CONFIG_RWNX_AGG_TX)
 };
 
@@ -200,7 +195,7 @@ struct txdesc_api {
 };
 
 struct txdesc_host {
-	u32_l ready;
+	u32 ready;
 
 	/// API of the embedded part
 	struct txdesc_api api;
@@ -212,18 +207,18 @@ struct dma_desc {
 	/* Application subsystem address which is used as source address for DMA
 	 * payload transfer
 	 */
-	u32_l src;
+	u32 src;
 	/** Points to the start of the embedded data buffer associated with this
 	 * descriptor. This address acts as the destination address for the DMA
 	 * payload transfer
 	 */
-	u32_l dest;
+	u32 dest;
 	/// Complete length of the buffer in memory
-	u16_l length;
+	u16 length;
 	/// Control word for the DMA engine (e.g. for interrupt generation)
-	u16_l ctrl;
+	u16 ctrl;
 	/// Pointer to the next element of the chained list
-	u32_l next;
+	u32 next;
 };
 
 // Comes from la.h
@@ -232,9 +227,9 @@ struct dma_desc {
 
 /// Structure containing the configuration data of a logic analyzer
 struct la_conf_tag {
-	u32_l conf[LA_CONF_LEN];
-	u32_l trace_len;
-	u32_l diag_conf;
+	u32 conf[LA_CONF_LEN];
+	u32 trace_len;
+	u32 diag_conf;
 };
 
 /// Size of a logic analyzer memory
@@ -273,47 +268,47 @@ enum {
 /// Structure containing the information about the PHY channel that is used
 struct phy_channel_info {
 	/// PHY channel information 1
-	u32_l info1;
+	u32 info1;
 	/// PHY channel information 2
-	u32_l info2;
+	u32 info2;
 };
 
 /// Debug information forwarded to host when an error occurs
 struct dbg_debug_info_tag {
 	/// Type of error (0: recoverable, 1: fatal)
-	u32_l error_type;
+	u32 error_type;
 	/// Pointer to the first RX Header Descriptor chained to the MAC HW
-	u32_l rhd;
+	u32 rhd;
 	/// Size of the RX header descriptor buffer
-	u32_l rhd_len;
+	u32 rhd_len;
 	/// Pointer to the first RX Buffer Descriptor chained to the MAC HW
-	u32_l rbd;
+	u32 rbd;
 	/// Size of the RX buffer descriptor buffer
-	u32_l rbd_len;
+	u32 rbd_len;
 	/// Pointer to the first TX Header Descriptors chained to the MAC HW
-	u32_l thd[NX_TXQ_CNT];
+	u32 thd[NX_TXQ_CNT];
 	/// Size of the TX header descriptor buffer
-	u32_l thd_len[NX_TXQ_CNT];
+	u32 thd_len[NX_TXQ_CNT];
 	/// MAC HW diag configuration
-	u32_l hw_diag;
+	u32 hw_diag;
 	/// Error message
-	u32_l error[DBG_ERROR_TRACE_SIZE / 4];
+	u32 error[DBG_ERROR_TRACE_SIZE / 4];
 	/// SW diag configuration length
-	u32_l sw_diag_len;
+	u32 sw_diag_len;
 	/// SW diag configuration
-	u32_l sw_diag[DBG_SW_DIAG_MAX_LEN / 4];
+	u32 sw_diag[DBG_SW_DIAG_MAX_LEN / 4];
 	/// PHY channel information
 	struct phy_channel_info chan_info;
 	/// Embedded LA configuration
 	struct la_conf_tag la_conf;
 	/// MAC diagnostic port state
-	u16_l diags_mac[DBG_DIAGS_MAC_MAX];
+	u16 diags_mac[DBG_DIAGS_MAC_MAX];
 	/// PHY diagnostic port state
-	u16_l diags_phy[DBG_DIAGS_PHY_MAX];
+	u16 diags_phy[DBG_DIAGS_PHY_MAX];
 	/// MAC HW RX Header descriptor pointer
-	u32_l rhd_hw_ptr;
+	u32 rhd_hw_ptr;
 	/// MAC HW RX Buffer descriptor pointer
-	u32_l rbd_hw_ptr;
+	u32 rbd_hw_ptr;
 };
 
 /// Full debug dump that is forwarded to host in case of error
@@ -322,16 +317,16 @@ struct dbg_debug_dump_tag {
 	struct dbg_debug_info_tag dbg_info;
 
 	/// RX header descriptor memory
-	u32_l rhd_mem[DBG_RHD_MEM_LEN / 4];
+	u32 rhd_mem[DBG_RHD_MEM_LEN / 4];
 
 	/// RX buffer descriptor memory
-	u32_l rbd_mem[DBG_RBD_MEM_LEN / 4];
+	u32 rbd_mem[DBG_RBD_MEM_LEN / 4];
 
 	/// TX header descriptor memory
-	u32_l thd_mem[NX_TXQ_CNT][DBG_THD_MEM_LEN / 4];
+	u32 thd_mem[NX_TXQ_CNT][DBG_THD_MEM_LEN / 4];
 
 	/// Logic analyzer memory
-	u32_l la_mem[LA_MEM_LEN / 4];
+	u32 la_mem[LA_MEM_LEN / 4];
 };
 
 /// Number of pulses in a radar event structure
@@ -340,20 +335,20 @@ struct dbg_debug_dump_tag {
 /// Definition of an array of radar pulses
 struct radar_pulse_array_desc {
 	/// Buffer containing the radar pulses
-	u32_l pulse[RADAR_PULSE_MAX];
+	u32 pulse[RADAR_PULSE_MAX];
 	/// Index of the radar detection chain that detected those pulses
-	u32_l idx;
+	u32 idx;
 	/// Number of valid pulses in the buffer
-	u32_l cnt;
+	u32 cnt;
 };
 
 /// Bit mapping inside a radar pulse element
 struct radar_pulse {
-	s32_l
+	s32
 		freq : 6;  /** Freq (resolution is 2Mhz range is [-Fadc/4 .. Fadc/4]) */
-	u32_l fom : 4; /** Figure of Merit */
-	u32_l len : 6; /** Length of the current radar pulse (resolution is 2us) */
-	u32_l rep : 16; /* Time interval between the previous radar event
+	u32 fom : 4; /** Figure of Merit */
+	u32 len : 6; /** Length of the current radar pulse (resolution is 2us) */
+	u32 rep : 16; /* Time interval between the previous radar event
 			 * and the current one (in us)
 			 */
 };
@@ -364,20 +359,20 @@ struct rx_vector_desc {
 	struct phy_channel_info phy_info;
 
 	/// RX vector 1
-	u32_l rx_vect1[IPC_RXVEC_SIZE / 4];
+	u32 rx_vect1[IPC_RXVEC_SIZE / 4];
 
 	/// Used to print a valid rx vector
-	u32_l pattern;
+	u32 pattern;
 };
 
 ///
 struct rxdesc_tag {
 	/// Host Buffer Address
-	u32_l host_id;
+	u32 host_id;
 	/// Length
-	u32_l frame_len;
+	u32 frame_len;
 	/// Status
-	u16_l status;
+	u16 status;
 };
 
 /*
@@ -485,9 +480,9 @@ struct rxdesc_tag {
  */
 struct ipc_header {
 	/// IPC message type.
-	u16_l type;
+	u16 type;
 	/// IPC message size in number of bytes.
-	u16_l size;
+	u16 size;
 };
 
 struct ipc_msg_elt {
@@ -498,70 +493,70 @@ struct ipc_msg_elt {
 
 /// Message structure for MSGs from Emb to App
 struct ipc_e2a_msg {
-	u16_l id; ///< Message id.
-	u16_l dummy_dest_id;
-	u16_l dummy_src_id;
-	u16_l param_len;                     ///< Parameter embedded struct length.
-	u32_l pattern;                       ///< Used to stamp a valid MSG buffer
-	u32_l param[IPC_E2A_MSG_PARAM_SIZE]; ///< Parameter embedded struct. Must be
+	u16 id; ///< Message id.
+	u16 dummy_dest_id;
+	u16 dummy_src_id;
+	u16 param_len;                     ///< Parameter embedded struct length.
+	u32 pattern;                       ///< Used to stamp a valid MSG buffer
+	u32 param[IPC_E2A_MSG_PARAM_SIZE]; ///< Parameter embedded struct. Must be
 										 ///< word-aligned.
 };
 
 /// Message structure for Debug messages from Emb to App
 struct ipc_dbg_msg {
-	u32_l string[IPC_DBG_PARAM_SIZE / 4]; ///< Debug string
-	u32_l pattern;                        ///< Used to stamp a valid buffer
+	u32 string[IPC_DBG_PARAM_SIZE / 4]; ///< Debug string
+	u32 pattern;                        ///< Used to stamp a valid buffer
 };
 
 /// Message structure for MSGs from App to Emb.
 /// Actually a sub-structure will be used when filling the messages.
 struct ipc_a2e_msg {
-	u32_l dummy_word; // used to cope with kernel message structure
-	u32_l msg[IPC_A2E_MSG_BUF_SIZE]; // body of the msg
+	u32 dummy_word; // used to cope with kernel message structure
+	u32 msg[IPC_A2E_MSG_BUF_SIZE]; // body of the msg
 };
 
 struct ipc_shared_rx_buf {
 	/// < ptr to hostbuf client (ipc_host client) structure
-	u32_l hostid;
+	u32 hostid;
 	/// < ptr to real hostbuf dma address
-	u32_l dma_addr;
+	u32 dma_addr;
 };
 
 struct ipc_shared_rx_desc {
 	/// DMA Address
-	u32_l dma_addr;
+	u32 dma_addr;
 };
 
 /// Structure containing FW characteristics for compatibility checking
 struct compatibility_tag {
 	/// Size of IPC shared memory
-	u16_l ipc_shared_size;
+	u16 ipc_shared_size;
 	/// Message struct/ID API version
-	u16_l msg_api;
+	u16 msg_api;
 	/// Version of IPC shared
-	u8_l ipc_shared_version;
+	u8 ipc_shared_version;
 	/// Number of host buffers available for Emb->App MSGs sending
-	u8_l msge2a_buf_cnt;
+	u8 msge2a_buf_cnt;
 	/// Number of host buffers available for Debug Messages sending
-	u8_l dbgbuf_cnt;
+	u8 dbgbuf_cnt;
 	/// Number of host buffers available for Radar events handling
-	u8_l radarbuf_cnt;
+	u8 radarbuf_cnt;
 	/// Number of host buffers available for unsupported Rx vectors handling
-	u8_l unsuprxvecbuf_cnt;
+	u8 unsuprxvecbuf_cnt;
 	/// Number of shared descriptors available for Data RX handling
-	u8_l rxdesc_cnt;
+	u8 rxdesc_cnt;
 	/// Number of host buffers available for Data Rx handling
-	u8_l rxbuf_cnt;
+	u8 rxbuf_cnt;
 	/// Number of descriptors in BK TX queue (power of 2, min 4, max 64)
-	u8_l bk_txq;
+	u8 bk_txq;
 	/// Number of descriptors in BE TX queue (power of 2, min 4, max 64)
-	u8_l be_txq;
+	u8 be_txq;
 	/// Number of descriptors in VI TX queue (power of 2, min 4, max 64)
-	u8_l vi_txq;
+	u8 vi_txq;
 	/// Number of descriptors in VO TX queue (power of 2, min 4, max 64)
-	u8_l vo_txq;
+	u8 vo_txq;
 	/// Number of descriptors in BCN TX queue (power of 2, min 4, max 64)
-	u8_l bcn_txq;
+	u8 bcn_txq;
 };
 
 /*
@@ -581,19 +576,19 @@ struct ipc_shared_env_tag {
 		msg_e2a_buf; // room to build the MSG to be DMA Xferred
 	struct dma_desc
 		msg_dma_desc; // DMA descriptor for Emb->App MSGs Xfers
-	u32_l msg_e2a_hostbuf_addr[IPC_MSGE2A_BUF_CNT]; // buffers @ for DMA Xfers
+	u32 msg_e2a_hostbuf_addr[IPC_MSGE2A_BUF_CNT]; // buffers @ for DMA Xfers
 
 	// Fields for Debug MSGs sending from Emb to App
 	struct ipc_dbg_msg
 		dbg_buf; // room to build the MSG to be DMA Xferred
 	struct dma_desc
 		dbg_dma_desc; // DMA descriptor for Emb->App MSGs Xfers
-	u32_l dbg_hostbuf_addr[IPC_DBGBUF_CNT]; // buffers @ for MSGs DMA Xfers
-	u32_l la_dbginfo_addr; // Host buffer address for the debug information
-	u32_l pattern_addr;
+	u32 dbg_hostbuf_addr[IPC_DBGBUF_CNT]; // buffers @ for MSGs DMA Xfers
+	u32 la_dbginfo_addr; // Host buffer address for the debug information
+	u32 pattern_addr;
 
-	u32_l radarbuf_hostbuf[IPC_RADARBUF_CNT]; // buffers @ for Radar Events
-	u32_l unsuprxvecbuf_hostbuf[IPC_UNSUPRXVECBUF_CNT]; // buffers @ for
+	u32 radarbuf_hostbuf[IPC_RADARBUF_CNT]; // buffers @ for Radar Events
+	u32 unsuprxvecbuf_hostbuf[IPC_UNSUPRXVECBUF_CNT]; // buffers @ for
 	// unsupported Rx vectors
 	struct txdesc_host txdesc0[CONFIG_USER_MAX][NX_TXDESC_CNT0];
 	struct txdesc_host txdesc1[CONFIG_USER_MAX][NX_TXDESC_CNT1];
@@ -609,10 +604,10 @@ struct ipc_shared_env_tag {
 	struct ipc_shared_rx_buf host_rxbuf[IPC_RXBUF_CNT];
 #else
 	// buffers @ for Data Rx
-	u32_l host_rxbuf[IPC_RXBUF_CNT];
+	u32 host_rxbuf[IPC_RXBUF_CNT];
 #endif /* CONFIG_RWNX_FULLMAC */
 
-	u32_l buffered[NX_REMOTE_STA_MAX][TID_MAX];
+	u32 buffered[NX_REMOTE_STA_MAX][TID_MAX];
 
 	u16 trace_pattern;
 	u32 trace_start;
@@ -633,9 +628,6 @@ extern struct ipc_shared_env_tag ipc_shared_env;
 // IRQs from app to emb
 /// Interrupts bits used for the TX descriptors of the AC queues
 #ifdef CONFIG_RWNX_MUMIMO_TX
-#ifdef CONFIG_RWNX_OLD_IPC
-#error "MU-MIMO cannot be compiled for old IPC"
-#endif
 /// Interrupts bits used
 #if CONFIG_USER_MAX > 3
 #define IPC_IRQ_A2E_USER_MSK 0xF
@@ -697,9 +689,6 @@ extern struct ipc_shared_env_tag ipc_shared_env;
 #define IPC_IRQ_E2A_TXCFM_POS 7
 
 #ifdef CONFIG_RWNX_MUMIMO_TX
-#ifdef CONFIG_RWNX_OLD_IPC
-#error "MU-MIMO cannot be compiled for old IPC"
-#endif
 /// Interrupts bits used
 #if CONFIG_USER_MAX > 3
 #define IPC_IRQ_E2A_USER_MSK 0xF

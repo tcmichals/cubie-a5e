@@ -42,15 +42,9 @@ struct aicwf_bus {
 	struct completion bustx_trgg;
 	struct completion busrx_trgg;
 	struct completion busirq_trgg; // new oob feature
-#ifdef AICWF_USB_SUPPORT
-	struct completion msg_busrx_trgg;
-#endif
 	struct task_struct *bustx_thread;
 	struct task_struct *busrx_thread;
 	struct task_struct *busirq_thread; // new oob feature
-#ifdef AICWF_USB_SUPPORT
-	struct task_struct *msg_busrx_thread;
-#endif
 };
 
 /* ================================================================
@@ -193,7 +187,5 @@ static inline const void *aicwf_bus_get_hw_props(struct aicwf_bus *bus)
 
 int aicwf_bus_init(uint bus_hdrlen, struct device *dev);
 void aicwf_bus_deinit(struct device *dev);
-void aicwf_hostif_ready(void);
-void aicwf_hostif_fail(void);
 
 #endif /* _AIC_BUS_H_ */

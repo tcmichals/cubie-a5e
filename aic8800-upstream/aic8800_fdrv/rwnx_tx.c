@@ -22,9 +22,6 @@
 #include "rwnx_mesh.h"
 #include "rwnx_msg_tx.h"
 #include "rwnx_tx.h"
-#ifdef AICWF_USB_SUPPORT
-#include "usb_host.h"
-#endif
 
 /******************************************************************************
  * Power Save functions
@@ -301,7 +298,7 @@ static const int rwnx_down_hwq2tid[3] = {
 
 static void rwnx_downgrade_ac(struct rwnx_sta *sta, struct sk_buff *skb)
 {
-	s8_l ac = rwnx_tid2hwq[skb->priority];
+	s8 ac = rwnx_tid2hwq[skb->priority];
 
 	if (WARN(ac > RWNX_HWQ_VO, "Unexepcted ac %d for skb before downgrade", ac))
 		ac = RWNX_HWQ_VO;
@@ -326,13 +323,14 @@ u16 rwnx_select_txq(struct rwnx_vif *rwnx_vif, struct sk_buff *skb)
 	bool tdls_mgmgt_frame = false;
 	int nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX_FOR_OLD_IC;
 
 	switch (wdev->iftype) {
-	case NL80211_IFTYPE_STATION:
-	case NL80211_IFTYPE_P2P_CLIENT: {
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
+	case NL80211_IFTYPE_P2P_CLIENT:
+#endif
+	case NL80211_IFTYPE_STATION: {
 		struct ethhdr *eth;
 
 		eth = (struct ethhdr *)skb->data;
@@ -347,6 +345,7 @@ u16 rwnx_select_txq(struct rwnx_vif *rwnx_vif, struct sk_buff *skb)
 			sta = rwnx_vif->sta.ap;
 		break;
 	}
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_AP_VLAN:
 		if (rwnx_vif->ap_vlan.sta_4a) {
 			sta = rwnx_vif->ap_vlan.sta_4a;
@@ -435,6 +434,7 @@ u16 rwnx_select_txq(struct rwnx_vif *rwnx_vif, struct sk_buff *skb)
 
 		break;
 	}
+#endif
 	default:
 		break;
 	}
@@ -538,8 +538,7 @@ static struct rwnx_sta *rwnx_get_tx_priv(struct rwnx_vif *rwnx_vif,
 	int nx_remote_sta_max = NX_REMOTE_STA_MAX;
 	int nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic) {
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic) {
 		nx_remote_sta_max = NX_REMOTE_STA_MAX_FOR_OLD_IC;
 		nx_bcmc_txq_ndev_idx = NX_BCMC_TXQ_NDEV_IDX_FOR_OLD_IC;
 	}
@@ -672,29 +671,6 @@ void rwnx_tx_push(struct rwnx_hw *rwnx_hw, struct rwnx_txhdr *txhdr, int flags)
 		rwnx_hw->stats.last_tx = jiffies;
 	}
 	aicwf_frame_tx((void *)(rwnx_hw->sdiodev), skb);
-#elif defined(AICWF_USB_SUPPORT)
-	if (((sw_txhdr->desc.host.flags & TXU_CNTRL_MGMT) &&
-	     (*(skb->data + sw_txhdr->headroom) == 0xd0 ||
-	      *(skb->data + sw_txhdr->headroom) == 0x10 ||
-	      *(skb->data + sw_txhdr->headroom) == 0x30)) ||
-	    sw_txhdr->desc.host.ethertype == cpu_to_be16(ETH_P_PAE) ||
-	    sw_txhdr->desc.host.ethertype == cpu_to_be16(0x88b4)) {
-		sw_txhdr->need_cfm = 1;
-		sw_txhdr->desc.host.hostid =
-			((1 << 31) | rwnx_hw->usb_env.txdesc_free_idx[0]);
-		aicwf_usb_host_txdesc_push(&rwnx_hw->usb_env, 0, (long)skb);
-		AICWFDBG(LOGINFO, "need cfm ethertype:%8x,user_idx=%d, skb=%p\n",
-			 sw_txhdr->desc.host.ethertype,
-			 rwnx_hw->usb_env.txdesc_free_idx[0], skb);
-	} else {
-		sw_txhdr->need_cfm = 0;
-		sw_txhdr->desc.host.hostid = 0;
-
-		sw_txhdr->rwnx_vif->net_stats.tx_packets++;
-		sw_txhdr->rwnx_vif->net_stats.tx_bytes += sw_txhdr->frame_len;
-		rwnx_hw->stats.last_tx = jiffies;
-	}
-	aicwf_frame_tx((void *)(rwnx_hw->usbdev), skb);
 #endif
 	rwnx_hw->stats.cfm_balance[hw_queue]++;
 }
@@ -1025,161 +1001,6 @@ end:
 }
 #endif /* CONFIG_RWNX_AMSDUS_TX */
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-int aic_br_client_tx(struct rwnx_vif *vif, struct sk_buff **pskb)
-{
-	struct sk_buff *skb = *pskb;
-
-	int res, is_vlan_tag = 0, i, do_nat25 = 1;
-	unsigned short vlan_hdr = 0;
-	void *br_port = NULL;
-
-#ifdef BR_SUPPORT_DEBUG
-	AICWFDBG(LOGDEBUG, "SA=%pM, br_mac=%pM, type=0x%x, da[0]=%x, scdb=%pM, vif_type=%d\n",
-		 skb->data + MACADDRLEN, vif->br_mac,
-		 *((unsigned short *)(skb->data + MACADDRLEN * 2)), skb->data[0],
-		 vif->scdb_mac, RWNX_VIF_TYPE(vif));
-#endif
-	spin_lock_bh(&vif->br_ext_lock);
-	if (!(skb->data[0] & 1) && br_port &&
-	    memcmp(skb->data + MACADDRLEN, vif->br_mac, MACADDRLEN) &&
-	    *((unsigned short *)(skb->data + MACADDRLEN * 2)) != htons(ETH_P_8021Q) &&
-	    *((unsigned short *)(skb->data + MACADDRLEN * 2)) == htons(ETH_P_IP) &&
-	    !memcmp(vif->scdb_mac, skb->data + MACADDRLEN, MACADDRLEN) &&
-	    vif->scdb_entry) {
-		memcpy(skb->data + MACADDRLEN, vif->ndev->dev_addr, MACADDRLEN);
-		vif->scdb_entry->ageing_timer = jiffies;
-		spin_unlock_bh(&vif->br_ext_lock);
-	} else {
-		if (*((unsigned short *)(skb->data + MACADDRLEN * 2)) ==
-			htons(ETH_P_8021Q)) {
-			is_vlan_tag = 1;
-			vlan_hdr = *((unsigned short *)(skb->data + MACADDRLEN * 2 + 2));
-			for (i = 0; i < 6; i++)
-				*((unsigned short *)(skb->data + MACADDRLEN * 2 + 2 - i * 2)) =
-					*((unsigned short *)(skb->data + MACADDRLEN * 2 - 2 -
-										 i * 2));
-			skb_pull(skb, 4);
-		}
-		/* if SA == br_mac && skb== IP  => copy SIP to br_ip ?? why */
-		if (!memcmp(skb->data + MACADDRLEN, vif->br_mac, MACADDRLEN) &&
-		    (*((unsigned short *)(skb->data + MACADDRLEN * 2)) == htons(ETH_P_IP)))
-			memcpy(vif->br_ip, skb->data + WLAN_ETHHDR_LEN + 12, 4);
-
-		if (*((unsigned short *)(skb->data + MACADDRLEN * 2)) ==
-			htons(ETH_P_IP)) {
-			if (memcmp(vif->scdb_mac, skb->data + MACADDRLEN, MACADDRLEN)) {
-				vif->scdb_entry =
-				(struct nat25_network_db_entry *)
-					scdb_find_entry(vif, skb->data + MACADDRLEN,
-							skb->data + WLAN_ETHHDR_LEN + 12);
-				if (vif->scdb_entry) {
-					memcpy(vif->scdb_mac, skb->data + MACADDRLEN, MACADDRLEN);
-					memcpy(vif->scdb_ip, skb->data + WLAN_ETHHDR_LEN + 12, 4);
-					vif->scdb_entry->ageing_timer = jiffies;
-					do_nat25 = 0;
-				}
-			} else {
-				if (vif->scdb_entry) {
-					vif->scdb_entry->ageing_timer = jiffies;
-					do_nat25 = 0;
-				} else {
-					memset(vif->scdb_mac, 0, MACADDRLEN);
-					memset(vif->scdb_ip, 0, 4);
-				}
-			}
-		}
-		spin_unlock_bh(&vif->br_ext_lock);
-
-		if (do_nat25) {
-			if (nat25_db_handle(vif, skb, NAT25_CHECK) == 0) {
-				struct sk_buff *newskb;
-
-				if (is_vlan_tag) {
-					skb_push(skb, 4);
-					for (i = 0; i < 6; i++)
-						*((unsigned short *)(skb->data + i * 2)) =
-							*((unsigned short *)
-							(skb->data + 4 + i * 2));
-					*((unsigned short *)(skb->data + MACADDRLEN * 2)) =
-						htons(ETH_P_8021Q);
-					*((unsigned short *)(skb->data + MACADDRLEN * 2 + 2)) =
-						vlan_hdr;
-				}
-
-				newskb =
-					skb_copy(skb, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
-				if (!newskb) {
-					AICWFDBG(LOGDEBUG, "TX DROP: skb_copy fail!\n");
-					/* goto stop_proc; */
-					return -1;
-				}
-				dev_kfree_skb_any(skb);
-
-				*pskb = skb = newskb;
-				if (is_vlan_tag) {
-					vlan_hdr = *((unsigned short *)
-						(skb->data + MACADDRLEN * 2 + 2));
-					for (i = 0; i < 6; i++)
-						*((unsigned short *)
-						(skb->data + MACADDRLEN * 2 + 2 - i * 2)) =
-						*((unsigned short *)(skb->data +
-							MACADDRLEN * 2 - 2 - i * 2));
-					skb_pull(skb, 4);
-				}
-			}
-
-			if (skb_is_nonlinear(skb))
-				AICWFDBG(LOGDEBUG, "%s(): skb_is_nonlinear!!\n", __func__);
-
-			res = skb_linearize(skb);
-
-			if (res < 0) {
-				AICWFDBG(LOGDEBUG, "TX DROP: skb_linearize fail!\n");
-				/* goto free_and_stop; */
-				return -1;
-			}
-
-			res = nat25_db_handle(vif, skb, NAT25_INSERT);
-			if (res < 0) {
-				if (res == -2) {
-					AICWFDBG(LOGDEBUG, "TX DROP: nat25_db_handle fail!\n");
-					/* goto free_and_stop; */
-					return -1;
-				}
-				return 0;
-			}
-		}
-
-		memcpy(skb->data + MACADDRLEN, vif->ndev->dev_addr, MACADDRLEN);
-
-		dhcp_flag_bcast(vif, skb);
-
-		if (is_vlan_tag) {
-			skb_push(skb, 4);
-			for (i = 0; i < 6; i++)
-				*((unsigned short *)(skb->data + i * 2)) =
-					*((unsigned short *)(skb->data + 4 + i * 2));
-			*((unsigned short *)(skb->data + MACADDRLEN * 2)) =
-				htons(ETH_P_8021Q);
-			*((unsigned short *)(skb->data + MACADDRLEN * 2 + 2)) = vlan_hdr;
-		}
-	}
-
-	/* check if SA is equal to our MAC */
-	if (memcmp(skb->data + MACADDRLEN, vif->ndev->dev_addr, MACADDRLEN)) {
-		AICWFDBG(LOGDEBUG, "TX DROP: untransformed frame SA:%02X%02X%02X%02X%02X%02X!\n",
-			 skb->data[6], skb->data[7], skb->data[8], skb->data[9],
-			 skb->data[10], skb->data[11]);
-		/* goto free_and_stop; */
-		return -1;
-	}
-
-	AICWFDBG(LOGDEBUG, "%s function exit\n", __func__);
-	return 0;
-}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 #ifdef CONFIG_AIC8800_FILTER_TCP_ACK
 /* return:
  *      0, msg buf freed by the real driver
@@ -1223,24 +1044,6 @@ int intf_tx(struct rwnx_hw *priv, struct msg_buf *msg)
 		return NETDEV_TX_OK;
 #endif
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	if (1) { //(check_fwstate(&padapter->mlmepriv, WIFI_STATION_STATE |
-			 // WIFI_ADHOC_STATE) == _TRUE) {
-		void *br_port = NULL;
-
-		rcu_read_lock();
-		br_port = rcu_dereference(rwnx_vif->ndev->rx_handler_data);
-		rcu_read_unlock();
-
-		if (br_port) {
-			s32 res = aic_br_client_tx(rwnx_vif, &skb);
-
-			if (res == -1)
-				goto free;
-		}
-	}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	/* Retrieve the pointer to the Ethernet data */
 	// eth = (struct ethhdr *)skb->data;
 
@@ -1278,10 +1081,11 @@ int intf_tx(struct rwnx_hw *priv, struct msg_buf *msg)
 	desc->host.ethertype = eth_t.h_proto;
 	desc->host.staid = sta->sta_idx;
 	desc->host.tid = tid;
+	desc->host.vif_idx = rwnx_vif->vif_index;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (unlikely(rwnx_vif->wdev.iftype == NL80211_IFTYPE_AP_VLAN))
 		desc->host.vif_idx = rwnx_vif->ap_vlan.master->vif_index;
-	else
-		desc->host.vif_idx = rwnx_vif->vif_index;
+#endif
 
 	if (rwnx_vif->use_4addr && sta->sta_idx < NX_REMOTE_STA_MAX)
 		desc->host.flags = TXU_CNTRL_USE_4ADDR;
@@ -1296,10 +1100,12 @@ int intf_tx(struct rwnx_hw *priv, struct msg_buf *msg)
 		// rwnx_vif->sta.tdls_sta->tdls.last_sn = desc->host.sn;
 	}
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_MESH_POINT) {
 		if (rwnx_vif->is_resending)
 			desc->host.flags |= TXU_CNTRL_MESH_FWD;
 	}
+#endif
 
 #ifdef CONFIG_RWNX_SPLIT_TX_BUF
 	desc->host.packet_len[0] = frame_len;
@@ -1420,21 +1226,6 @@ netdev_tx_t rwnx_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 #endif
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	void *br_port = NULL;
-
-	rcu_read_lock();
-	br_port = rcu_dereference(rwnx_vif->ndev->rx_handler_data);
-	rcu_read_unlock();
-
-	if (br_port) {
-		s32 res = aic_br_client_tx(rwnx_vif, &skb);
-
-		if (res == -1)
-			goto free;
-	}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	/* Retrieve the pointer to the Ethernet data */
 	// eth = (struct ethhdr *)skb->data;
 
@@ -1472,10 +1263,11 @@ netdev_tx_t rwnx_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	desc->host.ethertype = eth_t.h_proto;
 	desc->host.staid = sta->sta_idx;
 	desc->host.tid = tid;
+	desc->host.vif_idx = rwnx_vif->vif_index;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (unlikely(rwnx_vif->wdev.iftype == NL80211_IFTYPE_AP_VLAN))
 		desc->host.vif_idx = rwnx_vif->ap_vlan.master->vif_index;
-	else
-		desc->host.vif_idx = rwnx_vif->vif_index;
+#endif
 
 	if (rwnx_vif->use_4addr && sta->sta_idx < NX_REMOTE_STA_MAX)
 		desc->host.flags = TXU_CNTRL_USE_4ADDR;
@@ -1490,10 +1282,12 @@ netdev_tx_t rwnx_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		// rwnx_vif->sta.tdls_sta->tdls.last_sn = desc->host.sn;
 	}
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_MESH_POINT) {
 		if (rwnx_vif->is_resending)
 			desc->host.flags |= TXU_CNTRL_MESH_FWD;
 	}
+#endif
 
 #ifdef CONFIG_RWNX_SPLIT_TX_BUF
 	desc->host.packet_len[0] = frame_len;
@@ -1560,8 +1354,7 @@ int rwnx_start_mgmt_xmit(struct rwnx_vif *vif, struct rwnx_sta *sta,
 
 	AICWFDBG(LOGDEBUG, "mgmt xmit %x %x ", buf[0], buf[1]);
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_off_chan_txq_idx = NX_OFF_CHAN_TXQ_IDX_FOR_OLD_IC;
 
 	headroom = sizeof(struct rwnx_txhdr);
@@ -1610,6 +1403,7 @@ int rwnx_start_mgmt_xmit(struct rwnx_vif *vif, struct rwnx_sta *sta,
 	robust = ieee80211_is_robust_mgmt_frame(skb);
 
 	/* Update CSA counter if present */
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (unlikely(params->n_csa_offsets) &&
 	    vif->wdev.iftype == NL80211_IFTYPE_AP && vif->ap.csa) {
 		int i;
@@ -1618,6 +1412,7 @@ int rwnx_start_mgmt_xmit(struct rwnx_vif *vif, struct rwnx_sta *sta,
 		for (i = 0; i < params->n_csa_offsets; i++)
 			data[params->csa_offsets[i]] = vif->ap.csa->count;
 	}
+#endif
 
 	/*
 	 * Go back to the beginning of the allocated data area

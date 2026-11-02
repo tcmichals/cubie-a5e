@@ -320,11 +320,7 @@ static void rwnx_tdls_add_oper_classes(struct rwnx_vif *rwnx_vif,
 	chan_def.width = rwnx_vif->sta.ap->width;
 	chan_def.center_freq1 = rwnx_vif->sta.ap->center_freq1;
 	chan_def.center_freq2 = rwnx_vif->sta.ap->center_freq2;
-#ifdef CONFIG_AIC8800_GKI
-	if (!rwnx_ieee80211_chandef_to_operating_class(&chan_def, &op_class))
-#else
 	if (!ieee80211_chandef_to_operating_class(&chan_def, &op_class))
-#endif
 		return;
 
 	pos = skb_put(skb, 4);

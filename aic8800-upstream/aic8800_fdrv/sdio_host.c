@@ -82,7 +82,7 @@ void aicwf_sdio_host_tx_cfm_handler(struct sdio_host_env_tag *env, u32 *data)
 	// the ipc_host_txdesc_get() in case flow control was enabled and the index
 	// has to be already at the good value to ensure that the test of FIFO full
 	// is correct
-	u32_l used_idx = data[1];
+	u32 used_idx = data[1];
 	unsigned long host_id =
 		env->tx_host_id[queue_idx][used_idx % SDIO_TXDESC_CNT];
 

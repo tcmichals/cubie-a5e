@@ -11,11 +11,11 @@
 /// Definition of the IPC Host environment structure.
 struct sdio_host_env_tag {
 	// Index used that points to the first free TX desc
-	u32_l txdesc_free_idx[SDIO_TXQUEUE_CNT];
+	u32 txdesc_free_idx[SDIO_TXQUEUE_CNT];
 	// Index used that points to the first used TX desc
-	u32_l txdesc_used_idx[SDIO_TXQUEUE_CNT];
+	u32 txdesc_used_idx[SDIO_TXQUEUE_CNT];
 	// Array storing the currently pushed host ids, per IPC queue
-	u64_l tx_host_id[SDIO_TXQUEUE_CNT][SDIO_TXDESC_CNT];
+	u64 tx_host_id[SDIO_TXQUEUE_CNT][SDIO_TXDESC_CNT];
 
 	/// Pointer to the attached object (used in callbacks and register accesses)
 	void *pthis;

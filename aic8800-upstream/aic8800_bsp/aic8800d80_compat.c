@@ -14,6 +14,8 @@
 
 extern struct aicbsp_info_t aicbsp_info;
 
+u8 chip_sub_id;
+
 typedef u32 (*array2_tbl_t)[2];
 
 #define AIC_PATCH_MAGIG_NUM   0x48435450 // "PTCH"

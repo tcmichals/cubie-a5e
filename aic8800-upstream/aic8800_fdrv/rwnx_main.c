@@ -12,13 +12,10 @@
 #include "hal_desc.h"
 #include "reg_access.h"
 #include "rwnx_cfgfile.h"
-#include "rwnx_debugfs.h"
 #include "rwnx_defs.h"
 #include "rwnx_irqs.h"
 #include "rwnx_msg_tx.h"
 #include "rwnx_radar.h"
-#include "rwnx_version.h"
-#include "aic_vendor.h"
 #include <linux/ctype.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
@@ -26,9 +23,10 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
+#include <linux/pm.h>
 #include <linux/random.h>
 #include <linux/vmalloc.h>
-#include <linux/wireless.h>
+#include <generated/utsrelease.h>
 #include <net/cfg80211.h>
 #include <net/ip.h>
 #include <net/netlink.h>
@@ -40,31 +38,16 @@
 #include "rwnx_events.h"
 #include "rwnx_main.h"
 #include "rwnx_tdls.h"
-#include "rwnx_version.h"
 #ifdef AICWF_SDIO_SUPPORT
 #include "aicwf_sdio.h"
 #endif
 #include "aic_bsp_export.h"
 #include "aicwf_compat_8800d80.h"
 #include "aicwf_compat_8800dc.h"
-#include "rwnx_wakelock.h"
-#ifdef CONFIG_SDIO_BT
-#include "aic_btsdio.h"
-#endif
 #include "aicwf_genl.h"
 #include "aicwf_chip_ops.h"
 #include "aicwf_txq_prealloc.h"
 
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-#include "aicwf_wext_linux.h"
-#endif
-
-#ifndef CONFIG_AIC8800_USE_WIRELESS_EXT
-#ifdef CONFIG_WIRELESS_EXT
-#include <net/iw_handler.h>
-static struct iw_handler_def aic_handlers_def;
-#endif
-#endif
 
 #define RW_DRV_DESCRIPTION "RivieraWaves 11nac driver for Linux cfg80211"
 #define RW_DRV_COPYRIGHT   "Copyright(c) 2015-2017 RivieraWaves"
@@ -307,7 +290,11 @@ static struct ieee80211_channel rwnx_5ghz_channels[] = {
 
 struct ieee80211_sband_iftype_data rwnx_he_capa[1] = {
 	{
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 		.types_mask = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP),
+#else
+		.types_mask = BIT(NL80211_IFTYPE_STATION),
+#endif
 		.he_cap = RWNX_HE_CAPABILITIES,
 	},
 };
@@ -332,6 +319,7 @@ static struct ieee80211_supported_band rwnx_band_5ghz = {
 	.vht_cap = RWNX_VHT_CAPABILITIES,
 };
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 static struct ieee80211_iface_limit rwnx_limits[] = {
 	{.max = 1, .types = BIT(NL80211_IFTYPE_STATION)},
 	{.max = 1, .types = BIT(NL80211_IFTYPE_AP)},
@@ -373,6 +361,7 @@ static const struct ieee80211_iface_combination rwnx_combinations[] = {
 			(BIT(NL80211_CHAN_WIDTH_20_NOHT) | BIT(NL80211_CHAN_WIDTH_20) |
 			 BIT(NL80211_CHAN_WIDTH_40) | BIT(NL80211_CHAN_WIDTH_80)),
 	}};
+#endif
 
 /* There isn't a lot of sense in it, but you can transmit anything you like */
 static struct ieee80211_txrx_stypes
@@ -383,6 +372,7 @@ static struct ieee80211_txrx_stypes
 			       BIT(IEEE80211_STYPE_PROBE_REQ >> 4) |
 			       BIT(IEEE80211_STYPE_AUTH >> 4)),
 		},
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 		[NL80211_IFTYPE_AP] = {
 			.tx = 0xffff,
 			.rx = (BIT(IEEE80211_STYPE_ASSOC_REQ >> 4) |
@@ -430,6 +420,7 @@ static struct ieee80211_txrx_stypes
 			       BIT(IEEE80211_STYPE_AUTH >> 4) |
 			       BIT(IEEE80211_STYPE_DEAUTH >> 4)),
 		},
+#endif
 };
 
 static u32 cipher_suites[] = {
@@ -811,35 +802,6 @@ void rwnx_update_mesh_power_mode(struct rwnx_vif *vif)
 	vif->ap.mesh_pm = mesh_pm;
 }
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-#define CONFIG_BR_SUPPORT_BRNAME "br0"
-void netdev_br_init(struct net_device *netdev)
-{
-	struct rwnx_vif *rwnx_vif = netdev_priv(netdev);
-
-	rcu_read_lock();
-	if (rcu_dereference(rwnx_vif->ndev->rx_handler_data)) {
-		struct net_device *br_netdev;
-
-		br_netdev = dev_get_by_name(&init_net, CONFIG_BR_SUPPORT_BRNAME);
-		if (br_netdev) {
-			memcpy(rwnx_vif->br_mac, br_netdev->dev_addr, ETH_ALEN);
-			dev_put(br_netdev);
-			AICWFDBG(LOGDEBUG, "AICWF " FUNC_NDEV_FMT
-				 " bind bridge dev " NDEV_FMT "(" MAC_FMT ")\n",
-				 FUNC_NDEV_ARG(netdev), NDEV_ARG(br_netdev),
-				 MAC_ARG(br_netdev->dev_addr));
-		} else {
-			AICWFDBG(LOGDEBUG, "AICWF " FUNC_NDEV_FMT
-				 " can't get bridge dev by name \"%s\"\n",
-				 FUNC_NDEV_ARG(netdev), CONFIG_BR_SUPPORT_BRNAME);
-		}
-	}
-	rwnx_vif->eth_br_ext_info.add_pppoe_tag = 1;
-	rcu_read_unlock();
-}
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 static const char *const s_conn_state[] = {
 	"RWNX_DRV_STATUS_DISCONNECTED",
 	"RWNX_DRV_STATUS_DISCONNECTING",
@@ -1017,10 +979,6 @@ static int rwnx_open(struct net_device *dev)
 		}
 	}
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	netdev_br_init(dev);
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	netif_start_queue(dev);
 
 	return error;
@@ -1040,14 +998,7 @@ static int rwnx_close(struct net_device *dev)
 	struct rwnx_hw *rwnx_hw = rwnx_vif->rwnx_hw;
 	int ret;
 	struct aicwf_bus *bus_if = NULL;
-#ifdef AICWF_SDIO_SUPPORT
-	if (rwnx_hw->sdiodev && rwnx_hw->sdiodev->bus_if)
-		bus_if = rwnx_hw->sdiodev->bus_if;
-#endif
-#ifdef AICWF_USB_SUPPORT
-	if (rwnx_hw->usbdev && rwnx_hw->usbdev->bus_if)
-		bus_if = rwnx_hw->usbdev->bus_if;
-#endif
+	struct aic_sdio_dev *sdiodev = NULL;
 	int waiting_counter = 20;
 	int test_counter = 0;
 
@@ -1086,6 +1037,7 @@ static int rwnx_close(struct net_device *dev)
 		};
 
 		cfg80211_scan_done(rwnx_hw->scan_request, &info);
+		aicwf_sdio_scan_activity_put(rwnx_hw);
 		rwnx_hw->scan_request = NULL;
 
 		ret = rwnx_send_scanu_cancel_req(rwnx_hw, NULL);
@@ -1123,13 +1075,13 @@ static int rwnx_close(struct net_device *dev)
 			netdev_warn(dev, "AP not stopped when disabling interface");
 		}
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-		/* void nat25_db_cleanup(_adapter *priv); */
-		nat25_db_cleanup(rwnx_vif);
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
 	}
 
-	if (bus_if && bus_if->state != BUS_DOWN_ST) {
+#if defined(AICWF_SDIO_SUPPORT)
+	bus_if = dev_get_drvdata(rwnx_hw->dev);
+	if (bus_if)
+		sdiodev = bus_if->bus_priv.sdio;
+	if (sdiodev && sdiodev->bus_if->state != BUS_DOWN_ST) {
 		if (RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_STATION ||
 		    RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_P2P_CLIENT) {
 			test_counter = waiting_counter;
@@ -1161,6 +1113,7 @@ static int rwnx_close(struct net_device *dev)
 		}
 #endif
 	}
+#endif
 	/* Ensure that we won't process disconnect ind */
 	spin_lock_bh(&rwnx_hw->cb_lock);
 
@@ -1176,7 +1129,7 @@ static int rwnx_close(struct net_device *dev)
 
 	if (rwnx_hw->vif_started == 0) {
 		/* This also lets both ipc sides remain in sync before resetting */
-		if (bus_if && bus_if->state != BUS_DOWN_ST) {
+		if (sdiodev->bus_if->state != BUS_DOWN_ST) {
 #ifdef CONFIG_AIC8800_COEX
 			if (rwnx_hw->testmode == 0)
 				rwnx_send_coex_req(rwnx_hw, 1, 0);
@@ -1248,6 +1201,7 @@ static u16 rwnx_select_queue(struct net_device *dev,
  *	needs to be changed. If this interface is not defined, the
  *	mac address can not be changed.
  */
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY) || defined(CONFIG_AIC8800_SUPPORT_REALTIME_CHANGE_MAC)
 static int rwnx_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = addr;
@@ -1264,6 +1218,7 @@ static int rwnx_set_mac_address(struct net_device *dev, void *addr)
 
 	return ret;
 }
+#endif
 
 static const struct net_device_ops rwnx_netdev_ops = {
 	.ndo_open = rwnx_open,
@@ -1281,12 +1236,14 @@ static const struct net_device_ops rwnx_netdev_ops = {
 	//    .ndo_set_rx_mode        = rwnx_set_multicast_list,
 };
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 static const struct net_device_ops rwnx_netdev_monitor_ops = {
 	.ndo_open = rwnx_open,
 	.ndo_stop = rwnx_close,
 	.ndo_get_stats = rwnx_get_stats,
 	.ndo_set_mac_address = rwnx_set_mac_address,
 };
+#endif
 
 static void rwnx_netdev_setup(struct net_device *dev)
 {
@@ -1322,24 +1279,33 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 	int min_idx, max_idx;
 	int vif_idx = -1;
 	int i;
+
+	if (IS_ENABLED(CONFIG_AIC8800_STA_ONLY) &&
+	    type != NL80211_IFTYPE_STATION)
+		return NULL;
+
 #ifndef CONFIG_AIC8800_ONE_TXQ
 	int nx_nb_ndev_txq = NX_NB_NDEV_TXQ;
 
-	struct rwnx_hw *hw = rwnx_platform_get_hw(g_rwnx_plat);
-	if (hw && hw->chip_ops && hw->chip_ops->is_old_ic)
+	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
 		nx_nb_ndev_txq = NX_NB_NDEV_TXQ_FOR_OLD_IC;
 #endif
 
-	AICWFDBG(LOGINFO, "%s: %s, %d, %d\r\n", __func__, name, type,
-		 NL80211_IFTYPE_P2P_DEVICE);
+	AICWFDBG(LOGINFO, "%s: %s, %d\r\n", __func__, name, type);
 	// Look for an available VIF
+
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (type == NL80211_IFTYPE_AP_VLAN) {
 		min_idx = NX_VIRT_DEV_MAX;
 		max_idx = NX_VIRT_DEV_MAX + NX_REMOTE_STA_MAX;
 	} else {
+#endif
 		min_idx = 0;
 		max_idx = NX_VIRT_DEV_MAX;
+
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	}
+#endif
 
 	for (i = min_idx; i < max_idx; i++) {
 		if (rwnx_hw->avail_idx_map & BIT(i)) {
@@ -1350,7 +1316,7 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 	if (vif_idx < 0)
 		return NULL;
 
-#ifndef CONFIG_RWNX_MON_DATA
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY) && !defined(CONFIG_RWNX_MON_DATA)
 	list_for_each_entry(vif, &rwnx_hw->vifs, list) {
 		// Check if monitor interface already exists or type is monitor
 		if (RWNX_VIF_TYPE(vif) == NL80211_IFTYPE_MONITOR ||
@@ -1388,16 +1354,13 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 	memset(&vif->net_stats, 0, sizeof(vif->net_stats));
 	vif->is_p2p_vif = 0;
 
-#ifdef CONFIG_AIC8800_BR_SUPPORT
-	spin_lock_init(&vif->br_ext_lock);
-#endif /* CONFIG_AIC8800_BR_SUPPORT */
-
 	switch (type) {
 	case NL80211_IFTYPE_STATION:
 		vif->sta.ap = NULL;
 		vif->sta.tdls_sta = NULL;
 		vif->sta.external_auth = false;
 		break;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_P2P_CLIENT:
 		vif->sta.ap = NULL;
 		vif->sta.tdls_sta = NULL;
@@ -1446,22 +1409,28 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 		ndev->type = ARPHRD_IEEE80211_RADIOTAP;
 		ndev->netdev_ops = &rwnx_netdev_monitor_ops;
 		break;
+#endif
 	default:
 		break;
 	}
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (type == NL80211_IFTYPE_AP_VLAN) {
 		memcpy((void *)ndev->dev_addr, (const void *)params->macaddr, ETH_ALEN);
 		memcpy((void *)vif->wdev.address, (const void *)params->macaddr,
 		       ETH_ALEN);
 	} else {
+#endif
 		unsigned char mac_addr[6];
 
 		memcpy(mac_addr, rwnx_hw->wiphy->perm_addr, ETH_ALEN);
 		mac_addr[5] ^= vif_idx;
 		eth_hw_addr_set(ndev, mac_addr);
 		memcpy(vif->wdev.address, mac_addr, ETH_ALEN);
+
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	}
+#endif
 
 	AICWFDBG(LOGINFO, "interface add:%x %x %x %x %x %x\n", vif->wdev.address[0],
 		 vif->wdev.address[1], vif->wdev.address[2], vif->wdev.address[3],
@@ -1473,15 +1442,6 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 	} else {
 		vif->use_4addr = false;
 	}
-
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	aicwf_set_wireless_ext(ndev, rwnx_hw);
-#else
-#ifdef CONFIG_WIRELESS_EXT
-	memset(&aic_handlers_def, 0, sizeof(struct iw_handler_def));
-	ndev->wireless_handlers = (struct iw_handler_def *)&aic_handlers_def;
-#endif
-#endif
 	if (cfg80211_register_netdevice(ndev))
 		goto err;
 
@@ -1502,7 +1462,7 @@ void aicwf_p2p_alive_timeout(struct timer_list *t)
 	struct rwnx_hw *rwnx_hw;
 	struct rwnx_vif *rwnx_vif;
 	struct rwnx_vif *rwnx_vif1, *tmp;
-	u8_l p2p = 0;
+	u8 p2p = 0;
 
 	//rwnx_hw = from_timer(rwnx_hw, t, p2p_alive_timer);
 	rwnx_hw = timer_container_of(rwnx_hw, t, p2p_alive_timer);
@@ -1511,11 +1471,13 @@ void aicwf_p2p_alive_timeout(struct timer_list *t)
 	list_for_each_entry_safe(rwnx_vif1, tmp, &rwnx_hw->vifs, list) {
 		if ((rwnx_hw->avail_idx_map & BIT(rwnx_vif1->drv_vif_index)) == 0) {
 			switch (RWNX_VIF_TYPE(rwnx_vif1)) {
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 			case NL80211_IFTYPE_P2P_CLIENT:
 			case NL80211_IFTYPE_P2P_GO:
 				rwnx_hw->is_p2p_alive = 1;
 				p2p = 1;
 				break;
+#endif
 			default:
 				break;
 			}
@@ -1698,6 +1660,10 @@ rwnx_cfg80211_add_iface(struct wiphy *wiphy, const char *name,
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
 	struct wireless_dev *wdev;
 
+	if (IS_ENABLED(CONFIG_AIC8800_STA_ONLY) &&
+	    type != NL80211_IFTYPE_STATION)
+		return ERR_PTR(-EOPNOTSUPP);
+
 	if (type != NL80211_IFTYPE_P2P_DEVICE) {
 		struct rwnx_vif *vif =
 			rwnx_interface_add(rwnx_hw, name, name_assign_type, type, params);
@@ -1775,6 +1741,10 @@ static int rwnx_cfg80211_change_iface(struct wiphy *wiphy,
 	AICWFDBG(LOGDEBUG, "AICWF change_if: %d to %d, %d, %d", vif->wdev.iftype, type,
 		 NL80211_IFTYPE_P2P_CLIENT, NL80211_IFTYPE_STATION);
 
+	if (IS_ENABLED(CONFIG_AIC8800_STA_ONLY) &&
+	    type != NL80211_IFTYPE_STATION)
+		return -EOPNOTSUPP;
+
 #ifdef CONFIG_AIC8800_COEX
 	if (type == NL80211_IFTYPE_AP || type == NL80211_IFTYPE_P2P_GO)
 		rwnx_send_coex_req(vif->rwnx_hw, 1, 0);
@@ -1804,12 +1774,15 @@ static int rwnx_cfg80211_change_iface(struct wiphy *wiphy,
 	dev->netdev_ops = &rwnx_netdev_ops;
 
 	switch (type) {
-	case NL80211_IFTYPE_STATION:
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_P2P_CLIENT:
+#endif
+	case NL80211_IFTYPE_STATION:
 		vif->sta.ap = NULL;
 		vif->sta.tdls_sta = NULL;
 		vif->sta.external_auth = false;
 		break;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_MESH_POINT:
 		INIT_LIST_HEAD(&vif->ap.mpath_list);
 		INIT_LIST_HEAD(&vif->ap.proxy_list);
@@ -1828,6 +1801,7 @@ static int rwnx_cfg80211_change_iface(struct wiphy *wiphy,
 		dev->type = ARPHRD_IEEE80211_RADIOTAP;
 		dev->netdev_ops = &rwnx_netdev_monitor_ops;
 		break;
+#endif
 	default:
 		break;
 	}
@@ -1835,8 +1809,10 @@ static int rwnx_cfg80211_change_iface(struct wiphy *wiphy,
 	vif->wdev.iftype = type;
 	if (params->use_4addr != -1)
 		vif->use_4addr = params->use_4addr;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (type == NL80211_IFTYPE_P2P_CLIENT || type == NL80211_IFTYPE_P2P_GO)
 		p2p = true;
+#endif
 
 	if (vif->up) {
 		/* Abort scan request on the vif */
@@ -1877,7 +1853,7 @@ static int rwnx_cfg80211_change_iface(struct wiphy *wiphy,
 	return 0;
 }
 
-static int rwnx_cfgp2p_start_p2p_device(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfgp2p_start_p2p_device(struct wiphy *wiphy,
 					struct wireless_dev *wdev)
 {
 	int ret = 0;
@@ -1888,7 +1864,7 @@ static int rwnx_cfgp2p_start_p2p_device(struct wiphy *wiphy,
 	return ret;
 }
 
-static void rwnx_cfgp2p_stop_p2p_device(struct wiphy *wiphy,
+static void __maybe_unused rwnx_cfgp2p_stop_p2p_device(struct wiphy *wiphy,
 					struct wireless_dev *wdev)
 {
 	int ret = 0;
@@ -1902,6 +1878,7 @@ static void rwnx_cfgp2p_stop_p2p_device(struct wiphy *wiphy,
 		};
 
 		cfg80211_scan_done(rwnx_hw->scan_request, &info);
+		aicwf_sdio_scan_activity_put(rwnx_hw);
 		rwnx_hw->scan_request = NULL;
 		ret = rwnx_send_scanu_cancel_req(rwnx_hw, NULL);
 		if (ret)
@@ -1965,12 +1942,15 @@ static int rwnx_cfg80211_scan(struct wiphy *wiphy,
 		return -EBUSY;
 	}
 
-	rwnx_wakeup_lock(rwnx_hw->ws_scan);
+	if (!aicwf_sdio_scan_activity_get(rwnx_hw))
+		return -EBUSY;
 
 	rwnx_hw->scan_request = request;
 	error = rwnx_send_scanu_req(rwnx_hw, rwnx_vif, request);
 	if (error) {
-		rwnx_wakeup_unlock(rwnx_hw->ws_scan);
+		rwnx_hw->scan_request = NULL;
+		rwnx_hw->scanning = 0;
+		aicwf_sdio_scan_activity_put(rwnx_hw);
 		return error;
 	}
 
@@ -1992,7 +1972,7 @@ static int rwnx_cfg80211_add_key(struct wiphy *wiphy, struct wireless_dev *wdev,
 	struct rwnx_vif *vif = netdev_priv(netdev);
 	int i, error = 0;
 	struct mm_key_add_cfm key_add_cfm;
-	u8_l cipher = 0;
+	u8 cipher = 0;
 	struct rwnx_sta *sta = NULL;
 	struct rwnx_key *rwnx_key;
 
@@ -2312,22 +2292,9 @@ static int rwnx_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 	    atomic_read(&rwnx_vif->drv_conn_state) == RWNX_DRV_STATUS_ROAMING) {
 		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, RWNX_DRV_STATUS_DISCONNECTING);
 		key_flag = true;
-
-#ifdef CONFIG_AIC8800_USE_WIRELESS_EXT
-	memset(rwnx_hw->wext_essid, 0, 33);
-#endif
 		ret = rwnx_send_sm_disconnect_req(rwnx_hw, rwnx_vif, reason_code);
 #ifdef AICWF_SDIO_SUPPORT
-		if (rwnx_hw->sdiodev && rwnx_hw->sdiodev->bus_if &&
-		    rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
-			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
-			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
-					    RWNX_DRV_STATUS_DISCONNECTED);
-		}
-#endif
-#ifdef AICWF_USB_SUPPORT
-		if (rwnx_hw->usbdev && rwnx_hw->usbdev->bus_if &&
-		    rwnx_hw->usbdev->bus_if->state == BUS_DOWN_ST) {
+		if (rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
 			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
 			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
 					    RWNX_DRV_STATUS_DISCONNECTED);
@@ -2455,7 +2422,7 @@ rwnx_cfg80211_external_auth(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @add_station: Add a new station.
  */
-static int rwnx_cfg80211_add_station(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_add_station(struct wiphy *wiphy,
 				     struct wireless_dev *wdev,
 				     const u8 *mac,
 				     struct station_parameters *params)
@@ -2517,9 +2484,6 @@ static int rwnx_cfg80211_add_station(struct wiphy *wiphy,
 				sta->uapsd_tids &= ~(1 << tid);
 		}
 		memcpy(sta->mac_addr, mac, ETH_ALEN);
-#ifdef CONFIG_RWNX_DEBUGFS
-		rwnx_dbgfs_register_rc_stat(rwnx_hw, sta);
-#endif
 
 		/* Ensure that we won't process PS change or channel switch ind */
 		spin_lock_bh(&rwnx_hw->cb_lock);
@@ -2638,13 +2602,10 @@ static int rwnx_cfg80211_del_station_compat(struct wiphy *wiphy,
 			}
 
 #ifdef AICWF_RX_REORDER
-#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
-			rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv :
-				  (rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL);
-#elif defined(AICWF_SDIO_SUPPORT)
-			rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv : NULL;
-#elif defined(AICWF_USB_SUPPORT)
-			rx_priv = rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL;
+#ifdef AICWF_SDIO_SUPPORT
+			rx_priv = rwnx_hw->sdiodev->rx_priv;
+#else
+			rx_priv = rwnx_hw->usbdev->rx_priv;
 #endif
 			if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_STATION ||
 			    rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT) {
@@ -2681,9 +2642,6 @@ static int rwnx_cfg80211_del_station_compat(struct wiphy *wiphy,
 			rwnx_mu_group_sta_del(rwnx_hw, cur);
 #endif /* CONFIG_RWNX_BFMER */
 
-#ifdef CONFIG_RWNX_DEBUGFS
-			rwnx_dbgfs_unregister_rc_stat(rwnx_hw, cur);
-#endif
 		}
 
 		if (mac)
@@ -2762,13 +2720,10 @@ void apm_staloss_work_process(struct work_struct *work)
 		}
 
 #ifdef AICWF_RX_REORDER
-#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
-		rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv :
-			  (rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL);
-#elif defined(AICWF_SDIO_SUPPORT)
-		rx_priv = rwnx_hw->sdiodev ? rwnx_hw->sdiodev->rx_priv : NULL;
-#elif defined(AICWF_USB_SUPPORT)
-		rx_priv = rwnx_hw->usbdev ? rwnx_hw->usbdev->rx_priv : NULL;
+#ifdef AICWF_SDIO_SUPPORT
+		rx_priv = rwnx_hw->sdiodev->rx_priv;
+#else
+		rx_priv = rwnx_hw->usbdev->rx_priv;
 #endif
 		if (rwnx_vif->wdev.iftype == NL80211_IFTYPE_STATION ||
 		    rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT) {
@@ -2804,9 +2759,6 @@ void apm_staloss_work_process(struct work_struct *work)
 		rwnx_mu_group_sta_del(rwnx_hw, cur);
 #endif /* CONFIG_RWNX_BFMER */
 
-#ifdef CONFIG_RWNX_DEBUGFS
-		rwnx_dbgfs_unregister_rc_stat(rwnx_hw, cur);
-#endif
 	} else {
 		AICWFDBG(LOGDEBUG, "AICWF sta not found: %pM\n", mac);
 		return;
@@ -2866,7 +2818,7 @@ void apm_probe_sta_work_process(struct work_struct *work)
  *	them, also against the existing state! Drivers must call
  *	cfg80211_check_station_change() to validate the information.
  */
-static int rwnx_cfg80211_change_station(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_change_station(struct wiphy *wiphy,
 					struct wireless_dev *wdev,
 					const u8 *mac,
 					struct station_parameters *params)
@@ -2920,9 +2872,6 @@ static int rwnx_cfg80211_change_station(struct wiphy *wiphy,
 						sta->uapsd_tids &= ~(1 << tid);
 				}
 				memcpy(sta->mac_addr, mac, ETH_ALEN);
-#ifdef CONFIG_RWNX_DEBUGFS
-				rwnx_dbgfs_register_rc_stat(rwnx_hw, sta);
-#endif
 				/* Ensure that we won't process PS change or channel switch ind
 				 */
 				spin_lock_bh(&rwnx_hw->cb_lock);
@@ -2992,7 +2941,7 @@ static int rwnx_cfg80211_change_station(struct wiphy *wiphy,
 	}
 
 	if (params->vlan) {
-		u8_l vlan_idx;
+		u8 vlan_idx;
 
 		vif = netdev_priv(params->vlan);
 		vlan_idx = vif->vif_index;
@@ -3023,7 +2972,8 @@ static int rwnx_cfg80211_change_station(struct wiphy *wiphy,
 /*
  * @start_ap: Start acting in AP mode defined by the parameters.
  */
-static int rwnx_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_start_ap(struct wiphy *wiphy,
+						struct net_device *dev,
 				  struct cfg80211_ap_settings *settings)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
@@ -3058,9 +3008,6 @@ static int rwnx_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 
 		rwnx_vif->ap.bcmc_index = apm_start_cfm.bcmc_idx;
 		rwnx_vif->ap.flags = 0;
-#if (defined CONFIG_AIC8800_HE_FOR_OLD_KERNEL) || (defined CONFIG_AIC8800_VHT_FOR_OLD_KERNEL)
-		rwnx_vif->ap.aic_index = 0;
-#endif
 		rwnx_vif->ap.csa = NULL;
 		sta = &rwnx_hw->sta_table[apm_start_cfm.bcmc_idx];
 		sta->valid = true;
@@ -3119,7 +3066,7 @@ end:
  *	interface. This should reject the call when AP mode wasn't started.
  */
 
-static int rwnx_cfg80211_change_beacon(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_change_beacon(struct wiphy *wiphy,
 				       struct net_device *dev,
 				       struct cfg80211_ap_update *info)
 {
@@ -3148,7 +3095,8 @@ static int rwnx_cfg80211_change_beacon(struct wiphy *wiphy,
 /*
  * * @stop_ap: Stop being an AP, including stopping beaconing.
  */
-static int rwnx_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_stop_ap(struct wiphy *wiphy,
+					       struct net_device *dev,
 				 unsigned int link_id)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
@@ -3662,6 +3610,7 @@ static int rwnx_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 	/* Check if provided VIF is an AP or a STA one */
 	switch (RWNX_VIF_TYPE(rwnx_vif)) {
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	case NL80211_IFTYPE_AP_VLAN:
 		rwnx_vif = rwnx_vif->ap_vlan.master;
 		fallthrough;
@@ -3670,8 +3619,9 @@ static int rwnx_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	case NL80211_IFTYPE_MESH_POINT:
 		ap = true;
 		break;
-	case NL80211_IFTYPE_STATION:
 	case NL80211_IFTYPE_P2P_CLIENT:
+#endif
+	case NL80211_IFTYPE_STATION:
 	default:
 		break;
 	}
@@ -3735,7 +3685,7 @@ send_frame:
 /*
  * @start_radar_detection: Start radar detection in the driver.
  */
-static int rwnx_cfg80211_start_radar_detection(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_start_radar_detection(struct wiphy *wiphy,
 					       struct net_device *dev,
 					       struct cfg80211_chan_def *chandef,
 					       u32 cac_time_ms, int link_id)
@@ -3778,8 +3728,8 @@ static int rwnx_cfg80211_update_ft_ies(struct wiphy *wiphy, struct net_device *d
  */
 static int rwnx_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
 					     struct net_device *dev,
-					     s32_l rssi_thold,
-					     u32_l rssi_hyst)
+					     s32 rssi_thold,
+					     u32 rssi_hyst)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -3797,7 +3747,8 @@ static int rwnx_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
  *	everything. It should do it's best to verify requests and reject them
  *	as soon as possible.
  */
-static int rwnx_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_channel_switch(struct wiphy *wiphy,
+					      struct net_device *dev,
 					struct cfg80211_csa_settings *params)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
@@ -3881,7 +3832,8 @@ end:
 /*
  * @tdls_oper: execute TDLS operation
  */
-static int rwnx_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_tdls_oper(struct wiphy *wiphy,
+					 struct net_device *dev,
 				   const u8 *peer, enum nl80211_tdls_operation oper)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
@@ -3925,9 +3877,6 @@ static int rwnx_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 
 		/* Set TDLS not active */
 		rwnx_vif->sta.tdls_sta->tdls.active = false;
-#ifdef CONFIG_RWNX_DEBUGFS
-		rwnx_dbgfs_unregister_rc_stat(rwnx_hw, rwnx_vif->sta.tdls_sta);
-#endif
 		// Remove TDLS station
 		rwnx_vif->tdls_status = TDLS_LINK_IDLE;
 		rwnx_vif->sta.tdls_sta = NULL;
@@ -3939,7 +3888,7 @@ static int rwnx_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @tdls_channel_switch: enable TDLS channel switch
  */
-static int rwnx_cfg80211_tdls_channel_switch(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_tdls_channel_switch(struct wiphy *wiphy,
 					     struct net_device *dev,
 					     const u8 *addr, u8 oper_class,
 					     struct cfg80211_chan_def *chandef)
@@ -3981,7 +3930,8 @@ static int rwnx_cfg80211_tdls_channel_switch(struct wiphy *wiphy,
 /*
  * @tdls_cancel_channel_switch: disable TDLS channel switch
  */
-static void rwnx_cfg80211_tdls_cancel_channel_switch(struct wiphy *wiphy,
+static void __maybe_unused
+rwnx_cfg80211_tdls_cancel_channel_switch(struct wiphy *wiphy,
 						     struct net_device *dev,
 						     const u8 *addr)
 {
@@ -4001,7 +3951,8 @@ static void rwnx_cfg80211_tdls_cancel_channel_switch(struct wiphy *wiphy,
 /*
  * @change_bss: Modify parameters for a given BSS (mainly for AP mode).
  */
-static int rwnx_cfg80211_change_bss(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_change_bss(struct wiphy *wiphy,
+					  struct net_device *dev,
 				    struct bss_parameters *params)
 {
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -4019,7 +3970,7 @@ static int rwnx_cfg80211_change_bss(struct wiphy *wiphy, struct net_device *dev,
 	return res;
 }
 
-static void rwnx_convert_sta_flags(u32_l flags, struct station_info *sinfo)
+static void rwnx_convert_sta_flags(u32 flags, struct station_info *sinfo)
 {
 	struct nl80211_sta_flag_update *sfu;
 
@@ -4029,7 +3980,7 @@ static void rwnx_convert_sta_flags(u32_l flags, struct station_info *sinfo)
 		    BIT(NL80211_STA_FLAG_ASSOCIATED) |
 		    BIT(NL80211_STA_FLAG_AUTHENTICATED);
 
-	if (flags == (u32_l)RWNX_DRV_STATUS_CONNECTED) {
+	if (flags == (u32)RWNX_DRV_STATUS_CONNECTED) {
 		sfu->set |= (BIT(NL80211_STA_FLAG_WME) | BIT(NL80211_STA_FLAG_AUTHORIZED) |
 			     BIT(NL80211_STA_FLAG_ASSOCIATED) |
 			     BIT(NL80211_STA_FLAG_AUTHENTICATED));
@@ -4041,7 +3992,7 @@ static void rwnx_convert_sta_flags(u32_l flags, struct station_info *sinfo)
 static void rwnx_fill_bss_param(struct station_info *sinfo,
 				struct rwnx_vif *vif)
 {
-	u16_l capability = 0;
+	u16 capability = 0;
 
 	sinfo->filled |= BIT(NL80211_STA_INFO_BSS_PARAM);
 	sinfo->bss_param.beacon_interval =
@@ -4214,7 +4165,7 @@ static int rwnx_cfg80211_get_station(struct wiphy *wiphy,
 		if (vif->sta.ap && ether_addr_equal(vif->sta.ap->mac_addr, mac))
 			sta = vif->sta.ap;
 		if (sta) {
-			rwnx_convert_sta_flags((u32_l)atomic_read(&vif->drv_conn_state),
+			rwnx_convert_sta_flags((u32)atomic_read(&vif->drv_conn_state),
 					       sinfo);
 			rwnx_fill_bss_param(sinfo, vif);
 			return rwnx_fill_station_info(sta, vif, sinfo);
@@ -4322,7 +4273,8 @@ static int rwnx_cfg80211_dump_station(struct wiphy *wiphy,
 /*
  * @add_mpath: add a fixed mesh path
  */
-static int rwnx_cfg80211_add_mpath(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_add_mpath(struct wiphy *wiphy,
+					 struct net_device *dev,
 				   const u8 *dst, const u8 *next_hop)
 {
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -4339,7 +4291,8 @@ static int rwnx_cfg80211_add_mpath(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @del_mpath: delete a given mesh path
  */
-static int rwnx_cfg80211_del_mpath(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_del_mpath(struct wiphy *wiphy,
+					 struct net_device *dev,
 				   const u8 *dst)
 {
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -4355,7 +4308,7 @@ static int rwnx_cfg80211_del_mpath(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @change_mpath: change a given mesh path
  */
-static int rwnx_cfg80211_change_mpath(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_change_mpath(struct wiphy *wiphy,
 				      struct net_device *dev,
 				      const u8 *dst, const u8 *next_hop)
 {
@@ -4373,7 +4326,8 @@ static int rwnx_cfg80211_change_mpath(struct wiphy *wiphy,
 /*
  * @get_mpath: get a mesh path for the given parameters
  */
-static int rwnx_cfg80211_get_mpath(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_get_mpath(struct wiphy *wiphy,
+					 struct net_device *dev,
 				   u8 *dst, u8 *next_hop,
 				   struct mpath_info *pinfo)
 {
@@ -4412,7 +4366,8 @@ static int rwnx_cfg80211_get_mpath(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @dump_mpath: dump mesh path callback -- resume dump at index @idx
  */
-static int rwnx_cfg80211_dump_mpath(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_dump_mpath(struct wiphy *wiphy,
+					  struct net_device *dev,
 				    int idx, u8 *dst, u8 *next_hop,
 				    struct mpath_info *pinfo)
 {
@@ -4452,7 +4407,8 @@ static int rwnx_cfg80211_dump_mpath(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @get_mpp: get a mesh proxy path for the given parameters
  */
-static int rwnx_cfg80211_get_mpp(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_get_mpp(struct wiphy *wiphy,
+				       struct net_device *dev,
 				 u8 *dst, u8 *mpp, struct mpath_info *pinfo)
 {
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -4491,7 +4447,8 @@ static int rwnx_cfg80211_get_mpp(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @dump_mpp: dump mesh proxy path callback -- resume dump at index @idx
  */
-static int rwnx_cfg80211_dump_mpp(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_dump_mpp(struct wiphy *wiphy,
+					struct net_device *dev,
 				  int idx, u8 *dst, u8 *mpp,
 				  struct mpath_info *pinfo)
 {
@@ -4533,7 +4490,7 @@ static int rwnx_cfg80211_dump_mpp(struct wiphy *wiphy, struct net_device *dev,
 /*
  * @get_mesh_config: Get the current mesh configuration
  */
-static int rwnx_cfg80211_get_mesh_config(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_get_mesh_config(struct wiphy *wiphy,
 					 struct net_device *dev,
 					 struct mesh_config *conf)
 {
@@ -4548,7 +4505,7 @@ static int rwnx_cfg80211_get_mesh_config(struct wiphy *wiphy,
 /*
  * @update_mesh_config: Update mesh parameters on a running mesh.
  */
-static int rwnx_cfg80211_update_mesh_config(struct wiphy *wiphy,
+static int __maybe_unused rwnx_cfg80211_update_mesh_config(struct wiphy *wiphy,
 					    struct net_device *dev, u32 mask,
 					    const struct mesh_config *nconf)
 {
@@ -4586,7 +4543,8 @@ static int rwnx_cfg80211_update_mesh_config(struct wiphy *wiphy,
  * @join_mesh: join the mesh network with the specified parameters
  * (invoked with the wireless_dev mutex held)
  */
-static int rwnx_cfg80211_join_mesh(struct wiphy *wiphy, struct net_device *dev,
+static int __maybe_unused rwnx_cfg80211_join_mesh(struct wiphy *wiphy,
+					struct net_device *dev,
 				   const struct mesh_config *conf,
 				   const struct mesh_setup *setup)
 {
@@ -4672,7 +4630,8 @@ static int rwnx_cfg80211_join_mesh(struct wiphy *wiphy, struct net_device *dev,
  * @leave_mesh: leave the current mesh network
  * (invoked with the wireless_dev mutex held)
  */
-static int rwnx_cfg80211_leave_mesh(struct wiphy *wiphy, struct net_device *dev)
+static int __maybe_unused rwnx_cfg80211_leave_mesh(struct wiphy *wiphy,
+					 struct net_device *dev)
 {
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
 	struct rwnx_vif *rwnx_vif = netdev_priv(dev);
@@ -4716,8 +4675,10 @@ static struct cfg80211_ops rwnx_cfg80211_ops = {
 	.add_virtual_intf = rwnx_cfg80211_add_iface,
 	.del_virtual_intf = rwnx_cfg80211_del_iface,
 	.change_virtual_intf = rwnx_cfg80211_change_iface,
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	.start_p2p_device = rwnx_cfgp2p_start_p2p_device,
 	.stop_p2p_device = rwnx_cfgp2p_stop_p2p_device,
+#endif
 	.scan = rwnx_cfg80211_scan,
 	.connect = rwnx_cfg80211_connect,
 	.disconnect = rwnx_cfg80211_disconnect,
@@ -4726,14 +4687,18 @@ static struct cfg80211_ops rwnx_cfg80211_ops = {
 	.del_key = rwnx_cfg80211_del_key,
 	.set_default_key = rwnx_cfg80211_set_default_key,
 	.set_default_mgmt_key = rwnx_cfg80211_set_default_mgmt_key,
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	.add_station = rwnx_cfg80211_add_station,
 	.del_station = rwnx_cfg80211_del_station_compat,
 	.change_station = rwnx_cfg80211_change_station,
+#endif
 	.mgmt_tx = rwnx_cfg80211_mgmt_tx,
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	.start_ap = rwnx_cfg80211_start_ap,
 	.change_beacon = rwnx_cfg80211_change_beacon,
 	.stop_ap = rwnx_cfg80211_stop_ap,
 	.set_monitor_channel = rwnx_cfg80211_set_monitor_channel,
+#endif
 	//  .mgmt_frame_register = rwnx_cfg80211_mgmt_frame_register,
 	/*
 	 * unused interface
@@ -4752,9 +4717,12 @@ static struct cfg80211_ops rwnx_cfg80211_ops = {
 	.cancel_remain_on_channel = rwnx_cfg80211_cancel_remain_on_channel,
 	.dump_survey = rwnx_cfg80211_dump_survey,
 	.get_channel = rwnx_cfg80211_get_channel,
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	.start_radar_detection = rwnx_cfg80211_start_radar_detection,
+#endif
 	.update_ft_ies = rwnx_cfg80211_update_ft_ies,
 	.set_cqm_rssi_config = rwnx_cfg80211_set_cqm_rssi_config,
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	.channel_switch = rwnx_cfg80211_channel_switch,
 	.tdls_channel_switch = rwnx_cfg80211_tdls_channel_switch,
 	.tdls_cancel_channel_switch = rwnx_cfg80211_tdls_cancel_channel_switch,
@@ -4764,6 +4732,7 @@ static struct cfg80211_ops rwnx_cfg80211_ops = {
 	 */
 	.tdls_oper = rwnx_cfg80211_tdls_oper,
 	.change_bss = rwnx_cfg80211_change_bss,
+#endif
 	.external_auth = rwnx_cfg80211_external_auth,
 #ifdef CONFIG_AIC8800_SCHED_SCAN
 	.sched_scan_start = rwnx_cfg80211_sched_scan_start,
@@ -4808,6 +4777,7 @@ static void rwnx_reg_notifier(struct wiphy *wiphy,
 		rwnx_send_me_chan_config_req(rwnx_hw);
 }
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 static void rwnx_enable_mesh(struct rwnx_hw *rwnx_hw)
 {
 	struct wiphy *wiphy = rwnx_hw->wiphy;
@@ -4836,6 +4806,7 @@ static void rwnx_enable_mesh(struct rwnx_hw *rwnx_hw)
 	rwnx_limits[0].types |= BIT(NL80211_IFTYPE_MESH_POINT);
 	rwnx_limits_dfs[0].types |= BIT(NL80211_IFTYPE_MESH_POINT);
 }
+#endif
 
 #if IS_ENABLED(CONFIG_PM)
 static const struct wiphy_wowlan_support aic_wowlan_support = {
@@ -4915,6 +4886,47 @@ int rwnx_ic_rf_init(struct rwnx_hw *rwnx_hw)
 	return 0;
 }
 
+static void rwnx_wakeup_sources_deinit(struct rwnx_hw *rwnx_hw)
+{
+	wakeup_source_unregister(rwnx_hw->ws_tx);
+	wakeup_source_unregister(rwnx_hw->ws_rx);
+	wakeup_source_unregister(rwnx_hw->ws_irqrx);
+	wakeup_source_unregister(rwnx_hw->ws_pwrctrl);
+	wakeup_source_unregister(rwnx_hw->ws_scan);
+	rwnx_hw->ws_tx = NULL;
+	rwnx_hw->ws_rx = NULL;
+	rwnx_hw->ws_irqrx = NULL;
+	rwnx_hw->ws_pwrctrl = NULL;
+	rwnx_hw->ws_scan = NULL;
+}
+
+static int rwnx_wakeup_sources_init(struct rwnx_hw *rwnx_hw)
+{
+	rwnx_hw->ws_tx = wakeup_source_register(rwnx_hw->dev, "rwnx-tx");
+	if (!rwnx_hw->ws_tx)
+		goto err;
+
+	rwnx_hw->ws_rx = wakeup_source_register(rwnx_hw->dev, "rwnx-rx");
+	if (!rwnx_hw->ws_rx)
+		goto err;
+
+	rwnx_hw->ws_irqrx = wakeup_source_register(rwnx_hw->dev, "rwnx-irq-rx");
+	if (!rwnx_hw->ws_irqrx)
+		goto err;
+
+	rwnx_hw->ws_pwrctrl = wakeup_source_register(rwnx_hw->dev, "rwnx-pwrctrl");
+	if (!rwnx_hw->ws_pwrctrl)
+		goto err;
+
+	rwnx_hw->ws_scan = wakeup_source_register(rwnx_hw->dev, "rwnx-scan");
+	if (rwnx_hw->ws_scan)
+		return 0;
+
+err:
+	rwnx_wakeup_sources_deinit(rwnx_hw);
+	return -ENOMEM;
+}
+
 int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 {
 	struct rwnx_hw *rwnx_hw;
@@ -4928,7 +4940,7 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	u8 dflt_mac[ETH_ALEN] = {0x00, 0x25, 0x92, 0x31, 0xE2, 0x78}; // for CVTE
 	u8 addr_str[20];
 	struct mm_get_fw_version_cfm fw_version;
-	u8_l mac_addr_efuse[ETH_ALEN];
+	u8 mac_addr_efuse[ETH_ALEN];
 	struct aicbsp_feature_t feature;
 	struct mm_set_stack_start_cfm set_start_cfm;
 #ifdef CONFIG_AIC8800_TEMP_COMP
@@ -4941,12 +4953,7 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
-#ifdef AICWF_SDIO_SUPPORT
 	aicbsp_get_feature(&feature);
-#else
-	memset(&feature, 0, sizeof(feature));
-	feature.hwinfo = -1;
-#endif
 
 	get_random_bytes(&dflt_mac[4], 2);
 
@@ -4967,24 +4974,12 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	rwnx_hw->plat = rwnx_plat;
 	rwnx_hw->dev = rwnx_platform_get_dev(rwnx_plat);
 	strscpy(rwnx_hw->country_abbr, "WW", 2); //"00"
-#if defined(AICWF_SDIO_SUPPORT) && defined(AICWF_USB_SUPPORT)
-	if (rwnx_plat->sdiodev) {
-		rwnx_hw->sdiodev = rwnx_plat->sdiodev;
-		rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->sdiodev->chipid);
-		rwnx_plat->sdiodev->rwnx_hw = rwnx_hw;
-		rwnx_hw->cmd_mgr = &rwnx_plat->sdiodev->cmd_mgr;
-	} else if (rwnx_plat->usbdev) {
-		rwnx_hw->usbdev = rwnx_plat->usbdev;
-		rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->usbdev->chipid);
-		rwnx_plat->usbdev->rwnx_hw = rwnx_hw;
-		rwnx_hw->cmd_mgr = &rwnx_plat->usbdev->cmd_mgr;
-	}
-#elif defined(AICWF_SDIO_SUPPORT)
+#ifdef AICWF_SDIO_SUPPORT
 	rwnx_hw->sdiodev = rwnx_plat->sdiodev;
 	rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->sdiodev->chipid);
 	rwnx_plat->sdiodev->rwnx_hw = rwnx_hw;
 	rwnx_hw->cmd_mgr = &rwnx_plat->sdiodev->cmd_mgr;
-#elif defined(AICWF_USB_SUPPORT)
+#else
 	rwnx_hw->usbdev = rwnx_plat->usbdev;
 	rwnx_hw->chip_ops = aic_chip_ops_select(rwnx_hw->usbdev->chipid);
 	rwnx_plat->usbdev->rwnx_hw = rwnx_hw;
@@ -4992,6 +4987,7 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 #endif
 	rwnx_hw->mod_params = &rwnx_mod_params;
 	rwnx_hw->tcp_pacing_shift = 7;
+	atomic_set(&rwnx_hw->scan_activity_held, 0);
 
 #ifdef CONFIG_AIC8800_SCHED_SCAN
 	rwnx_hw->is_sched_scan = false;
@@ -5007,7 +5003,9 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	memset(&rwnx_hw->ccode.bssid, 0, sizeof(rwnx_hw->ccode.bssid));
 #endif
 
-	aicwf_wakeup_lock_init(rwnx_hw);
+	ret = rwnx_wakeup_sources_init(rwnx_hw);
+	if (ret)
+		goto err_wakeup_sources;
 	rwnx_init_aic(rwnx_hw);
 	/* set device pointer for wiphy */
 	set_wiphy_dev(wiphy, rwnx_hw->dev);
@@ -5037,11 +5035,9 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 
 	rwnx_hwq_init(rwnx_hw);
 
-#if defined(CONFIG_PREALLOC_TXQ) && defined(AICWF_SDIO_SUPPORT)
+#ifdef CONFIG_PREALLOC_TXQ
 	rwnx_hw->txq =
 	(struct rwnx_txq *)aicwf_prealloc_txq_alloc(sizeof(struct rwnx_txq) * NX_NB_TXQ);
-#else
-	rwnx_hw->txq = kzalloc(sizeof(struct rwnx_txq) * NX_NB_TXQ, GFP_KERNEL);
 #endif
 
 	for (i = 0; i < NX_NB_TXQ; i++)
@@ -5103,23 +5099,28 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 		wiphy->bands[NL80211_BAND_5GHZ] = &rwnx_band_5ghz;
 	}
 
-	wiphy->interface_modes =
-		BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP) |
+	wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION);
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
+	wiphy->interface_modes |=
+		BIT(NL80211_IFTYPE_AP) |
 		BIT(NL80211_IFTYPE_AP_VLAN) | BIT(NL80211_IFTYPE_P2P_CLIENT) |
 		BIT(NL80211_IFTYPE_P2P_GO) |
 #ifndef CONFIG_AIC8800_USE_P2P0
 		BIT(NL80211_IFTYPE_P2P_DEVICE) |
 #endif
 		BIT(NL80211_IFTYPE_MONITOR);
+#endif
 
 #if IS_ENABLED(CONFIG_PM)
 	/* Set WoWLAN flags */
 	wiphy->wowlan = &aic_wowlan_support;
 #endif
-	wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL |
-			WIPHY_FLAG_HAS_CHANNEL_SWITCH |
+	wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
+	wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH |
 			WIPHY_FLAG_4ADDR_STATION | WIPHY_FLAG_4ADDR_AP;
 	wiphy->max_num_csa_counters = BCN_MAX_CSA_CPT;
+#endif
 
 #ifdef CONFIG_AIC8800_WOWLAN_PM
 	aic_wowlan_config = kmalloc_obj(*aic_wowlan_config, GFP_KERNEL);
@@ -5138,13 +5139,16 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	wiphy->wowlan_config = aic_wowlan_config;
 #endif
 	wiphy->max_remain_on_channel_duration = rwnx_hw->mod_params->roc_dur_max;
+	wiphy->features |= NL80211_FEATURE_SK_TX_STATUS |
+			   NL80211_FEATURE_VIF_TXPOWER;
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	wiphy->features |= NL80211_FEATURE_NEED_OBSS_SCAN |
-			   NL80211_FEATURE_SK_TX_STATUS |
-			   NL80211_FEATURE_VIF_TXPOWER |
 			   NL80211_FEATURE_ACTIVE_MONITOR |
-			   NL80211_FEATURE_AP_MODE_CHAN_WIDTH_CHANGE | 0;
+			   NL80211_FEATURE_AP_MODE_CHAN_WIDTH_CHANGE;
+#endif
 	wiphy->features |= NL80211_FEATURE_SAE;
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	if (rwnx_mod_params.tdls)
 		/* TDLS support */
 		wiphy->features |= NL80211_FEATURE_TDLS_CHANNEL_SWITCH;
@@ -5153,6 +5157,7 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	 * rwnx_handle_dynparams if supported
 	 */
 	wiphy->n_iface_combinations = ARRAY_SIZE(rwnx_combinations) - 1;
+#endif
 	wiphy->reg_notifier = rwnx_reg_notifier;
 	wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
 	rwnx_enable_wapi(rwnx_hw);
@@ -5213,20 +5218,22 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	if (ret)
 		goto err_lmac_reqs;
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	rwnx_enable_mesh(rwnx_hw);
+#endif
 	rwnx_radar_detection_init(&rwnx_hw->radar);
 
 	/* Set parameters to firmware */
 	if (!rwnx_hw->chip_ops->limit_by_testmode || !rwnx_hw->testmode)
 		rwnx_send_me_config_req(rwnx_hw);
 
+#if !IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 	/* Only monitor mode supported when custom channels are enabled */
 	if (rwnx_mod_params.custchan) {
 		rwnx_limits[0].types = BIT(NL80211_IFTYPE_MONITOR);
 		rwnx_limits_dfs[0].types = BIT(NL80211_IFTYPE_MONITOR);
 	}
-
-	aicwf_vendor_init(wiphy);
+#endif
 
 	ret = wiphy_register(wiphy);
 	if (ret) {
@@ -5244,13 +5251,6 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 
 	*platform_data = rwnx_hw;
 
-#ifdef CONFIG_RWNX_DEBUGFS
-	ret = rwnx_dbgfs_register(rwnx_hw, "rwnx");
-	if (ret) {
-		wiphy_err(wiphy, "Failed to register debugfs entries");
-		goto err_debugfs;
-	}
-#endif
 	rtnl_lock();
 
 	/* Add an initial station interface */
@@ -5273,12 +5273,8 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 #endif
 	AICWFDBG(LOGINFO, "New interface create %s \r\n", vif->ndev->name);
 
-#ifdef CONFIG_SDIO_BT
-	btchr_init();
-	hdev_init();
-#endif
-
-#ifdef CONFIG_AIC8800_USE_P2P0
+#if defined(CONFIG_AIC8800_USE_P2P0) && \
+	!IS_ENABLED(CONFIG_AIC8800_STA_ONLY)
 
 	rtnl_lock();
 	/* Add an initial p2p0 interface */
@@ -5303,8 +5299,7 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
 	rwnx_hw->started_jiffies = 0;
 	rwnx_hw->temp = 0;
-	if (rwnx_hw->sdiodev)
-		aicwf_tp_ctrl_init(rwnx_hw->sdiodev);
+	aicwf_tp_ctrl_init(rwnx_hw->sdiodev);
 #endif
 
 #ifdef CONFIG_AIC8800_POWER_LIMIT
@@ -5318,9 +5313,8 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 	return 0;
 
 err_add_interface:
-#ifdef CONFIG_RWNX_DEBUGFS
-	rwnx_dbgfs_unregister(rwnx_hw);
-err_debugfs:
+#ifdef CONFIG_AIC8800_GENL
+	aicwf_deinit_genl(rwnx_hw);
 #endif
 	wiphy_unregister(rwnx_hw->wiphy);
 err_register_wiphy:
@@ -5329,7 +5323,8 @@ err_lmac_reqs:
 	rwnx_platform_off(rwnx_hw, NULL);
 	kmem_cache_destroy(rwnx_hw->sw_txhdr_cache);
 err_cache:
-	aicwf_wakeup_lock_deinit(rwnx_hw);
+	rwnx_wakeup_sources_deinit(rwnx_hw);
+err_wakeup_sources:
 	wiphy_free(wiphy);
 err_out:
 	return ret;
@@ -5346,15 +5341,8 @@ void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw)
 	aicwf_deinit_genl(rwnx_hw);
 #endif
 
-#ifdef AICWF_SDIO_SUPPORT
-	if (rwnx_hw->sdiodev && rwnx_hw->sdiodev->bus_if &&
-	    rwnx_hw->sdiodev->bus_if->state != BUS_DOWN_ST)
+	if (rwnx_hw->sdiodev->bus_if->state != BUS_DOWN_ST)
 		rwnx_send_set_stack_start_req(rwnx_hw, 0, 0, 0, 0, &set_start_cfm);
-#elif defined(AICWF_USB_SUPPORT)
-	if (rwnx_hw->usbdev && rwnx_hw->usbdev->bus_if &&
-	    rwnx_hw->usbdev->bus_if->state != BUS_DOWN_ST)
-		rwnx_send_set_stack_start_req(rwnx_hw, 0, 0, 0, 0, &set_start_cfm);
-#endif
 
 	rwnx_hw->fwlog_en = 0;
 	spin_lock_bh(&rwnx_hw->defrag_lock);
@@ -5369,17 +5357,9 @@ void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw)
 		}
 	}
 	spin_unlock_bh(&rwnx_hw->defrag_lock);
-#ifdef CONFIG_RWNX_DEBUGFS
-	rwnx_dbgfs_unregister(rwnx_hw);
-#endif
 
-#ifdef CONFIG_SDIO_BT
-	btchr_exit();
-	hdev_exit();
-#endif
 #ifdef CONFIG_AIC8800_TEMP_CONTROL
-	if (rwnx_hw->sdiodev)
-		aicwf_tp_ctrl_deinit(rwnx_hw->sdiodev);
+	aicwf_tp_ctrl_deinit(rwnx_hw->sdiodev);
 #endif
 
 	flush_workqueue(rwnx_hw->apm_staloss_wq);
@@ -5400,10 +5380,7 @@ void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw)
 #ifdef CONFIG_AIC8800_FILTER_TCP_ACK
 	tcp_ack_deinit(rwnx_hw);
 #endif
-	aicwf_wakeup_lock_deinit(rwnx_hw);
-#if !defined(CONFIG_PREALLOC_TXQ) || !defined(AICWF_SDIO_SUPPORT)
-	kfree(rwnx_hw->txq);
-#endif
+	rwnx_wakeup_sources_deinit(rwnx_hw);
 	wiphy_free(rwnx_hw->wiphy);
 }
 
@@ -5411,9 +5388,6 @@ static void aicsmac_driver_register(void)
 {
 #ifdef AICWF_SDIO_SUPPORT
 	aicwf_sdio_register();
-#endif
-#ifdef AICWF_USB_SUPPORT
-	aicwf_usb_register();
 #endif
 }
 
@@ -5438,15 +5412,14 @@ void aicwf_hostif_fail(void)
 static int __init rwnx_mod_init(void)
 {
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
-	rwnx_print_version();
 	rwnx_init_cmd_array();
 
-#ifdef AICWF_SDIO_SUPPORT
+	pr_info("AIC8800 WiFi driver, built against Linux %s\n", UTS_RELEASE);
+
 	if (aicbsp_set_subsys(AIC_WIFI, AIC_PWR_ON) < 0) {
 		AICWFDBG(LOGERROR, "%s, set power on fail!\n", __func__);
 		return -ENODEV;
 	}
-#endif
 
 	init_completion(&hostif_register_done);
 	aicsmac_driver_register();
@@ -5457,11 +5430,8 @@ static int __init rwnx_mod_init(void)
 		AICWFDBG(LOGERROR, "register_driver timeout or error\n");
 #ifdef AICWF_SDIO_SUPPORT
 		aicwf_sdio_exit();
+#endif /* AICWF_SDIO_SUPPORT */
 		aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
-#endif
-#ifdef AICWF_USB_SUPPORT
-		aicwf_usb_exit();
-#endif
 		return -ENODEV;
 	}
 
@@ -5474,12 +5444,9 @@ static void __exit rwnx_mod_exit(void)
 
 #ifdef AICWF_SDIO_SUPPORT
 	aicwf_sdio_exit();
-	aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
-#endif
-#ifdef AICWF_USB_SUPPORT
-	aicwf_usb_exit();
 #endif
 
+	aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
 	rwnx_free_cmd_array();
 }
 
@@ -5489,6 +5456,5 @@ module_exit(rwnx_mod_exit);
 MODULE_FIRMWARE(RWNX_CONFIG_FW_NAME);
 
 MODULE_DESCRIPTION(RW_DRV_DESCRIPTION);
-MODULE_VERSION(RWNX_VERS_MOD);
 MODULE_AUTHOR(RW_DRV_COPYRIGHT " " RW_DRV_AUTHOR);
 MODULE_LICENSE("GPL");

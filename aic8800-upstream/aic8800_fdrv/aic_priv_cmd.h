@@ -58,69 +58,45 @@ enum {
 };
 
 struct cmd_rf_settx {
-	u8_l chan;
-	u8_l bw;
-	u8_l mode;
-	u8_l rate;
-	u16_l length;
-	u16_l tx_intv_us;
-	s8_l max_pwr;
+	u8 chan;
+	u8 bw;
+	u8 mode;
+	u8 rate;
+	u16 length;
+	u16 tx_intv_us;
+	s8 max_pwr;
 };
 
 struct cmd_rf_setfreq {
-	u8_l val;
+	u8 val;
 };
 
 struct cmd_rf_rx {
-	u8_l chan;
-	u8_l bw;
+	u8 chan;
+	u8 bw;
 };
 
 struct cmd_rf_getefuse {
-	u8_l block;
+	u8 block;
 };
 
 struct cmd_rf_setcobcal {
-	u8_l dutid;
-	u8_l chip_num;
-	u8_l dis_xtal;
+	u8 dutid;
+	u8 chip_num;
+	u8 dis_xtal;
 };
 
 struct cob_result_ptr {
-	u16_l dut_rcv_golden_num;
-	u8_l golden_rcv_dut_num;
-	s8_l rssi_static;
-	s8_l snr_static;
-	s8_l dut_rssi_static;
-	u16_l reserved;
+	u16 dut_rcv_golden_num;
+	u8 golden_rcv_dut_num;
+	s8 rssi_static;
+	s8 snr_static;
+	s8 dut_rssi_static;
+	u16 reserved;
 };
-
-struct android_wifi_priv_cmd {
-	char __user *buf;
-
-	int used_len;
-
-	int total_len;
-
-};
-
-#ifdef CONFIG_COMPAT
-struct compat_android_wifi_priv_cmd {
-	compat_caddr_t buf;
-
-	int used_len;
-
-	int total_len;
-
-};
-
-#endif /* CONFIG_COMPAT */
 
 extern int reg_regdb_size;
-extern u8_l vendor_extension_data[256];
-extern int vendor_extension_len;
 
-int android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd);
 unsigned int command_strtoul(const char *cp, char **endp, unsigned int base);
 int handle_private_cmd(struct net_device *net, char *command, u32 cmd_len);
 
