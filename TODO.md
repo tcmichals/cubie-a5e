@@ -1039,6 +1039,8 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
     - `0x0014`: `WDT_MODE_REG`
 - [x] **Task 3: Mainline Restart Handler Architecture & Fallback**:
   - [x] In commit `242c869eff8e`, `sunxi_wdt_restart()` attempted timer interval reload and spun in `cpu_relax()`, causing a hard stall when the timer reset path was not routed.
+  - [x] Priority churn check: verified that toggling restart priority (128 vs 255) does NOT fix reboot on silicon. Vendor BSP sets priority to standard 128.
+  - [x] Hardware fact: SoC `RESET` (pin 1M24) is driven by `AP-RESET` from the AXP318/AXP8191 PMIC (`PWROK`). Vendor BSP configures `AXP2101_COMM_CFG` bit 3 (`enable pwrok pin pull low to restart the system`). Without the PMIC probed or handling PWROK, SoC warm restart hangs.
   - [x] Updated `drivers/watchdog/sunxi_wdt.c` on branch `feature/a733-e902-remoteproc`:
     ```c
     if (regs->wdt_key_val == 0x16aa0000) {
@@ -1047,7 +1049,8 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
     }
     ```
   - [x] Rebuilt `sunxi_wdt.ko` against Linux 7.1.
-- [ ] **Task 4: Live Hardware Target Verification**:
+- [ ] **Task 4: Live Hardware Target Verification & PMIC PWROK Binding**:
+  - [ ] Bind AXP PMIC on `s_twi0` / configure `PWROK` or resolve TF-A BL31 `SUNXI_STANDALONE_WATCHDOG`.
   - [ ] Execute `reboot` from userspace command line on live Cubie A7A.
   - [ ] Verify immediate hardware reset into BootROM/U-Boot with 0% stall rate.
 
