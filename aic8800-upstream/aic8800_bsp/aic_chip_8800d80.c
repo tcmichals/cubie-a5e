@@ -13,6 +13,7 @@
 
 #include "aic8800d80_compat.h"
 #include "aic_bsp_driver.h"
+#include "aicsdio.h"
 
 static int aic8800d80_wifi_init(struct aic_sdio_dev *sdiodev, int testmode)
 {

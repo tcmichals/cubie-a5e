@@ -77,8 +77,9 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Boot A7A board and verify clean console + earlycon output.
   - [x] Verify `/dev/media0` and `/dev/video0` appear.
   - [x] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
-  - [ ] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `BA10`):
-    `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=BA10 --stream-mmap --stream-count=10`.
+  - [x] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `GB10`):
+    `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=GB10 --stream-mmap --stream-count=30`.
+    Verified on silicon: 1080p @ 30 FPS continuous streaming with 0 frame drops, 0 errors, and all 1080 scanlines populated with valid Bayer pixel data.
   - [ ] Test userspace camera capture with `rpicam-still -o /tmp/test.jpg`.
 - [ ] **Allwinner Hardware ISP 5.22 Integration**:
   - [ ] Utilize verified vendor C source reference located on local disk:
@@ -824,6 +825,13 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
 ---
 
 # Part II: Radxa Cubie A7A (Allwinner A733)
+
+> [!IMPORTANT]
+> **HANDOFF / SYNC NOTICE FOR COOPERATING AGENTS WORKING ON A7A:**
+> - **Wi-Fi Driver Updated & Verified on A5E**: The mainline driver in `aic8800-upstream/` has completed physical hardware verification on Radxa Cubie A5E (`192.168.1.13`). Power save is defaulted to `off`, SDIO sleep/wakeup register handshaking is fixed (`sleep_reg` 0x01 bit 4), and `aicwf_sdio_wakeup()` is cleanly decoupled from dynamic power control so Buildroot builds warning-free with `CONFIG_AIC8800_SDIO_PWRCTRL=n`.
+> - **Zero USB Transport Regression**: All USB transport logic (`aicwf_usb.c`, `usb_host.c`, endpoint mapping `0xA69C:0x8800` / `0x8D81`) is 100% preserved.
+> - **A7A Rebuild**: When ready to rebuild target modules for A7A, run `make -C bld.a7a aic8800-driver-rebuild`.
+> - **Current A7A Focus**: The other agent is actively working in `linux-cubie` on branch `feature/a733-e902-remoteproc` focusing on the Camera & Video Input Subsystem (MIPI-CSI / CSIC DMA 1.40) and E902 RemoteProc.
 
 ## 1. Hardware Overview & Current Bring-Up Status
 

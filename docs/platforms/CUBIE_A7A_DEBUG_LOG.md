@@ -1744,15 +1744,29 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
 - **Issue**: Calling `media-ctl` to set active format on `sun6i-csi-bridge` triggered a kernel backtrace warning (`WARN_ON_ONCE(!state)` in `__v4l2_subdev_state_get_format()`) because `sun6i_csi_bridge_set_fmt()` passed `state == NULL` when `format->which == V4L2_SUBDEV_FORMAT_ACTIVE`.
 - **Resolution**: Wrapped `v4l2_subdev_state_get_format(state, ...)` inside an `if (state)` guard in `drivers/media/platform/sunxi/sun6i-csi/sun6i_csi_bridge.c`. Verified zero warnings during full media controller pipeline configuration.
 
-### 3. Allwinner Watchdog Restart Priority vs TF-A PSCI Conflict
+### 3. Allwinner Watchdog Restart Priority vs TF-A PSCI Conflict (Strict Rule: Priority 255)
 - **Issue**: Issuing `reboot` via SSH or command line cleanly unmounted ext4 filesystems, sent SIGKILL to all processes, and printed `Requesting system reboot`, but halted there without resetting the hardware, requiring a manual press of the physical RST button.
-- **Root Cause**: In mainline Linux, PSCI system reset has restart priority 129 (`drivers/firmware/psci/psci.c`). The vendor TF-A BL31 on Allwinner A733 does not implement PSCI `SYSTEM_RESET`. Meanwhile, `sunxi_wdt.c` had its restart priority configured at 128 (`watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 128);`). Linux called PSCI first, which hung/stalled, never reaching the watchdog restart handler.
-- **Resolution**: Set `watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 255);` in `drivers/watchdog/sunxi_wdt.c`. Combined with immediate software reset via `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`), the watchdog restart handler executes first, guaranteeing immediate and reliable hardware reset upon reboot.
+- **Root Cause**: In mainline Linux, PSCI system reset has restart priority 129 (`drivers/firmware/psci/psci.c`). The vendor TF-A BL31 on Allwinner A733 does not implement PSCI `SYSTEM_RESET`. When `sunxi_wdt.c` had its restart priority lowered to 128 (`watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 128);`), Linux called PSCI first. PSCI returned `NOTIFY_DONE` or stalled, breaking reboot.
+- **Resolution & Strict Rule**:
+  1. `watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 255);` **MUST ALWAYS REMAIN 255**. Do NOT lower it to 128.
+  2. In `sunxi_wdt_restart()`, keep `while (1) cpu_relax();` after the watchdog trigger and delay to ensure the CPU remains halted while the hardware watchdog reset counter expires (0.5s) and triggers SoC reset.
+  3. LPDDR5 Retraining: The ~20-25s delay before serial console output resumes upon warm reboot is normal BootROM LPDDR5 retraining behavior.
 
-### 4. CSI Top Clock Tree Parent Mux (`CSI_CLK_REG` `0x1840`)
-- **Issue**: When `v4l2-ctl --stream-mmap` initiated streaming, the board suffered an immediate bus freeze and network drop.
-- **Root Cause**: `CSI_CLK_REG` (`0x02003840`) default reset value is `0x00000003`, where bits [26:24] `CLK_SRC_SEL` are `000` (`VIDEO2PLL4X` / `VIDEO3PLL4X`). Because `VIDEO3PLL` is unpowered, enabling `BIT(31)` (the clock gate) fed a 0 Hz dead clock into the CSI hardware block. When `sun55i_a523_csi_runtime_resume()` subsequently accessed `0x05800000` (`CSI_CCU_MODE`), the unclocked peripheral caused an AXI bus freeze.
-- **Resolution**: In `drivers/clk/sunxi-ng/ccu-sun60i-a733.c`, initialized `0x1840` bits [26:24] to `010` (`PLL_PERI0_480M`) with divisor $M=4$ (`(2 << 24) | 0x3` = 120 MHz) while keeping gate bit 31 disabled until streaming start. When the driver calls `clk_prepare_enable(clock_top)`, the hardware gate turns on with an active 120 MHz parent from the running `PERI0` PLL.
+### 4. CSI Top & ISP Clock Tree Reclocking to 600 MHz (`0x1840` / `0x1860`)
+- **Issue**: Sensor streaming captured only scanline 0 (3,840 bytes) followed by zeros for lines 1..1079, accompanied by MIPI Lane FIFO Overflow (`0x058115f4 = 0x00000033`).
+- **Root Cause**: `CLK_CSI_TOP` and `CLK_CSI_ISP` were clocked at only 120 MHz (`PERI0_480M / 4`). Vendor reference DTS (`vendor-a733-reference/dtbs/sun60i-a733-cubie-a7a.dts`) defines `csi_top = <0x23c34600>` (600 MHz) and `csi_isp = <0x202fbf00>` (540 MHz). At 120 MHz, downstream processing was ~5× too slow to drain the MIPI D-PHY receiver FIFO at the incoming burst rate.
+- **Resolution**:
+  - Reclocked `0x1840` (`CSI_CLK_REG`) to `PERI0_600M / 1` (`(4 << 24) | 0x0` = 600 MHz).
+  - Reclocked `0x1860` (`ISP_CLK_REG`) to `PERI0_600M / 1` (`BIT(31) | (3 << 24) | 0x0` = 600 MHz).
+  - Verified on silicon: MIPI lane error register `0x058115f4` dropped to `0x00000000` (zero FIFO overflows), and full-frame Bayer capture across all 1080 lines succeeded immediately.
+
+### 5. OV5647 Frame Rate Resolution (24.3 FPS vs 30 FPS)
+- **Issue**: `v4l2-ctl -d /dev/video0 --stream-mmap --stream-count=30` achieved 24.29 fps instead of 30.0 fps.
+- **Root Cause**: In upstream `drivers/media/i2c/ov5647.c::ov5647_set_pad_fmt()`, changing resolution called `__v4l2_ctrl_modify_range()` for `sensor->hblank` but omitted `__v4l2_ctrl_s_ctrl(sensor->hblank, hblank)`. As a result, the sensor retained the probe default `horizontal_blanking = 1212` from mode 2 ($HTS = 1920 + 1212 = 3132$, $VTS = 1080 + 24 = 1104$). With pixel clock $87.5\text{ MHz}$, framerate was $87,500,000 / (3132 \times 1104) = 25.3\text{ fps}$ (measured at 24.29 fps).
+- **Resolution**:
+  - Added `__v4l2_ctrl_s_ctrl(sensor->hblank, hblank);` in `ov5647.c::ov5647_set_pad_fmt()`.
+  - When $hblank = 496$ ($HTS = 2416$) and $vblank = 24$ ($VTS = 1104$), framerate is $87,500,000 / (2416 \times 1104) = 32.8\text{ fps}$ (measured at 31.49 fps).
+  - For exact $30.0\text{ fps}$, setting $vblank = 127$ ($VTS = 1207$) yields $87,500,000 / (2416 \times 1207) = 30.005\text{ fps}$ (measured live at 29-30 fps).
 
 
 

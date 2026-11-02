@@ -628,7 +628,6 @@ int aicwf_sdio_recv_pkt(struct aic_sdio_dev *sdiodev, struct sk_buff *skbbuf,
 	return ret;
 }
 
-#if defined(CONFIG_SDIO_PWRCTRL)
 int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 {
 	int ret = 0;
@@ -639,7 +638,9 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 	wakeup_reg_val = sdiodev->chip_ops->wakeup_reg_val;
 
 	if (sdiodev->state == SDIO_SLEEP_ST) {
+#if defined(CONFIG_SDIO_PWRCTRL)
 		down(&sdiodev->pwrctl_wakeup_sema);
+#endif
 		while (write_retry) {
 			ret = aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg,
 						wakeup_reg_val);
@@ -666,15 +667,20 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 			write_retry--;
 			usleep_range(30, 50);
 		}
+#if defined(CONFIG_SDIO_PWRCTRL)
 		up(&sdiodev->pwrctl_wakeup_sema);
+#endif
 	}
 
 	sdiodev->state = SDIO_ACTIVE_ST;
+#if defined(CONFIG_SDIO_PWRCTRL)
 	aicwf_sdio_pwrctl_timer(sdiodev, sdiodev->active_duration);
+#endif
 
 	return ret;
 }
 
+#if defined(CONFIG_SDIO_PWRCTRL)
 int aicwf_sdio_sleep_allow(struct aic_sdio_dev *sdiodev)
 {
 	int ret = 0;
