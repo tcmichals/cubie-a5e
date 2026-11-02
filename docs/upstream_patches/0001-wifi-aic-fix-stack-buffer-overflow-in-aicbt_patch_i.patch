@@ -34,7 +34,7 @@ index a1b2c3d..e4f5a6b 100644
 @@ -1148,9 +1148,13 @@ int aicbt_patch_info_unpack(struct aicbt_patch_info_t *patch_info,
  		if (patch_info->info_len == 0)
  			return 0;
- 
+
 +		size_t copy_len = patch_info->info_len * sizeof(uint32_t) * 2;
 +		size_t max_len = sizeof(struct aicbt_patch_info_t) - sizeof(patch_info->info_len);
 +		if (copy_len > max_len)
@@ -46,5 +46,5 @@ index a1b2c3d..e4f5a6b 100644
  		AICWFDBG(LOGDEBUG, "%s adid_addrinf:%x addr_adid:%x \r\n", __func__,
  			 ((struct aicbt_patch_info_t *)patch_info_array)->adid_addrinf,
  			 ((struct aicbt_patch_info_t *)patch_info_array)->addr_adid);
--- 
+--
 2.43.0

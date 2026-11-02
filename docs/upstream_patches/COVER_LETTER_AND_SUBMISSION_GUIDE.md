@@ -11,18 +11,19 @@
 ## 1. Executive Email Body (Cover Letter)
 
 ```text
-Subject: Re: [RFC PATCH wireless-next v2 0/4] wifi: aic: add AIC8800 SDIO FullMAC driver
+Subject: Re: [RFC PATCH wireless-next v3 0/4] wifi: aic: add AIC8800D80 SDIO FullMAC driver
 
 Hi Yanli, Zhirun, Dijia, and linux-wireless,
 
-We have completed physical hardware validation of your RFC v2 patch series on
+We have completed physical hardware validation of your RFC v3 patch series on
 real silicon:
 
   - Platform: Radxa Cubie A5E (Allwinner T527 SoC, ARM64)
   - Chipset: AIC8800D80 SDIO Wi-Fi 6 (802.11ax / HE)
   - Kernel: Linux 7.1.0 PREEMPT_RT
 
-During hardware bring-up, we identified and resolved three critical issues:
+During hardware bring-up and stress validation, we identified and resolved four
+critical issues:
 
 1. Kernel Stack Overflow Panic:
    `aicbt_patch_info_unpack()` in `aic_bsp_driver.c` calculated copy size as
@@ -42,11 +43,18 @@ During hardware bring-up, we identified and resolved three critical issues:
    chip wakeup during probe, and adds safe fallback if 0x40500000 pre-boot read
    is not supported by BootROM.
 
-With these fixes applied and `CONFIG_AIC8800_FDRV_NO_REG_SDIO=y` enabled:
+4. SDIO V3 Sleep Status & PMU Wakeup Polling:
+   Patch 4 fixes handshaking register mismatches in `aicwf_sdio.c`. On AIC8800D80
+   (V3 register map), `aicwf_sdio_wakeup()` incorrectly polled `wakeup_reg` (0x02)
+   checking bit 0 instead of polling `sleep_reg` (0x01) checking bit 4 (`val & 0x10`,
+   PMU awake), and `aicwf_sdio_sleep_allow()` wrote to `wakeup_reg` instead of
+   `sleep_reg` (0x10), directly conflicting with `aic8800_bsp`.
+
+With these fixes applied:
   - Firmware binaries (`fw_patch_table`, `fw_adid`, `fw_patch`, `fmacfw`) load in <300ms.
   - The MCU application starts cleanly, returning chip version `06090101`.
-  - Interface `wlan0` registers, acquires DHCP (`192.168.1.15`), and passes ping
-    traffic (0% packet loss).
+  - Interface `wlan0` registers, associates with 802.11ax APs, and acquires DHCP.
+  - Continuous ping latency achieves a rock-solid 1.28 ms average with 0% packet loss.
 
 Tested-by: Tim Michals <tcmichals@gmail.com>
 
@@ -62,7 +70,7 @@ Run the following commands from your terminal:
 
 ```bash
 # 1. Verify patch formatting
-git checkpatch docs/upstream_patches/*.patch
+~/projects/cubie/linux-cubie/scripts/checkpatch.pl docs/upstream_patches/*.patch
 
 # 2. Dry-run send-email
 git send-email \
@@ -76,9 +84,10 @@ git send-email \
   --dry-run \
   docs/upstream_patches/0001-wifi-aic-fix-stack-buffer-overflow-in-aicbt_patch_i.patch \
   docs/upstream_patches/0002-wifi-aic-update-cfg80211-API-compatibility-for-mode.patch \
-  docs/upstream_patches/0003-wifi-aic-fix-sdio-phase-timing-and-wakeup-sequence.patch
+  docs/upstream_patches/0003-wifi-aic-fix-sdio-phase-timing-and-wakeup-sequence.patch \
+  docs/upstream_patches/0004-wifi-aic-fix-sdio-v3-sleep-status-and-pmu-wakeup-po.patch
 
-# 3. Send email to mailing list
+# 3. Send email to mailing list (run only when ready)
 git send-email \
   --to="yanli.yang@bedmex.com" \
   --cc="zhirun.liu@aicsemi.com" \
@@ -89,5 +98,7 @@ git send-email \
   --cc="linux-wireless@vger.kernel.org" \
   docs/upstream_patches/0001-wifi-aic-fix-stack-buffer-overflow-in-aicbt_patch_i.patch \
   docs/upstream_patches/0002-wifi-aic-update-cfg80211-API-compatibility-for-mode.patch \
-  docs/upstream_patches/0003-wifi-aic-fix-sdio-phase-timing-and-wakeup-sequence.patch
+  docs/upstream_patches/0003-wifi-aic-fix-sdio-phase-timing-and-wakeup-sequence.patch \
+  docs/upstream_patches/0004-wifi-aic-fix-sdio-v3-sleep-status-and-pmu-wakeup-po.patch
+```
 ```

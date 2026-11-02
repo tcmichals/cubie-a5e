@@ -1,0 +1,62 @@
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sun, 1 Nov 2026 21:00:00 -0600
+Subject: [PATCH RFC v3 4/4] wifi: aic: fix SDIO V3 sleep status and PMU wakeup polling
+
+On AIC8800D80 (V3 register map), the SDIO sleep/wakeup handshaking
+registers and bitmask definitions differ from legacy V1/V2 chipsets:
+
+1. Wakeup polling in aicwf_sdio_wakeup():
+   In aic8800_bsp/aicsdio.c, wakeup polling correctly reads sleep_reg
+   (SDIOWIFI_INTR_PENDING_REG_V3 at 0x01) and checks bit 4 (val & 0x10)
+   indicating the chip PMU is awake. However, aic8800_fdrv/aicwf_sdio.c
+   incorrectly polled wakeup_reg (0x02) checking (val & 0x1) == 0,
+   which is the legacy V1 protocol. This caused aicwf_sdio_wakeup() in
+   fdrv to repeatedly fail or time out on AIC8800D80.
+
+2. Sleep request in aicwf_sdio_sleep_allow():
+   For AIC8800D80 (!use_func2), sleep entry requires writing 0x10 to
+   sleep_reg (0x01), matching the sequence executed by aic8800_bsp.
+   Writing 0x02 to wakeup_reg failed to place the chip transceiver into
+   the expected low-power state.
+
+Align aicwf_sdio_wakeup() and aicwf_sdio_sleep_allow() in aic8800_fdrv
+with the V3 SDIO register operations proven in aic8800_bsp.
+
+Tested on Radxa Cubie A5E (Allwinner T527, AIC8800D80 SDIO Wi-Fi 6).
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
+---
+ drivers/net/wireless/aic/aic8800_fdrv/aicwf_sdio.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/wireless/aic/aic8800_fdrv/aicwf_sdio.c b/drivers/net/wireless/aic/aic8800_fdrv/aicwf_sdio.c
+index ca2944b..d54a66c 100644
+--- a/drivers/net/wireless/aic/aic8800_fdrv/aicwf_sdio.c
++++ b/drivers/net/wireless/aic/aic8800_fdrv/aicwf_sdio.c
+@@ -1236,11 +1236,11 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
+ 					u8 val;
+
+ 					ret = aicwf_sdio_readb(sdiodev,
+-							       sdiodev->sdio_reg.wakeup_reg,
++							       sdiodev->sdio_reg.sleep_reg,
+ 							       &val);
+ 					if (ret < 0)
+ 						txrx_err("sdio wakeup read fail\n");
+-					else if ((val & 0x1) == 0)
++					else if (val & 0x10)
+ 						break;
+ 					read_retry--;
+ 					usleep_range(50, 60);
+@@ -1283,8 +1283,8 @@ int aicwf_sdio_sleep_allow(struct aic_sdio_dev *sdiodev)
+ 	    (int)(atomic_read(&sdiodev->rx_priv->rx_cnt) == 0)) {
+ 		AICWFDBG(LOGSDPWRC, "%s s\n", __func__);
+ 		if (!aic_sdio_hw->use_func2) {
+-			if (aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 0x02) < 0)
+-				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.wakeup_reg);
++			if (aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.sleep_reg, 0x10) < 0)
++				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.sleep_reg);
+ 		} else {
+ 			if (aicwf_sdio_func2_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 0x2) < 0)
+ 				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.wakeup_reg);
+-- 
+2.43.0
