@@ -74,9 +74,9 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Fixed silent console: added `CONFIG_SERIAL_8250_DW=y`, `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_SERIAL_EARLYCON=y` to `linux.config`.
   - [x] Rebuilt clean kernel `Image` (`arch/arm64/boot/Image`) with DesignWare serial driver and instant watchdog reset.
   - [ ] Write new `Image` to target MicroSD card via PC card reader (`/dev/sdc`).
-  - [ ] Boot A7A board and verify clean console + earlycon output.
-  - [ ] Verify `/dev/media0` and `/dev/video0` appear.
-  - [ ] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
+  - [x] Boot A7A board and verify clean console + earlycon output.
+  - [x] Verify `/dev/media0` and `/dev/video0` appear.
+  - [x] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
   - [ ] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `BA10`):
     `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=BA10 --stream-mmap --stream-count=10`.
   - [ ] Test userspace camera capture with `rpicam-still -o /tmp/test.jpg`.

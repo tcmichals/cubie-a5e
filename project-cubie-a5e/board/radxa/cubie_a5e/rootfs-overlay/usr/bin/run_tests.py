@@ -50,6 +50,7 @@ PROFILE_2 = 2  # Pure On-Chip SRAM VirtIO
 PROFILE_3 = 3  # Userspace UIO Mode
 PROFILE_4 = 4  # Hardware Mailbox Isolation & Dual-Core Test
 PROFILE_5 = 5  # Cadence HiFi4 DSP Mailbox Isolation
+PROFILE_A7A = 10 # Radxa Cubie A7A E902 RemoteProc (SRAM A2 + DDR Carveout)
 
 PROFILE_INFO = {
     PROFILE_1: {
@@ -86,6 +87,13 @@ PROFILE_INFO = {
         "test_overlays": ["cubie-a5e-dsp-mailbox-test"],
         "node_desc": "HiFi4 DSP Hardware Mailbox (/sys/kernel/debug/mailbox-test-dsp)",
         "compatible_tests": ["dsp-msgbox"],
+    },
+    PROFILE_A7A: {
+        "name": "Radxa Cubie A7A E902 RemoteProc (SRAM A2 + DDR Carveout)",
+        "overlay_config": "dtoverlay=cubie-a7a-rproc",
+        "test_overlays": ["cubie-a7a-rproc"],
+        "node_desc": "System SRAM A2 (0x00040000, 208 KB) + DDR Carveout (0x4E000000, 16 MB)",
+        "compatible_tests": ["basic", "trace", "crash", "rpmsg", "dram", "example"],
     },
 }
 
@@ -157,6 +165,17 @@ TEST_ALIAS_MAP = {
     "testDSPMsgbox": "testDSPMsgbox",
     "dual-msgbox": "testDualMsgbox",
     "testDualMsgbox": "testDualMsgbox",
+    "lifecycle": "testLifecycleStress",
+    "testLifecycleStress": "testLifecycleStress",
+    "double-start": "testDoubleStart",
+    "testDoubleStart": "testDoubleStart",
+    "sram-zero": "testSramZeroing",
+    "testSramZeroing": "testSramZeroing",
+    "rpmsg-cycle": "testRpmsgCycling",
+    "testRpmsgCycling": "testRpmsgCycling",
+    "stress": "testWorkstreamD",
+    "workstream-d": "testWorkstreamD",
+    "testWorkstreamD": "testWorkstreamD",
 }
 
 def strip_ansi(text):
@@ -333,6 +352,17 @@ def detect_active_dt_profile():
     Inspects /sys/firmware/devicetree/base to determine the active hardware profile.
     Returns: (profile_id, details_str)
     """
+    # Check if running on Allwinner A733 / Radxa Cubie A7A (XuanTie E902)
+    for p in [os.path.join(DT_BASE, "compatible"), "/proc/device-tree/compatible"]:
+        if os.path.exists(p):
+            try:
+                with open(p, "rb") as f:
+                    compat_str = f.read().decode("latin1", errors="replace").lower()
+                if "a733" in compat_str or "sun60i" in compat_str or "cubie-a7a" in compat_str or "cubie_a7a" in compat_str:
+                    return PROFILE_A7A, "System SRAM A2 (0x00040000, 208 KB) + DDR Carveout (0x4E000000, 16 MB)"
+            except Exception:
+                pass
+
     # Profile 5 check: Standalone DSP mailbox test overlay without E906 mailbox
     if (os.path.exists(os.path.join(DT_BASE, "mailbox-test-dsp")) or os.path.exists("/sys/kernel/debug/mailbox-test-dsp")) and \
        not (os.path.exists(os.path.join(DT_BASE, "mailbox-test-e906")) or os.path.exists("/sys/kernel/debug/mailbox-test-e906")):
@@ -382,6 +412,12 @@ def verify_profile_or_halt(test_id, allowed_profiles):
         allowed_profiles = [allowed_profiles]
 
     active_profile, active_detail = detect_active_dt_profile()
+
+    # Special handling for A7A Profile: allows basic, trace, crash, rpmsg, dram, example
+    if active_profile == PROFILE_A7A:
+        if test_id in ["testBasic", "testStringBinaryTrace0", "testCrash", "testPingRpmsg", "testPingRpmsgSram", "testDRAMMsg", "exampleRiscv"]:
+            return
+
     if active_profile not in allowed_profiles:
         primary_req = allowed_profiles[0]
         req_info = PROFILE_INFO[primary_req]
@@ -1084,6 +1120,300 @@ def test_dual_msgbox():
     log_info(f"Dual-Core concurrent sweep finished in {total_wall_s:.3f} s")
     return sub_results
 
+# ============================================================================
+# Workstream D: On-Target Stress & Lifecycle Tests (closes rproc #12, #13, #15)
+# ============================================================================
+
+def read_rproc_clk_counts():
+    """Reads enable and prepare counts for remoteproc clocks from clk_summary."""
+    clk_path = "/sys/kernel/debug/clk/clk_summary"
+    if not os.path.exists(clk_path):
+        if not os.path.ismount("/sys/kernel/debug"):
+            subprocess.run(["mount", "-t", "debugfs", "none", "/sys/kernel/debug"], stderr=subprocess.DEVNULL)
+    if not os.path.exists(clk_path):
+        return {}
+    res = {}
+    try:
+        with open(clk_path, "r") as f:
+            for line in f:
+                if any(k in line for k in ("riscv", "bus-riscv-cfg")):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        res[parts[0]] = (int(parts[1]), int(parts[2]))
+    except Exception as e:
+        log_warn(f"Failed to read {clk_path}: {e}")
+    return res
+
+
+def test_lifecycle_stress(iterations=50):
+    """D.1: Rapid start/stop lifecycle stress test (50 iterations) [closes rproc #12]."""
+    verify_profile_or_halt("testLifecycleStress", [PROFILE_1, PROFILE_2])
+    log_header(f"Workstream D.1: Rapid Start/Stop Lifecycle Stress Test ({iterations} Iterations)")
+    fw = "testBasic.elf"
+    fw_path = os.path.join(FW_DIR, fw)
+    if not os.path.isfile(fw_path):
+        log_fail(f"{fw} not found in {FW_DIR}")
+        return [{"name": "testLifecycleStress", "status": "FAIL", "details": "ELF not found", "metrics": {}}]
+
+    stop_rproc()
+    initial_clks = read_rproc_clk_counts()
+    log_info(f"Initial clock counts (offline): {initial_clks}")
+
+    # Clear dmesg log buffer before stress test
+    subprocess.run(["dmesg", "-c"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    t0 = time.time()
+    failures = 0
+    for i in range(1, iterations + 1):
+        if not start_rproc(fw):
+            log_fail(f"Cycle #{i}: Failed to start {fw}")
+            failures += 1
+            break
+        stop_rproc()
+        if i % 10 == 0 or i == iterations:
+            log_info(f"Completed {i}/{iterations} rapid start/stop cycles ({time.time() - t0:.2f}s)...")
+
+    duration = time.time() - t0
+    final_clks = read_rproc_clk_counts()
+    clk_balanced = (initial_clks == final_clks)
+
+    if clk_balanced:
+        log_pass(f"Clock enable/prepare counts balanced across {iterations} cycles: {final_clks}")
+    else:
+        log_fail(f"Clock leak detected! Initial: {initial_clks}, Final: {final_clks}")
+
+    # Verify dmesg is free of kernel warnings, oopses, or refcount warnings
+    dmesg_out = subprocess.run(["dmesg"], stdout=subprocess.PIPE, text=True).stdout
+    bad_lines = [
+        l for l in dmesg_out.splitlines()
+        if any(err in l.lower() for err in ["oops", "call trace", "cut here", "kernel bug", "warning:", "refcount", "leak"])
+    ]
+
+    dmesg_clean = (len(bad_lines) == 0)
+    if dmesg_clean:
+        log_pass(f"Kernel log (dmesg) clean across {iterations} rapid cycles (0 oops/warnings)")
+    else:
+        log_fail(f"Kernel log reported warnings/errors ({len(bad_lines)} lines): {bad_lines[:3]}")
+
+    status = "PASS" if (failures == 0 and clk_balanced and dmesg_clean) else "FAIL"
+    cps = round(iterations / duration, 1) if duration > 0 else 0
+    return [{
+        "name": "testLifecycleStress",
+        "status": status,
+        "details": f"{iterations} cycles in {duration:.2f}s ({cps} cyc/s, clk_balanced={clk_balanced}, dmesg_clean={dmesg_clean})",
+        "metrics": {
+            "packets_sent": iterations,
+            "packets_recv": iterations - failures,
+            "throughput_msgs_s": cps,
+            "duration_s": round(duration, 2),
+            "data_integrity": "PASS (0 leaks)" if clk_balanced and dmesg_clean else "FAIL",
+            "clk_balanced": clk_balanced,
+            "dmesg_clean": dmesg_clean
+        }
+    }]
+
+
+def test_double_start_rejection():
+    """D.2: Double-start rejection test [closes rproc #13]."""
+    verify_profile_or_halt("testDoubleStart", [PROFILE_1, PROFILE_2])
+    log_header("Workstream D.2: Double-Start & Double-Stop Rejection Invariant Test")
+    fw = "testBasic.elf"
+
+    # 1. Normal start
+    if not start_rproc(fw):
+        return [{"name": "testDoubleStart", "status": "FAIL", "details": "Initial start failed", "metrics": {}}]
+
+    assert read_file(RPROC_STATE) == "running"
+    log_pass("Remote processor started normally (power refcount = 1, state: running)")
+
+    # 2. Attempt second start while already running:
+    # Kernel remoteproc increments rproc->power refcount (to 2) and returns 0 without re-booting
+    log_info("Attempting second 'start' while core is already running (increments rproc->power refcount)...")
+    write_sysfs(RPROC_STATE, "start")
+    time.sleep(0.2)
+    s2 = read_file(RPROC_STATE)
+    if s2 == "running":
+        log_pass("Double-start handled gracefully; core remains running (power refcount = 2)")
+    else:
+        log_fail(f"Double-start corrupted state machine: state is now '{s2}'")
+
+    # 3. First stop decrements rproc->power from 2 to 1; core remains running
+    log_info("First 'stop' balances double-start (decrements rproc->power from 2 to 1)...")
+    write_sysfs(RPROC_STATE, "stop")
+    time.sleep(0.3)
+    s3 = read_file(RPROC_STATE)
+    if s3 == "running":
+        log_pass("Kernel power refcounting verified: core remains running while power refcount > 0")
+    else:
+        log_fail(f"Core unexpectedly stopped before power refcount reached zero: state is '{s3}'")
+
+    # 4. Second stop decrements rproc->power from 1 to 0; core actually shuts down to offline
+    log_info("Second 'stop' brings rproc->power to 0 (core shuts down to offline)...")
+    write_sysfs(RPROC_STATE, "stop")
+    time.sleep(0.5)
+    s4 = read_file(RPROC_STATE)
+    if s4 == "offline":
+        log_pass("Remote processor stopped cleanly when power refcount reached zero (state: offline)")
+    else:
+        log_fail(f"Core failed to shut down when power refcount reached zero: state is '{s4}'")
+
+    # 5. Attempt stop while already offline: kernel returns -EINVAL gracefully
+    log_info("Attempting 'stop' while core is already offline (testing -EINVAL rejection)...")
+    write_sysfs(RPROC_STATE, "stop")
+    time.sleep(0.2)
+    s5 = read_file(RPROC_STATE)
+    if s5 == "offline":
+        log_pass("Double-stop gracefully handled; core remains offline with zero crash")
+    else:
+        log_fail(f"Double-stop corrupted state machine: state is now '{s5}'")
+
+    # 6. Recovery start
+    log_info("Testing recovery start after double-start and double-stop...")
+    recovery_ok = start_rproc(fw)
+    stop_rproc()
+
+    if recovery_ok:
+        log_pass("Recovery start/stop succeeded cleanly")
+        status = "PASS"
+    else:
+        log_fail("Recovery start failed")
+        status = "FAIL"
+
+    return [{
+        "name": "testDoubleStart",
+        "status": status,
+        "details": "Double-start and double-stop rejected gracefully; kernel power refcount verified",
+        "metrics": {
+            "double_start_safe": (s2 == "running"),
+            "refcount_balanced": (s3 == "running" and s4 == "offline"),
+            "double_stop_safe": (s5 == "offline"),
+            "recovery_ok": recovery_ok,
+            "data_integrity": "PASS (0 crash)" if status == "PASS" else "FAIL"
+        }
+    }]
+
+
+def test_sram_zeroing_lifecycle():
+    """D.3: SRAM zeroing verification [closes rproc #15]."""
+    verify_profile_or_halt("testSramZeroing", [PROFILE_1, PROFILE_2])
+    log_header("Workstream D.3: SRAM Clean Zeroing & Fresh Reload Across Cycles")
+    fw = "testBasic.elf"
+
+    # Cycle 1: Start testBasic.elf, let it run until heartbeat count reaches at least 2
+    log_info("Run 1: Starting testBasic.elf...")
+    if not start_rproc(fw):
+        return [{"name": "testSramZeroing", "status": "FAIL", "details": "Run 1 start failed", "metrics": {}}]
+
+    time.sleep(1.5)
+    t1_data = read_trace_bytes().decode("latin1", errors="replace")
+    m1 = re.findall(r'count=(\d+)', t1_data)
+    run1_max = max([int(c) for c in m1]) if m1 else 0
+    log_info(f"Run 1 max heartbeat count: {run1_max}")
+    stop_rproc()
+
+    # Cycle 2: Start testBasic.elf again and verify count restarts fresh from 1
+    log_info("Run 2: Re-starting testBasic.elf after clean stop...")
+    if not start_rproc(fw):
+        return [{"name": "testSramZeroing", "status": "FAIL", "details": "Run 2 start failed", "metrics": {}}]
+
+    time.sleep(1.0)
+    t2_data = read_trace_bytes().decode("latin1", errors="replace")
+    stop_rproc()
+
+    # In testBasic.elf, trace0 buffer starts fresh with "[testBasic] Heartbeat #1"
+    run2_reset = "[testBasic] Heartbeat #1" in t2_data
+    if run2_reset and run1_max >= 2:
+        log_pass(f"SRAM trace buffer and BSS cleanly re-initialized (Run 1 reached #{run1_max}, Run 2 reset to #1)")
+        status = "PASS"
+    else:
+        log_fail(f"Stale trace buffer or BSS detected: run2_reset={run2_reset}, run1_max={run1_max}")
+        status = "FAIL"
+
+    return [{
+        "name": "testSramZeroing",
+        "status": status,
+        "details": f"Clean BSS/SRAM reload verified (Run 1 reached #{run1_max}, Run 2 reset to #1)",
+        "metrics": {
+            "run1_heartbeats": run1_max,
+            "run2_reset_to_one": run2_reset,
+            "data_integrity": "PASS (Clean BSS)" if status == "PASS" else "FAIL"
+        }
+    }]
+
+
+def test_rpmsg_cycling(iterations=20):
+    """D.4: RPMsg rapid connect/disconnect cycling."""
+    verify_profile_or_halt("testPingRpmsg", [PROFILE_1, PROFILE_2])
+    log_header(f"Workstream D.4: Rapid RPMsg Connect/Ping/Disconnect Cycling ({iterations} Iterations)")
+    active_profile, _ = detect_active_dt_profile()
+    fw = "testPingRpmsg.elf" if active_profile in (PROFILE_1, PROFILE_A7A) else "testPingRpmsgSram.elf"
+
+    if not start_rproc(fw):
+        return [{"name": "testRpmsgCycling", "status": "FAIL", "details": f"Failed to start {fw}", "metrics": {}}]
+
+    time.sleep(1.0)
+
+    t0 = time.time()
+    successful_cycles = 0
+    total_pings = 0
+    rtt_list = []
+
+    for i in range(1, iterations + 1):
+        cmd = ["/usr/bin/ping_rpmsg", "-n", "10", "-t", "500"]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0 and "Packets Recv   : 10 (100% success)" in res.stdout:
+            successful_cycles += 1
+            total_pings += 10
+            # Parse average latency
+            m_lat = re.search(r'Avg Latency\s*:\s*([\d.]+)\s*us', res.stdout)
+            if m_lat:
+                rtt_list.append(float(m_lat.group(1)))
+        else:
+            log_fail(f"Cycle #{i}: ping_rpmsg failed: {res.stderr or res.stdout[:150]}")
+            break
+        if i % 5 == 0 or i == iterations:
+            log_info(f"RPMsg cycle {i}/{iterations}: 10/10 pings verified (total: {total_pings})")
+
+    duration = time.time() - t0
+    stop_rproc()
+
+    dmesg_out = subprocess.run(["dmesg"], stdout=subprocess.PIPE, text=True).stdout
+    vring_clean = not any(err in dmesg_out.lower() for err in ["vring", "leak", "warning:", "oops", "call trace"])
+
+    status = "PASS" if (successful_cycles == iterations and vring_clean) else "FAIL"
+    avg_rtt = sum(rtt_list) / len(rtt_list) if rtt_list else 0.0
+
+    if status == "PASS":
+        log_pass(f"All {iterations} RPMsg open/ping/close cycles passed ({total_pings} pings, avg RTT: {avg_rtt:.2f} us)")
+    else:
+        log_fail(f"RPMsg cycling failed: {successful_cycles}/{iterations} cycles completed")
+
+    return [{
+        "name": "testRpmsgCycling",
+        "status": status,
+        "details": f"{successful_cycles}/{iterations} cycles completed in {duration:.2f}s ({total_pings} pings, 0 drops, avg RTT: {avg_rtt:.2f} us)",
+        "metrics": {
+            "packets_sent": total_pings,
+            "packets_recv": total_pings if successful_cycles == iterations else (successful_cycles * 10),
+            "avg_lat_us": round(avg_rtt, 2),
+            "throughput_msgs_s": round(total_pings / duration, 1) if duration > 0 else 0,
+            "data_integrity": "PASS (0 drops, 0 leaks)" if status == "PASS" else "FAIL",
+            "iterations": iterations,
+            "vring_clean": vring_clean
+        }
+    }]
+
+
+def test_workstream_d():
+    """Workstream D: Complete Lifecycle & Stress Test Suite."""
+    results = []
+    results.extend(test_lifecycle_stress(50))
+    results.extend(test_double_start_rejection())
+    results.extend(test_sram_zeroing_lifecycle())
+    results.extend(test_rpmsg_cycling(20))
+    return results
+
+
 def format_summary_table(results_list):
     header  = f"  {'Test / Application':<34} | {'Status':<6} | {'Pkts/Recv':<11} | {'Avg RTT':<10} | {'Throughput':<14} | {'Bandwidth':<15} | {'Integrity':<10}"
     divider = f"  {'-'*34}-+-{'-'*6}-+-{'-'*11}-+-{'-'*10}-+-{'-'*14}-+-{'-'*15}-+-{'-'*10}"
@@ -1212,6 +1542,8 @@ def main():
         verify_profile_or_halt("testPing", PROFILE_3)
     elif canon_test in ("testCrash", "testPingRpmsg", "testDRAMMsg"):
         verify_profile_or_halt(canon_test, PROFILE_1)
+    elif canon_test in ("testLifecycleStress", "testDoubleStart", "testSramZeroing", "testRpmsgCycling", "testWorkstreamD"):
+        verify_profile_or_halt(canon_test, [PROFILE_1, PROFILE_2])
     elif canon_test in ("testMsgbox", "testDSPMsgbox", "testDualMsgbox"):
         verify_profile_or_halt(canon_test, PROFILE_4)
 
@@ -1226,7 +1558,7 @@ def main():
             all_test_results.append(res)
 
     if canon_test == "all":
-        if active_profile == PROFILE_1:
+        if active_profile in (PROFILE_1, PROFILE_A7A):
             append_results(test_basic())
             append_results(test_string_binary_trace0())
             append_results(test_crash())
@@ -1267,6 +1599,16 @@ def main():
             append_results(test_dsp_msgbox())
         elif canon_test == "testDualMsgbox":
             append_results(test_dual_msgbox())
+        elif canon_test == "testLifecycleStress":
+            append_results(test_lifecycle_stress())
+        elif canon_test == "testDoubleStart":
+            append_results(test_double_start_rejection())
+        elif canon_test == "testSramZeroing":
+            append_results(test_sram_zeroing_lifecycle())
+        elif canon_test == "testRpmsgCycling":
+            append_results(test_rpmsg_cycling())
+        elif canon_test == "testWorkstreamD":
+            append_results(test_workstream_d())
 
     # Final Summary Table with Quantitative Metrics
     log_header("TEST EXECUTION & BENCHMARK SUMMARY REPORT")

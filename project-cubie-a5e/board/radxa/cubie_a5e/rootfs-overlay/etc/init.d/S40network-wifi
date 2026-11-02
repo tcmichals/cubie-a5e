@@ -7,6 +7,7 @@ case "$1" in
     modprobe aic8800_fdrv 2>/dev/null
     sleep 1
     wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
+    iw dev wlan0 set power_save off 2>/dev/null
     udhcpc -b -i wlan0 -R
     echo "OK"
     ;;

@@ -34,6 +34,7 @@ scratch/
 # Whitelist board vendor firmware tools
 !project-cubie-a5e/board/**/tools/*.bin
 !project-cubie-a5e/board/**/tools/dragonsecboot
+!project-cubie-a5e/board/radxa/cubie_a7a/rootfs-overlay/**/aic_load_fw.ko
 
 # Python caches
 __pycache__/

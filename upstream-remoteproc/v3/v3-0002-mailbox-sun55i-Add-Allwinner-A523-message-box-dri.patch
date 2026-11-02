@@ -22,6 +22,7 @@ signaled by the receiver bank's write interrupt (allwinner,tx-done-irq).
 Based on the vendor sunxi-msgbox driver by Allwinner Technology Co.,
 Ltd.
 
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - Enable the bus clocks and resets of all four banks: the host writes

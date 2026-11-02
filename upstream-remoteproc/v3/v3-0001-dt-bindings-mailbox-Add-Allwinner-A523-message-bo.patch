@@ -18,6 +18,7 @@ clock and reset, and an unclocked bank drops writes, so all four are
 described. The optional allwinner,tx-done-irq property selects TX
 completion by the receiver bank's write interrupt instead of polling.
 
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - One compatible, allwinner,sun55i-a523-msgbox: the A523, A527 and T527

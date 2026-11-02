@@ -1730,6 +1730,30 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - **Root Cause 2 (Missing DW Serial Console Driver)**: In `linux.config`, `CONFIG_SERIAL_8250=y`, `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_SERIAL_8250_DW=y`, and `CONFIG_SERIAL_EARLYCON=y` were missing, causing Kconfig to silently omit the Synopsys DesignWare 8250 serial driver for `serial@2500000` (`uart0`).
   - **Status**: Both fixes committed; clean `Image` compiled with DesignWare UART and earlycon. Ready to write to SD card via PC reader.
 
+---
+
+## 6. Milestone 18: CSI Media Controller Topology, Video Input Power Domain, Watchdog Priority & Clock Tree Fixes (Nov 1, 2026)
+
+### 1. Allwinner A733 Video Input Power Domain (`PD_VI`)
+- **Discovery**: In `drivers/pmdomain/sunxi/sun55i-pck600.c` and `<dt-bindings/power/allwinner,sun60i-a733-pck-600.h>`, domain `0` is `PD_VI` (base `0x07060000`).
+- **Issue**: None of the camera / CSI device nodes in `sun60i-a733-cubie-a7a.dts` specified `power-domains = <&pck600 PD_VI>;`. During early kernel boot, `genpd` saw domain VI as unused and powered it off (`PM: genpd: Disabling unused power domains`).
+- **Symptom**: With domain VI powered off, all CSI, MIPI CSI-2, and D-PHY registers (`0x05800000`..`0x05830000`) returned `0x00000000`, interrupts failed to route, and register accesses risked bus lockups.
+- **Resolution**: Added `power-domains = <&pck600 PD_VI>;` to `dphy1: phy@5810200`, `mipi1: csi@5811400`, and `csi: csi@5800800`. Verified live in `/sys/kernel/debug/pm_genpd/pm_genpd_summary` that `VI` is `on` and managing the three runtime PM children.
+
+### 2. V4L2 Subdev NULL State Warning in `sun6i_csi_bridge.c`
+- **Issue**: Calling `media-ctl` to set active format on `sun6i-csi-bridge` triggered a kernel backtrace warning (`WARN_ON_ONCE(!state)` in `__v4l2_subdev_state_get_format()`) because `sun6i_csi_bridge_set_fmt()` passed `state == NULL` when `format->which == V4L2_SUBDEV_FORMAT_ACTIVE`.
+- **Resolution**: Wrapped `v4l2_subdev_state_get_format(state, ...)` inside an `if (state)` guard in `drivers/media/platform/sunxi/sun6i-csi/sun6i_csi_bridge.c`. Verified zero warnings during full media controller pipeline configuration.
+
+### 3. Allwinner Watchdog Restart Priority vs TF-A PSCI Conflict
+- **Issue**: Issuing `reboot` via SSH or command line cleanly unmounted ext4 filesystems, sent SIGKILL to all processes, and printed `Requesting system reboot`, but halted there without resetting the hardware, requiring a manual press of the physical RST button.
+- **Root Cause**: In mainline Linux, PSCI system reset has restart priority 129 (`drivers/firmware/psci/psci.c`). The vendor TF-A BL31 on Allwinner A733 does not implement PSCI `SYSTEM_RESET`. Meanwhile, `sunxi_wdt.c` had its restart priority configured at 128 (`watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 128);`). Linux called PSCI first, which hung/stalled, never reaching the watchdog restart handler.
+- **Resolution**: Set `watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 255);` in `drivers/watchdog/sunxi_wdt.c`. Combined with immediate software reset via `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`), the watchdog restart handler executes first, guaranteeing immediate and reliable hardware reset upon reboot.
+
+### 4. CSI Top Clock Tree Parent Mux (`CSI_CLK_REG` `0x1840`)
+- **Issue**: When `v4l2-ctl --stream-mmap` initiated streaming, the board suffered an immediate bus freeze and network drop.
+- **Root Cause**: `CSI_CLK_REG` (`0x02003840`) default reset value is `0x00000003`, where bits [26:24] `CLK_SRC_SEL` are `000` (`VIDEO2PLL4X` / `VIDEO3PLL4X`). Because `VIDEO3PLL` is unpowered, enabling `BIT(31)` (the clock gate) fed a 0 Hz dead clock into the CSI hardware block. When `sun55i_a523_csi_runtime_resume()` subsequently accessed `0x05800000` (`CSI_CCU_MODE`), the unclocked peripheral caused an AXI bus freeze.
+- **Resolution**: In `drivers/clk/sunxi-ng/ccu-sun60i-a733.c`, initialized `0x1840` bits [26:24] to `010` (`PLL_PERI0_480M`) with divisor $M=4$ (`(2 << 24) | 0x3` = 120 MHz) while keeping gate bit 31 disabled until streaming start. When the driver calls `clk_prepare_enable(clock_top)`, the hardware gate turns on with an active 120 MHz parent from the running `PERI0` PLL.
+
 
 
 

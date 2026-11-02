@@ -25,6 +25,8 @@ test), a read pending bit clears only once its FIFO is empty, and a
 write pending bit is raised while the FIFO has room and cleared only
 while it is full, as measured on the board. Under forced interrupt
 threading the registered handler is run from the test thread.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - Moved after the drivers

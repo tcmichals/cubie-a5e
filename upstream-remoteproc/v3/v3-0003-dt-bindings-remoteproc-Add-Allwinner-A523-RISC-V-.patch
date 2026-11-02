@@ -16,6 +16,7 @@ resets, the RISC-V and SRAM power domains, one message box channel, the
 reserved memory regions (a pool for virtio, DRAM for firmware, a trace
 buffer) and an optional crash interrupt.
 
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - File renamed to allwinner,sun55i-a523-rproc.yaml to match the

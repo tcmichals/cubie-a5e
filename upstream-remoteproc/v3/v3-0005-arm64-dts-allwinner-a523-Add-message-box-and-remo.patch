@@ -12,6 +12,7 @@ and message box channel 9.
 The remoteproc node is disabled; a board enables it together with its
 firmware name and reserved memory regions.
 
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - Message box: all four banks with their clocks and resets; the DSP and

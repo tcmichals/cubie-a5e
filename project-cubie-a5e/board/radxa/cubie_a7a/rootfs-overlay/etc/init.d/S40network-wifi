@@ -1,0 +1,15 @@
+#!/bin/sh
+case "$1" in
+  start)
+    if ! pgrep -f "wpa_supplicant.*wlan0" >/dev/null; then
+        if [ -s /etc/wpa_supplicant.conf ]; then
+            wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf 2>/dev/null
+            iw dev wlan0 set power_save off 2>/dev/null
+            udhcpc -b -i wlan0 -R 2>/dev/null
+        fi
+    fi
+    ;;
+  stop)
+    killall udhcpc wpa_supplicant 2>/dev/null
+    ;;
+esac

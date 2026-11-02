@@ -23,6 +23,8 @@ workqueue, and the work servicing every vring.
 Register and SRAM access is redirected with KUnit static stubs to fake
 buffers; fake clocks and a fake reset controller on a software node
 stand in for the hardware, so the tests run on any architecture.
+
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - Moved after the drivers

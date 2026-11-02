@@ -27,6 +27,7 @@ reported with rproc_report_crash().
 Based on the vendor sunxi-rproc driver by Allwinner Technology Co.,
 Ltd.
 
+Signed-off-by: Tim Michals <tcmichals@gmail.com>
 ---
 Changes in v3:
 - The core is an E906 (RV32IMAFCX), not an E907
