@@ -57,7 +57,7 @@ struct rwnx_mod_params rwnx_mod_params = {
 	COMMON_PARAM(listen_itv, 0)
 	COMMON_PARAM(listen_bcmc, true)
 	COMMON_PARAM(lp_clk_ppm, 20)
-	COMMON_PARAM(ps_on, true)
+	COMMON_PARAM(ps_on, false)
 	COMMON_PARAM(tx_lft, RWNX_TX_LIFETIME_MS)
 	COMMON_PARAM(amsdu_maxnb, NX_TX_PAYLOAD_MAX)
 	// By default, only enable UAPSD for Voice queue (see

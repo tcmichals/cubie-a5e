@@ -183,6 +183,11 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - Bidirectional ping: 0% packet loss to gateway `192.168.1.1` (0.93 ms min / 1.25 ms avg RTT) and `8.8.8.8` (13.8 ms min / 15.8 ms avg RTT).
     - High-speed sustained throughput: 50 MB download transfer at **433.3 Mbps RX** (VHT-MCS 9 80MHz short GI) and **351.0 Mbps TX** (VHT-MCS 8 80MHz).
     - Cumulative verified traffic: 65,835,902 bytes RX (43,775 packets), 1,164,097 bytes TX (22,238 packets); -47 dBm RSSI, -89 dBm noise floor, 0 kernel/driver errors. Zero regressions.
+  - **Power Save & SDIO PMU Remediation (Silicon-Verified on Cubie A5E, 2026-11-01)**:
+    - Disabled `CONFIG_AIC8800_SDIO_PWRCTRL=n`, `CONFIG_AIC8800_AUTO_POWERSAVE=n`, and `CONFIG_AIC8800_WOWLAN_PM=n` in Buildroot `aic8800-driver.mk` to eliminate the rogue 20 ms SDIO sleep watchdog thread.
+    - Set `COMMON_PARAM(ps_on, false)` in `aic8800_fdrv/rwnx_mod_params.c` to prevent `cfg80211` from setting `WIPHY_FLAG_PS_ON_BY_DEFAULT`.
+    - Patched C register bugs in `aic8800_fdrv/aicwf_sdio.c`: fixed `aicwf_sdio_wakeup()` polling to read `sleep_reg` (0x01) checking bit 4 (`val & 0x10`) instead of `wakeup_reg` (0x02), and fixed `aicwf_sdio_sleep_allow()` to write `0x10` to `sleep_reg`.
+    - Persisted `iw dev wlan0 set power_save off` in rootfs overlays `/etc/init.d/S40network-wifi`, eliminating DTIM latency jitter and power sag brownouts (ping RTT rock-solid at 1.7 ms).
 
 ---
 

@@ -1236,11 +1236,11 @@ int aicwf_sdio_wakeup(struct aic_sdio_dev *sdiodev)
 					u8 val;
 
 					ret = aicwf_sdio_readb(sdiodev,
-							       sdiodev->sdio_reg.wakeup_reg,
+							       sdiodev->sdio_reg.sleep_reg,
 							       &val);
 					if (ret < 0)
 						txrx_err("sdio wakeup read fail\n");
-					else if ((val & 0x1) == 0)
+					else if (val & 0x10)
 						break;
 					read_retry--;
 					usleep_range(50, 60);
@@ -1283,8 +1283,8 @@ int aicwf_sdio_sleep_allow(struct aic_sdio_dev *sdiodev)
 	    (int)(atomic_read(&sdiodev->rx_priv->rx_cnt) == 0)) {
 		AICWFDBG(LOGSDPWRC, "%s s\n", __func__);
 		if (!aic_sdio_hw->use_func2) {
-			if (aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 0x02) < 0)
-				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.wakeup_reg);
+			if (aicwf_sdio_writeb(sdiodev, sdiodev->sdio_reg.sleep_reg, 0x10) < 0)
+				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.sleep_reg);
 		} else {
 			if (aicwf_sdio_func2_writeb(sdiodev, sdiodev->sdio_reg.wakeup_reg, 0x2) < 0)
 				sdio_err("reg:%d write failed!\n", sdiodev->sdio_reg.wakeup_reg);
