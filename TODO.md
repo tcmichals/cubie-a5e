@@ -779,6 +779,11 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
 | V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
+| V4-SRAMDA | SRAM vring/carveout/buffer addresses are host PAs, not E906 DAs (HARSH rproc M2, never decided): `dma-ranges` + E906-DA carveouts, or say so in the cover letter | TC-3 | ❓ Q3 | |
+| V4-MBOXOPT | `mboxes` optional for UIO: keep or make required | TC-7 | ❓ Q4 | |
+| V4-RCPT | v4 recipients: Chen-Yu at `wens@kernel.org` (v3 went to `wens@csie.org`) | TC-5 | ⬜ | |
+| V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ⬜ | |
+| V4-SPARSE-TOOL | Install sparse on this PC (`sudo apt install sparse`, owner) so `C=1` runs | TC-10 | ⬜ | |
 | V4-DOCS | Correct the `minItems: 1` rule; v3 process lessons in lessons, rules, `/kreview`, `/kseries` | v3 retrospective | ✅ 2026-11-03 | (cubie-a5e) |
 
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
