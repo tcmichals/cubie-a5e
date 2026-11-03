@@ -19,11 +19,11 @@ Changes in v4 (details in each patch):
   - Remoteproc: the vring work takes rproc->lock and runs only while
     the core is running, as stm32 does; this was reported on v2 and
     I missed it in v3 (Sashiko).
-  - TBD (Q1): the crash interrupt is removed from the driver and the
+  - Remoteproc: the crash interrupt is removed from the driver and the
     binding: the A523 has no line for it (Krzysztof, Sashiko).
-  - TBD (Q2): memory-region and memory-region-names: <fixed list | the
-    hardware reason for each optional entry>; same comment as on v2,
-    which I missed in v3 (Krzysztof).
+  - Remoteproc binding: the description now says why the dram and
+    trace memory regions are optional (they depend on the firmware);
+    v2 and v3 did not say it (Krzysztof).
   - Remoteproc KUnit: depends on PM; __force on the __iomem casts
     (Sashiko).
   - Rebased on next-TBD.

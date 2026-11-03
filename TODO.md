@@ -774,8 +774,8 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ⬜ | |
 | V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ⬜ | |
 | V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ⬜ | |
-| V4-CRASH | Crash interrupt: remove from driver + binding (proposed), or always `synchronize_irq()` in `stop()`. Repeat of v2 | V3-S6, V3-K2c | ❓ Q1 | |
-| V4-MEMREG | `memory-region(-names)`: fixed list without `minItems`, or a hardware reason per optional entry. Repeat of v2 | V3-K2a/b | ❓ Q2 | |
+| V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ⬜ (decided 2026-11-03: remove) | |
+| V4-MEMREG | `memory-region(-names)`: keep `minItems: 1` (owner: dram/trace optional); binding description gives the firmware reason. Repeat of v2 | V3-K2a/b | ⬜ (decided 2026-11-03) | |
 | V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
 | V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
