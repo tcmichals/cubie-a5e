@@ -12,7 +12,6 @@
  */
 
 #include <linux/delay.h>
-#include <crypto/md5.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -434,17 +433,12 @@ int aicwf_request_firmware(const struct firmware **fw, const char *name,
 	return ret;
 }
 
-#define MD5PINRT                                                               \
-	"file "                                                                    \
-	"md5:%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n"
-
 static int rwnx_load_firmware(u32 **fw_buf, const char *name,
 			      struct device *device)
 {
 	const struct firmware *fw = NULL;
 	u32 *dst = NULL;
 	void *buffer = NULL;
-	u8 digest[MD5_DIGEST_SIZE];
 	int size = 0;
 	int ret = 0;
 
@@ -475,11 +469,6 @@ static int rwnx_load_firmware(u32 **fw_buf, const char *name,
 	memcpy(buffer, dst, size);
 
 	*fw_buf = buffer;
-
-	md5(buffer, size, digest);
-	AICWFDBG(LOGDEBUG, "AICWF " MD5PINRT, digest[0], digest[1], digest[2], digest[3],
-		 digest[4], digest[5], digest[6], digest[7], digest[8], digest[9],
-		 digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
 
 	release_firmware(fw);
 

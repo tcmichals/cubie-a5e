@@ -14,7 +14,6 @@ if WLAN_VENDOR_AIC
 menuconfig AIC8800_BSP_SUPPORT
 	tristate "AIC8800D80 U02 SDIO bus support"
 	depends on MMC
-	select CRYPTO_LIB_MD5
 	help
 	  Enable the AIC8800D80 U02 SDIO bus support package. It provides
 	  the SDIO transport, chip operations and firmware download path used
