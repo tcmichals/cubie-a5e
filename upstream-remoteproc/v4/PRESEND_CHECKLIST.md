@@ -37,8 +37,8 @@ Tick each line with the date, commit and result. A box without evidence is not d
 - [ ] Cover letter `TBD`s filled in; v3 link added
 - [ ] Owner Signed-off-by on every patch; no AI trailers
 - [ ] `git format-patch -v4 --cover-letter --base=<next tag>`
-- [ ] Recipients as v3 (bash history / v3 send). Check Chen-Yu's address: v3 went to
-      `wens@csie.org`, he reviewed v1 from `wens@kernel.org`
+- [ ] Recipients as v3, except Chen-Yu at `wens@kernel.org` (MAINTAINERS; v3 went to `wens@csie.org`, TC-5);
+      re-run `get_maintainer.pl` on the v4 patches
 - [ ] New thread, no `--in-reply-to`; owner's go-ahead
 - [ ] After sending: post [REPLIES_DRAFT.md](REPLIES_DRAFT.md) replies; record the lore link in
       `../SUBMISSION_TRACKER.md` and `../LORE_ARCHIVE_AND_SUBMISSION_INDEX.md`

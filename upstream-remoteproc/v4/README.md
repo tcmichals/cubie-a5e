@@ -7,7 +7,7 @@ Same layout as [../v3/](../v3/).
 |:--|:--|
 | Previous version | v3, sent 2026-11-01: https://lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com/ |
 | v3 reviews | [../v3/COMMENTS.md](../v3/COMMENTS.md) (6 emails, raw in [../v3/emails/](../v3/emails/)) |
-| Status | **In prep**: 2 items open for the owner (see the checklist) |
+| Status | **In prep**: 4 owner questions open (Q1–Q4, see the checklist); triple check in [review/TRIPLE_CHECK_20261103.md](review/TRIPLE_CHECK_20261103.md) |
 | Work branch | `linux-cubie`: v4 fixes on `cubie-linux-7.1` first (board test), then folded onto a fresh linux-next branch (name to be chosen when created) |
 | Patches | 7, same order as v3: 1 mailbox binding, 2 mailbox driver, 3 rproc binding, 4 rproc driver, 5 DTS, 6 mailbox KUnit, 7 rproc KUnit |
 
