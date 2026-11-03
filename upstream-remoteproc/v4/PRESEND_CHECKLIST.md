@@ -5,7 +5,8 @@ Tick each line with the date, commit and result. A box without evidence is not d
 ## 1. Build (on the linux-next base, each patch on its own)
 
 - [ ] `W=1`, GCC and clang, built in and as modules
-- [ ] `C=1` sparse clean on the new files (missed in v3: V3-S8)
+- [ ] `C=1` sparse clean on the new files (missed in v3: V3-S8). Check the log has `CHECK` lines: an
+      old sparse (Ubuntu 0.6.4) is rejected by `scripts/checker-valid.sh` and `C=` is silently ignored
 - [ ] `CONFIG_PM=n` build, drivers and KUnit (missed in v3: V3-S7)
 - [ ] `CONFIG_COMPILE_TEST` on a non-arm64 arch
 - [ ] `make dt_binding_check DT_SCHEMA_FILES=...` for both bindings, and `dtbs_check`
