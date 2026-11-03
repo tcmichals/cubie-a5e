@@ -30,8 +30,9 @@ DRAM, trace and vrings from the carveouts. DRAM support is not dropped to satisf
 comment.
 
 ### Memory regions are a listed, positional set (D10, 2026-10-14)
-> **Owner, 2026-11-03 (Q2):** "trace and dram do not always have to be used or defined." `vram`
-> (index 0, the pool) is required; `dram` and `trace` are optional. Krzysztof rejected
+> **Owner, 2026-11-03 (Q2):** "trace and dram do not always have to be used or defined." When
+> regions are given, index 0 is the pool (`vram`); `dram` and `trace` are optional. `memory-region`
+> itself is not required (firmware without virtio needs no pool). 7.1 `891dfd49cb6c`. Krzysztof rejected
 > `minItems: 1` in v2 and v3 because no reason was given: v4 states it in the binding
 > description and in the reply. The reason is the firmware, not the SoC: firmware linked to run
 > from the two SRAMs has no DRAM sections, and firmware without a trace buffer needs no trace

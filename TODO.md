@@ -775,7 +775,7 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ⬜ | |
 | V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ⬜ | |
 | V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ⬜ (decided 2026-11-03: remove) | |
-| V4-MEMREG | `memory-region(-names)`: keep `minItems: 1` (owner: dram/trace optional); binding description gives the firmware reason. Repeat of v2 | V3-K2a/b | ⬜ (decided 2026-11-03) | |
+| V4-MEMREG | `memory-region(-names)`: keep `minItems: 1` (owner: dram/trace optional); binding description gives the firmware reason. Repeat of v2 | V3-K2a/b | ✅ (dt_binding_check clean) | `891dfd49cb6c` |
 | V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
 | V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
@@ -784,6 +784,11 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-RCPT | v4 recipients: Chen-Yu at `wens@kernel.org` (v3 went to `wens@csie.org`) | TC-5 | ⬜ | |
 | V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ⬜ | |
 | V4-SPARSE-TOOL | Install sparse on this PC (`sudo apt install sparse`, owner) so `C=1` runs | TC-10 | ⬜ | |
+| V4-BOARD | Remove overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-msgbox-txirq.dtso`; the base DT then runs TX done by interrupt | V4-TXIRQ | ⬜ | |
+| V4-SWEEP | `tools/run_full_sweep.py`: drop the timer benchmark and Profile 1T, and the "TX-done lines requested in timer mode" check (lines are now always used); keep the write-IRQ test in profile 1 | V4-TXIRQ | ⬜ | |
+| V4-MSGDOC | Docs that describe timer mode / `allwinner,tx-done-irq` / the crash IRQ: msgbox reference, driver guide, T527 spec reference, discovery doc | V4-TXIRQ, V4-CRASH | ⬜ | |
+| V4-CHLOG | Per-patch "Changes in v4" and commit messages (1/7 still describes `tx-done-irq`; 3/7 the crash interrupt; 4/7 the crash IRQ and `-EBUSY`) | all | ⬜ | |
+| V4-THRESH | Re-check HARSH mailbox D6 (write-IRQ threshold write in `startup()` is a no-op on this silicon): it now carries all TX done | TC review | ⬜ | |
 | V4-DOCS | Correct the `minItems: 1` rule; v3 process lessons in lessons, rules, `/kreview`, `/kseries` | v3 retrospective | ✅ 2026-11-03 | (cubie-a5e) |
 
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
