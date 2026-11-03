@@ -38,8 +38,9 @@ Sorry, I missed these again in v3.
 I should have said why dram and trace are optional, and the binding
 did not say it either. They depend on the firmware, not on the SoC:
 firmware linked to run from the two SRAMs has no DRAM sections, and
-firmware without a trace buffer needs no trace region. The vring pool
-is always needed and is required. v4 says this in the binding. If you
+firmware without a trace buffer needs no trace region, and only
+firmware that uses virtio needs the vring pool. v4 says this in the
+binding. If you
 prefer them gone from the binding, the firmware can request both
 through its resource table instead.
 
