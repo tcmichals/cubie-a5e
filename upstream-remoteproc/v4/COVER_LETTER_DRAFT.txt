@@ -1,0 +1,59 @@
+Subject: [PATCH v4 0/7] Add Allwinner A523 message box and XuanTie E906 remoteproc support
+
+This series adds a driver for the message box of the Allwinner A523,
+A527 and T527 (sun55i) and a remoteproc driver for their T-Head XuanTie
+E906 RISC-V core, with bindings, DT nodes and KUnit tests.
+
+v3: https://lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com/
+
+Changes in v4 (details in each patch):
+  - Message box binding: allwinner,tx-done-irq is dropped; it chose
+    driver behaviour, not hardware (Krzysztof, Sashiko).
+  - Message box: TX done always uses the receiver bank's write
+    interrupt; the 1 ms poll mode is removed. A message for a full FIFO
+    is held and written from the write interrupt, so send_data() no
+    longer returns -EBUSY and the core never keeps a message it has
+    not handed over. The write status is cleared and the interrupt
+    armed in the same locked section as the FIFO write, and a channel
+    is never re-armed once its shutdown has started (Sashiko).
+  - Remoteproc: the vring work takes rproc->lock and runs only while
+    the core is running, as stm32 does; this was reported on v2 and
+    I missed it in v3 (Sashiko).
+  - TBD (Q1): the crash interrupt is removed from the driver and the
+    binding: the A523 has no line for it (Krzysztof, Sashiko).
+  - TBD (Q2): memory-region and memory-region-names: <fixed list | the
+    hardware reason for each optional entry>; same comment as on v2,
+    which I missed in v3 (Krzysztof).
+  - Remoteproc KUnit: depends on PM; __force on the __iomem casts
+    (Sashiko).
+  - Rebased on next-TBD.
+
+Notes for review:
+  - The remap register (0x07010364, PRCM) is shared with the DSP: bit 1
+    shares the 512 KiB SRAM A3_2 with the E906's subsystem, bit 0
+    belongs to the DSP. The driver maps only this register and
+    read-modify-writes bit 1, which is safe while no other Linux driver
+    writes it. I can move it to a syscon or the R-CCU, or describe SRAM
+    A3_2 through the sunxi SRAM driver (allwinner,sram), if preferred.
+  - System suspend is not supported: the E906 runs next to a Linux that
+    stays up, so the driver has no PM callbacks.
+  - Merging: patches 1, 2 and 6 are for the mailbox tree, 3, 4 and 7
+    for remoteproc, and 5 for sunxi. Patch 5 needs the bindings in
+    patches 1 and 3.
+
+Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT and PREEMPT
+with the same driver and test files:
+  - TBD: KUnit counts, built in and as modules, and under UML.
+  - TBD: rpmsg ping and stress, message box unbind/bind, remoteproc
+    stop/start, with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP.
+  - TBD on next-TBD: W=1 with GCC and clang, built in and as modules;
+    C=1 (sparse); a CONFIG_PM=n build; dt_binding_check, dtbs_check;
+    checkpatch --strict.
+
+Tools: I used Claude Code (Anthropic) to help review the code against
+the v3 comments, write the KUnit tests, run the board tests and draft
+commit messages. I reviewed every change; all tests above ran on my
+board.
+
+Thanks to Krzysztof Kozlowski for reviewing v3, and to Krzysztof
+Kozlowski, Chen-Yu Tsai and Rob Herring for v1 and v2.

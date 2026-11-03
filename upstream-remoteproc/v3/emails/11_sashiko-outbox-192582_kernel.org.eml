@@ -1,0 +1,348 @@
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.remote-ip=100.103.45.18
+ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
+	t=1793560644;
+	b=OWagjnfFZMA4bnY4uAyL40D8FNMrBCmAjBVnbxWbx9KTqSn2UeGF6vXoK4kQ+Cm4flMN
+	 uBMmquwclOwFVKgekEOjQCDFNrzXJVzfpAEZwywrBodQibT0PFHKg8OT6KPjtlbxF9VSG
+	 3ptG1G8SiUzARmo0Co6XxnHc6BQN5AO4rIEzn0DyNNIdr/MTn62Va7LjG+6v+0zfYBEUG
+	 oSEDPGdADxcbOUkWdz5mO6ggIEdiqvjg1CNjrLRMe6hbY4cBdj2HhWin4DPVeVX7gHZ6p
+	 WJUXwLTGmoZwHvd+wSKHepaUAVVROPqVEFWA1GO67xlr/LjvRQ72SissTMJ4DhwQAqA==
+ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
+	a=rsa-sha256; c=relaxed/relaxed; t=1793560644;
+	h=Received:DKIM-Signature:Message-ID:From:Subject:Reply-To:To:Cc:
+	 In-Reply-To:References:Content-Type:Content-Transfer-Encoding:Date;
+	bh=gesiNNAWq3M7pDBClNLCK2E4TQzDxNqRHR1euveMj3A=;
+	b=s5qh8abIckt+e8/iE8ntZlyyx7b2AyQGBUU32Io91lG+aCxO5Lt9+IIDuu4gP97rpQHD
+	 zNn/NTssfITJJcNkV7C+7h+jI4K7pWBcU/1vv9na0BW/2msZHNSJ3Mj7uD8z+FO4hQ5GK
+	 gFZu4FNf0A5W+6Dewx0HVpC9WyHxgvfsenA5/lAqhfVWQZxZ0E0mOsRYWsT8Dl7mvhocL
+	 cq/V28MC96nc3//YpjjERtHvX7CA5VT4LvPBJI/ds9Mx5N5B2PJRJIVVqeV3jlRNt8Ab7
+	 HbUU0EObF94y6o2ZIX0pieRb/HM78Wvuc2qSFNosVZ1bbHbjo+ACM4wz49EZk6LXlOw==
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+	dkim=pass header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=MjRHOeal;
+	arc=none smtp.remote-ip=100.103.45.18
+Received: from smtp.kernel.org (quasi.space.kernel.org [100.103.45.18])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature ECDSA (prime256v1))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id C5E88606A324;
+	Sun,  1 Nov 2026 19:17:23 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key,
+ unprotected) header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=MjRHOeal
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 1B9611F000C1;
+	Sun,  1 Nov 2026 19:17:23 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1793560643;
+	bh=gesiNNAWq3M7pDBClNLCK2E4TQzDxNqRHR1euveMj3A=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=MjRHOealDVEmVoud1X75fTLd1DNOfSqImKPBRVtrRfPXnA2uqKSIa9IvVM+uqco1y
+	 8cHJxukwMVqHrRKKpwmMTh5LWmu6vweCQ9+A9ZqIM5iXSqu2kltj67p0BqdVJMnyAO
+	 1iL3odDQJ8IDiyCJfGJ89fkSaFTkp9q0fe8SOUFzYXmjTCOX+mToLAVFuG4Cbw2950
+	 LyGcn4TvvMVSbWcCkHm02lo469mC4wMbj2HBm8ptvnmjl2AmID7QLkcOrDGmilaqpx
+	 HFeb9ME96UQkpl5aO0S9rMkDoTVB6m4fgRgH7li6y1SCiOWG1Dld11AjDCbYc1l2Kv
+	 nSlWscfFhtucg==
+Message-ID: <sashiko-outbox-192582@kernel.org>
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box
+ driver
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, devicetree@vger.kernel.org, robh@kernel.org,
+ conor+dt@kernel.org
+In-Reply-To: <20261101185735.762559-3-tcmichals@gmail.com>
+References: <20261101185735.762559-1-tcmichals@gmail.com>
+ <20261101185735.762559-3-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Sun, 01 Nov 2026 19:17:22 +0000
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Post: <mailto:linux-sunxi@lists.linux.dev>
+List-Help: <mailto:linux-sunxi+help@lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+List-Owner: <mailto:linux-sunxi+owner@lists.linux.dev>
+Precedence: list
+
+Thank you for your contribution! Sashiko AI review found 3 potential issue(=
+s) to consider:
+- [High] mailbox: sun55i: TX IRQ race in sun55i_msgbox_shutdown() on shared=
+ route
+- [High] mailbox: sun55i: UAF and race returning -EBUSY in sun55i_msgbox_se=
+nd_data()
+- [Medium] mailbox: sun55i: lock drop race enabling TX IRQ in sun55i_msgbox=
+_send_data()
+--
+
+commit e3cf2bfaf2bd6f778a72431227fd527e0aef2173
+Author: Tim Michals <tcmichals@gmail.com>
+
+mailbox: sun55i: Add Allwinner A523 message box driver
+
+This commit adds a mailbox controller driver for the Allwinner sun55i (A523)
+message box, supporting 12 hardware FIFO channels between the Cortex-A55 ho=
+st
+and the CPUS, HiFi4 DSP, and XuanTie E906 processors with either polled or
+write-IRQ TX completion.
+
+> diff --git a/drivers/mailbox/sun55i-msgbox.c b/drivers/mailbox/sun55i-msg=
+box.c
+> new file mode 100644
+> index 0000000000000..1618c16219fc2
+> --- /dev/null
+> +++ b/drivers/mailbox/sun55i-msgbox.c
+> @@ -0,0 +1,613 @@
+
+[ ... ]
+
+> +static void sun55i_msgbox_tx_irq_put(struct sun55i_msgbox *mbox, int loc=
+al_n)
+> +{
+> +	struct sun55i_tx_irq *tx =3D &mbox->tx_irqs[local_n];
+> +
+> +	mutex_lock(&mbox->tx_irq_lock);
+> +	if (!--tx->users) {
+> +		free_irq(tx->irq, tx);
+> +	} else {
+> +		/* The line stays in use: let a running handler finish with us */
+> +		synchronize_irq(tx->irq);
+> +	}
+> +	mutex_unlock(&mbox->tx_irq_lock);
+> +}
+> +
+> +static int sun55i_msgbox_send_data(struct mbox_chan *chan, void *data)
+> +{
+> +	struct sun55i_msgbox *mbox =3D to_sun55i_msgbox(chan);
+> +	int n =3D chan - mbox->controller.chans;
+> +	int local_n, p, remote_id, remote_n;
+> +	unsigned long flags;
+> +	u32 msg =3D 0;
+> +	bool full;
+> +
+> +	if (data)
+> +		memcpy(&msg, data, sizeof(msg));
+> +
+> +	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
+> +
+> +	/*
+> +	 * Under the lock: in timer mode the poll timer may write a held
+> +	 * message into the same FIFO from another CPU (last_tx_done()).
+> +	 */
+> +	spin_lock_irqsave(&mbox->lock, flags);
+> +
+> +	/*
+> +	 * The core calls send_data() only with no request active, so a message
+> +	 * still held here is one it gave up on (a blocking send timed out):
+> +	 * drop it rather than send it after this newer one.
+> +	 */
+> +	__clear_bit(n, &mbox->tx_held);
+> +
+> +	/*
+> +	 * Writing a full FIFO corrupts its count, so never do it. In write IRQ
+> +	 * mode the IRQ armed below retries the message once a slot is free. In
+> +	 * timer mode the core polls only a channel whose send succeeded, so
+> +	 * hold the message and let last_tx_done() write it.
+> +	 */
+> +	full =3D sun55i_msgbox_tx_count(mbox, remote_id, remote_n, p) >=3D SUN5=
+5I_FIFO_MAX;
+> +	if (!full) {
+> +		sun55i_msgbox_writel(msg, mbox->regs[remote_id] +
+> +				     SUN55I_MSGBOX_MSG_FIFO(remote_n, p));
+> +	} else if (!mbox->tx_done_irq) {
+> +		mbox->tx_held_msg[n] =3D msg;
+> +		__set_bit(n, &mbox->tx_held);
+> +	}
+> +
+> +	spin_unlock_irqrestore(&mbox->lock, flags);
+
+[Severity: Medium]
+Can dropping mbox->lock here before calling sun55i_msgbox_tx_irq_enable()
+cause a premature TX completion when a previous blocking send timed out?
+
+If an earlier blocking send timed out in mbox_send_message() ->
+tx_tick(chan, -ETIME), SUN55I_MSGBOX_WR_IRQ_EN_BIT(p) stays enabled in the
+remote bank. When the remote processor later reads a message and frees a sl=
+ot,
+SUN55I_MSGBOX_WR_IRQ_PEND_BIT(p) is latched in
+SUN55I_MSGBOX_WRITE_IRQ_STATUS(remote_n).
+
+When the next sun55i_msgbox_send_data() writes to SUN55I_MSGBOX_MSG_FIFO and
+fills the FIFO to SUN55I_FIFO_MAX, releasing mbox->lock before clearing the
+latched status bit in sun55i_msgbox_tx_irq_enable() opens a window where
+sun55i_msgbox_tx_irq() on another CPU can acquire mbox->lock, see both
+WR_IRQ_EN_BIT(p) and the stale latched WR_IRQ_PEND_BIT(p) set, and call
+mbox_chan_txdone() to complete the new message while the FIFO is still full.
+
+Should the write IRQ status clear and enable in sun55i_msgbox_tx_irq_enable=
+()
+be performed under the same mbox->lock critical section as the FIFO write?
+
+> +
+> +	/*
+> +	 * A kick is a doorbell, the data is in shared memory: it is done once
+> +	 * the FIFO accepted it and has room for the next one. The write IRQ
+> +	 * reports exactly that, at once or when the receiver reads a message.
+> +	 */
+> +	if (mbox->tx_done_irq) {
+> +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, true);
+> +		return full ? -EBUSY : 0;
+> +	}
+
+[Severity: High]
+What happens in write-IRQ mode (mbox->tx_done_irq) when the hardware FIFO is
+full and sun55i_msgbox_send_data() arms the write IRQ and returns -EBUSY?
+
+In drivers/mailbox/mailbox.c, msg_submit() only sets chan->active_req =3D d=
+ata
+and decrements chan->msg_count when send_data() returns 0:
+
+drivers/mailbox/mailbox.c:msg_submit() {
+	...
+	if (chan->cl->tx_prepare)
+		chan->cl->tx_prepare(chan->cl, data);
+	/* Try to submit a message to the MBOX controller */
+	err =3D chan->mbox->ops->send_data(chan, data);
+	if (!err) {
+		chan->active_req =3D data;
+		chan->msg_count--;
+	}
+	...
+}
+
+When send_data() returns -EBUSY, chan->active_req remains NULL and the
+caller's data pointer stays in chan->msg_data[]. If a blocking send in
+mbox_send_message() then times out in wait_for_completion_timeout(), it cal=
+ls
+tx_tick(chan, -ETIME):
+
+drivers/mailbox/mailbox.c:tx_tick() {
+	...
+	spin_lock_irqsave(&chan->lock, flags);
+	mssg =3D chan->active_req;
+	chan->active_req =3D NULL;
+	spin_unlock_irqrestore(&chan->lock, flags);
+
+	/* Submit next message */
+	msg_submit(chan);
+
+	if (!mssg)
+		return;
+	...
+}
+
+Because chan->active_req is NULL, tx_tick() does not remove the timed-out
+message from chan->msg_data[]. Instead, mbox_send_message() returns -ETIME =
+to
+the caller while its message pointer (often stack-allocated in blocking mod=
+e)
+is still queued in chan->msg_data[] with the write IRQ enabled. When the
+remote processor later drains a FIFO slot, sun55i_msgbox_tx_irq() ->
+mbox_chan_txdone() -> tx_tick() -> msg_submit() will call cl->tx_prepare(),
+sun55i_msgbox_send_data() (which runs memcpy(&msg, data, sizeof(msg))), and
+cl->tx_done() on the dangling pointer.
+
+Even without a timeout, while chan->active_req is NULL and the first message
+waits in chan->msg_data[] for the write IRQ, a second mbox_send_message() c=
+all
+on another CPU can run msg_submit() just as a FIFO slot frees: CPU 0 sees
+chan->active_req =3D=3D NULL, calls cl->tx_prepare() a second time on the f=
+irst
+message, writes it into the single free FIFO slot (refilling the FIFO), and
+sets chan->active_req. The concurrent sun55i_msgbox_tx_irq() on CPU 1 then
+calls mbox_chan_txdone() and prematurely completes the message while the FI=
+FO
+is full.
+
+Should write-IRQ mode also buffer the message in mbox->tx_held_msg[n] and
+return 0 when the FIFO is full, writing the held message from
+sun55i_msgbox_tx_irq() once a slot is free?
+
+[ ... ]
+
+> +static void sun55i_msgbox_shutdown(struct mbox_chan *chan)
+> +{
+> +	struct sun55i_msgbox *mbox =3D to_sun55i_msgbox(chan);
+> +	void __iomem *base =3D mbox->regs[SUN55I_PROC_ARM];
+> +	int n =3D chan - mbox->controller.chans;
+> +	int local_n, p, remote_id, remote_n;
+> +	u32 stale[SUN55I_FIFO_MAX];
+> +	unsigned long flags;
+> +	u32 val;
+> +
+> +	sun55i_msgbox_chan_to_route(n, &local_n, &p, &remote_id, &remote_n);
+> +
+> +	/* Disable the receive IRQ; a message held for a full FIFO is dropped */
+> +	spin_lock_irqsave(&mbox->lock, flags);
+> +	val =3D sun55i_msgbox_readl(base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_=
+n));
+> +	val &=3D ~SUN55I_MSGBOX_RD_IRQ_EN_BIT(p);
+> +	sun55i_msgbox_writel(val, base + SUN55I_MSGBOX_READ_IRQ_ENABLE(local_n)=
+);
+> +	__clear_bit(n, &mbox->tx_held);
+> +	spin_unlock_irqrestore(&mbox->lock, flags);
+> +
+> +	/* The handler delivers outside the lock: let it finish with this chann=
+el */
+> +	synchronize_irq(mbox->irq);
+> +
+> +	/* Release the line only if this channel's startup() got it */
+> +	if (test_and_clear_bit(n, &mbox->tx_irq_held)) {
+> +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
+> +		sun55i_msgbox_tx_irq_put(mbox, local_n);
+> +		/*
+> +		 * A TX-done handler that was already running submits the next
+> +		 * message through send_data(), which arms the IRQ again. It has
+> +		 * finished now (free_irq() or synchronize_irq() above), so
+> +		 * disarm once more.
+> +		 */
+> +		sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, false);
+> +	}
+
+[Severity: High]
+Can a second sun55i_msgbox_tx_irq() invocation still race with channel
+teardown here when another channel on the same route remains active
+(tx->users > 1)?
+
+In mbox_free_channel(), chan->mbox->ops->shutdown(chan) runs before chan->cl
+is cleared, and queued messages may still be present in chan->msg_data[]. W=
+hen
+tx->users > 1 on local_n, sun55i_msgbox_tx_irq_put() only calls
+synchronize_irq(tx->irq) and leaves tx->irq enabled at the interrupt
+controller.
+
+If an in-flight sun55i_msgbox_tx_irq() was already past mbox->lock on anoth=
+er
+CPU, it calls:
+
+sun55i_msgbox_tx_irq()
+  mbox_chan_txdone()
+    tx_tick()
+      msg_submit()
+        sun55i_msgbox_send_data()
+          sun55i_msgbox_tx_irq_enable(mbox, remote_id, remote_n, p, true)
+
+Because the write IRQ is level-triggered whenever at least one FIFO slot is
+free, re-enabling SUN55I_MSGBOX_WR_IRQ_EN_BIT(p) in sun55i_msgbox_send_data=
+()
+can immediately assert tx->irq again as soon as the first handler returns.
+Waiters in sun55i_msgbox_tx_irq_put()'s synchronize_irq(tx->irq) only wait =
+for
+that first handler invocation to complete, so a second sun55i_msgbox_tx_irq=
+()
+can fire before the second sun55i_msgbox_tx_irq_enable(..., false) runs and
+execute mbox_chan_txdone() -> tx_tick() concurrently with mbox_free_channel=
+()
+setting chan->cl =3D NULL (or re-arm the write IRQ again if more messages w=
+ere
+queued).
+
+Would checking test_bit(n, &mbox->tx_irq_held) under mbox->lock before armi=
+ng
+the write IRQ in sun55i_msgbox_send_data() avoid re-enabling the IRQ after
+sun55i_msgbox_shutdown() has begun?
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20261101185735.7625=
+59-1-tcmichals@gmail.com?part=3D2

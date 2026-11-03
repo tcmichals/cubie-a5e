@@ -123,16 +123,19 @@ The owner's design decisions (what we deliberately keep even when a review disag
   In v1 the rproc binding described `memory-region` / `memory-region-names` in free text. Krzysztof asked us to list the items (v1, KK8). The vendor BSP, and older stm32 / i.MX / ZynqMP bindings, use a free list whose meaning comes from reserved-memory node names (`vdev0buffer`, `vdev0vring0`, ...), which a new binding should not copy.
 * **The Upstream Rule**:
   A new binding lists each `memory-region` entry positionally, with matching `- const:` names. The schema can check positions and names; it cannot check node names.
-* **The Pattern We Use** (TI K3, MediaTek SCP, OMAP do the same):
+* **v2 and v3 were rejected for `minItems: 1` here** (Krzysztof v3 3/7: "same comments as for v2").
+  We kept it because TI K3 and MediaTek SCP have it, without checking whether those bindings give a
+  reason. Listing the items is not enough: every entry is required unless the binding says which
+  hardware has no such region. `minItems` is not a way to make entries optional for the driver's sake.
+* **The Pattern** (v4; whether `dram` and `trace` exist on every board is owner question Q2 in
+  [v4/V3_TO_V4_RECONCILIATION_CHECKLIST.md](v4/V3_TO_V4_RECONCILIATION_CHECKLIST.md)):
   ```yaml
   memory-region:
-    minItems: 1
     items:
       - description: Virtio vring and buffer pool
       - description: Firmware code and data in DRAM
       - description: Trace buffer
   memory-region-names:
-    minItems: 1
     items:
       - const: vram
       - const: dram
@@ -391,6 +394,51 @@ To prevent regressions against these kernel rules, review checks are codified in
 
 ---
 
+## 6. Review Process Lessons (v3, 2026-11-03)
+
+v3 got 8 Sashiko findings (v2: 24) and Krzysztof accepted most of the mailbox binding, so the code
+improved. But nearly everything that came back had been reported before or found by our own
+reviews: 4 of 9 were in our v3 reviews (HARSH H1, M1, M2, part of M4) and were closed; 2 were
+Sashiko "as reported on v2"; Krzysztof's 3/7 was "same comments as for v2". Only the mailbox-core
+races, PM=n and sparse were truly new. The reviewing worked; what failed was what happened to the
+findings. Ledger: [v3/COMMENTS.md](v3/COMMENTS.md).
+
+### Lesson 6.1: A Finding Is Fixed or Put to the Owner, Never Closed Silently
+* **What Went Wrong**: findings were recorded "left as is" in a TODO row without asking the owner,
+  or kept because a design decision already existed (e.g. the `tx-done-irq` property).
+* **Rule**: every High/Medium finding ends as a commit, or as a yes/no question the owner answered
+  (answer and date recorded). An existing DESIGN_DECISIONS entry is a reason to ask, not to close.
+
+### Lesson 6.2: Re-check Earlier Findings Against the New Code
+* **What Went Wrong**: v2 Sashiko findings (vq_work locking, crash IRQ vs stop) were ticked off
+  because code touching them existed; the failure scenario was never re-run. Sashiko reported both again.
+* **Rule**: for each earlier finding, walk its failure scenario through the new code (or a KUnit
+  test that reproduces it) before marking it fixed.
+
+### Lesson 6.3: Concurrency Review Goes Through the Subsystem Core
+* **What Went Wrong**: the v3 mailbox races were only visible by tracing `drivers/mailbox/mailbox.c`:
+  `msg_submit()` sets `active_req` only when `send_data()` returns 0, so `-EBUSY` leaves the
+  caller's pointer queued after a blocking timeout (UAF); a level IRQ re-armed by `send_data()` can
+  fire again after `synchronize_irq()`; a latched status bit fired between unlock and arm.
+* **Rule**: for each callback, trace the core for (a) a blocking send that times out, (b) unbind
+  during traffic, (c) a second interrupt after `synchronize_irq()`, (d) stop/recovery while work or
+  a threaded IRQ runs. Work items that walk core state take the core's lock (`rproc->lock` +
+  `RPROC_RUNNING`, as stm32 and imx_dsp do).
+
+### Lesson 6.4: Precedent Arguments Cite All Peers
+* **What Went Wrong**: `minItems: 1` on `memory-region` was defended by citing TI K3 and MediaTek
+  SCP only; that closed the finding twice, and the wrong rule stayed in this file after Krzysztof flagged it.
+* **Rule**: a "mainline does it" argument lists every peer binding/driver, including the ones that
+  do it differently, and says why ours matches. If a maintainer rejects it once, the rule here is
+  corrected the same day.
+
+### Lesson 6.5: Run the Checks Bots Run
+* **What Went Wrong**: Sashiko found a missing `depends on PM` and missing `__force` casts; we never
+  built with `CONFIG_PM=n` or ran sparse.
+* **Rule**: `C=1` and `CONFIG_PM=n` builds are in the pre-send checklist ([v4/PRESEND_CHECKLIST.md](v4/PRESEND_CHECKLIST.md)).
+
+---
+
 ## Summary Checklist Before Next Patch Submission
 
 - [ ] Every `reg-names`, `clock-names`, `reset-names` uses positional `- const:` lists (NO `enum`).
@@ -399,7 +447,11 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] `scripts/checkpatch.pl --strict` passes with **0 errors, 0 warnings**.
   Its SPDX check needs Python `ply`; without it `spdxcheck.py` prints a traceback and the
   check is skipped. Run with `PATH=~/projects/cubie/.venv-kernel-tools/bin:$PATH` (2026-10-29).
-- [ ] Mailbox TX: timer mode `last_tx_done()` = `count < 8`; ISR mode (`allwinner,tx-done-irq`) `txdone_irq`, write IRQ armed after every send (OMAP model); never write a full FIFO (DESIGN_DECISIONS.md).
+- [ ] Mailbox TX (v4): no `allwinner,tx-done-irq` property (policy, Krzysztof + Sashiko v3); TX done by the receiver bank's write IRQ only; a message for a full FIFO is held and `send_data()` returns 0, never `-EBUSY` (Lesson 6.3); never write a full FIFO.
+- [ ] `make C=1` (sparse) clean on the new files, and a `CONFIG_PM=n` build of drivers and KUnit (missed in v3: Sashiko 7/7).
+- [ ] Concurrency pass through the subsystem core (Lesson 6.3) done and recorded in `v<N>/review/`.
+- [ ] Every earlier finding re-checked by re-running its failure scenario on the new code (Lesson 6.2).
+- [ ] No High/Medium finding from any review closed without a fix or the owner's yes/no (Lesson 6.1).
 - [ ] RemoteProc kick uses `cl.knows_txdone = false`, `tx_block = false`, immutable per-vring payloads; never calls `mbox_client_txdone()`.
 - [ ] Mailbox `rx_callback` only queues work; `rproc_vq_interrupt()` runs from the work item.
 - [ ] Teardown: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()` (probe error path: free mailbox → cancel work).
@@ -408,7 +460,8 @@ To prevent regressions against these kernel rules, review checks are codified in
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Carveouts and dump segments registered in `.parse_fw()` (after allocating the entries, before nothing can fail): the core frees them only once `parse_fw()` succeeded, so registering in `.prepare()` leaks them when `parse_fw()` fails (final review 2026-10-27).
 - [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`, all looked up by name. Board-tested 2026-10-17 (msgbox reference §6b).
-- [ ] `memory-region` / `memory-region-names` listed positionally (Lesson 1.5); no driver logic keyed on region names.
+- [ ] `memory-region` / `memory-region-names` listed positionally, **no `minItems`** unless the binding states the hardware reason an entry may be absent (Lesson 1.5; rejected in v2 and v3); no driver logic keyed on region names.
+- [ ] No `minItems` anywhere in a binding without a written hardware reason (applies to every list, not only interrupts).
 - [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).
 - [ ] KUnit run under UML with `PROVE_LOCKING`, `DEBUG_PREEMPT`, `DEBUG_ATOMIC_SLEEP` and `KASAN`, and the kernel log has no `WARNING:`/`BUG:` from a test: KUnit passes a case that only warns (2026-10-27: a test raised its IRQ with interrupts on, warned, and passed). The full sweep checks the board's log the same way.
 - [ ] Drivers and KUnit tests built for arm64 both `=y` and `=m` with a full `Image modules` build, so modpost runs (2026-10-27: a test used the unexported `irq_to_desc()` and only failed as a module), with GCC and clang at `W=1`.

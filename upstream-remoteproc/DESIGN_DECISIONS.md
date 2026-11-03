@@ -30,6 +30,11 @@ DRAM, trace and vrings from the carveouts. DRAM support is not dropped to satisf
 comment.
 
 ### Memory regions are a listed, positional set (D10, 2026-10-14)
+> **Reopened 2026-11-03** (owner question Q2, v4/V3_TO_V4_RECONCILIATION_CHECKLIST.md):
+> Krzysztof rejected `minItems: 1` on `memory-region` / `memory-region-names` in v2 and again in
+> v3 ("same comments as for v2"). The order below stands; whether `dram` and `trace` are always
+> present (fixed list) or need a hardware reason to be optional is for the owner.
+
 The binding lists the `memory-region` items in order: `vram` (the DMA pool, index 0), then
 `dram`, then `trace`, with matching `memory-region-names`. Krzysztof asked for listed items
 in v1 (KK8).
@@ -132,6 +137,11 @@ binds the message box to the project-only `sun55i-msgbox-uio` driver (clock and 
 and the SRAM ping slot as `/dev/uio0`).
 
 ### Crash interrupt kept (D14)
+> **Reopened 2026-11-03** (owner question Q1): Krzysztof (v3 3/7, "same comments as for v2") and
+> Sashiko (v3 4/7 High, stop() vs handler race, also reported on v2) both hit it again. Proposed:
+> remove it from the driver and binding (no line on the A523, none in the BSP, never tested); the
+> crash dump stays. Until the owner answers, the text below stands.
+
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
 cover letter must not claim it is tested.
 2026-10-27 (owner): kept in the binding, whose description now says the A523 has no dedicated
@@ -168,7 +178,24 @@ The E906 polls its message box (interrupt off): a dedicated core, lowest latency
 The firmware also supports an interrupt mode (wake on the message box interrupt) and both modes
 are tested.
 
-### Message box TX completion: the device tree selects timer or ISR (owner, 2026-10-16)
+### Message box TX completion: write interrupt only, no DT property (owner, 2026-11-03, v4)
+Replaces the 2026-10-16 entry below. Krzysztof (v3 1/7: "Sashiko comment looks valid") and
+Sashiko (v3 1/7, Medium) rejected `allwinner,tx-done-irq` as driver policy: every A523 has the
+three remote write-interrupt lines, and the binding already requires them, so the property only
+chose how the driver works. The `ti,mbox-send-noirq` precedent did not carry it.
+
+- The property is dropped from the binding, the driver and the DTS. TX done always uses the
+  receiver bank's write interrupt (`txdone_irq`, the OMAP model described below); the 1 ms poll
+  mode, `last_tx_done()` and its tests are removed.
+- A kick is still done once the receiver's FIFO accepted it and has room (a kick is a doorbell).
+- A message for a full FIFO is held by the driver and `send_data()` returns 0; the write-interrupt
+  handler writes it once a slot is free. Returning `-EBUSY` left the caller's pointer queued in the
+  core after a blocking timeout (Sashiko v3 2/7, UAF).
+- Clearing the latched write status and arming happen in the locked section that wrote the FIFO,
+  and a channel is never re-armed once its `shutdown()` has started (Sashiko v3 2/7).
+- Lesson: UPSTREAM_LESSONS_LEARNED.md §6. Tracker: TODO.md §5.6b.
+
+### Message box TX completion: the device tree selects timer or ISR (owner, 2026-10-16) — superseded 2026-11-03
 Replaces "Mailbox TX pacing" (`count == 0`, poll) and the open "poll or write interrupt" item.
 The system builder chooses, per board, in the device tree:
 

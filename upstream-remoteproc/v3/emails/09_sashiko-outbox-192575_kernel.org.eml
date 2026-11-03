@@ -1,0 +1,137 @@
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.remote-ip=100.103.45.18
+ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
+	t=1793559984;
+	b=LKOjlhrOtUk0l3c0R/Vx3ezJAHKWWOAQQ27P98EPGhx/z4QYxwGXfDqx496hQESWgEYH
+	 jayFPoSXsdJstKzjJ24GWEogFQCugAcdQlakIM8UsqHqcZNm4btqV6x4yEC0BD2KBnk4A
+	 RSlggZ+y7NlCyDlYVj+Cz/z6NUAYWIitamK1kGu3dhkaltGRTxL/VYRxNQuBBf6nCUaeB
+	 GX04cdORaWfS5B/fPOfujowAr0E31MKolQ8Uq86H2vhGDv+o7YArV4olncpEPIpxWv7q7
+	 pPw6yf5d+p8Xzh/JGNnxTbL+P/JklHqvXq5SlpOt0gsBDpjM1l0Mx+qTxYKU4BRBRmg==
+ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
+	a=rsa-sha256; c=relaxed/relaxed; t=1793559984;
+	h=Received:DKIM-Signature:Message-ID:From:Subject:Reply-To:To:Cc:
+	 In-Reply-To:References:Content-Type:Content-Transfer-Encoding:Date;
+	bh=GGRJWcM21Izvg1dm7HMm0esst7+RrI+gcat3Gpza6lw=;
+	b=ET3bxlt9+DBhB2puotYBWLUcAigMAszcIzEMGr59urI+trOToPg/s1PVvXnFYqlFu435
+	 9NT2jXFLK4X8HREBb9wz1H/f1zrd+ZwNXb655OKQgtv+JFfTlA11bG2byXiS25F/HY6EF
+	 8md2X9nbsNSnPMEt5mbkdPdtpyph6i8VEoyAVRMXOJql8Syl9MLbDsI9Liv5Oe/EhXfzx
+	 g/+eLbQxa905ZbJPfU+iEfQYG00kF3zEB2x2lTMv54oNFhwscxt5jmCBt6SpgvvGUEMk9
+	 siHtWNr7NGaY0wpo15FncFSdzOsJSKgXoE2O55KZBBUdRAXIOEoP1AelUPPg7kleyig==
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+	dkim=pass header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=LVFrVaEs;
+	arc=none smtp.remote-ip=100.103.45.18
+Received: from smtp.kernel.org (quasi.space.kernel.org [100.103.45.18])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature ECDSA (prime256v1))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E1BF5606A324;
+	Sun,  1 Nov 2026 19:06:23 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key,
+ unprotected) header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=LVFrVaEs
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 28B5F1F00A15;
+	Sun,  1 Nov 2026 19:06:23 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1793559983;
+	bh=GGRJWcM21Izvg1dm7HMm0esst7+RrI+gcat3Gpza6lw=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=LVFrVaEsopvonKVIAAAVDjbusmmpnih/uKyoSy1OFGp2YPymjQDT2UBqxbWOellQE
+	 aK2JEXBQxK8sCwYiUy4CcN1tk4TPNLfjsxz9nIIBt8+aMOppARhQWyz9NzJvP3pwxe
+	 AjM9GcsbKQVKjpBAZzi+SV42HjP3EoT6DMqVnNa1PQB1h6MCWIYFBa9OOv4uS24uiw
+	 C9BtaaNPUI0Gg+RKpJ4QH8BD5jEcGIODDs0d4ityALNpxkG8TFUrijomOGlcgCqtEg
+	 Q53SxYbxNio8LXicSH7qtZkvu7TyYplqVr4EmsuqMl75Lt6FXhbKjkaf+WuWVzhmZ+
+	 NCLxf1MeTtKnw==
+Message-ID: <sashiko-outbox-192575@kernel.org>
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH v3 1/7] dt-bindings: mailbox: Add Allwinner A523 message
+ box
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, devicetree@vger.kernel.org, robh@kernel.org,
+ conor+dt@kernel.org
+In-Reply-To: <20261101185735.762559-2-tcmichals@gmail.com>
+References: <20261101185735.762559-1-tcmichals@gmail.com>
+ <20261101185735.762559-2-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Sun, 01 Nov 2026 19:06:22 +0000
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Post: <mailto:linux-sunxi@lists.linux.dev>
+List-Help: <mailto:linux-sunxi+help@lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+List-Owner: <mailto:linux-sunxi+owner@lists.linux.dev>
+Precedence: list
+
+Thank you for your contribution! Sashiko AI review found 1 potential issue(=
+s) to consider:
+- [Medium] dt-bindings: mailbox: sun55i-a523: allwinner,tx-done-irq encodes=
+ driver policy
+--
+
+commit 84f2f43ac2a1769e84ee3a5f62703aa7b08889d3
+Author: Tim Michals <tcmichals@gmail.com>
+
+dt-bindings: mailbox: Add Allwinner A523 message box
+
+This commit adds the Devicetree binding schema for the Allwinner A523, A527,
+and T527 (sun55i) message box controller, describing the four processor
+register banks, clocks, resets, interrupts, and an optional
+allwinner,tx-done-irq property.
+
+> diff --git a/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a=
+523-msgbox.yaml b/Documentation/devicetree/bindings/mailbox/allwinner,sun55=
+i-a523-msgbox.yaml
+> new file mode 100644
+> index 0000000000000..47b6fe304dbc8
+> --- /dev/null
+> +++ b/Documentation/devicetree/bindings/mailbox/allwinner,sun55i-a523-msg=
+box.yaml
+
+[ ... ]
+
+> +  interrupts:
+> +    items:
+> +      - description: Cortex-A55 bank read interrupt, messages for the ho=
+st
+> +      - description: HiFi4 DSP bank write interrupt for the host
+> +      - description: CPUS bank write interrupt for the host
+> +      - description: XuanTie RISC-V bank write interrupt for the host
+> +
+> +  interrupt-names:
+> +    items:
+> +      - const: arm
+> +      - const: dsp
+> +      - const: cpus
+> +      - const: rv
+> +
+> +  allwinner,tx-done-irq:
+> +    type: boolean
+> +    description:
+> +      Signal TX done with the write interrupt of the receiver's bank ins=
+tead
+> +      of polling. A message is done once the receiver's FIFO has room fo=
+r the
+> +      next one either way; the write interrupt is raised while the FIFO =
+has
+> +      room. Without this property a full FIFO is polled. Received messag=
+es
+> +      use the host bank read interrupt either way.
+
+[Severity: Medium]
+Since the schema unconditionally requires all four hardware interrupt lines
+(arm, dsp, cpus, and rv) in interrupts and interrupt-names, and every A523
+SoC wires the three remote bank write interrupts to the GIC, this boolean
+property appears to only select between interrupt-driven and polled TX
+completion in the driver rather than describing a hardware difference.
+
+Given that Devicetree bindings should describe hardware capabilities and
+wiring rather than OS driver runtime policy, should allwinner,tx-done-irq be
+dropped from the binding so the driver decides how to handle TX completion?
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20261101185735.7625=
+59-1-tcmichals@gmail.com?part=3D1
