@@ -31,11 +31,14 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
 3. **No Driver Prose**: Ensure descriptions describe physical hardware, not Linux internal driver concepts (workqueues, buffers).
 4. **Subject Line Hygiene**: Drop redundant words like "schema" or "bindings" from patch subjects.
 5. **Example Validation**: Does the DTS example match the binding constraints exactly?
+6. **No `minItems` Without a Hardware Reason**: **FAIL** any `minItems` (on `memory-region`, `interrupts`, clocks, any list) unless the binding text says which hardware lacks the optional entries. A driver that can run without an entry is not a reason (Krzysztof rejected `memory-region` `minItems: 1` on v2 and again on v3).
+7. **No Policy Properties**: **FAIL** a property that only selects how the driver uses hardware every SoC has (poll vs IRQ, e.g. `allwinner,tx-done-irq`, dropped after Krzysztof + Sashiko on v3).
 
 ### Tier 2: Kernel Memory, Concurrency & Hardware Invariants (C Code)
 1. **FIFO & Controller Pacing**:
-   - For the sun55i msgbox, `last_tx_done()` returns `count < FIFO_MAX` (owner decision 2026-10-16, DESIGN_DECISIONS "Message box TX completion": a kick is a doorbell). Do not flag it.
+   - sun55i msgbox from v4: TX done only by the receiver bank's write IRQ (`txdone_irq`); there is no poll mode and no `allwinner,tx-done-irq` (V3-K1). A kick is done once the FIFO took it and has room (a kick is a doorbell).
    - **FAIL** if a full FIFO can be written (it corrupts the count), or a level write IRQ is left enabled while the FIFO has room.
+   - **FAIL** if the write status is cleared/armed outside the locked section that wrote the FIFO (a latched bit completes a message while the FIFO is full, V3-S3).
 2. **Atomic Context & Workqueue Deferral**:
    - Mailbox `rx_callback` runs in atomic/hardirq context.
    - **FAIL** if `rproc_vq_interrupt()` or any sleeping function is invoked directly in `rx_callback`. It must be deferred to an ordered workqueue (`queue_work(priv->workqueue, &priv->vq_work)`).
@@ -46,6 +49,8 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
    - **FAIL** if a controller calls client code (`mbox_chan_received_data()`, `mbox_chan_txdone()`, any callback) while holding its own lock. A client may send from its callback, and the send path may take the same lock (2026-10-26: missed by the 10-13 reviews' fix and made a real deadlock by the TX-done IRQ commit).
 4. **Framework Contract on Errors**:
    - For every error an op can return (`send_data()`, `startup()`, ...), read what the core does with it (`msg_submit()` / `tx_tick()` / `txdone_hrtimer()` in `drivers/mailbox/mailbox.c`). **FAIL** if the error leaves work with no retry path (2026-10-26: `-EBUSY` from `send_data()` in poll mode left the message queued, because the core starts the poll timer only after a successful send).
+   - **FAIL** if `send_data()` returns an error (e.g. `-EBUSY`) for a message the core then keeps in `chan->msg_data[]` with `active_req == NULL`: after a blocking send times out the caller's (stack) pointer is still queued and a later txdone uses it (V3-S2). Hold the message in the driver and return 0.
+   - Trace these scenarios through the core for every op, not only the driver: (a) a blocking send that times out, (b) unbind (`mbox_free_channel()`) during traffic, (c) a second interrupt after `synchronize_irq()` because a handler re-armed a level IRQ (V3-S4), (d) stop/recovery while a work item or threaded IRQ runs.
    - Review the whole file again after any later change, not only the diff a finding was fixed in.
 5. **DMA & Cache Attribute Coherency**:
    - Are trace and DRAM buffers mapped with matching attributes (`MEMREMAP_WC`) to prevent ARM64 Write-Back vs Write-Combining aliasing?
@@ -62,22 +67,26 @@ Check every `.yaml` binding file against upstream maintainer rules (Krzysztof Ko
 3. **Teardown Ordering in `remove()`**:
    - **Rule**: `rproc_del()` must be called BEFORE `mbox_free_channel()`.
    - **Rule**: `cancel_work_sync(&priv->vq_work)` must be called AFTER `mbox_free_channel()` so no new work can be scheduled.
+   - **Rule**: a work item that walks core state (`rproc->notifyids`) takes `rproc->lock` and returns unless `rproc->state == RPROC_RUNNING`, as `stm32_rproc_mb_vq_work()` and `imx_dsp_rproc_vq_work()` do (V3-S5, reported on v2 and v3). **FAIL** a `cancel_work_sync()` of that work in `.stop()`: `.stop()` runs under `rproc->lock` → deadlock.
 
 ### Tier 4: SMP Concurrency & Lifecycle Race Matrix
 Audit cross-core concurrency and shutdown interactions:
 1. **Stop vs. Mailbox RX**: When `rproc_stop()` asserts core reset, ensure any in-flight `vq_work` cannot access invalidated resources.
 2. **Stop vs. Kick**: Ensure `rproc_kick()` does not access freed mailbox pointers during unbind.
 3. **Crash IRQ vs. Shutdown**: Verify `disable_irq()` is executed without holding spinlocks to prevent `might_sleep()` sleep-in-atomic crashes.
+4. **Threaded IRQ vs. Stop**: if a handler can clear the "armed" flag before `.stop()` checks it, `.stop()` must still `synchronize_irq()`; otherwise a handler preempted mid-way re-enables/reports after a restart (V3-S6, reported on v2 and v3).
+5. **Earlier Findings**: for every finding from earlier versions and earlier reviews, re-run its failure scenario on the current code. **FAIL** "fixed" items whose scenario still happens; code that touches the area is not proof.
 
 ### Tier 5: Peer Driver & Schema Comparative Cross-Audit
 Directly cross-reference the driver logic against upstream reference implementations:
 1. **RemoteProc Peers**: Compare ATT translation and carveout registration with `drivers/remoteproc/imx_rproc.c` and `drivers/remoteproc/stm32_rproc.c`.
 2. **Mailbox Peers**: Compare crossbar channel routing with `drivers/mailbox/sun6i-msgbox.c` and `drivers/mailbox/arm_mhu.c`.
 3. **Divergence Verification**: For every architectural difference between our driver and the peer drivers, verify whether the divergence is required by hardware differences or represents a defect.
+4. **Precedent Must Cite All Peers**: a "mainline does it" argument lists every peer driver/binding, including those that do it differently, and says why ours matches. One or two agreeing peers is not enough (v3: TI K3 / MediaTek SCP were cited for `minItems: 1`; Krzysztof rejected it twice).
 
 ### Tier 6: Adversarial False-Positive Filtering & Lore Grounding
 Before reporting any finding:
-1. **Cross-reference against [DESIGN_DECISIONS.md](../../../upstream-remoteproc/DESIGN_DECISIONS.md)**: Do not report deliberate project decisions as defects (e.g. keeping DRAM firmware, sharing PRCM remap bit 1, keeping A733 placeholders).
+1. **Cross-reference against [DESIGN_DECISIONS.md](../../../upstream-remoteproc/DESIGN_DECISIONS.md)**: a finding against a recorded decision is **not dropped**. Report it as `CONFLICTS WITH DECISION <id>` with the evidence, for the owner to answer yes/no. Only settled items the owner asked never to re-raise (e.g. D9 remap write, DRAM firmware) are noted in one line. In v3, four findings were closed this way and came back from upstream (UPSTREAM_LESSONS_LEARNED §6).
 2. **Formulate a hypothesis to DISPROVE the bug**: Inspect real kernel base code (`linux-next`) to verify if the core framework already protects against the scenario (e.g. SRCU protection in `remoteproc_virtio.c`).
 3. **Lore Search (Optional)**: If evaluating novel maintainer feedback, check `lore.kernel.org` patterns for subsystem maintainers (Bjorn Andersson, Mathieu Poirier, Jassi Brar, Krzysztof Kozlowski).
 
@@ -89,4 +98,6 @@ Output the findings strictly according to LKML standards:
 - **Pass/Fail status for each of the 6 Tiers**.
 - **Peer Divergence Matrix**: Summary of how the code compares to mainline peers (`imx_rproc`, `stm32_rproc`).
 - **Inline patch comments** with `+`/`-` remediation diffs if bugs are found.
-- **Final Upstream Readiness Verdict** (`CLEAN` or `ACTION REQUIRED`).
+- **Owner questions**: every High/Medium finding not fixed in this pass, as a yes/no question. A finding is never closed as "left as is".
+- **Build checks run**: `W=1`, `C=1` (sparse), `CONFIG_PM=n` (both missed before v3 and reported by Sashiko).
+- **Final Upstream Readiness Verdict** (`CLEAN` or `ACTION REQUIRED`). `CLEAN` only with no open owner questions.

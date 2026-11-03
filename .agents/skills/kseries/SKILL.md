@@ -16,7 +16,10 @@ Kernel maintainers volunteer significant time reviewing patches. Sending a new r
 
 Every comment must be resolved in one of two ways:
 1. **`FIXED`**: Modified in code or DT binding schema, with a verifiable commit hash, file, and diff hunk.
-2. **`EXPLAINED / DECIDED`**: Technically justified (e.g., citing physical datasheet, silicon readback, or `DESIGN_DECISIONS.md`) and formulated as an explicit, polite inline reply to the reviewer.
+2. **`EXPLAINED / DECIDED`**: Technically justified (e.g., citing physical datasheet, silicon readback, or `DESIGN_DECISIONS.md`) and formulated as an explicit, polite inline reply to the reviewer. For a High/Medium finding this needs the **owner's yes/no**, recorded with the date; an existing DESIGN_DECISIONS entry is a reason to ask, not to close. A precedent argument cites every peer, including those that do it differently.
+
+> [!WARNING]
+> v3 lesson (UPSTREAM_LESSONS_LEARNED §6): 4 of the 9 v3 findings had been found by our own reviews and closed as "left as is" or on one-sided precedent; 3 more were repeats of v2 comments marked fixed. Explaining a comment away is the exception.
 
 ---
 
@@ -28,6 +31,7 @@ Every comment must be resolved in one of two ways:
    ```bash
    python3 upstream-remoteproc/scripts/fetch_lore_reviews.py --version v<N> --msgid <cover-or-patch-msgid>
    ```
+   lore's search and Atom feeds return 403 to scripts; the thread mbox by Message-ID works. If the Message-ID is not recorded, take it from the Sashiko link (`sashiko.dev/#/patchset/<msgid>`) or ask the owner. Record it in `SUBMISSION_TRACKER.md` at send time.
 2. **Atomize Every Review into Numbered Critique Tokens**:
    Do not group comments into vague summaries. Parse every `.eml` file and extract each specific critique into an atomic token:
    - `[KK-<N>]`: Krzysztof Kozlowski (Devicetree bindings, naming, schemas, threading)
@@ -46,8 +50,10 @@ Construct or update the reconciliation matrix:
 | Critique ID | Reviewer | Patch | Issue / Comment | Resolution Status | Verified Commit / Justification |
 | :--- | :--- | :---: | :--- | :---: | :--- |
 | `KK-1` | Krzysztof | 1/7 | Do not attach/thread patchset to older threads | **FIXED** | Standalone top-level thread planned; no `--in-reply-to` |
-| `KK-2` | Krzysztof | 1/7 | Interrupts: free-form text instead of constrained items | **FIXED** | Commit `70b91777f601`: positional `items:` with `minItems: 1` |
+| `KK-2` | Krzysztof | 1/7 | Interrupts: free-form text instead of constrained items | **FIXED** | Positional `items:`, all lines required, **no `minItems`** (`minItems: 1` was rejected again on v3) |
 | `KK-3` | Krzysztof | 4/7 | `reg-names` using `enum:` allows arbitrary permutations | **FIXED** | Commit `15ff0fd60917`: positional `- const:` entries |
+
+**Repeat check**: for every item from earlier versions marked FIXED, re-run its failure scenario on the new code, and mark items a reviewer reported again ("as reported on v2", "same comments as for v2") as **REPEAT**. A REPEAT is said plainly in the patch changelog and the reply.
 
 > [!CAUTION]
 > **GATE HALT**: If any critique item is marked `UNRESOLVED` or missing from the code/DTS/schema, **HALT IMMEDIATELY**. Do not generate patches, do not send email replies, and do not advance revision numbers until every item has a recorded commit or owner decision.
@@ -87,7 +93,8 @@ dispatched as a fresh, standalone top-level thread with its own cover letter.
 > of free form text.
 
 Fixed in v3. Dropped the free-form text and converted 'interrupts' and
-'interrupt-names' into a rigid positional list with minItems: 1:
+'interrupt-names' into a positional list; all four lines exist on every
+A523, so all are required (no minItems):
   items:
     - const: arm
     - const: dsp
@@ -120,6 +127,9 @@ When all code fixes and test milestones pass on hardware:
    ```
 4. **Pre-Submission Invariant Audit**:
    - Run `scripts/checkpatch.pl --strict v<N>/*.patch` (must pass 0 errors, 0 warnings).
+   - Build checks: `W=1` (GCC and clang, `=y` and `=m`), `C=1` sparse, a `CONFIG_PM=n` build, `dt_binding_check`, `dtbs_check` (sparse and PM=n were missed before v3).
+   - Run `/kreview` on the final series, including its concurrency pass; all owner questions answered.
+   - Every box in `v<N>/PRESEND_CHECKLIST.md` ticked with evidence.
    - Verify `git log` metadata: strictly Author `Tim Michals <tcmichals@gmail.com>`.
    - **STRICT PROHIBITION**: Zero `Co-Authored-By` AI trailers or bot metadata.
    - Recipient Verification: Verify `git send-email` recipient list matches maintainer list from `SUBMISSION_TRACKER.md` (no generic keyword spam).

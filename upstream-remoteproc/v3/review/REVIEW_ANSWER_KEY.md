@@ -34,7 +34,8 @@ Use this answer key to score automated review runs (Claude, Gemini, Sashiko, sem
 | **MBOX-M4** | Multi-IRQ ISR concurrency race | `sun55i-msgbox.c` | MMIO status read and FIFO drain must be enclosed in `spin_lock_irqsave(&mbox->lock)`. |
 | **TEST-K2** | Big-Endian MMIO mock accessors | `sunxi_rproc_test.c` | Raw array indexing fails on BE; assertions must use `readl()` accessors. |
 | **DT-D1** | Positional `reg-names` items | `allwinner,sun55i-a523-rproc.yaml` | Fixed positional `items: [ - const: cfg, ... ]` required; `enum` across items forbidden. |
-| **DT-D2** | Positional `interrupts` items | `allwinner,sun55i-a523-msgbox.yaml` | `interrupts` and `interrupt-names` must be positional with `minItems: 1`. |
+| **DT-D2** | Positional `interrupts` items | `allwinner,sun55i-a523-msgbox.yaml` | `interrupts` and `interrupt-names` positional; lines that exist in the silicon are required, **no `minItems`** (corrected 2026-11-03: `minItems: 1` was rejected in v2 and v3). |
+| **DT-D3** | `memory-region` items | `allwinner,sun55i-a523-rproc.yaml` | Positional list, **no `minItems`** unless the binding gives a hardware reason (Krzysztof v2 and v3 3/7). |
 | **DISPATCH** | Threading under previous revisions | Mailing list dispatch | Do NOT use `--in-reply-to` for new major series versions; send fresh top-level threads. |
 
 ---

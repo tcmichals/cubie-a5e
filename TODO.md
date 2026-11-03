@@ -760,6 +760,27 @@ Run 2026-10-27 (results: `test_sweep_results.md`). Backup of the previous board 
 - [x] v3 branch `v3-next-20261027` rebuilt with `3b8f885f2f4d` (tip `4e7ef5807501`, files identical to `cubie-linux-7.1`) and re-exported: GCC 15.1 and clang 21.1.8 (`LLVM=1`) `W=1` clean on each patch, `=m` + modpost builds all four modules with both, checkpatch `--strict` only the Signed-off-by and MAINTAINERS hints, UML 68 pass / 1 skip. Board left on RT `#11`, Buildroot modules, overlays `cubie-a5e-flight-stack-e906 cubie-a5e-msgbox-txirq`
 - [x] 2026-10-29 `/kreview` + `/kseries` + review prompt rerun on the final v3 (the 10-27 reviews predate `eea917a5d5fb`, the KUnit TX-done changes and `8671beca6667`): full read of the current files, all six tiers PASS, no code change (`upstream-remoteproc/v3/review/FINAL_REVIEW_20261029.md`). Lore: no mail after 10-01. Fixed: rproc binding description reflow (`0a77050147bd`, dt_binding_check clean); cover letter testing lists PREEMPT, modules, clang, PROVE_RAW_LOCK_NESTING. checkpatch SPDX check had not run (`ply` missing): now via `~/projects/cubie/.venv-kernel-tools`, still only Signed-off-by + MAINTAINERS hints. v3 branch `v3-next-20261027` tip `6c779567f9f9`, re-exported
 
+### 5.6b v4 Fix Tracker (2026-11-03)
+
+Sources: v3 review emails, `upstream-remoteproc/v3/COMMENTS.md`; plan and evidence in
+`upstream-remoteproc/v4/V3_TO_V4_RECONCILIATION_CHECKLIST.md`; gates in `v4/PRESEND_CHECKLIST.md`.
+Fixes land on `cubie-linux-7.1` first (board test), then fold onto a fresh linux-next branch for v4.
+One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ needs decision.
+
+| # | Issue | Source | Status | Commit (7.1) |
+| :--- | :--- | :--- | :---: | :--- |
+| V4-TXIRQ | Drop `allwinner,tx-done-irq` (binding, driver, DTS); TX done by write IRQ only; remove poll mode and its tests | V3-K1, V3-S1 | ⬜ (decided) | |
+| V4-HELD | Full FIFO: hold the message, `send_data()` returns 0, write it from the TX IRQ; KUnit: blocking timeout then late IRQ | V3-S2 | ⬜ | |
+| V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ⬜ | |
+| V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ⬜ | |
+| V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ⬜ | |
+| V4-CRASH | Crash interrupt: remove from driver + binding (proposed), or always `synchronize_irq()` in `stop()`. Repeat of v2 | V3-S6, V3-K2c | ❓ Q1 | |
+| V4-MEMREG | `memory-region(-names)`: fixed list without `minItems`, or a hardware reason per optional entry. Repeat of v2 | V3-K2a/b | ❓ Q2 | |
+| V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
+| V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
+| V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
+| V4-DOCS | Correct the `minItems: 1` rule; v3 process lessons in lessons, rules, `/kreview`, `/kseries` | v3 retrospective | ✅ 2026-11-03 | (cubie-a5e) |
+
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
 
 Ground truth used: silicon readbacks (`firmware/tests.md` heartbeat `MISA=0x40901125`, live register probes)

@@ -13,7 +13,7 @@ documents below, which people read too. Do not copy rules into tool-specific fil
    raise it with the owner.
 2. **[upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md](upstream-remoteproc/UPSTREAM_LESSONS_LEARNED.md)** —
    what kernel maintainers and review bots told us, and the pre-submission checklist.
-3. **[TODO.md](TODO.md)** — the only task tracker. The v3 fix tracker is §5.6a. Do not
+3. **[TODO.md](TODO.md)** — the only task tracker. The v3 fix tracker is §5.6a, the v4 one §5.6b. Do not
    create other TODO files.
 
 ## Detailed rules

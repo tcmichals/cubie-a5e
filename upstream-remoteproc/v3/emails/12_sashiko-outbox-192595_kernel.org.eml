@@ -1,0 +1,301 @@
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.remote-ip=100.103.45.18
+ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
+	t=1793561062;
+	b=Pbxrin5rDjfqgsk8igYWTswPhpf4Q7oGL3pbBF5auTRdi4NBygXp7MQdWdiPVOdiUVqb
+	 6UlQGzn1Q5n0lRn/1j0YAlLcXmrEWonGELO0hEzrXM26Aj8CfNXBuv64TQgG8/Vu+0S5w
+	 cgc+fk1vZHFYa+mtCJa2S+Z8Qws4I19T/3YrJfOAy5EpltD2bgEVBno4OIOnTpDxvpd3V
+	 dkV8dT96TDocsGyf2dCLDWt0wvEIdRy5SiRyIRGPvvJn39cr6RrbLRYZGQaJO+4CpcnJT
+	 qZzLazUvoHdIsUXPjruxygGs90h016XrjCtw9lTPGrSsqz94xT44a1MPJeoWoNqijjQ==
+ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
+	a=rsa-sha256; c=relaxed/relaxed; t=1793561062;
+	h=Received:DKIM-Signature:Message-ID:From:Subject:Reply-To:To:Cc:
+	 In-Reply-To:References:Content-Type:Content-Transfer-Encoding:Date;
+	bh=gxFoWzqW7qFiTsMS+ArjH33ZrdRJBD8UQZUcUgurI3E=;
+	b=1vnXDYC0Ofkp4e/0/PrCNWkOpZB5BRcH0iaVAA2HnqmPm5UJRiczOk+h4lFyTdtTdG+t
+	 rHhZhgFqnlfWZwNKZZRNwAPqtFKPlswVWjG8rMWU9+1GSR6Nv0Ih8tsOPMYcQBkDQleUi
+	 BJBbFF4DjvbPdH//FVUEo7R1EtoUTcHeYmrqKxsonIqo2EDw8t3re6LD7NwmBB5hxUjqK
+	 dBbBvhL8eItHAY9H2hcOrXe5HKgw7QLDRq2UAdujYs7XeDLL4MDDOwFg2qq1hQRmEDMKQ
+	 l6W4Ve83hvAlHlCAHFjawo29739BOgFkyfIKb3unV7A8plrji7tz/szbNudnT5TI7gg==
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+	dkim=pass header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=Q61o9qbS;
+	arc=none smtp.remote-ip=100.103.45.18
+Received: from smtp.kernel.org (quasi.space.kernel.org [100.103.45.18])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature ECDSA (prime256v1))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D7D9C606A324;
+	Sun,  1 Nov 2026 19:24:21 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key,
+ unprotected) header.d=kernel.org header.i=@kernel.org header.a=rsa-sha256
+ header.s=k20260515 header.b=Q61o9qbS
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 2BDD91F000C1;
+	Sun,  1 Nov 2026 19:24:21 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kernel.org;
+	s=k20260515; t=1793561061;
+	bh=gxFoWzqW7qFiTsMS+ArjH33ZrdRJBD8UQZUcUgurI3E=;
+	h=From:Subject:Reply-To:To:Cc:In-Reply-To:References:Date;
+	b=Q61o9qbSE8FvoA33MyJxE+s0lNxEo9899ZyBmTnBggR8ULaIljnWzcypryb1Ry3AE
+	 OCUfKJGdSn1Y/GIKQiwavFSPgnzxPiha6yGL2N8H2FB35YyyePAlBQ8DDKkfcww7Td
+	 s1oUBoAV+zfTSHTSdKk1cc2bQZC3lVjGjY+Av4r0BetR9Avv4+NwyTN+7Xo28mIjPR
+	 sn8PLrbvSqHO3v5PPzlu1++pp7hx5oa5BcenE69DmddJp7nP3D7+a4qcXwdoPkDRkP
+	 LLmR1Uo0emGNhA4X6Q75Prsdy3g5Eu034kIJAiUv1338FjTdexVb8jlHI2Cnbvzr1x
+	 g8feIF+7itU7A==
+Message-ID: <sashiko-outbox-192595@kernel.org>
+From: sashiko-bot@kernel.org
+Subject: Re: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie
+ E906 driver
+Reply-To: sashiko-reviews@lists.linux.dev
+To: "Tim Michals" <tcmichals@gmail.com>
+Cc: linux-sunxi@lists.linux.dev, devicetree@vger.kernel.org, robh@kernel.org,
+ conor+dt@kernel.org
+In-Reply-To: <20261101185735.762559-5-tcmichals@gmail.com>
+References: <20261101185735.762559-1-tcmichals@gmail.com>
+ <20261101185735.762559-5-tcmichals@gmail.com>
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+Date: Sun, 01 Nov 2026 19:24:20 +0000
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Post: <mailto:linux-sunxi@lists.linux.dev>
+List-Help: <mailto:linux-sunxi+help@lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+List-Owner: <mailto:linux-sunxi+owner@lists.linux.dev>
+Precedence: list
+
+Thank you for your contribution! Sashiko AI review found 2 potential issue(=
+s) to consider:
+- [High] remoteproc: sunxi: missing IRQ sync in sunxi_rproc_stop() races cr=
+ash handler
+- [High] remoteproc: sunxi: race and UAF in sunxi_rproc_vq_work() on notify=
+ids
+--
+
+commit f895edd61f6cf2e80a5341959b347c747139fe48
+Author: Tim Michals <tcmichals@gmail.com>
+
+remoteproc: sunxi: Add Allwinner A523 XuanTie E906 driver
+
+This commit adds a remoteproc driver for the XuanTie E906 RISC-V core on
+Allwinner A523, A527, and T527 SoCs, handling power domains, clocks, resets,
+SRAM mappings, memory-region carveouts, mailbox notifications, and crash
+reporting.
+
+> diff --git a/drivers/remoteproc/sunxi_rproc.c b/drivers/remoteproc/sunxi_=
+rproc.c
+> new file mode 100644
+> index 0000000000000..1cee7110f0b8c
+> --- /dev/null
+> +++ b/drivers/remoteproc/sunxi_rproc.c
+> @@ -0,0 +1,855 @@
+
+[ ... ]
+
+> +VISIBLE_IF_KUNIT
+> +int sunxi_rproc_vq_notify(int id, void *ptr, void *data)
+> +{
+> +	KUNIT_STATIC_STUB_REDIRECT(sunxi_rproc_vq_notify, id, ptr, data);
+> +	rproc_vq_interrupt(data, id);
+> +	return 0;
+> +}
+> +EXPORT_SYMBOL_IF_KUNIT(sunxi_rproc_vq_notify);
+> +
+> +/* One channel carries all notifications: check every vring */
+> +VISIBLE_IF_KUNIT
+> +void sunxi_rproc_vq_work(struct work_struct *work)
+> +{
+> +	struct sunxi_rproc *priv =3D container_of(work, struct sunxi_rproc, vq_=
+work);
+> +
+> +	idr_for_each(&priv->rproc->notifyids, sunxi_rproc_vq_notify, priv->rpro=
+c);
+> +}
+> +EXPORT_SYMBOL_IF_KUNIT(sunxi_rproc_vq_work);
+
+[Severity: High]
+As reported by Sashiko on v2 [1], in drivers/remoteproc/sunxi_rproc.c, can
+sunxi_rproc_vq_work() race with rproc_resource_cleanup() during
+rproc_shutdown(), rproc_boot_recovery(), or sunxi_rproc_remove() ->
+rproc_del() and trigger a use-after-free?
+
+Because priv->mbox_chan stays active across remoteproc stops, crash
+recoveries, and throughout rproc_del() in sunxi_rproc_remove(), and neither
+sunxi_rproc_stop() nor sunxi_rproc_unprepare() cancels priv->vq_work,
+sunxi_rproc_vq_work() can run concurrently with rproc_resource_cleanup().
+
+In sunxi_rproc_vq_work(), idr_for_each() iterates priv->rproc->notifyids
+without holding priv->rproc->lock (unlike stm32_rproc_mb_vq_work() or
+imx_dsp_rproc_vq_work()) and without RCU read-side protection (which cannot
+be held across sunxi_rproc_vq_notify() because rproc_vq_interrupt() invokes
+virtqueue callbacks that can sleep):
+
+  lib/idr.c:idr_for_each()
+    radix_tree_for_each_slot(slot, &idr->idr_rt, &iter, 0)
+      fn(id, rcu_dereference_raw(*slot), data)
+
+While sunxi_rproc_vq_notify() is executing, a concurrent teardown runs:
+
+  rproc_resource_cleanup()
+    platform_device_unregister(rvdev->pdev)
+      rproc_virtio_remove()
+        rproc_free_vring()
+          idr_remove(&rproc->notifyids, rvring->notifyid)
+
+If removing the vring frees the underlying struct radix_tree_node via
+call_rcu(), the grace period can finish while sunxi_rproc_vq_notify() sleep=
+s,
+leaving radix_tree_next_slot() in idr_for_each() to dereference a freed slot
+pointer.
+
+In addition, although __rproc_virtio_del_vqs() clears rvring->vq and runs
+synchronize_srcu(&rproc->vq_srcu) during rproc_stop_subdevices(), the rvring
+entry stays in rproc->notifyids until platform_device_unregister(rvdev->pde=
+v)
+removes it and immediately frees the devm-allocated struct rproc_vdev
+without another synchronize_srcu(&rproc->vq_srcu). If rproc_vq_interrupt()
+looks up rvring in rproc->notifyids just before idr_remove(), it can
+dereference rvring->vq after rvdev has been freed.
+
+Should sunxi_rproc_vq_work() hold mutex_lock(&priv->rproc->lock) around
+idr_for_each(), or should the driver synchronize and stop queuing vq_work
+before rproc_resource_cleanup() tears down the vrings?
+
+> +
+> +/*
+> + * Mailbox rx callbacks run in atomic context, but the virtio/rpmsg rece=
+ive
+> + * path takes mutexes, so the vring notifications are handled from a wor=
+k item.
+> + */
+> +VISIBLE_IF_KUNIT
+> +void sunxi_rproc_mb_rx_callback(struct mbox_client *cl, void *data)
+> +{
+> +	struct sunxi_rproc *priv =3D container_of(cl, struct sunxi_rproc, cl);
+> +
+> +	queue_work(priv->workqueue, &priv->vq_work);
+> +}
+> +EXPORT_SYMBOL_IF_KUNIT(sunxi_rproc_mb_rx_callback);
+> +
+> +VISIBLE_IF_KUNIT
+> +irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
+> +{
+> +	struct sunxi_rproc *priv =3D data;
+> +
+> +	/*
+> +	 * Stays masked until the next start(); recovery runs stop() first. A
+> +	 * stop() that already disarmed it has disabled the line itself.
+> +	 */
+> +	if (test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
+> +		disable_irq_nosync(irq);
+> +
+> +	rproc_report_crash(priv->rproc, RPROC_FATAL_ERROR);
+> +
+> +	return IRQ_HANDLED;
+> +}
+> +EXPORT_SYMBOL_IF_KUNIT(sunxi_rproc_crash_handler);
+
+[ ... ]
+
+> +VISIBLE_IF_KUNIT
+> +int sunxi_rproc_start(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +	const struct sunxi_rproc_cfg *cfg =3D priv->cfg;
+> +	int ret;
+> +
+> +	dev_dbg(priv->dev, "Starting %s core at entry 0x%llx\n",
+> +		cfg->name, (u64)rproc->bootaddr);
+> +
+> +	if (rproc->bootaddr > U32_MAX)
+> +		return -EINVAL;
+> +
+> +	/* Program the reset vector and flush it before releasing the core */
+> +	sunxi_rproc_writel((u32)rproc->bootaddr, priv->cfg_va + cfg->boot_reg_o=
+ffset);
+> +	sunxi_rproc_readl(priv->cfg_va + cfg->boot_reg_offset);
+> +
+> +	ret =3D reset_control_deassert(priv->rst_core);
+> +	if (ret) {
+> +		dev_err(priv->dev, "failed to release core reset: %d\n", ret);
+> +		return ret;
+> +	}
+> +
+> +	if (priv->crash_irq > 0 &&
+> +	    !test_and_set_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
+> +		enable_irq(priv->crash_irq);
+> +
+> +	return 0;
+> +}
+> +EXPORT_SYMBOL_IF_KUNIT(sunxi_rproc_start);
+> +
+> +static int sunxi_rproc_stop(struct rproc *rproc)
+> +{
+> +	struct sunxi_rproc *priv =3D rproc->priv;
+> +	const struct sunxi_rproc_cfg *cfg =3D priv->cfg;
+> +
+> +	dev_dbg(priv->dev, "Halting %s core...\n", cfg->name);
+> +
+> +	/* Assert reset so the core stops executing */
+> +	reset_control_assert(priv->rst_core);
+> +
+> +	if (priv->crash_irq > 0 &&
+> +	    test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
+> +		disable_irq(priv->crash_irq);
+> +
+> +	return 0;
+> +}
+
+[Severity: High]
+As reported by Sashiko on v2 [2], in drivers/remoteproc/sunxi_rproc.c, what
+happens if sunxi_rproc_stop() runs right after sunxi_rproc_crash_handler()
+clears SUNXI_RPROC_CRASH_IRQ_ARMED, while the threaded handler is still
+executing?
+
+Because sunxi_rproc_crash_handler() is a preemptible IRQ thread, it can cle=
+ar
+SUNXI_RPROC_CRASH_IRQ_ARMED and be preempted before calling
+disable_irq_nosync(irq) or rproc_report_crash(priv->rproc, RPROC_FATAL_ERRO=
+R):
+
+  CPU0 (IRQ thread)                    CPU1 (rproc_shutdown / recovery)
+  sunxi_rproc_crash_handler()
+    test_and_clear_bit(
+      SUNXI_RPROC_CRASH_IRQ_ARMED,
+      &priv->flags) -> true
+                                       sunxi_rproc_stop()
+                                         test_and_clear_bit(
+                                           SUNXI_RPROC_CRASH_IRQ_ARMED,
+                                           &priv->flags) -> false
+                                         /* returns without waiting */
+
+If a subsequent rproc_boot() calls sunxi_rproc_start() before CPU0 reaches
+disable_irq_nosync(irq), sunxi_rproc_start() sets SUNXI_RPROC_CRASH_IRQ_ARM=
+ED
+and calls enable_irq(priv->crash_irq) while the IRQ disable depth is still =
+0,
+triggering an unbalanced enable warning in __enable_irq(). When CPU0 then
+runs disable_irq_nosync(irq), the IRQ is left disabled while
+SUNXI_RPROC_CRASH_IRQ_ARMED is set, and the next sunxi_rproc_stop() will
+increment the disable depth to 2, leaving the crash IRQ permanently masked =
+on
+later boots.
+
+Furthermore, because sunxi_rproc_stop() does not call
+synchronize_irq(priv->crash_irq) when test_and_clear_bit() returns false, t=
+he
+in-flight sunxi_rproc_crash_handler() thread can call rproc_report_crash()
+after the stop (and a subsequent restart) has already completed.
+
+Should sunxi_rproc_stop() still call synchronize_irq(priv->crash_irq) when
+priv->crash_irq > 0 and SUNXI_RPROC_CRASH_IRQ_ARMED was already cleared by
+the crash handler?
+
+[1] https://lore.kernel.org/r/20260927003338.CB0E21F000FF@smtp.kernel.org
+[2] https://lore.kernel.org/r/20260927003338.CB0E21F000FF@smtp.kernel.org
+
+--=20
+Sashiko AI review =C2=B7 https://sashiko.dev/#/patchset/20261101185735.7625=
+59-1-tcmichals@gmail.com?part=3D4

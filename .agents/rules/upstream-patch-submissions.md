@@ -25,6 +25,14 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 2. **Positional `items:` for Interrupts**:
    - Do NOT use free-form narrative text in `description:` explaining port order.
    - Define an explicit positional list for `interrupts` and `interrupt-names`. Lines that exist in the silicon are required (no `minItems`): a driver option that does not use some of them does not make them optional (Krzysztof v1: "How could an interrupt be optional?"; owner decision 2026-10-27).
+2a. **No `minItems` Without a Hardware Reason** (any list: `memory-region`, `interrupts`, clocks, ...):
+   - An entry is optional only when the binding says which hardware lacks it. A driver that can run
+     without it is not a reason. `memory-region` `minItems: 1` was rejected in v2 and v3 (Krzysztof:
+     "same comments as for v2"); citing TI K3 / MediaTek SCP did not help.
+2b. **No Driver Policy Properties**:
+   - A boolean that only chooses how the driver uses hardware every SoC has (e.g. `allwinner,tx-done-irq`,
+     poll vs IRQ) is policy and is rejected (Krzysztof + Sashiko, v3 1/7). Search mainline first for a
+     binding that does the same before arguing (AGENTS.md).
 3. **No Redundant Descriptions or Formatting Pipes**:
    - Drop `description: bus clock` or `description: bus reset`.
    - Drop `|` pipes on single-line property descriptions.
@@ -43,6 +51,9 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 > These rules are decisions. Each one names its source. A review (AI or human) that
 > disagrees does not change the code by itself: check it against the kernel source and the
 > vendor BSP first, then update the rule here **and** the code together.
+> It is not closed by itself either: a High/Medium finding against a rule is put to the owner
+> as a yes/no, with every peer driver cited, including those that do it differently
+> (UPSTREAM_LESSONS_LEARNED.md §6; four v3 findings came back because they were closed here).
 > Vendor BSP reference: `linux-aw2501` `bsp` (location varies per PC: see docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0) (Radxa allwinner-bsp,
 > read with `git --git-dir=... show HEAD:<path>`): `drivers/remoteproc/sunxi_rproc.c`,
 > `drivers/remoteproc/sunxi_rproc_e906_boot.c`, `drivers/msgbox/sunxi-msgbox.c`,
