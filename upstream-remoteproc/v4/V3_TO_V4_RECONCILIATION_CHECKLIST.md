@@ -14,7 +14,7 @@ driver, **5** DTS, **6** mailbox KUnit, **7** rproc KUnit.
 |:--|:--|:--|
 | ~~Q1~~ | **Answered 2026-11-03: yes, remove** (no interrupt line). Was: Remove the crash interrupt from the driver and the binding? No line exists on the A523, the vendor BSP has none, it was never tested on hardware; the crash dump stays. A mailbox crash message can come later | V3-S6, V3-K2c; patches 3, 4, 7 |
 | ~~Q2~~ | **Answered 2026-11-03: optional** (keep `minItems: 1`, give the firmware reason in the binding and reply). Was: Are the `dram` and `trace` memory regions always used? Yes → fixed list, no `minItems`. No → the binding gives a hardware reason for each optional entry | V3-K2a, V3-K2b; patches 3, 4, 5 |
-| Q3 | Fix SRAM resource-table addresses to E906 DAs with `dma-ranges` (TC-3, HARSH rproc M2, never decided)? No → the cover letter says they are host PAs | patches 3, 4, firmware |
+| Q3 | **Answered 2026-11-03: fix it with `dma-ranges`; the pool may be in SRAM or DDR.** Open: placement A1 (bus node with `dma-ranges` in the dtsi, like stm32 `mlahb`; recommended) or A2 (driver sets the map). Was: Fix SRAM resource-table addresses to E906 DAs with `dma-ranges` (TC-3, HARSH rproc M2, never decided)? No → the cover letter says they are host PAs | patches 3, 4, firmware |
 | ~~Q4~~ | **Closed 2026-11-03, no change**: `mboxes` stays optional, as in `fsl,imx-rproc`, `st,stm32-rproc`, `ti,k3-m4f-rproc` (only `ti,k3-dsp-rproc` requires it); Krzysztof did not comment on it. Was: keep `mboxes` optional for UIO (TC-7)? | patch 3 |
 
 Triple check of v1/v2/v3: [review/TRIPLE_CHECK_20261103.md](review/TRIPLE_CHECK_20261103.md) (TC-1 … TC-10).
