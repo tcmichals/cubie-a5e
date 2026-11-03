@@ -30,10 +30,16 @@ DRAM, trace and vrings from the carveouts. DRAM support is not dropped to satisf
 comment.
 
 ### Memory regions are a listed, positional set (D10, 2026-10-14)
-> **Reopened 2026-11-03** (owner question Q2, v4/V3_TO_V4_RECONCILIATION_CHECKLIST.md):
-> Krzysztof rejected `minItems: 1` on `memory-region` / `memory-region-names` in v2 and again in
-> v3 ("same comments as for v2"). The order below stands; whether `dram` and `trace` are always
-> present (fixed list) or need a hardware reason to be optional is for the owner.
+> **Owner, 2026-11-03 (Q2):** "trace and dram do not always have to be used or defined." `vram`
+> (index 0, the pool) is required; `dram` and `trace` are optional. Krzysztof rejected
+> `minItems: 1` in v2 and v3 because no reason was given: v4 states it in the binding
+> description and in the reply. The reason is the firmware, not the SoC: firmware linked to run
+> from the two SRAMs has no DRAM sections, and firmware without a trace buffer needs no trace
+> region. Precedent: `ti,k3-m4f-rproc.yaml` ("Optional memory regions available for firmware
+> specific purposes"), `ti,k3-dsp-rproc.yaml`, `fsl,imx-rproc.yaml`, `st,stm32-rproc.yaml`,
+> `qcom,milos-pas.yaml`. Positional list: `trace` needs `dram` before it (the driver does not
+> care; only index 0 must be the pool). Fallback if rejected a third time: drop `dram`/`trace`
+> from DT and use resource-table carveouts (conflicts with D7, owner to decide then).
 
 The binding lists the `memory-region` items in order: `vram` (the DMA pool, index 0), then
 `dram`, then `trace`, with matching `memory-region-names`. Krzysztof asked for listed items
@@ -136,11 +142,15 @@ at `0x072B0000`). It was removed on 2026-10-16. The working split: the `-uio` ba
 binds the message box to the project-only `sun55i-msgbox-uio` driver (clock and reset on, registers
 and the SRAM ping slot as `/dev/uio0`).
 
-### Crash interrupt kept (D14)
-> **Reopened 2026-11-03** (owner question Q1): Krzysztof (v3 3/7, "same comments as for v2") and
-> Sashiko (v3 4/7 High, stop() vs handler race, also reported on v2) both hit it again. Proposed:
-> remove it from the driver and binding (no line on the A523, none in the BSP, never tested); the
-> crash dump stays. Until the owner answers, the text below stands.
+### Crash interrupt removed (owner, 2026-11-03, v4; replaces D14)
+There is no interrupt line for a crash on the A523 (none in the manual, none in the vendor BSP),
+so there is no crash ISR: v4 drops `interrupts` from the rproc binding and the crash handler,
+the armed flag and their KUnit tests from the driver. Krzysztof (v1: "How interrupt could be
+optional? It either is or is not there"; v3 3/7 "same comments as for v2") and Sashiko (v3 4/7
+High, also on v2) both hit it. The crash dump segments stay registered; a crash report can come
+later through a mailbox message, with its own binding-free protocol.
+
+#### D14 as it was (superseded)
 
 The driver keeps the optional crash IRQ. No DTS wires it and the vendor BSP has none, so the
 cover letter must not claim it is tested.
@@ -179,6 +189,7 @@ The firmware also supports an interrupt mode (wake on the message box interrupt)
 are tested.
 
 ### Message box TX completion: write interrupt only, no DT property (owner, 2026-11-03, v4)
+Owner, 2026-11-03: "we are not using a timer for msgbox, we have an interrupt".
 Replaces the 2026-10-16 entry below. Krzysztof (v3 1/7: "Sashiko comment looks valid") and
 Sashiko (v3 1/7, Medium) rejected `allwinner,tx-done-irq` as driver policy: every A523 has the
 three remote write-interrupt lines, and the binding already requires them, so the property only

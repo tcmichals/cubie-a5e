@@ -35,14 +35,15 @@ On Mon, Nov 02, 2026 at 11:19:54AM +0100, Krzysztof Kozlowski wrote:
 
 Sorry, I missed these again in v3.
 
-TBD (Q2), one of:
-  memory-region and memory-region-names are now a fixed list of three,
-  with no minItems.
-or:
-  <the hardware reason each optional entry may be absent>
+I should have said why dram and trace are optional, and the binding
+did not say it either. They depend on the firmware, not on the SoC:
+firmware linked to run from the two SRAMs has no DRAM sections, and
+firmware without a trace buffer needs no trace region. The vring pool
+is always needed and is required. v4 says this in the binding. If you
+prefer them gone from the binding, the firmware can request both
+through its resource table instead.
 
-TBD (Q1):
-  The crash interrupt is gone: the A523 has no line for it.
+The crash interrupt is gone: the A523 has no line for it.
 
 <v4 lore link>
 
