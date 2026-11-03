@@ -58,6 +58,10 @@ as `vdev0buffer`, `vdev0vring0`), even though the vendor BSP uses it:
 - our firmware uses `FW_RSC_ADDR_ANY` and lets Linux place the vrings, which is the pool case.
 
 ### Vring pool in DRAM or SRAM (owner, 2026-10-27)
+> **2026-11-03 (owner, Q3):** kept, and v4 gives the E906 its own addresses through `dma-ranges`
+> (SRAM windows translated, DDR 1:1), as stm32 does; v3 handed it host addresses in SRAM and the
+> firmware converted them. Placement (bus node A1 vs driver map A2) open: TODO §5.6b V4-SRAMDA.
+
 `memory-region[0]` is a `shared-dma-pool` and may sit in DRAM or on an E906 SRAM; both are
 board-tested every sweep (profile 1/1T: `cubie-a5e-flight-stack`, DRAM `0x48000000`; profile 2:
 `cubie-a5e-testPingRpmsgSram`, SRAM space 1 `0x072c0000`). A pool on an SRAM reuses that SRAM's
