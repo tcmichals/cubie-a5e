@@ -75,8 +75,10 @@ static int aic8800d80_driver_fw_init(struct aic_sdio_dev *sdiodev, u32 *btenable
 		aicbsp_info->chip_rev = (u8)((rd_mem_addr_cfm.memdata >> 16) & 0x3F);
 		is_chip_id_h = (u8)(((rd_mem_addr_cfm.memdata >> 16) & 0xC0) == 0xC0);
 	}
-	if (is_chip_id_h || aicbsp_info->chip_rev != CHIP_REV_U02) {
-		pr_err("aicbsp: AIC8800D80 U02 is required (revision %u)\n",
+	/* U03 (rev 7, the Cubie A5E module) runs the U02 firmware. */
+	if (is_chip_id_h || (aicbsp_info->chip_rev != CHIP_REV_U02 &&
+			     aicbsp_info->chip_rev != CHIP_REV_U03)) {
+		pr_err("aicbsp: AIC8800D80 U02/U03 is required (revision %u)\n",
 		       aicbsp_info->chip_rev);
 		return -ENODEV;
 	}

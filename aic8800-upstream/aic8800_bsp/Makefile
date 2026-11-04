@@ -13,4 +13,5 @@ aic8800_bsp-y := \
 
 ccflags-y += -I$(src)/../aic8800_fdrv
 ccflags-y += -DAICWF_SDIO_SUPPORT
-ccflags-y += -DCONFIG_SDIO_PWRCTRL
+ccflags-$(CONFIG_AIC8800_SDIO_PWRCTRL) += -DCONFIG_SDIO_PWRCTRL
+ccflags-$(CONFIG_AIC8800_FDRV_NO_REG_SDIO) += -DCONFIG_FDRV_NO_REG_SDIO

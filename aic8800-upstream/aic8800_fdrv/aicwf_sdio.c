@@ -2195,14 +2195,20 @@ void aicwf_sdio_hal_irqhandler(struct sdio_func *func)
 			complete(&bus_if->busrx_trgg);
 
 	} else {
+		int retry = 3;
+
+		/* A failing SDIO read must not spin forever with the host claimed. */
 		do {
 			ret = aicwf_sdio_readb(sdiodev,
 					       sdiodev->sdio_reg.misc_int_status_reg,
 					       &intstatus);
-			if (!ret)
-				break;
-			sdio_err("ret=%d, intstatus=%x\r\n", ret, intstatus);
-		} while (1);
+		} while (ret && --retry);
+		if (ret) {
+			sdio_err("misc int status read failed: %d\n", ret);
+			aicwf_sdio_activity_put(sdiodev->rwnx_hw,
+						sdiodev->rwnx_hw->ws_irqrx);
+			return;
+		}
 		if (intstatus & SDIO_OTHER_INTERRUPT) {
 			u8 int_pending;
 
