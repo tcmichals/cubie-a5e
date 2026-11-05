@@ -769,23 +769,23 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 
 | # | Issue | Source | Status | Commit (7.1) |
 | :--- | :--- | :--- | :---: | :--- |
-| V4-TXIRQ | Drop `allwinner,tx-done-irq` (binding, driver, DTS); TX done by write IRQ only; remove poll mode and its tests | V3-K1, V3-S1 | ⬜ (decided) | |
-| V4-HELD | Full FIFO: hold the message, `send_data()` returns 0, write it from the TX IRQ; KUnit: blocking timeout then late IRQ | V3-S2 | ⬜ | |
-| V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ⬜ | |
-| V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ⬜ | |
-| V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ⬜ | |
-| V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ⬜ (decided 2026-11-03: remove) | |
+| V4-TXIRQ | Drop `allwinner,tx-done-irq` (binding, driver, DTS); TX done by write IRQ only; remove poll mode and its tests | V3-K1, V3-S1 | ✅ (decided) | `620d918874f8` `70509dc4e6fe` |
+| V4-HELD | Full FIFO: hold the message, `send_data()` returns 0, write it from the TX IRQ; KUnit: blocking timeout then late IRQ | V3-S2 | ✅ | `70509dc4e6fe` `e1f50ee2fd84` |
+| V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ✅ | `70509dc4e6fe` `e1f50ee2fd84` |
+| V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ✅ | `70509dc4e6fe` `e1f50ee2fd84` |
+| V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ✅ | `e6f9ab5f987d` `7476d6d15b43` |
+| V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ✅ (decided 2026-11-03: remove) | `a4042b040f2c` `e6f9ab5f987d` `7476d6d15b43` |
 | V4-MEMREG | `memory-region(-names)`: keep `minItems: 1` (owner: dram/trace optional); binding description gives the firmware reason. Repeat of v2 | V3-K2a/b | ✅ (dt_binding_check clean) | `891dfd49cb6c` |
-| V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
-| V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
+| V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ✅ | `7476d6d15b43` |
+| V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ✅ | `7476d6d15b43` |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
 | V4-SRAMDA | SRAM vring/carveout/buffer addresses are host PAs, not E906 DAs (HARSH rproc M2). Owner 2026-11-03: fix with `dma-ranges` (SRAM0 `0x3ffc0000→0x07280000`, SRAM1 `0x40000000→0x072c0000`, DDR 1:1), pool in SRAM or DDR. Core: vring da = dma addr (`remoteproc_core.c:766`), vdev copies the rproc map (`remoteproc_virtio.c:30`). Carveouts registered with E906 DA (stm32 `stm32_rproc_pa_to_da()`); drop ATT host rows; remove `translate_da()` in `firmware/` and AbstractX; board test both pools. ❓ placement: A1 bus node in dtsi (stm32 `mlahb`, recommended) or A2 driver-built map | TC-3 | ❓ A1/A2 | |
 | V4-MBOXOPT | `mboxes` optional for UIO: keep (imx, stm32, k3-m4f also optional) | TC-7 | ✅ no change | |
 | V4-RCPT | v4 recipients: Chen-Yu at `wens@kernel.org` (v3 went to `wens@csie.org`) | TC-5 | ⬜ | |
-| V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ⬜ | |
+| V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ✅ | `e1f50ee2fd84` `7476d6d15b43` |
 | V4-SPARSE-TOOL | sparse for `C=1`: Ubuntu's 0.6.4 is installed but the kernel rejects it (`scripts/checker-valid.sh` needs `__typeof_unqual__`) and silently drops `C=`. Needs sparse built from git (newer than 0.6.4) | TC-10 | ⬜ (0.6.4 too old) | |
-| V4-BOARD | Remove overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-msgbox-txirq.dtso`; the base DT then runs TX done by interrupt | V4-TXIRQ | ⬜ | |
-| V4-SWEEP | `tools/run_full_sweep.py`: drop the timer benchmark and Profile 1T, and the "TX-done lines requested in timer mode" check (lines are now always used); keep the write-IRQ test in profile 1 | V4-TXIRQ | ⬜ | |
+| V4-BOARD | Remove overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-msgbox-txirq.dtso`; the base DT then runs TX done by interrupt | V4-TXIRQ | 🔧 in progress | |
+| V4-SWEEP | `tools/run_full_sweep.py`: drop the timer benchmark and Profile 1T, and the "TX-done lines requested in timer mode" check (lines are now always used); keep the write-IRQ test in profile 1 | V4-TXIRQ | 🔧 in progress | |
 | V4-MSGDOC | Docs that describe timer mode / `allwinner,tx-done-irq` / the crash IRQ: msgbox reference, driver guide, T527 spec reference, discovery doc | V4-TXIRQ, V4-CRASH | ⬜ | |
 | V4-CHLOG | Per-patch "Changes in v4" and commit messages (1/7 still describes `tx-done-irq`; 3/7 the crash interrupt; 4/7 the crash IRQ and `-EBUSY`) | all | ⬜ | |
 | V4-THRESH | Re-check HARSH mailbox D6 (write-IRQ threshold write in `startup()` is a no-op on this silicon): it now carries all TX done | TC review | ⬜ | |
