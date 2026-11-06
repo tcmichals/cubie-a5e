@@ -1,0 +1,158 @@
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.remote-ip=209.85.128.53
+ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
+	t=1793887201;
+	b=ayM4KA8xOGxyLm2cJbWURTYVNQ5L/yzpQSZct+nTJ4I3kifiiY/dlOe0BtecQuTMBE8/
+	 j1l1rZB++wecJxe0adwL8gcyEIcs+N1+y4u858FT1FH3agFpjisJ79zIqamB7C5OZUpiL
+	 1nhE9cZluqdIZEzmOJY+yNpcabiNW74V7fk3d10faUcJuOYcdKufyi1VXN5FAApxynQx/
+	 yWS6fG2ZFXr0KU0eat+bORzzP7H3NxKVDnFwgqR2Uy8iljPCzXbXIbaZ2PdBbF+8EQrag
+	 MtHjaxX1AD5IIlewORXOceqVNQIWn5iNByjwjC98u6s3tekyJePLEoil9XWrsEed7NA==
+ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
+	a=rsa-sha256; c=relaxed/relaxed; t=1793887201;
+	h=DMARC-Filter:Received:DKIM-Signature:X-Google-DKIM-Signature:
+	 X-Forwarded-Encrypted:X-Gm-Message-State:X-Gm-Gg:X-Received:Received:
+	 Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To;
+	bh=0bb3vYa61fFM02QV8RwA3NSPnIkcy66WcHx7ncn336Y=;
+	b=TjkdUYHoOSzR/Ln9oKlSRzFoSLTRRQRFUqatnOv5Pte9qJvQYLnGqWFv7Bv/a+VMp42M
+	 EZJ1jygVUGPy8jHcCW+pkZ8veGbZKTE1EsBYhJfobk4MptZU1HipgkJyN3Dcd9XiJOWIo
+	 L/Y5RZbxP4zgqdbYxKyuCICgUeUCSZ7w86k5WWwpSP1OSE2qyOsCfgW5LA6bGq5gRnKw4
+	 RXRaJpG1lkUQrCH103jWpC8virWfHahaCSga9VRkqGBMkkbfltYcg96iVZuknnpN0IDIN
+	 jaeh0FGm1uDVmGe/rwTu1S5Uca2VrFw+PUC4jwgayxBaZaHX6fzNptYrTcliHataW4A==
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+	dmarc=none header.from=baylibre.com;
+	spf=pass smtp.mailfrom=baylibre.com;
+	arc=none smtp.remote-ip=209.85.128.53
+Received: from mail-wm1-f53.google.com (mail-wm1-f53.google.com
+ [209.85.128.53])
+	(using TLSv1.3 with cipher TLS_AES_128_GCM_SHA256 (128/128 bits)
+	 key-exchange X25519 server-signature ECDSA (prime256v1) server-digest
+ SHA256)
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D6C6D606A32C
+	for <linux-sunxi@lists.linux.dev>; Thu,  5 Nov 2026 13:59:55 +0000 (UTC)
+DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org D6C6D606A32C
+Authentication-Results: smtp.subspace.kernel.org;
+ dmarc=none (p=none dis=none) header.from=baylibre.com
+Authentication-Results: smtp.subspace.kernel.org;
+ spf=pass smtp.mailfrom=baylibre.com
+Received: by mail-wm1-f53.google.com with SMTP id
+ 5b1f17b1804b1-4a2153c8525so12781455e9.3
+        for <linux-sunxi@lists.linux.dev>;
+ Thu, 05 Nov 2026 05:59:55 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=baylibre.com; s=google; t=1793887194; x=1794491994;
+ darn=lists.linux.dev;
+        h=in-reply-to:content-disposition:content-type:mime-version
+         :references:message-id:subject:cc:to:from:date:from:to:cc:subject
+         :date:message-id:reply-to:content-type;
+        bh=0bb3vYa61fFM02QV8RwA3NSPnIkcy66WcHx7ncn336Y=;
+        b=YGmlwk6oiIeXBINNE3yORBhyGEyD/1ygRhty5OvHaT1uuH64fnU6eUt9XdTtKsR8ZR
+         p8BKl4O7TYDOvG0QWA67PgZtnFt8y7wnuIvM4QZF2dHXEiXYk1F21ovEdUNP6vfK4Ov0
+         Tgxy7JWgl7A8hKl49tMvfTo4CAupQX6oCY9RfrGF5FmxW+dJChQ3XXvfb72xNygplD5A
+         xH4Wj0jC5mqm6D3BK7b7VIZwNyi/8vfNcg1Vl/+HU5/EP4yVxljD8h0qlYTsu0bc8GSm
+         S4XBQ6wyssNG5vC0vqe/AJc4TcLz7fSw0M5hz4xTuduCxJTyRKIkNIL2HBMPcpMnNl+K
+         1Obg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20260707; t=1793887194; x=1794491994;
+        h=in-reply-to:content-disposition:content-type:mime-version
+         :references:message-id:subject:cc:to:from:date:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to
+         :content-type;
+        bh=0bb3vYa61fFM02QV8RwA3NSPnIkcy66WcHx7ncn336Y=;
+        b=0feXdUQY3paCmsNLI0HdAyLIsTLmBrHGW216XmAcptAJCHgBuchTD7FpXYT87fz1RU
+         WyYzonxjt6rVs5QTJPQqrAJCWL1xbMnLUoWgdWz8G0RWTjGq7ylcn27SWln/Z4uZJ10l
+         If9XujBsBAbKYZRur4s1RF9m/h3mdzDnHBsURPxdEU3wv2N5uPz7bNVWrpaeMYC9Qj3m
+         l0yr8EuPLrPhvAa2LISek9We3p95qncOxGFhafoPkMucKQq+BUOiZD3tAEG9JbqA+SDQ
+         B/RYDUfhjxhlXCd10p2l+tUL33kZGU9M1XPXRzTyp8hSNcVAEorGe27BSdYidR0mrhAU
+         QY4Q==
+X-Forwarded-Encrypted: i=1;
+ AKwUvBxqNu0Qg11iA6rgzVUYpBwpp3d1XiLwHcZFCQPyylLIU9kdGsSCI+WCu3NxwoXUz4WxJvZp+cUIft8wZg==@lists.linux.dev
+X-Gm-Message-State: APuU4Z+yBOjfiZa0AUjJFTHcWhIME1NZQYgGXAtTbIPs5BZRm3xJ6wW9
+	brqBzHHyf69R5vxV1GRNkm3hi/udkbb8GLYhlgYC+zaTdnGYvlAokeJvLFC7aBM+UvY=
+X-Gm-Gg: AYBFou3uVzGoH/Jpz3kcHNRHW/D/tBgyiT0Myle3fg5TgWD+miaY5wSO9IO+nbPASsG
+	I+t8xJKqxNI66iuVx9AEv8MM+yj5p4EYfMbPYJCjpFutovdXK538eKWiz5B5/g8d/3o4Wdl8t5u
+	zTz4oH5YOzHOxdD9lPKE1k1js/lud88ZJtm3CxuegVP2GqlZ5FmSHHjh1eQpxI3Q2W0QHx/ovT/
+	el3onS6iPrcRjuXc4qE5aR0L5Eg7qNjrktvuwq8X7WW71WpumolhwoUO74LrUNisn4t9TXkNKtZ
+	vJ5/lUPlgRoC18KPI1tfAamSmDA3HRCo0T6QuiAIcAPpG2cJJPUSum0PFnaGeqnU365vf20cpJo
+	1aaarsEtfsgOG+8ZYQY82GRmW4ThmENUFR5vhF0/y0AyTEn1rQ5PRx4oueFi3vMvXoouIjTa5pK
+	x+KfbdQas9W5qnkAtXaerNw1zzSMoBswsO6HBvVQ+VItLunMb0SVDd4vOSoaA5j9qmNbVLv5PaD
+	cRjin5rzBVHita/3zbBeoprQqYpdO1VjwAZqkYIVywKv1WLnS2m/1ULf3Zilbx0Jh6gYj6cSgMF
+	x8JmXYOob2NAyoZfAZQv46m88pY=
+X-Received: by 2002:a05:600d:c:b0:4af:83ad:8f70 with SMTP id
+ 5b1f17b1804b1-4af83ad8fa7mr259029715e9.35.1793887194037;
+        Thu, 05 Nov 2026 05:59:54 -0800 (PST)
+Received: from localhost ([194.213.108.9])
+        by smtp.gmail.com with UTF8SMTPSA id
+ 5b1f17b1804b1-4b56e2ae73csm69855805e9.1.2026.11.05.05.59.52
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Thu, 05 Nov 2026 05:59:53 -0800 (PST)
+Date: Thu, 5 Nov 2026 14:59:49 +0100
+From: Uwe =?utf-8?Q?Kleine-K=C3=B6nig?= <u.kleine-koenig@baylibre.com>
+To: Tim Michals <tcmichals@gmail.com>
+Cc: Jassi Brar <jassisinghbrar@gmail.com>,
+	Bjorn Andersson <andersson@kernel.org>,
+ Mathieu Poirier <mathieu.poirier@linaro.org>,
+	Rob Herring <robh@kernel.org>, Krzysztof Kozlowski <krzk+dt@kernel.org>,
+	Conor Dooley <conor+dt@kernel.org>, Chen-Yu Tsai <wens@csie.org>,
+	Jernej Skrabec <jernej.skrabec@gmail.com>,
+ Samuel Holland <samuel@sholland.org>,
+	linux-sunxi@lists.linux.dev, linux-remoteproc@vger.kernel.org,
+ devicetree@vger.kernel.org,
+	linux-arm-kernel@lists.infradead.org, linux-kernel@vger.kernel.org
+Subject: Re: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie
+ E906 driver
+Message-ID: <auyLnRhPv0jz1roG@monoceros>
+References: <20261101185735.762559-1-tcmichals@gmail.com>
+ <20261101185735.762559-5-tcmichals@gmail.com>
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Post: <mailto:linux-sunxi@lists.linux.dev>
+List-Help: <mailto:linux-sunxi+help@lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+List-Owner: <mailto:linux-sunxi+owner@lists.linux.dev>
+Precedence: list
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha512;
+	protocol="application/pgp-signature"; boundary="bvyb3kuhcvop66ue"
+Content-Disposition: inline
+In-Reply-To: <20261101185735.762559-5-tcmichals@gmail.com>
+
+
+--bvyb3kuhcvop66ue
+Content-Type: text/plain; protected-headers=v1; charset=us-ascii
+Content-Disposition: inline
+Subject: Re: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie
+ E906 driver
+MIME-Version: 1.0
+
+Hello,
+
+On Sun, Nov 01, 2026 at 12:57:32PM -0600, Tim Michals wrote:
+> +#include <linux/mod_devicetable.h>
+> [...]
+> +#include <linux/platform_device.h>
+
+As for patch 2: Please don't use <linux/mod_devicetable.h> and rely on
+<linux/platform_device.h> to provide of_device_id.
+
+Best regards
+Uwe
+
+--bvyb3kuhcvop66ue
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iQEzBAABCgAdFiEEP4GsaTp6HlmJrf7Tj4D7WH0S/k4FAmrsi9IACgkQj4D7WH0S
+/k5Wggf/YfIQ7WHmvvey+xjJQnqBBC6pD6WMGs1N8zOjBs47xKTlmoiTy704ncA/
+SHYjg0IkCpwOICXXvfiXJZFK8h5M7+y5jrB6VR4gKwnHKcUzaD8baV2tzCTRxFzk
+q7fKaeI3n7fNH1aRrXWMimidD77eQ9VgIocGQaE05rZOFLWYznwN1IejorHjVYp/
+vlaPrjtYabWXJydNPSHUrC4QQNwhhpon6qjxkgmEXkcW4zWORnfjI58d7MJv7jNd
+i46zZKPpVOXafx2kCKmbSiggE5i1cPr6O3e+3Muw64B0kJenSgxjkPD0kzt1TMDL
+MrWyYaGIU8+0pgKPYFIeJQiOoD98Ww==
+=7Net
+-----END PGP SIGNATURE-----
+
+--bvyb3kuhcvop66ue--

@@ -1,0 +1,166 @@
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.remote-ip=209.85.128.48
+ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
+	t=1793887132;
+	b=d14SB6YztqWgk16v28dA51ZPdDVcZncC77pfAoTHv7QUpfdlLJ5MCBN6xZSqI1/mPGoG
+	 xi4qR9ZQBUmas0o3j40+VAXSIj3zXqotTrHi92NpY3Gw3UTW28Lr/kiPa+Q6InWcDLZv/
+	 kwkX+cM3fgsBTmZoB8hblwhCekoRtmIJig5uHT4cNLW/dLsHTSvIMMhdy8BXtOxKL0i5B
+	 HiQomLUxq7wBgVhqQGUtvhIOjUuqclNp9Q4EeNsE4MJiSngNuEz3JPZ0Eo1Fbg+0nLgrL
+	 UcxCVKmRWAXQ7ytNPg1M/nDkBIL4/c3rTW9m+QEgqawF06OaExc0n5ywLmNehremYSQ==
+ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
+	a=rsa-sha256; c=relaxed/relaxed; t=1793887132;
+	h=DMARC-Filter:Received:DKIM-Signature:X-Google-DKIM-Signature:
+	 X-Forwarded-Encrypted:X-Gm-Message-State:X-Gm-Gg:X-Received:Received:
+	 Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To;
+	bh=XP2sPyfb4drUGyU1lXjbZR0XesYSs81x4qP77e4f+vA=;
+	b=mSQ0eOEaPcJPcri5EHv0edSsSAWW/Nlfi8gimqtWF3MULhZBCEppvdDOo4mO3Pb6YZEN
+	 gBMNkdJju05VY0t8p8LCEm1docHw3B6P+3ksZCbgRozNehiGPL4eK0wNDqjx7I9s/Pynx
+	 rjsE0LbgsQp1bhR6ZOHJ2Sn3eCPPuFmW+boSVo4+w4ntHW19ukBj14BEIeLlesIj4d+J/
+	 R/ZBYBcXNFur2wonxWxL4/a9kP4ojMYhz6+Hs9HnN2L03WTEO0FIqgGNraOVafmcNiEmm
+	 6I+8n9ST3N9j8RJF7k1F87i/i2Kvgcavh5JichTuUceP2liAeLD4jih1OrznHPM7dEQ==
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+	dmarc=none header.from=baylibre.com;
+	spf=pass smtp.mailfrom=baylibre.com;
+	dkim=pass header.d=baylibre.com header.i=@baylibre.com header.a=rsa-sha256
+ header.s=google header.b=M81CpWeR;
+	arc=none smtp.remote-ip=209.85.128.48
+Received: from mail-wm1-f48.google.com (mail-wm1-f48.google.com
+ [209.85.128.48])
+	(using TLSv1.3 with cipher TLS_AES_128_GCM_SHA256 (128/128 bits)
+	 key-exchange X25519 server-signature ECDSA (prime256v1) server-digest
+ SHA256)
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 2F9A9606A326
+	for <linux-sunxi@lists.linux.dev>; Thu,  5 Nov 2026 13:58:51 +0000 (UTC)
+DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org 2F9A9606A326
+Authentication-Results: smtp.subspace.kernel.org;
+ dmarc=none (p=none dis=none) header.from=baylibre.com
+Authentication-Results: smtp.subspace.kernel.org;
+ spf=pass smtp.mailfrom=baylibre.com
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key,
+ unprotected) header.d=baylibre.com header.i=@baylibre.com header.a=rsa-sha256
+ header.s=google header.b=M81CpWeR
+Received: by mail-wm1-f48.google.com with SMTP id
+ 5b1f17b1804b1-4a20a37703bso14381185e9.1
+        for <linux-sunxi@lists.linux.dev>;
+ Thu, 05 Nov 2026 05:58:50 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=baylibre.com; s=google; t=1793887129; x=1794491929;
+ darn=lists.linux.dev;
+        h=in-reply-to:content-disposition:content-type:mime-version
+         :references:message-id:subject:cc:to:from:date:from:to:cc:subject
+         :date:message-id:reply-to:content-type;
+        bh=XP2sPyfb4drUGyU1lXjbZR0XesYSs81x4qP77e4f+vA=;
+        b=M81CpWeRdflYp60A5K4Gj+Q+YC0HKs9tbcsayILnEUF402lUQMTc8w/OTTS/xQopIg
+         yunI69dTGh37mrsPVffOFx/nENQRNxBOY+ubyInqMK5PVJa4oc3QHwC5e/CXQF/llNV5
+         DBHEkhNHNGIXHDb9lmoT1n34jpEQ9BIRE/EpBFIjK1bDvfCbFKjVOqFqGhCMomZzOh94
+         PrrChSHCGM+ven8JiHn+9lM/ZryDdTqRkRkyU/j28SvrmAdbeLjCuc0FXv9QjyDXUycb
+         oEaxc9Q2tsMPTSYA0zRudYVxVvkwD+kVfQIU8p50Sv3WNhrnds72uyvsoKg3lyZ44wvn
+         JsaA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20260707; t=1793887129; x=1794491929;
+        h=in-reply-to:content-disposition:content-type:mime-version
+         :references:message-id:subject:cc:to:from:date:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to
+         :content-type;
+        bh=XP2sPyfb4drUGyU1lXjbZR0XesYSs81x4qP77e4f+vA=;
+        b=q31jjO/9LQ/OFemHp27UluF9KyCtmZf/45b0HFswnvkuMRh3XCrlIB2n23pzlAMQIx
+         N5ZhHQ/JfYSfAVeBUsjMLxRMvh/a1pU4kR+RhR/ZIkKoV4gvdTz6v8BAcEBvhA+9dqMO
+         nYTXJ5SBrliFBkhAquzuw/x4nlUV/O6mPZIueMFqQCk7XYlM6pYSleuT/ZFhQtNevX4p
+         gcnRqtWM2g5LgjscsayAXi0bmfKDlvga/D79Kt1Z5RYeoTxrrJvAddce8hcsEIv0gH1I
+         A7BxPyrAFvH7XZpFWVRqx5Xb69HgEzv9ladXN+55K1SK8CBTWRRZkms2jyucR3jL3T3+
+         eaeQ==
+X-Forwarded-Encrypted: i=1;
+ AKwUvBy7DZcFJfvPoSzVmAy4pedlyqVDObutDQh/axqJ61yNBLp+niLf6igjuSyGuiBHEkWO1nLMAMNLyy8EwQ==@lists.linux.dev
+X-Gm-Message-State: APuU4Z8SlbTYyzR5NI4nZQ0t3APYZqooHffTkHWa2sXwRiy18slTlYOC
+	vGo1KnFWjpunpHVJ5BwLJvp2IrF0GXbUDb257MQht9LnYLxCXYUfzS5gvXNa2a7tcuE=
+X-Gm-Gg: AYBFou3MU1l478zI9LaehIZYIIiks53MFl/Wj6+ZTDxLkl5iLXk7HRFr62JKjf0CfdF
+	TKHzx7dT1UeEWQqn3lO8UwvDaXkDg4y18F/CqtZE63mVgANC3P+GEsvxYe42V6f7ojop1i1a5ti
+	GXADIGyX15jDDT8upGAoqNlm4N2Wet3gg7QDTwGsOiFlc+KF5fMsNs8pRZ9ZFj61qcQiJ+rsjk0
+	QlFhU6P3GemR+TVHqwqI1IzPe4jpwJ1KMlyfsbnJoC7hAdgNa14jn4J/azvfoXZfWu1QuUQxOQ9
+	9sP7IzH60N90iD3BIhL7DNswK51gdzmXK/bjfh7P7j14EEqSaDqm3ltjvlnvND9j63mIxiY7L3g
+	S0hWPaIin8ZDA4k5I5e53GBzK2NskPMIj0m6UTylqcl41W70iA/OhDC93pW0FsvOjEIgze4KZuu
+	w4xgzm47gu/+Ouq2pYqqb0ZSeyIGX1AJfomzQEpqd85XmC8qs+QkZESUW6QXycgMTpdJBfPjqEn
+	xaIoWAmizK68/sMCIhf71GBjlfeH0TTvBztQ3U3hgb32NV7FtN1SMDyIVDnPU66Yj74GxFHM6ED
+	+FFdEI4x3CufHDnM5QtxkXy/Lqo0
+X-Received: by 2002:a05:600c:6095:b0:49e:7c8c:361d with SMTP id
+ 5b1f17b1804b1-4ac182dc30fmr375702725e9.22.1793887129505;
+        Thu, 05 Nov 2026 05:58:49 -0800 (PST)
+Received: from localhost ([194.213.108.8])
+        by smtp.gmail.com with UTF8SMTPSA id
+ 5b1f17b1804b1-4b56ba6bc36sm75097435e9.0.2026.11.05.05.58.47
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Thu, 05 Nov 2026 05:58:48 -0800 (PST)
+Date: Thu, 5 Nov 2026 14:58:45 +0100
+From: Uwe =?utf-8?Q?Kleine-K=C3=B6nig?= <u.kleine-koenig@baylibre.com>
+To: Tim Michals <tcmichals@gmail.com>
+Cc: Jassi Brar <jassisinghbrar@gmail.com>,
+	Bjorn Andersson <andersson@kernel.org>,
+ Mathieu Poirier <mathieu.poirier@linaro.org>,
+	Rob Herring <robh@kernel.org>, Krzysztof Kozlowski <krzk+dt@kernel.org>,
+	Conor Dooley <conor+dt@kernel.org>, Chen-Yu Tsai <wens@csie.org>,
+	Jernej Skrabec <jernej.skrabec@gmail.com>,
+ Samuel Holland <samuel@sholland.org>,
+	linux-sunxi@lists.linux.dev, linux-remoteproc@vger.kernel.org,
+ devicetree@vger.kernel.org,
+	linux-arm-kernel@lists.infradead.org, linux-kernel@vger.kernel.org
+Subject: Re: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box
+ driver
+Message-ID: <auyLOc4djmm29Bnz@monoceros>
+References: <20261101185735.762559-1-tcmichals@gmail.com>
+ <20261101185735.762559-3-tcmichals@gmail.com>
+X-Mailing-List: linux-sunxi@lists.linux.dev
+List-Id: <linux-sunxi.lists.linux.dev>
+List-Post: <mailto:linux-sunxi@lists.linux.dev>
+List-Help: <mailto:linux-sunxi+help@lists.linux.dev>
+List-Subscribe: <mailto:linux-sunxi+subscribe@lists.linux.dev>
+List-Unsubscribe: <mailto:linux-sunxi+unsubscribe@lists.linux.dev>
+List-Owner: <mailto:linux-sunxi+owner@lists.linux.dev>
+Precedence: list
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha512;
+	protocol="application/pgp-signature"; boundary="6jfoalgweekh6k4p"
+Content-Disposition: inline
+In-Reply-To: <20261101185735.762559-3-tcmichals@gmail.com>
+
+
+--6jfoalgweekh6k4p
+Content-Type: text/plain; protected-headers=v1; charset=us-ascii
+Content-Disposition: inline
+Subject: Re: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box
+ driver
+MIME-Version: 1.0
+
+On Sun, Nov 01, 2026 at 12:57:30PM -0600, Tim Michals wrote:
+> +#include <linux/mod_devicetable.h>
+> [...]
+> +#include <linux/platform_device.h>
+
+Please don't include <linux/mod_devicetable.h> as this pulls in a lot of
+unneeded build dependencies.
+
+<linux/platform_device.h> already provides of_device_id which is all you
+seem to use here. If you want full iwyu include <linux/device-id/of.h>
+instead.
+
+Best regards
+Uwe
+
+--6jfoalgweekh6k4p
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iQEzBAABCgAdFiEEP4GsaTp6HlmJrf7Tj4D7WH0S/k4FAmrsi5EACgkQj4D7WH0S
+/k5vhQf+JI5oqB8wirr4Mfq53+EuIcbqVBMYKSJ4VvYsL5NgmUbk5OmelFsyFXLh
+1cTpKfp/pSXjaY74bSTdw8Wzj26UAD6h5WcL7M+Y0R76ERavh1U/j83g7GfDBxJr
+eHota1nXeLkRvpDqW7tWDBWn66eu0IeVsO8nlokpZTVhmLk/uFlIIITHp+IbJSUS
+oBmB5o0SK31zlNe1wrqwI8jCXjAUPyVcVouZEhNQ5mtIja4FE782+wlnw7agZe69
+vl3MG/TIihE7J63RC8U2iKs7BsfN9oB5xF5H8YMQYZ8/3uAj4eNkgFSjpbU8xXtp
+IDWe63lnv5ShurGsD35Z20wJbKGEKA==
+=hD40
+-----END PGP SIGNATURE-----
+
+--6jfoalgweekh6k4p--

@@ -10,7 +10,7 @@ This document indexes all public patch series submissions, maintainer review thr
 | :--- | :--- | :--- | :---: | :--- |
 | **RFC v1** | 2026-09-22 | [lore.kernel.org/linux-sunxi/20260922034711.190253-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20260922034711.190253-1-tcmichals@gmail.com/) | Superseded | [v1/COMMENTS.md](v1/COMMENTS.md) (11 review emails; raw in `v1/emails/`) |
 | **v2** | 2026-09-27 | [lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20260927002021.797069-1-tcmichals@gmail.com/) | Superseded | [v2/COMMENTS.md](v2/COMMENTS.md) (8 review emails; raw in `v2/emails/`) |
-| **v3** | 2026-11-01 | [lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com/) | Superseded by v4 (in prep) | [v3/COMMENTS.md](v3/COMMENTS.md) (6 review emails; raw in `v3/emails/`) |
+| **v3** | 2026-11-01 | [lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com](https://lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com/) | Superseded by v4 (in prep) | [v3/COMMENTS.md](v3/COMMENTS.md) (8 review emails; raw in `v3/emails/`) |
 | **v4** | Pending | Target: same recipients, new top-level thread | In Prep | Fix ledger in [v3/COMMENTS.md](v3/COMMENTS.md) |
 
 ---

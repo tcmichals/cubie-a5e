@@ -1,6 +1,6 @@
 # v3 Review Feedback → v4 Reconciliation
 
-Every comment from the v3 review ([../v3/COMMENTS.md](../v3/COMMENTS.md), 6 emails), with
+Every comment from the v3 review ([../v3/COMMENTS.md](../v3/COMMENTS.md), 8 emails), with
 the v4 change and how it is verified. Status: **DECIDED** (owner chose), **PLANNED** (fix
 follows from a decision or needs none), **OPEN** (owner yes/no needed), **FIXED** (in the v4
 code, with evidence), **EXPLAINED** (answered, no code change; only with the owner's OK).
@@ -27,6 +27,7 @@ Triple check of v1/v2/v3: [review/TRIPLE_CHECK_20261103.md](review/TRIPLE_CHECK_
 | V3-K2a | Krzysztof | 3 | `memory-region` `minItems: 1`: "same comments as for v2" | v2 | Keep `minItems: 1`; binding description says why `dram`/`trace` are optional (Q2) | DECIDED | |
 | V3-K2b | Krzysztof | 3 | `memory-region-names` `minItems: 1` | v2 | Same as V3-K2a | DECIDED | |
 | V3-K2c | Krzysztof | 3 | `interrupts` (crash): "same comments as for v2" | v2 | Drop `interrupts` (Q1 = yes) | DECIDED | |
+| V3-U1 | Uwe Kleine-König | 2, 4 | Do not include `<linux/mod_devicetable.h>` (build dependencies); `<linux/platform_device.h>` provides `of_device_id` | – | Remove the include from `sun55i-msgbox.c` and `sunxi_rproc.c` | FIXED | 7.1 `9a5f36c0628d`; W=1 clean on 7.1 and next-20261105 |
 
 ## Sashiko
 

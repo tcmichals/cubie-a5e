@@ -4,7 +4,7 @@
 - **Lore Master Thread**: https://lore.kernel.org/linux-sunxi/20261101185735.762559-1-tcmichals@gmail.com/
 - **Sashiko**: https://sashiko.dev/#/patchset/20261101185735.762559-1-tcmichals@gmail.com
 - **Base**: next-20261030 (base-commit 7649ba73f9e7e1e04d0b46213e39c79ae09dd55c)
-- **Total Review Emails Received**: 6 (2 Krzysztof Kozlowski, 4 Sashiko bot; thread has 14 messages)
+- **Total Review Emails Received**: 8 (2 Krzysztof Kozlowski, 2 Uwe Kleine-König, 4 Sashiko bot; thread has 16 messages)
 - **Raw Email Archive Directory**: `upstream-remoteproc/v3/emails/`
 - **No replies** on 5/7 (DTS) and 6/7 (mailbox KUnit). Sashiko had no findings on 3/7.
 
@@ -33,6 +33,7 @@ owner; none is closed as "left as is".
 | V3-K2c | 3/7 | Krzysztof | `interrupts` (crash) — "same comments as for v2" | **yes, v2** | Drop from the binding with V3-S6 | Open |
 | V3-S7 | 7/7 | Sashiko (Medium) | `SUNXI_REMOTEPROC_KUNIT_TEST` needs `depends on PM` (`power.usage_count`, PM-domain failure test) | no | Add `PM` to `depends on`; add a PM=n build to pre-send checks | Planned |
 | V3-S8 | 7/7 | Sashiko (Low) | `use_mmio_mocks()` casts lack `__force` (sparse) | no | Add `__force`; add `C=1` sparse to pre-send checks | Planned |
+| V3-U1 | 2/7, 4/7 | Uwe Kleine-König | Do not include `<linux/mod_devicetable.h>`; `<linux/platform_device.h>` provides `of_device_id` | no | Remove the include from both drivers. Do not add `<linux/device-id/of.h>`: `cubie-linux-7.1` does not have it, and the line removal builds on both trees (7.1 gets it through `<linux/of.h>`) | Fixed: 7.1 `9a5f36c0628d`, W=1 clean on 7.1 and next-20261105 |
 
 ### Process changes (why these came back)
 1. Every High/Medium finding is fixed or put to the owner as a yes/no, never closed in a TODO row.
@@ -782,3 +783,53 @@ building with C=1?
 Sashiko AI review · https://sashiko.dev/#/patchset/20261101185735.762559-1-tcmichals@gmail.com?part=7
 ````
 
+---
+
+### 7. Uwe Kleine-König <u.kleine-koenig@baylibre.com> — Re: [PATCH v3 2/7] mailbox: sun55i: Add Allwinner A523 message box driver
+- **Date**: Thu, 5 Nov 2026 14:58:45 +0100
+- **Message-ID**: `<auyLOc4djmm29Bnz@monoceros>`
+- **Lore Link**: https://lore.kernel.org/linux-sunxi/auyLOc4djmm29Bnz@monoceros/
+- **Raw Email File**: `v3/emails/15_auyLOc4djmm29Bnz_monoceros.eml`
+
+#### Verbatim text
+````text
+On Sun, Nov 01, 2026 at 12:57:30PM -0600, Tim Michals wrote:
+> +#include <linux/mod_devicetable.h>
+> [...]
+> +#include <linux/platform_device.h>
+
+Please don't include <linux/mod_devicetable.h> as this pulls in a lot of
+unneeded build dependencies.
+
+<linux/platform_device.h> already provides of_device_id which is all you
+seem to use here. If you want full iwyu include <linux/device-id/of.h>
+instead.
+
+Best regards
+Uwe
+````
+
+
+---
+
+### 8. Uwe Kleine-König <u.kleine-koenig@baylibre.com> — Re: [PATCH v3 4/7] remoteproc: sunxi: Add Allwinner A523 XuanTie E906 driver
+- **Date**: Thu, 5 Nov 2026 14:59:49 +0100
+- **Message-ID**: `<auyLnRhPv0jz1roG@monoceros>`
+- **Lore Link**: https://lore.kernel.org/linux-sunxi/auyLnRhPv0jz1roG@monoceros/
+- **Raw Email File**: `v3/emails/16_auyLnRhPv0jz1roG_monoceros.eml`
+
+#### Verbatim text
+````text
+Hello,
+
+On Sun, Nov 01, 2026 at 12:57:32PM -0600, Tim Michals wrote:
+> +#include <linux/mod_devicetable.h>
+> [...]
+> +#include <linux/platform_device.h>
+
+As for patch 2: Please don't use <linux/mod_devicetable.h> and rely on
+<linux/platform_device.h> to provide of_device_id.
+
+Best regards
+Uwe
+````

@@ -790,6 +790,7 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-CHLOG | Per-patch "Changes in v4" and commit messages (1/7 still describes `tx-done-irq`; 3/7 the crash interrupt; 4/7 the crash IRQ and `-EBUSY`) | all | ⬜ | |
 | V4-THRESH | Re-check HARSH mailbox D6 (write-IRQ threshold write in `startup()` is a no-op on this silicon): it now carries all TX done | TC review | ⬜ | |
 | V4-DOCS | Correct the `minItems: 1` rule; v3 process lessons in lessons, rules, `/kreview`, `/kseries` | v3 retrospective | ✅ 2026-11-03 | (cubie-a5e) |
+| V4-INCL | Drop `<linux/mod_devicetable.h>` from `sun55i-msgbox.c` and `sunxi_rproc.c` (Uwe Kleine-König, 2026-11-05). No `<linux/device-id/of.h>`: that header is not on 7.1. W=1 clean on 7.1 and next-20261105 (v4 sources), not folded yet | V3-U1 | ✅ | `9a5f36c0628d` |
 
 ### 5.6 Documentation Corrections (found during v3 review, 2026-10-13)
 
