@@ -97,3 +97,6 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
      python3 cubie-a5e/upstream-remoteproc/scripts/fetch_lore_reviews.py --version v<N> --msgid <message-id>
      ```
    - Store all raw review emails in `v<N>/emails/` and document verbatim resolutions in `v<N>/COMMENTS.md`.
+3. **Replying to Reviews**:
+   - An accepted comment gets no mailing-list reply: fix it in the next version and note it in that patch's "Changes in vN".
+   - Reply only when there is a disagreement, and only with the owner's go-ahead (decided 2026-11-06).
