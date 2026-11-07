@@ -79,6 +79,9 @@ struct rwnx_plat {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 
 	bool enabled;
 

@@ -306,11 +306,11 @@ static int rwnx_send_msg(struct rwnx_hw *rwnx_hw, const void *msg_params,
 		 __func__, reqid, RWNX_ID2STR(reqid), reqcfm, (int)in_hardirq(),
 		 (int)in_softirq(), (int)irqs_disabled());
 
-#ifdef AICWF_SDIO_SUPPORT
 	if (!aicwf_bus_activity_get(rwnx_hw, rwnx_hw->ws_tx)) {
 		rwnx_msg_free(rwnx_hw, msg_params);
 		return -EBUSY;
 	}
+#ifdef AICWF_SDIO_SUPPORT
 	if (rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
 		rwnx_msg_free(rwnx_hw, msg_params);
 		sdio_err("bus is down\n");

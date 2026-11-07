@@ -188,4 +188,5 @@ int aic_chip_priv_cmd_rdwr_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 				   char *argv[], char *command);
 int aic_chip_priv_cmd_rdwr_efuse_pwrofst(struct rwnx_hw *rwnx_hw, int argc,
 					 char *argv[], char *command);
+u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size);
 #endif /* _AICWF_CHIP_OPS_H_ */

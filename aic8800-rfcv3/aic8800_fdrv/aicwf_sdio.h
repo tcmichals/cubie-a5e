@@ -262,7 +262,6 @@ void enable_wakeup_irq(struct aic_sdio_dev *sdiodev);
 irqreturn_t wakeup_irq_handler(int irq, void *priv);
 #endif
 
-u8 crc8_ponl_107(u8 *p_buffer, uint16_t cal_size);
 
 #endif /* AICWF_SDIO_SUPPORT */
 

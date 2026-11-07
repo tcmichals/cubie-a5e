@@ -42,9 +42,15 @@ struct aicwf_bus {
 	struct completion bustx_trgg;
 	struct completion busrx_trgg;
 	struct completion busirq_trgg; // new oob feature
+#ifdef AICWF_USB_SUPPORT
+	struct completion msg_busrx_trgg;
+#endif
 	struct task_struct *bustx_thread;
 	struct task_struct *busrx_thread;
 	struct task_struct *busirq_thread; // new oob feature
+#ifdef AICWF_USB_SUPPORT
+	struct task_struct *msg_busrx_thread;
+#endif
 };
 
 /* ================================================================

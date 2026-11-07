@@ -998,7 +998,9 @@ static int rwnx_close(struct net_device *dev)
 	struct rwnx_hw *rwnx_hw = rwnx_vif->rwnx_hw;
 	int ret;
 	struct aicwf_bus *bus_if = NULL;
+#ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev = NULL;
+#endif
 	int waiting_counter = 20;
 	int test_counter = 0;
 
@@ -1082,6 +1084,10 @@ static int rwnx_close(struct net_device *dev)
 	if (bus_if)
 		sdiodev = bus_if->bus_priv.sdio;
 	if (sdiodev && sdiodev->bus_if->state != BUS_DOWN_ST) {
+#else
+	bus_if = rwnx_hw->usbdev->bus_if;
+	if (bus_if && bus_if->state != BUS_DOWN_ST) {
+#endif
 		if (RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_STATION ||
 		    RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_P2P_CLIENT) {
 			test_counter = waiting_counter;
@@ -1113,7 +1119,6 @@ static int rwnx_close(struct net_device *dev)
 		}
 #endif
 	}
-#endif
 	/* Ensure that we won't process disconnect ind */
 	spin_lock_bh(&rwnx_hw->cb_lock);
 
@@ -1129,7 +1134,11 @@ static int rwnx_close(struct net_device *dev)
 
 	if (rwnx_hw->vif_started == 0) {
 		/* This also lets both ipc sides remain in sync before resetting */
+#ifdef AICWF_SDIO_SUPPORT
 		if (sdiodev->bus_if->state != BUS_DOWN_ST) {
+#else
+		if (bus_if && bus_if->state != BUS_DOWN_ST) {
+#endif
 #ifdef CONFIG_AIC8800_COEX
 			if (rwnx_hw->testmode == 0)
 				rwnx_send_coex_req(rwnx_hw, 1, 0);
@@ -2295,6 +2304,13 @@ static int rwnx_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 		ret = rwnx_send_sm_disconnect_req(rwnx_hw, rwnx_vif, reason_code);
 #ifdef AICWF_SDIO_SUPPORT
 		if (rwnx_hw->sdiodev->bus_if->state == BUS_DOWN_ST) {
+			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
+					    RWNX_DRV_STATUS_DISCONNECTED);
+		}
+#endif
+#ifdef AICWF_USB_SUPPORT
+		if (rwnx_hw->usbdev->bus_if->state == BUS_DOWN_ST) {
 			AICWFDBG(LOGINFO, "%s bus is down %d\n", __func__, ret);
 			rwnx_set_conn_state(&rwnx_vif->drv_conn_state,
 					    RWNX_DRV_STATUS_DISCONNECTED);
@@ -4953,7 +4969,12 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
 
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
+#ifdef AICWF_SDIO_SUPPORT
 	aicbsp_get_feature(&feature);
+#else
+	memset(&feature, 0, sizeof(feature));
+	feature.hwinfo = -1;
+#endif
 
 	get_random_bytes(&dflt_mac[4], 2);
 
@@ -5341,7 +5362,11 @@ void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw)
 	aicwf_deinit_genl(rwnx_hw);
 #endif
 
+#ifdef AICWF_SDIO_SUPPORT
 	if (rwnx_hw->sdiodev->bus_if->state != BUS_DOWN_ST)
+#else
+	if (rwnx_hw->usbdev->bus_if->state != BUS_DOWN_ST)
+#endif
 		rwnx_send_set_stack_start_req(rwnx_hw, 0, 0, 0, 0, &set_start_cfm);
 
 	rwnx_hw->fwlog_en = 0;
@@ -5389,6 +5414,9 @@ static void aicsmac_driver_register(void)
 #ifdef AICWF_SDIO_SUPPORT
 	aicwf_sdio_register();
 #endif
+#ifdef AICWF_USB_SUPPORT
+	aicwf_usb_register();
+#endif
 }
 
 static struct completion hostif_register_done;
@@ -5416,10 +5444,12 @@ static int __init rwnx_mod_init(void)
 
 	pr_info("AIC8800 WiFi driver, built against Linux %s\n", UTS_RELEASE);
 
+#ifdef AICWF_SDIO_SUPPORT
 	if (aicbsp_set_subsys(AIC_WIFI, AIC_PWR_ON) < 0) {
 		AICWFDBG(LOGERROR, "%s, set power on fail!\n", __func__);
 		return -ENODEV;
 	}
+#endif
 
 	init_completion(&hostif_register_done);
 	aicsmac_driver_register();
@@ -5430,8 +5460,11 @@ static int __init rwnx_mod_init(void)
 		AICWFDBG(LOGERROR, "register_driver timeout or error\n");
 #ifdef AICWF_SDIO_SUPPORT
 		aicwf_sdio_exit();
-#endif /* AICWF_SDIO_SUPPORT */
 		aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
+#endif /* AICWF_SDIO_SUPPORT */
+#ifdef AICWF_USB_SUPPORT
+		aicwf_usb_exit();
+#endif
 		return -ENODEV;
 	}
 
@@ -5444,9 +5477,12 @@ static void __exit rwnx_mod_exit(void)
 
 #ifdef AICWF_SDIO_SUPPORT
 	aicwf_sdio_exit();
+	aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
+#endif
+#ifdef AICWF_USB_SUPPORT
+	aicwf_usb_exit();
 #endif
 
-	aicbsp_set_subsys(AIC_WIFI, AIC_PWR_OFF);
 	rwnx_free_cmd_array();
 }
 

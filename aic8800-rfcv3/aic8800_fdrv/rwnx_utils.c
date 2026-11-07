@@ -29,7 +29,11 @@ int rwnx_init_aic(struct rwnx_hw *rwnx_hw)
 #endif
 	rwnx_cmd_mgr_init(rwnx_hw->cmd_mgr);
 
+#ifdef AICWF_SDIO_SUPPORT
 	rwnx_hw->testmode = get_testmode();
+#else
+	rwnx_hw->testmode = 0;
+#endif
 
 	return 0;
 }
