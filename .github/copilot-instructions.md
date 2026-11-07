@@ -2,22 +2,8 @@
 
 ## What this repo is
 
-Out-of-tree Buildroot external tree for the **Radxa Cubie A5E** (Allwinner A527/T527, 8-core Cortex-A55).
-Primary mission: **flight controller platform** with NPU-assisted landing.
-
-## Architecture split
-
-```
-Cubie A5E (Linux / this repo)          FPGA
-─────────────────────────────          ──────────────────────
-High-level flight logic                DSHOT motor output
-Mission state machine                  PWM generation/capture
-TinyML / NPU inference                 IMU interface
-Camera + distance sensor fusion        Hard real-time timing
-Navigation / supervisory control
-        │                                      │
-        └────────────── dual SPI ──────────────┘
-```
+Linux mainline development for the **Radxa Cubie A5E** (Allwinner A527/T527) and the **Radxa Cubie A7A** (Allwinner A733).
+The goal is to fully test both boards to Linux standards: drivers, Buildroot images, and the firmware that exercises them.
 
 ## Repo layout
 
@@ -43,7 +29,6 @@ project-cubie-a5e/                     external tree (BR2_EXTERNAL) — edit her
     setup-npu-bundle.sh                Helper script to automatically pull NPU libs
 docs/                                  organized how-to guides
   buildroot/                           Creating the distribution (OS / bring-up)
-  flightcontroller/                    Using the distribution (Guidance / control)
 bld/                                   build output (generated, not in repo)
 ```
 
@@ -122,7 +107,6 @@ sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progre
 - `docs/buildroot/DeviceTreeHowTo.md` — DTB and overlays compilation
 - `docs/buildroot/WirelessHowTo.md` — Wi-Fi bring-up
 - `docs/buildroot/HowToNPU.md` — NPU drivers, packaging, and setup script
-- `docs/flightcontroller/DevelopmentAndDebugging.md` — C++ remote debugging with VS Code / gdbserver
 - `docs/buildroot/CameraTesting.md` — Camera bring-up and V4L2 diagnostics
 
 ## Real-Time Linux (PREEMPT_RT) & Core Isolation Guidelines

@@ -4,22 +4,8 @@
 
 ## What this repo is
 
-Out-of-tree Buildroot external tree for the **Radxa Cubie A5E** (Allwinner A527/T527, 8-core Cortex-A55).
-Primary mission: **flight controller platform** with NPU-assisted landing.
-
-## Architecture split
-
-```
-Cubie A5E (Linux / this repo)          FPGA
-─────────────────────────────          ──────────────────────
-High-level flight logic                DSHOT motor output
-Mission state machine                  PWM generation/capture
-TinyML / NPU inference                 IMU interface
-Camera + distance sensor fusion        Hard real-time timing
-Navigation / supervisory control
-        │                                      │
-        └────────────── dual SPI ──────────────┘
-```
+Linux mainline development for the **Radxa Cubie A5E** (Allwinner A527/T527) and the **Radxa Cubie A7A** (Allwinner A733).
+The goal is to fully test both boards to Linux standards: drivers, Buildroot images, and the firmware that exercises them.
 
 ## Repo layout
 
@@ -43,7 +29,6 @@ project-cubie-a5e/                     external tree (BR2_EXTERNAL) — edit her
     timvx-delegate/                    TIM-VX delegate wiring (deprecated)
 docs/                                  organized how-to guides
   buildroot/                           Creating the distribution (OS / bring-up)
-  flightcontroller/                    Using the distribution (Guidance / control)
 bld/                                   build output (generated, not in repo)
 ```
 
@@ -119,15 +104,9 @@ sudo dd if=$PWD/bld/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progre
 - `docs/buildroot/WirelessHowTo.md` — Wi-Fi bring-up
 - `docs/buildroot/HowToNPU.md` — open-source NPU configuration and validation
 - `docs/buildroot/HowToRISCV.md` — open-source RISC-V co-processor configuration and compilation
-- `docs/flightcontroller/DevelopmentAndDebugging.md` — C++ remote debugging with VS Code / gdbserver
 - `docs/buildroot/CameraTesting.md` — Camera bring-up and V4L2 diagnostics
 - `docs/buildroot/FOSS_NPU_Migration_Article.md` — Case study on transitioning the NPU stack to FOSS
 - `docs/buildroot/Mainline_Flightstack_Bringup_Article.md` — Master technical article on the flightstack bring-up
-
-## Workspace Prompts & Research Traces
-- `workspace_prompts/prompt3_riscv_tcm_map.md` — RISC-V Memory Maps and PLIC tracing
-- `workspace_prompts/prompt4_mailbox_sync_trace.md` — Mailbox IPC Handshake Traces
-- `workspace_prompts/prompt5_riscv_debug_trace.md` — MMIO Debug Bridge Architecture
 
 ## Real-Time Linux (PREEMPT_RT) & Core Isolation Guidelines
 

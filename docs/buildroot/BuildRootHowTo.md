@@ -124,7 +124,6 @@ Related pieces:
 Why we use it:
 - Hardware-accelerated h264/h265 encoding offloads the CPU.
 - Integrates seamlessly with the standard Mainline Linux V4L2 Memory-to-Memory (M2M) stateless architecture.
-- For deep dives into the VEU driver mappings, see `workspace_prompts/prompt2_mainline_veu_encoder.md`.
 
 ### NPU / TinyML
 
