@@ -32,11 +32,11 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 | **Reset Hierarchy** | Two-stage: `rst_cfg`/`rst_sram`/`rst_debug` (bus, debug module) vs `rst_core` (CPU) | SMC call or SRC registers | Two-stage: `module-reset` (bus/RAM) vs `local-reset` (CPU) | Syscon hold_boot / SCMI / SMC |
 | **`.prepare()`** | Powers the `riscv` and `sram` power domains (runtime PM), deasserts cfg/SRAM/debug resets, enables bus/SRAM/core clocks, sets remap bit 1 (SRAM A3_2 → MCU), clears both SRAMs (`memset_io`), registers carveouts | Maps memory (`imx_rproc_addr_init`), enables clocks | Deasserts module-reset to allow loading internal RAM while CPU reset is held | Registers reserved memory carveouts |
 | **`.start()`** | Deasserts `rst_core`, programs `STA_ADD_REG` boot address | Releases remote M4/M7 from reset | Releases local reset (`k3_rproc_release`) | Clears deep sleep (`pdds`), releases hold boot |
-| **`.stop()`** | Asserts `rst_core`, disarms the optional crash IRQ (`disable_irq()`, no lock held) | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot |
+| **`.stop()`** | Asserts `rst_core`; the mailbox stays open (virtio teardown may still kick) | Asserts reset via SMC/MMIO, syncs workqueue | Asserts local reset (`k3_rproc_reset`) | Sends "detach" mbox msg, asserts hold boot |
 | **`.unprepare()`** | Clears remap bit 1, disables clocks, asserts debug/SRAM/cfg resets, drops the power domains | Disables clocks | Asserts module-reset via TI-SCI | N/A |
 | **`.da_to_va()`** | ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000` (256 KB each), plus host-PA identity entries. Everything else returns `NULL`: DRAM firmware, trace and vrings resolve through the core's carveout list (DA `0x40040000`+ is DRAM 1:1) | Static table lookup (`imx_rproc_att`) across TCML, TCMU, DDR | Iterates `mem[]` (internal RAM) and `rmem[]` (DDR); returns `cpu_addr + offset` | Dynamic lookup in `rmems` based on `dma-ranges` |
-| **`.kick()`** | Sends a pointer to an immutable `static const u32` payload per vring; the msgbox controller completes TX (`txdone_poll`, or `txdone_irq` with `allwinner,tx-done-irq`), the client never calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue |
-| **Crash Handling** | Optional `crash` IRQ (no DTS wires one; the vendor BSP has none): `disable_irq_nosync()` + `rproc_report_crash(rproc, RPROC_FATAL_ERROR)`; an atomic "armed" bit re-enables it in `.start()` | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` |
+| **`.kick()`** | Sends a pointer to an immutable `static const u32` payload per vring; the msgbox controller completes TX from the receiver bank's write IRQ (`txdone_irq`), the client never calls `mbox_client_txdone()` | Iterates `rproc->notifyids` in workqueue | Casts `msg` to `(void *)(uintptr_t)` and sends via mbox | Dedicated mailbox channels per virtqueue |
+| **Crash Handling** | None in hardware (no DTS wires a crash IRQ; the vendor BSP has none). Both SRAM spaces are registered as coredump segments (`rproc_coredump_add_segment()`) | N/A | N/A | Dedicated watchdog IRQ -> `rproc_report_crash(rproc, RPROC_WATCHDOG)` |
 
 ---
 
@@ -66,28 +66,13 @@ How `sunxi_rproc` and `sun55i-msgbox` compare against key reference drivers in t
 - **The Problem**: In SMP systems, if driver teardown (`remove()`) masks IRQs in hardware, asserts reset, and disables clocks while the ISR is actively running on another CPU core, that core performs MMIO reads on an unclocked bus, causing a hardware bus fault.
 - **The Solution**: Call `synchronize_irq(irq)` on all requested interrupts before asserting reset lines or disabling peripheral clocks.
 
-### Rule 5: Mitigate Crash Interrupt Storms
-- **The Problem**: Level-sensitive hardware crash alerts or watchdogs remain asserted until the remote core is completely reset. If a driver simply calls `rproc_report_crash()` in the hardirq handler, the interrupt immediately re-fires millions of times per second (IRQ storm), freezing the ARM Linux host.
-- **The Solution**:
-  ```c
-  static irqreturn_t sunxi_rproc_crash_handler(int irq, void *data)
-  {
-      struct sunxi_rproc *priv = data;
-
-      dev_err(priv->dev, "crash event from %s core\n", priv->cfg->name);
-
-      /* Stays masked until the next start(); recovery runs stop() first */
-      if (test_and_clear_bit(SUNXI_RPROC_CRASH_IRQ_ARMED, &priv->flags))
-          disable_irq_nosync(irq);
-
-      rproc_report_crash(priv->rproc, RPROC_FATAL_ERROR);
-      return IRQ_HANDLED;
-  }
-  ```
-  `.start()` re-arms it with `test_and_set_bit()` + `enable_irq()`, and `.stop()` disarms it with `test_and_clear_bit()` + `disable_irq()`, so enable/disable calls always pair up. No SoC DTS wires a crash IRQ today; the vendor BSP reports crashes in software only.
+### Rule 5: Mask Level Interrupts in Their Handler
+- **The Problem**: The msgbox write IRQ is level-sensitive: it stays asserted while the receiver's FIFO has room. If the handler only acks it, it re-fires at once (IRQ storm) and freezes the host.
+- **The Solution**: `sun55i_msgbox_tx_irq()` clears the channel's enable bit, then acks the pending bit, under `mbox->lock`, and calls `mbox_chan_txdone()` after dropping the lock. Only the next `send_data()` arms it again.
+- v4 has no remote-core crash interrupt: no SoC DTS wires one and the vendor BSP reports crashes in software only.
 
 ### Rule 6: Never Pass Stack Pointers to Asynchronous Mailbox Send
-- **The Problem**: With `txdone_poll`, `mbox_send_message()` queues the message *pointer* when a previous request is still active and reads it later from the poll timer. Passing `&local_var` on the stack is a use-after-return; a shared writable `priv->kick_msg` can be overwritten while still queued.
+- **The Problem**: `mbox_send_message()` queues the message *pointer* when a previous request is still active and reads it later from the TX-done path (the write IRQ here). Passing `&local_var` on the stack is a use-after-return; a shared writable `priv->kick_msg` can be overwritten while still queued.
 - **The Solution**: Use immutable static storage, one entry per vring:
   ```c
   static const u32 sunxi_rproc_kick_msg[2] = { 0, 1 };
@@ -143,5 +128,5 @@ When adapting `sunxi_rproc.c` for A733 support:
 
 To achieve a >2:1 test-to-code ratio with comprehensive coverage, the test suites use **Mock MMIO Fixtures**:
 - Rather than requiring real silicon registers or executing on target hardware, tests allocate structured mock arrays representing hardware register banks.
-- Functional driver operations (`send_data`, `last_tx_done`, `peek_data`, `startup`, `shutdown`, `da_to_va`, `start`, `prepare`) are executed against these mock banks.
+- Functional driver operations (`send_data`, `tx_irq`, `peek_data`, `startup`, `shutdown`, `da_to_va`, `start`, `prepare`) are executed against these mock banks.
 - Every valid route, boundary condition, integer overflow, and error path is systematically asserted.

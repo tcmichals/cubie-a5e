@@ -283,11 +283,11 @@ The owner's design decisions (what we deliberately keep even when a review disag
 * **What Went Wrong**:
   The kick protocol was flipped between versions: polling (`knows_txdone = false`, 1 ms poll latency per queued kick) → client-reported completion (`knows_txdone = true` + `mbox_client_txdone()`) → back to polling. Each flip was driven by a review comment, not a decision.
 * **The Rule**:
-  1. The sun55i msgbox controller sets `txdone_poll = true`, so the controller decides when a message is done (`last_tx_done()`, see Lesson 2.1).
+  1. The sun55i msgbox controller decides when a message is done: from v4 it sets `txdone_irq = true` and completes each kick from the receiver bank's write IRQ (up to v3: `txdone_poll`, `last_tx_done()`, Lesson 2.1).
   2. The client sets `cl.knows_txdone = false` and `cl.tx_block = false`, and never calls `mbox_client_txdone()`.
   3. Payloads must outlive `mbox_send_message()` because the core queues the pointer: use immutable `static const u32` values, one per vring (no shared writable `kick_msg`).
   4. The Allwinner vendor BSP uses the same client settings (`knows_txdone` unset, `tx_block = false`).
-* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller, not `knows_txdone = true` in the client. Done 2026-10-16 (DESIGN_DECISIONS "Message box TX completion"): `last_tx_done()` = `count < 8`; with `allwinner,tx-done-irq` the write IRQ is armed after every send (OMAP model, revised 2026-10-17).
+* **Known cost and the real fix**: kicks queued behind an unconsumed kick wait for the poll tick, and more than `MBOX_TX_QUEUE_LEN` (20) queued kicks return `-ENOBUFS`. The fix is in the controller, not `knows_txdone = true` in the client. Done 2026-10-16 (DESIGN_DECISIONS "Message box TX completion"): `last_tx_done()` = `count < 8`; with `allwinner,tx-done-irq` the write IRQ is armed after every send (OMAP model, revised 2026-10-17). From v4 (2026-11-03) the write IRQ is the only mode and the controller sets `txdone_irq`, not `txdone_poll`.
 
 ---
 
@@ -387,7 +387,7 @@ To prevent regressions against these kernel rules, review checks are codified in
 * 📜 **[scripts/sashiko_protocols.md](scripts/sashiko_protocols.md)**: Full prompt specification and invariant definitions for the 5 review stages:
   1. *Stage 1 (Hardirq & Concurrency)*: SMP spinlocks, TOCTOU windows, bounded loops.
   2. *Stage 2 (Resource Lifecycle & Teardown)*: LIFO reverse unwinds, workqueue teardown, UAF prevention.
-  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox `last_tx_done` (decision 2026-10-16: `count < 8`, DT selects timer or ISR; the ISR arms the write IRQ after every send), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
+  3. *Stage 3 (Subsystem Framework Contracts)*: Mailbox TX completion (v4: write IRQ only, armed after every send; a full FIFO is held, never written), client `knows_txdone = false`, `rx_callback` atomic context, RemoteProc ATT bounds.
   4. *Stage 4 (Interconnect, MMIO & Endianness)*: Posted write flushes, Big-Endian mock accessors.
   5. *Stage 5 (Adversarial Gatekeeper)*: False-positive elimination and severity scoring.
 * 🛠️ **[scripts/run_adversarial_audit.py](scripts/run_adversarial_audit.py)**: Automated static audit tool running these checks before every submission and outputting results directly into `v<N>/AUDIT.md`.
@@ -459,7 +459,7 @@ findings. Ledger: [v3/COMMENTS.md](v3/COMMENTS.md).
 - [ ] Every hardware fact in commit messages, cover letter and bindings checked against silicon readbacks or the vendor BSP (`linux-aw2501` or `linux-a733`, located per PC as in docs/platforms/RADXA_CUBIE_A5E_LEGACY_DRIVER_AND_HARDWARE_DISCOVERY.md §4.0), not against project docs alone.
 - [ ] No sleeping calls (disable_irq(), synchronize_irq()) invoked under spinlocks.
 - [ ] Carveouts and dump segments registered in `.parse_fw()` (after allocating the entries, before nothing can fail): the core frees them only once `parse_fw()` succeeded, so registering in `.prepare()` leaks them when `parse_fw()` fails (final review 2026-10-27).
-- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and the remote banks' write-IRQ lines (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) only with `allwinner,tx-done-irq`, all looked up by name. Board-tested 2026-10-17 (msgbox reference §6b).
+- [ ] Mailbox driver requests the ARM bank interrupt (SPI 0) always, and a remote bank's write-IRQ line (SPI 181 / 174 / 205, not the vendor DT's 1 / 181 / 174) while a channel to that bank is started, all looked up by name. v3 lines board-tested 2026-10-17 (msgbox reference §6b); v4 to re-test.
 - [ ] `memory-region` / `memory-region-names` listed positionally, **no `minItems`** unless the binding states the hardware reason an entry may be absent (Lesson 1.5; rejected in v2 and v3); no driver logic keyed on region names.
 - [ ] No `minItems` anywhere in a binding without a written hardware reason (applies to every list, not only interrupts).
 - [ ] Every KUnit test can fail; KUnit patches last and marked droppable in the cover letter (Lesson 4.2).

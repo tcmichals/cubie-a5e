@@ -242,14 +242,14 @@ rproc: remoteproc@7130000 {
 - **Probe (`sunxi_rproc_probe` / `register_mem`)**: Maps `"r_sram"` (`0x07280000`), `"r_sram1"` (`0x072c0000`), and `"remap"` (`0x07010364`). Initializes workqueues (`INIT_WORK(&priv->vq_work)`) *before* requesting mailbox channels to eliminate race conditions on early interrupts or deferred probes.
 - **Two-Stage Reset Architecture**:
   - **Prepare (`sunxi_rproc_prepare`)**: Powers the `riscv`/`sram` power domains, deasserts the cfg/SRAM/debug resets (`rst_core` stays asserted) and enables clocks. Sets Bit 1 of `REMAP_CTRL_REG` (`val |= BIT(1)`), exposing `SRAMA3_2` to `MCU_SYS`. Clears SRAM via `memset_io` to eliminate stale data / ECC noise. Keeps CPU pipeline reset (`rst_core`) asserted so firmware can be loaded into SRAM without premature execution.
-  - **Start (`sunxi_rproc_start`)**: Deasserts `rst_core` and writes entry point to `STA_ADD_REG` (`0x07130204`). Re-enables the hardware crash IRQ if previously disabled during recovery.
+  - **Start (`sunxi_rproc_start`)**: Deasserts `rst_core` and writes entry point to `STA_ADD_REG` (`0x07130204`).
   - **Stop (`sunxi_rproc_stop`)**: Asserts `rst_core` to freeze execution, then drains `vq_work` via `cancel_work_sync()`.
   - **Unprepare (`sunxi_rproc_unprepare`)**: Symmetrically clears Bit 1 of `REMAP_CTRL_REG`, disables CCU clocks, and asserts bus resets.
 - **DA Translation (`sunxi_rproc_da_to_va`)**:
   - Guarded against 64-bit integer wrap-around: `if (da > U64_MAX - len) return NULL;`.
   - ATT: Space 0 DA `0x3FFC0000` → PA `0x07280000`, Space 1 DA `0x40000000` → PA `0x072C0000`, plus host-PA identity entries. DRAM firmware, trace and vrings are registered carveouts and resolve through the core. DA `0x40040000`+ is DRAM, mapped 1:1.
   - Returns `NULL` for dynamic DDR carveouts to delegate translation directly to the Linux remoteproc core's `rproc->carveouts` linked list.
-- **Teardown Order**: `rproc_del()` -> `mbox_free_channel()` -> `cancel_work_sync()` (the optional crash IRQ is disarmed by `stop()` inside `rproc_del()`).
+- **Teardown Order**: `rproc_del()` -> `mbox_free_channel()` -> `cancel_work_sync()`
 - **Reference Guide**: For full architectural rules and comparisons across mainline drivers, refer to [**`LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md`**](../architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md).
 
 ---
@@ -921,6 +921,6 @@ devmem2 0x07130248 w
    # Check KUnit results in dmesg at boot:
    dmesg | grep -i kunit
    ```
-   * **`sunxi_rproc` suite** (32 tests): `da_to_va` SRAM windows, boundaries and overflow, DRAM/trace through `rproc_da_to_va()` carveouts, start/stop/prepare/unprepare on mock MMIO, carveout lifecycle, and the rx-callback-defers-to-workqueue regression test.
-   * **`sun55i_msgbox` suite** (29 tests): channel routing, send/peek/`last_tx_done`, startup/shutdown FIFO flushing, and IRQ handling (spurious, drain cap, cross-talk).
+   * **`sunxi_rproc` suite** (23 cases in v4): `da_to_va` SRAM windows, boundaries and overflow, DRAM/trace through `rproc_da_to_va()` carveouts, start/stop/prepare/unprepare on mock MMIO, carveout lifecycle, and the rx-callback-defers-to-workqueue regression test.
+   * **`sun55i_msgbox` suite** (37 cases in v4): channel routing, send/peek, held messages, startup/shutdown FIFO flushing, and IRQ handling (spurious, drain cap, cross-talk).
    * Target: 55/55 PASS (100% success).

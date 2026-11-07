@@ -183,9 +183,10 @@ do not re-raise them.
 The four msgbox lines (host bank read, DSP/CPUS/RISC-V bank write) exist on every A523, so the
 binding lists all four, with `interrupt-names`, as required; no `minItems`, no
 `allwinner,tx-done-irq` conditional. This answers Krzysztof's v1 question "How could an
-interrupt be optional?". `allwinner,tx-done-irq` only selects how the driver learns that a send
-is done (1 ms poll or the remote bank's write interrupt); received messages use the host bank
-read interrupt in both modes, and the driver requests the write lines only in tx-done-irq mode.
+interrupt be optional?". From v4 the driver learns that a send is done only from the remote
+bank's write interrupt (no `allwinner,tx-done-irq`, see "Message box TX completion" below);
+received messages use the host bank read interrupt, and a bank's write line is requested while
+a channel to that bank is started.
 
 ### KUnit stays in the series (D15)
 Both KUnit patches stay, but every test must exercise driver behaviour (see

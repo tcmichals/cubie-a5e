@@ -109,12 +109,12 @@ In `probe()` error unwind (`err_mbox_release`):
 
 In `stop()`:
 
-1. `reset_control_assert()` (halt core) → disarm the crash IRQ (`disable_irq()` without holding a spinlock). The mailbox stays open: virtio teardown in `rproc_stop()` happens before `ops->stop()` and may still kick.
+1. `reset_control_assert()` (halt core) only. The mailbox stays open: virtio teardown in `rproc_stop()` happens before `ops->stop()` and may still kick. (v4 has no crash interrupt; no SoC DTS wires one.)
 
 **Expected answer:**
 - `remove()`: `rproc_del()` → `mbox_free_channel()` → `cancel_work_sync()`
 - `probe()` error: `mbox_free_channel()` → `cancel_work_sync()`
-- `stop()`: `reset_control_assert()` → disarm crash IRQ
+- `stop()`: `reset_control_assert()`, mailbox left open
 - ❌ Flag as a bug: freeing mailbox channels before `rproc_del()`, or `cancel_work_sync()` before `mbox_free_channel()`.
 
 ---
@@ -259,9 +259,9 @@ These are not caught by automated tools — they are upstream maintainer style r
 2. **Reverse LIFO unwind:** Every `goto err_*` must strictly unwind resources acquired up to that line in exact reverse order.
 3. **No unclocked ISR execution:** If an interrupt is registered (`devm_request_irq` or `request_irq`), hardware interrupt enable registers must be masked to zero (`writel(0, ...)`) before any error path disables the peripheral clock or asserts reset.
 4. **Shared reset balancing:** If `reset_control_deassert()` is called in `probe()`, every subsequent error path must call `reset_control_assert()` to balance the refcount.
-5. **Crash IRQ storm prevention:** When a remote core crash interrupt fires, the ISR MUST call `disable_irq_nosync()` before reporting the crash. Re-enable the IRQ only in `start()` once the core has been reset and restarted.
+5. **Level IRQ storm prevention:** A level interrupt that stays asserted (e.g. the msgbox write IRQ while the FIFO has room) MUST be masked in its handler before it is acked, and re-armed only by the next send.
 
-**Expected answer:** Probe allocates memory before clocks/resets; unwinds strictly in reverse LIFO order; masks hardware interrupts before disabling clocks; disables crash IRQs during recovery.
+**Expected answer:** Probe allocates memory before clocks/resets; unwinds strictly in reverse LIFO order; masks hardware interrupts before disabling clocks; masks level interrupts in their handler.
 
 ---
 
@@ -297,17 +297,17 @@ These are not caught by automated tools — they are upstream maintainer style r
 
 ## CHECK GROUP 20: Subsystem API Semantic Contracts
 
-1. **Mailbox TX completion (`last_tx_done`)** — owner decision, DESIGN_DECISIONS.md
-   "Message box TX completion" (2026-10-16); do not flag it as a bug:
-   - For the sun55i msgbox a kick is a doorbell (data is in the vrings): it is done once the
-     receiver's FIFO accepted it and has room for the next one.
-   - The device tree selects the mode: no property = timer (`txdone_poll`, `last_tx_done()` =
-     `count < 8`); `allwinner,tx-done-irq` = `txdone_irq`, the write interrupt armed after every
-     send and disabled in its handler (OMAP model, manual §2.12.4.1 / §6.1.5.1). Precedent:
-     `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
-   - **Check instead:** the latched write status is cleared before arming, the handler disables
-     the (level) interrupt and acks it before calling `mbox_chan_txdone()` outside the lock, and
-     a full FIFO is never written (writing a full FIFO corrupts the count, reference §6a).
+1. **Mailbox TX completion (write IRQ)** — owner decision, DESIGN_DECISIONS.md
+   "Message box TX completion"; do not flag it as a bug:
+   - For the sun55i msgbox a kick is a doorbell (data is in the vrings).
+   - From v4, TX done is only by the receiver bank's write interrupt (`txdone_irq`): no poll
+     mode, no `last_tx_done()`, no device-tree property. `send_data()` arms the interrupt after
+     every send (OMAP model, manual §2.12.4.1 / §6.1.5.1).
+   - **Check instead:** the latched write status is cleared and the interrupt armed in the same
+     lock section as the FIFO write; a full FIFO is never written (writing a full FIFO corrupts
+     the count, reference §6a) — the message is held and the handler writes it; the handler
+     disables the (level) interrupt and acks it before calling `mbox_chan_txdone()` outside the
+     lock; `send_data()` returns `-ESHUTDOWN` once `shutdown()` has started.
 2. **RemoteProc Address Translation Fall-through:**
    - In `da_to_va()`, if an address matches an Address Translation Table (ATT) entry (`sunxi_rproc_da_to_sys() == 0`), the address is definitively an ATT-governed core address.
    - If that translated system address does not fall within any mapped hardware window (SRAM, DRAM carveout), it MUST return `NULL` immediately.

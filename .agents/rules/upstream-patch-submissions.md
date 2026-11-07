@@ -61,10 +61,12 @@ Whenever preparing, reviewing, formatting, or sending patches to the Linux kerne
 
 1. **Mailbox TX completion** (DESIGN_DECISIONS.md, "Message box TX completion", 2026-10-16):
    - A kick is done once the receiver's FIFO accepted it and has room; `send_data()` never writes a full FIFO.
-   - Device tree selects the mode: no property = timer (`txdone_poll`, `last_tx_done()` = `count < 8`,
-     1 ms while full); `allwinner,tx-done-irq` = `txdone_irq`, write interrupt armed after every send
-     and disabled in the handler (OMAP model, manual §2.12.4.1 / §6.1.5.1).
-     Precedent: `ti,mbox-send-noirq` (ti,omap-mailbox.yaml).
+   - From v4, TX done is only by the receiver bank's write interrupt (`txdone_irq`): no poll mode, no
+     `last_tx_done()`, no device-tree property (`allwinner,tx-done-irq` was dropped after v3 review, 2b).
+     `send_data()` arms the write interrupt under the lock after every send; the handler disables it
+     and acks it before `mbox_chan_txdone()` (OMAP model, manual §2.12.4.1 / §6.1.5.1).
+   - A full FIFO is never written: `send_data()` holds the message and the write interrupt writes it.
+   - A route's write-IRQ line is requested only while a channel on it is started.
    - Client (remoteproc): `cl.knows_txdone = false`, `cl.tx_block = false`; never call `mbox_client_txdone()`.
 2. **SMP Concurrency**:
    - MMIO status reads and FIFO drain operations in the msgbox ISR are enclosed in `spin_lock_irqsave(&mbox->lock, flags)`, and `startup()`/`shutdown()` change the IRQ-enable bit under the same lock.

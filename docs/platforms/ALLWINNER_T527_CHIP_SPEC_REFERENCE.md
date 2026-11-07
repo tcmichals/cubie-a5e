@@ -185,7 +185,7 @@ Because the ARM Cortex-A55, XuanTie RISC-V, and Tensilica HiFi4 DSP connect to t
 
 Full reference: [ALLWINNER_SUN55I_MSGBOX_REFERENCE.md](ALLWINNER_SUN55I_MSGBOX_REFERENCE.md).
 
-The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every message for Linux raises the **ARM bank read interrupt, GIC SPI 0** (verified on silicon). The remote banks' lines that reach the A55 are their **write** (TX-done) interrupts, used only with `allwinner,tx-done-irq`. The vendor `sun55iw3p1.dtsi` lists these lines wrong; the values below are from the manual (Table 2-15) and silicon. Channel routing and registers: see the reference above.
+The message box links four processors (ARM CPUX, HiFi4 DSP, CPUS, XuanTie RISC-V). Each processor has its own register bank; a sender writes into the receiver's bank. Every message for Linux raises the **ARM bank read interrupt, GIC SPI 0** (verified on silicon). The remote banks' lines that reach the A55 are their **write** (TX-done) interrupts; from v4 the driver completes every TX from them. The vendor `sun55iw3p1.dtsi` lists these lines wrong; the values below are from the manual (Table 2-15) and silicon. Channel routing and registers: see the reference above.
 
 | Host Channels | Remote Processor | Remote Bank | Remote Bank Write IRQ (to A55) |
 | :--- | :--- | :--- | :--- |

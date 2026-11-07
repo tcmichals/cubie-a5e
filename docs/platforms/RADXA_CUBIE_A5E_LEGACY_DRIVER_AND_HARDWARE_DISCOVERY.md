@@ -212,7 +212,7 @@ reserved-memory {
 | **Kick** | `tx_block = false`, `knows_txdone` unset, heap payload freed in `tx_done` | `tx_block = false`, `knows_txdone = false`, `static const` payload | ✅ equivalent |
 | **Teardown** | `rproc_del()` → free mailbox → `destroy_workqueue()` | `rproc_del()` → free mailbox → `cancel_work_sync()` | ✅ |
 | **Msgbox clocks/resets** | ARM bank clock + reset only | all four banks' clocks + resets (the RV bank must be clocked for doorbells to reach the E906) | ✅ D12 reopened; board-tested 2026-10-17 in `b957de4d382e` `f441eb024f6e` |
-| **Msgbox `last_tx_done`** | "FIFO not full" (5 ms poll), or write-IRQ `txdone_irq` | "FIFO has room" (`count < 8`); DT selects 1 ms poll (default) or write IRQ (`allwinner,tx-done-irq`) | ✅ Decided 2026-10-16, board-tested 2026-10-17 (`98e26bbd53e6` `b957de4d382e`) |
+| **Msgbox TX completion** | "FIFO not full" (5 ms poll), or write-IRQ `txdone_irq` | v4: write IRQ only (`txdone_irq`), armed after every send; full FIFO held and written by the IRQ. v3 had a 1 ms poll default and `allwinner,tx-done-irq` (rejected as policy) | ✅ v4 `4931baf9d66b`; v3 board-tested 2026-10-17 |
 | **Msgbox IRQ pending** | cleared **after** draining ("can be cleared only once the FIFO is empty") | drains the FIFO, **then** clears the pending bit (D13) | ✅ Board-tested 2026-10-17: one SPI 0 IRQ per message (`b957de4d382e`) |
 
 ---
