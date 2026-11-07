@@ -12,6 +12,13 @@
 #include "lmac_types.h"
 #include "lmac_msg.h"
 
+enum AICWF_IC {
+	PRODUCT_ID_AIC8801 = 0,
+	PRODUCT_ID_AIC8800DC,
+	PRODUCT_ID_AIC8800DW,
+	PRODUCT_ID_AIC8800D80
+};
+
 struct rwnx_hw;
 struct mm_set_rf_calib_req;
 struct mm_set_rf_calib_cfm;

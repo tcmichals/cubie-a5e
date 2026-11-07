@@ -1037,7 +1037,7 @@ static int rwnx_close(struct net_device *dev)
 		};
 
 		cfg80211_scan_done(rwnx_hw->scan_request, &info);
-		aicwf_sdio_scan_activity_put(rwnx_hw);
+		aicwf_bus_scan_activity_put(rwnx_hw);
 		rwnx_hw->scan_request = NULL;
 
 		ret = rwnx_send_scanu_cancel_req(rwnx_hw, NULL);
@@ -1287,7 +1287,7 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
 #ifndef CONFIG_AIC8800_ONE_TXQ
 	int nx_nb_ndev_txq = NX_NB_NDEV_TXQ;
 
-	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
+	if (aicwf_plat_chip_ops()->is_old_ic)
 		nx_nb_ndev_txq = NX_NB_NDEV_TXQ_FOR_OLD_IC;
 #endif
 
@@ -1878,7 +1878,7 @@ static void __maybe_unused rwnx_cfgp2p_stop_p2p_device(struct wiphy *wiphy,
 		};
 
 		cfg80211_scan_done(rwnx_hw->scan_request, &info);
-		aicwf_sdio_scan_activity_put(rwnx_hw);
+		aicwf_bus_scan_activity_put(rwnx_hw);
 		rwnx_hw->scan_request = NULL;
 		ret = rwnx_send_scanu_cancel_req(rwnx_hw, NULL);
 		if (ret)
@@ -1942,7 +1942,7 @@ static int rwnx_cfg80211_scan(struct wiphy *wiphy,
 		return -EBUSY;
 	}
 
-	if (!aicwf_sdio_scan_activity_get(rwnx_hw))
+	if (!aicwf_bus_scan_activity_get(rwnx_hw))
 		return -EBUSY;
 
 	rwnx_hw->scan_request = request;
@@ -1950,7 +1950,7 @@ static int rwnx_cfg80211_scan(struct wiphy *wiphy,
 	if (error) {
 		rwnx_hw->scan_request = NULL;
 		rwnx_hw->scanning = 0;
-		aicwf_sdio_scan_activity_put(rwnx_hw);
+		aicwf_bus_scan_activity_put(rwnx_hw);
 		return error;
 	}
 

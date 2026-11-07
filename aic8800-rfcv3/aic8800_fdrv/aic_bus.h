@@ -188,4 +188,22 @@ static inline const void *aicwf_bus_get_hw_props(struct aicwf_bus *bus)
 int aicwf_bus_init(uint bus_hdrlen, struct device *dev);
 void aicwf_bus_deinit(struct device *dev);
 
+/* ================================================================
+ *  Bus activity tracking, called from the shared command and scan
+ *  paths. One bus is selected per build. SDIO counts the activity so
+ *  suspend can wait for it; USB only holds the wakeup source.
+ * ================================================================
+ */
+#ifdef AICWF_SDIO_SUPPORT
+#define aicwf_bus_activity_get      aicwf_sdio_activity_get
+#define aicwf_bus_activity_put      aicwf_sdio_activity_put
+#define aicwf_bus_scan_activity_get aicwf_sdio_scan_activity_get
+#define aicwf_bus_scan_activity_put aicwf_sdio_scan_activity_put
+#else
+#define aicwf_bus_activity_get      aicwf_usb_activity_get
+#define aicwf_bus_activity_put      aicwf_usb_activity_put
+#define aicwf_bus_scan_activity_get aicwf_usb_scan_activity_get
+#define aicwf_bus_scan_activity_put aicwf_usb_scan_activity_put
+#endif
+
 #endif /* _AIC_BUS_H_ */

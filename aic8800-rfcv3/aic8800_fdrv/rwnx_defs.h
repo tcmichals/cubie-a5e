@@ -676,9 +676,19 @@ int rwnx_chanctx_valid(struct rwnx_hw *rwnx_hw, u8 idx);
 
 extern u8 chip_id;
 
+/* Chip ops of the one device this driver binds to */
+static inline const struct aic_chip_ops *aicwf_plat_chip_ops(void)
+{
+#ifdef AICWF_SDIO_SUPPORT
+	return g_rwnx_plat->sdiodev->rwnx_hw->chip_ops;
+#else
+	return g_rwnx_plat->usbdev->rwnx_hw->chip_ops;
+#endif
+}
+
 static inline bool is_multicast_sta(int sta_idx)
 {
-	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
+	if (aicwf_plat_chip_ops()->is_old_ic)
 		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
 	else
 		return (sta_idx >= NX_REMOTE_STA_MAX);

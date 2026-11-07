@@ -13,6 +13,7 @@
 #include "aicwf_sdio.h"
 #include "lmac_msg.h"
 
+#ifdef AICWF_SDIO_SUPPORT
 /* ========== SDIO chip properties ========== */
 static const struct aic_sdio_chip_hw aic_sdio_chip_tbl[] = {
 	[PRODUCT_ID_AIC8801] = {
@@ -79,6 +80,7 @@ const struct aic_sdio_chip_hw *aic_sdio_get_props(u16 chipid)
 		return &aic_sdio_chip_tbl[chipid];
 	return NULL;
 }
+#endif /* AICWF_SDIO_SUPPORT */
 
 /*========== Chip ops wrappers ========== */
 int aic_chip_init_capa(struct rwnx_hw *rwnx_hw)
