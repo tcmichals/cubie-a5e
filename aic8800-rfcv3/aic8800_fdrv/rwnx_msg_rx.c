@@ -726,7 +726,7 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 
 	rwnx_hw->scan_request = NULL;
 	rwnx_hw->scanning = 0;
-	aicwf_sdio_scan_activity_put(rwnx_hw);
+	aicwf_bus_scan_activity_put(rwnx_hw);
 
 	return 0;
 }

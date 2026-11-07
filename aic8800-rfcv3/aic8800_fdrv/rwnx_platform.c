@@ -2785,7 +2785,7 @@ int rwnx_platform_on(struct rwnx_hw *rwnx_hw, void *config)
  */
 void rwnx_platform_off(struct rwnx_hw *rwnx_hw, void **config)
 {
-#if defined(AICWF_SDIO_SUPPORT)
+#if defined(AICWF_SDIO_SUPPORT) || defined(AICWF_USB_SUPPORT)
 	tasklet_kill(&rwnx_hw->task);
 	rwnx_hw->plat->enabled = false;
 	return;
@@ -2846,6 +2846,8 @@ struct device *rwnx_platform_get_dev(struct rwnx_plat *rwnx_plat)
 {
 #ifdef AICWF_SDIO_SUPPORT
 	return rwnx_plat->sdiodev->dev;
+#else
+	return rwnx_plat->usbdev->dev;
 #endif
 }
 

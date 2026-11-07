@@ -4,16 +4,37 @@ config WLAN_VENDOR_AIC
 	bool "AIC devices"
 	default y
 	help
-	  Say Y to expose the AIC8800D80 U02 SDIO Wi-Fi driver.
+	  Say Y to expose the AIC8800D80 U02 Wi-Fi driver, over SDIO or USB.
 	  The first upstreaming target is a narrow D80 U02 SDIO station
 	  configuration; legacy transport, Bluetooth, Android, test and
 	  manufacturing build switches are intentionally not exposed.
 
 if WLAN_VENDOR_AIC
 
+choice
+	prompt "AIC8800 bus"
+	default AIC8800_SDIO_SUPPORT
+	help
+	  The driver is built for one bus. A kernel with both an SDIO and a
+	  USB AIC8800 board needs the choice made per image.
+
+config AIC8800_SDIO_SUPPORT
+	bool "SDIO"
+	depends on MMC
+
+config AIC8800_USB_SUPPORT
+	bool "USB"
+	depends on USB
+	help
+	  The USB chip enumerates in its BootROM as a69c:8d80 and needs its
+	  firmware loaded by the vendor aic_load_fw module (not part of this
+	  driver) before it comes back as a69c:8d81 or a69c:8d83.
+
+endchoice
+
 menuconfig AIC8800_BSP_SUPPORT
 	tristate "AIC8800D80 U02 SDIO bus support"
-	depends on MMC
+	depends on AIC8800_SDIO_SUPPORT
 	help
 	  Enable the AIC8800D80 U02 SDIO bus support package. It provides
 	  the SDIO transport, chip operations and firmware download path used
@@ -26,14 +47,13 @@ menuconfig AIC8800_BSP_SUPPORT
 
 if AIC8800_BSP_SUPPORT
 
-config AIC8800_SDIO_SUPPORT
-	def_bool y
-
 config AIC8800_SDIO_PWRCTRL
 	def_bool y
 
 source "drivers/net/wireless/aic/aic8800_bsp/Kconfig"
-source "drivers/net/wireless/aic/aic8800_fdrv/Kconfig"
 
 endif # AIC8800_BSP_SUPPORT
+
+source "drivers/net/wireless/aic/aic8800_fdrv/Kconfig"
+
 endif # WLAN_VENDOR_AIC

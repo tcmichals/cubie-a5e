@@ -36,6 +36,10 @@
 #include "aicwf_sdio.h"
 #include "sdio_host.h"
 #endif
+#ifdef AICWF_USB_SUPPORT
+#include "aicwf_usb.h"
+#include "usb_host.h"
+#endif
 
 #include "lmac_mac.h"
 #include "aicwf_chip_ops.h"
@@ -533,6 +537,9 @@ struct rwnx_hw {
 #ifdef AICWF_SDIO_SUPPORT
 	struct aic_sdio_dev *sdiodev;
 #endif
+#ifdef AICWF_USB_SUPPORT
+	struct aic_usb_dev *usbdev;
+#endif
 	struct wiphy *wiphy;
 	struct list_head vifs;
 	struct rwnx_vif *
@@ -540,7 +547,7 @@ struct rwnx_hw {
 	struct rwnx_sta sta_table[NX_REMOTE_STA_MAX + NX_VIRT_DEV_MAX];
 	struct rwnx_survey_info survey[SCAN_CHANNEL_MAX];
 	struct cfg80211_scan_request *scan_request;
-	/* The normal scan path owns one SDIO activity until its terminal event. */
+	/* The normal scan path owns one bus activity until its terminal event. */
 	atomic_t scan_activity_held;
 #ifdef CONFIG_AIC8800_SCHED_SCAN
 	struct cfg80211_sched_scan_request *sched_scan_req;
@@ -581,6 +588,9 @@ struct rwnx_hw {
 	struct ipc_host_env_tag *ipc_env;
 #ifdef AICWF_SDIO_SUPPORT
 	struct sdio_host_env_tag sdio_env;
+#endif
+#ifdef AICWF_USB_SUPPORT
+	struct usb_host_env_tag usb_env;
 #endif
 
 	struct rwnx_ipc_elem_pool e2amsgs_pool;
@@ -676,9 +686,19 @@ int rwnx_chanctx_valid(struct rwnx_hw *rwnx_hw, u8 idx);
 
 extern u8 chip_id;
 
+/* Chip ops of the one device this driver binds to */
+static inline const struct aic_chip_ops *aicwf_plat_chip_ops(void)
+{
+#ifdef AICWF_SDIO_SUPPORT
+	return g_rwnx_plat->sdiodev->rwnx_hw->chip_ops;
+#else
+	return g_rwnx_plat->usbdev->rwnx_hw->chip_ops;
+#endif
+}
+
 static inline bool is_multicast_sta(int sta_idx)
 {
-	if (g_rwnx_plat->sdiodev->rwnx_hw->chip_ops->is_old_ic)
+	if (aicwf_plat_chip_ops()->is_old_ic)
 		return (sta_idx >= NX_REMOTE_STA_MAX_FOR_OLD_IC);
 	else
 		return (sta_idx >= NX_REMOTE_STA_MAX);
