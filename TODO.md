@@ -769,26 +769,26 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 
 | # | Issue | Source | Status | Commit (7.1) |
 | :--- | :--- | :--- | :---: | :--- |
-| V4-TXIRQ | Drop `allwinner,tx-done-irq` (binding, driver, DTS); TX done by write IRQ only; remove poll mode and its tests | V3-K1, V3-S1 | ⬜ (decided) | |
-| V4-HELD | Full FIFO: hold the message, `send_data()` returns 0, write it from the TX IRQ; KUnit: blocking timeout then late IRQ | V3-S2 | ⬜ | |
-| V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ⬜ | |
-| V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ⬜ | |
-| V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ⬜ | |
-| V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ⬜ (decided 2026-11-03: remove) | |
+| V4-TXIRQ | Drop `allwinner,tx-done-irq` (binding, driver, DTS); TX done by write IRQ only; remove poll mode and its tests | V3-K1, V3-S1 | ✅ | `620d918874f8`, `70509dc4e6fe`, overlay in `2c6a626` |
+| V4-HELD | Full FIFO: hold the message, `send_data()` returns 0, write it from the TX IRQ; KUnit: blocking timeout then late IRQ | V3-S2 | ✅ (UML) | `70509dc4e6fe`, `4931baf9d66b` |
+| V4-ARM | Clear write status + arm in the same `mbox->lock` section as the FIFO write; KUnit: latched bit + fill to 8 | V3-S3 | ✅ (UML) | `70509dc4e6fe` |
+| V4-SHUT | Never arm once `shutdown()` started (flag under `mbox->lock`); KUnit: second IRQ after `synchronize_irq()` | V3-S4 | ✅ (UML) | `70509dc4e6fe` |
+| V4-VQWORK | `vq_work` takes `rproc->lock` and returns unless `RPROC_RUNNING` (stm32, imx_dsp). **No** `cancel_work_sync()` in `stop()` (runs under `rproc->lock`: deadlock). Repeat of v2 | V3-S5 | ✅ (UML) | `e6f9ab5f987d` |
+| V4-CRASH | Crash interrupt: remove from driver, binding and KUnit (no line exists; dump segments stay). Repeat of v2 | V3-S6, V3-K2c | ✅ | `a4042b040f2c`, `e6f9ab5f987d` |
 | V4-MEMREG | `memory-region(-names)`: keep `minItems: 1` (owner: dram/trace optional); binding description gives the firmware reason. Repeat of v2 | V3-K2a/b | ✅ (dt_binding_check clean) | `891dfd49cb6c` |
-| V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
-| V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
+| V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ✅ | `7476d6d15b43` |
+| V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ✅ code; `C=1` still to run (V4-SPARSE-TOOL) | `7476d6d15b43` |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
 | V4-SRAMDA | With a pool on SRAM, vring and buffer addresses are host PAs, not E906 DAs (HARSH rproc M2). Owner 2026-11-07: the pool stays flexible, SRAM and DRAM both work; the 2026-11-03 `dma-ranges` plan is dropped (DESIGN_DECISIONS, "Vring pool in DRAM or SRAM"). No driver or binding change. Left to do: the v4 cover letter states that SRAM addresses are host PAs, and the board test keeps both pools | TC-3 | 🔧 cover letter | |
 | V4-MBOXOPT | `mboxes` optional for UIO: keep (imx, stm32, k3-m4f also optional) | TC-7 | ✅ no change | |
 | V4-RCPT | v4 recipients: Chen-Yu at `wens@kernel.org` (v3 went to `wens@csie.org`) | TC-5 | ⬜ | |
-| V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ⬜ | |
+| V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ✅ UML 65 pass / 1 skip | `e1f50ee2fd84`, `67fa40c77ccd` |
 | V4-SPARSE-TOOL | sparse for `C=1`: Ubuntu's 0.6.4 is installed but the kernel rejects it (`scripts/checker-valid.sh` needs `__typeof_unqual__`) and silently drops `C=`. Needs sparse built from git (newer than 0.6.4) | TC-10 | ⬜ (0.6.4 too old) | |
-| V4-BOARD | Remove overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-msgbox-txirq.dtso`; the base DT then runs TX done by interrupt | V4-TXIRQ | ⬜ | |
-| V4-SWEEP | `tools/run_full_sweep.py`: drop the timer benchmark and Profile 1T, and the "TX-done lines requested in timer mode" check (lines are now always used); keep the write-IRQ test in profile 1 | V4-TXIRQ | ⬜ | |
+| V4-BOARD | Remove overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a5e-msgbox-txirq.dtso`; the base DT then runs TX done by interrupt | V4-TXIRQ | ✅ removed; board run pending | `2c6a626` (cubie-a5e) |
+| V4-SWEEP | `tools/run_full_sweep.py`: drop the timer benchmark and Profile 1T, and the "TX-done lines requested in timer mode" check (lines are now always used); keep the write-IRQ test in profile 1 | V4-TXIRQ | ✅ edited; board run pending; source audit 4/4 on `linux-v4-71` | `2c6a626`, `40b6bea` (cubie-a5e) |
 | V4-MSGDOC | Docs that describe timer mode / `allwinner,tx-done-irq` / the crash IRQ: msgbox reference, driver guide, T527 spec reference, discovery doc | V4-TXIRQ, V4-CRASH | ⬜ | |
 | V4-CHLOG | Per-patch "Changes in v4" and commit messages (1/7 still describes `tx-done-irq`; 3/7 the crash interrupt; 4/7 the crash IRQ and `-EBUSY`) | all | ⬜ | |
-| V4-THRESH | Re-check HARSH mailbox D6 (write-IRQ threshold write in `startup()` is a no-op on this silicon): it now carries all TX done | TC review | ⬜ | |
+| V4-THRESH | Re-check HARSH mailbox D6 (write-IRQ threshold write in `startup()` is a no-op on this silicon): it now carries all TX done | TC review | 🔧 the A55 write has no effect; sweep write-IRQ test proves threshold 1 free on the board | |
 | V4-DOCS | Correct the `minItems: 1` rule; v3 process lessons in lessons, rules, `/kreview`, `/kseries` | v3 retrospective | ✅ 2026-11-03 | (cubie-a5e) |
 | V4-INCL | Drop `<linux/mod_devicetable.h>` from `sun55i-msgbox.c` and `sunxi_rproc.c` (Uwe Kleine-König, 2026-11-05). No `<linux/device-id/of.h>`: that header is not on 7.1. W=1 clean on 7.1 and next-20261105 (v4 sources), not folded yet | V3-U1 | ✅ | `9a5f36c0628d` |
 
