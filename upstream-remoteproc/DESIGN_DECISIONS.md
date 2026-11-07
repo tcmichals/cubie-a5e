@@ -58,9 +58,14 @@ as `vdev0buffer`, `vdev0vring0`), even though the vendor BSP uses it:
 - our firmware uses `FW_RSC_ADDR_ANY` and lets Linux place the vrings, which is the pool case.
 
 ### Vring pool in DRAM or SRAM (owner, 2026-10-27)
-> **2026-11-03 (owner, Q3):** kept, and v4 gives the E906 its own addresses through `dma-ranges`
-> (SRAM windows translated, DDR 1:1), as stm32 does; v3 handed it host addresses in SRAM and the
-> firmware converted them. Placement (bus node A1 vs driver map A2) open: TODO §5.6b V4-SRAMDA.
+> **2026-11-07 (owner):** the design is flexible: the pool works in SRAM and in DRAM. This replaces
+> the 2026-11-03 `dma-ranges` plan (Q3), which cannot give the firmware E906 buffer addresses: rpmsg
+> adds buffers as scatterlists and, without `VIRTIO_F_ACCESS_PLATFORM`, virtio writes `sg_phys()` into
+> each descriptor (`virtio_ring.c`, `vring_map_one_sg()`). That feature is bit 33, and the resource
+> table's feature fields are 32 bits. So with a pool on SRAM, descriptor addresses are host physical
+> addresses under any kernel address map, and firmware maps them to its own view. The vring `da` in
+> the resource table is also a host address in that case, which the cover letter states: TODO §5.6b
+> V4-SRAMDA.
 
 `memory-region[0]` is a `shared-dma-pool` and may sit in DRAM or on an E906 SRAM; both are
 board-tested every sweep (profile 1/1T: `cubie-a5e-flight-stack`, DRAM `0x48000000`; profile 2:
@@ -88,8 +93,8 @@ it. Move it to a syscon or the R-CCU only if maintainers ask.
 2026-10-27 (owner, after the harsh review): kept for v3. The cover letter also offers the sunxi
 SRAM driver (`allwinner,sram = <&...>`) for SRAM A3_2, which a reviewer is likely to ask for.
 **Why it stays (owner, 2026-10-28; settled, do not re-open):** the remap register is how the
-E906 side gets more RAM, and AbstractX depends on it: bit 0 (`MCU_RAM_REMAP`, reset 1) shares
-the HiFi4 DSP's local RAM (`0x00020000`, 128 KB, AbstractX's MicroPython heap), and bit 1
+E906 side gets more RAM: bit 0 (`MCU_RAM_REMAP`, reset 1) shares
+the HiFi4 DSP's local RAM (`0x00020000`, 128 KB), and bit 1
 (`SRAMA3_2_RAM_REMAP`) shares the 512 KB SRAMA3_2 (`0x07300000`) with MCU_SYS (T527 manual V0.94
 p.33 and p.418). The driver sets bit 1 and leaves bit 0 alone. Test results correct the wording,
 never the decision.
@@ -253,8 +258,7 @@ overflowed (`MBOX_TX_QUEUE_LEN`, kick `-ENOBUFS`) once the RV bank was clocked (
 ### E906 D-cache is off (C1)
 The E906 runs with `mhcr.DE = 0`. Linux maps the DMA pool and carveouts uncached
 (`shared-dma-pool`, `MEMREMAP_WC`, no `dma-coherent`), so no cache maintenance is needed
-today. Enabling the cache and the clean/invalidate helpers belong to the AbstractX firmware,
-after v3.
+today. Enabling the cache and the clean/invalidate helpers are firmware work, after v3.
 
 ---
 

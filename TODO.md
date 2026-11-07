@@ -779,7 +779,7 @@ One commit per row. Status: ✅ done · 🔧 in progress · ⬜ todo · ❓ need
 | V4-KPM | rproc KUnit `depends on PM` | V3-S7 | ⬜ | |
 | V4-SPARSE | `__force` on `__iomem` casts in `use_mmio_mocks()` | V3-S8 | ⬜ | |
 | V4-CHECKS | Pre-send: `C=1` sparse, `CONFIG_PM=n` build, concurrency pass through the cores, re-run of every earlier finding's scenario | UPSTREAM_LESSONS_LEARNED §6 | ⬜ | |
-| V4-SRAMDA | SRAM vring/carveout/buffer addresses are host PAs, not E906 DAs (HARSH rproc M2). Owner 2026-11-03: fix with `dma-ranges` (SRAM0 `0x3ffc0000→0x07280000`, SRAM1 `0x40000000→0x072c0000`, DDR 1:1), pool in SRAM or DDR. Core: vring da = dma addr (`remoteproc_core.c:766`), vdev copies the rproc map (`remoteproc_virtio.c:30`). Carveouts registered with E906 DA (stm32 `stm32_rproc_pa_to_da()`); drop ATT host rows; remove `translate_da()` in `firmware/` and AbstractX; board test both pools. ❓ placement: A1 bus node in dtsi (stm32 `mlahb`, recommended) or A2 driver-built map | TC-3 | ❓ A1/A2 | |
+| V4-SRAMDA | With a pool on SRAM, vring and buffer addresses are host PAs, not E906 DAs (HARSH rproc M2). Owner 2026-11-07: the pool stays flexible, SRAM and DRAM both work; the 2026-11-03 `dma-ranges` plan is dropped (DESIGN_DECISIONS, "Vring pool in DRAM or SRAM"). No driver or binding change. Left to do: the v4 cover letter states that SRAM addresses are host PAs, and the board test keeps both pools | TC-3 | 🔧 cover letter | |
 | V4-MBOXOPT | `mboxes` optional for UIO: keep (imx, stm32, k3-m4f also optional) | TC-7 | ✅ no change | |
 | V4-RCPT | v4 recipients: Chen-Yu at `wens@kernel.org` (v3 went to `wens@csie.org`) | TC-5 | ⬜ | |
 | V4-KTEST | Rewrite the poll-mode msgbox KUnit cases for IRQ mode; update test counts | TC-9 | ⬜ | |
