@@ -1,6 +1,6 @@
-# Allwinner T527 & A733 Flight Controller Workspace
+# Allwinner T527 & A733 Mainline Linux Workspace
 
-Top-level workspace for the **Radxa Cubie A5E** (Allwinner T527/A527) and **Radxa Cubie A7A / A7Z** (Allwinner A733) flight controller distributions and mainline Linux bring-up.
+Top-level workspace for Linux mainline development on the **Radxa Cubie A5E** (Allwinner T527/A527) and the **Radxa Cubie A7A** (Allwinner A733).
 
 ---
 

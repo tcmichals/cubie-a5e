@@ -1,6 +1,6 @@
-# 📖 Avionics Flight Stack & Board Documentation Index
+# 📖 Linux Mainline Development: Documentation Index
 
-This repository contains the complete embedded Linux OS, real-time co-processor firmware, and flight control software stack for the **Radxa Cubie family** (Cubie A5E & Cubie A7A).
+Documentation for Linux mainline development on the **Radxa Cubie A5E** (Allwinner A527/T527) and the **Radxa Cubie A7A** (Allwinner A733): drivers, Buildroot images, the firmware that exercises them, and testing both boards to Linux standards.
 
 ---
 
