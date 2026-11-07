@@ -1,0 +1,120 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * Copyright (C) 2018-2024 AIC semiconductor.
+ *
+ * @file aicwf_usb.h
+ * @brief USB transport header and declarations
+ */
+
+#ifndef _AICWF_USB_H_
+#define _AICWF_USB_H_
+
+#include <linux/usb.h>
+#include "rwnx_cmds.h"
+
+#ifdef AICWF_USB_SUPPORT
+
+struct rwnx_hw;
+struct wakeup_source;
+
+/* USB Device IDs */
+#define USB_VENDOR_ID_AIC                0xA69C
+
+/*
+ * The BootROM device (0x8D80) belongs to the vendor aic_load_fw module, which
+ * loads the firmware; the chip then comes back as one of these.
+ */
+#define USB_PRODUCT_ID_AIC8800D80_COMBO  0x8D81 /* AIC8800D80 Wi-Fi + BT Combo */
+#define USB_PRODUCT_ID_AIC8800D80_WIFI   0x8D83 /* AIC8800D80 Wi-Fi Only */
+
+#define AICWF_USB_RX_URBS               (200)
+#define AICWF_USB_MSG_RX_URBS           (100)
+#define AICWF_USB_TX_URBS               (100)
+#define AICWF_USB_TX_LOW_WATER          (AICWF_USB_TX_URBS/4)
+#define AICWF_USB_TX_HIGH_WATER         (AICWF_USB_TX_LOW_WATER*3)
+#define AICWF_USB_MAX_PKT_SIZE          (2048)
+#define AICWF_USB_MSG_MAX_PKT_SIZE      (2048)
+
+typedef enum {
+	USB_TYPE_DATA         = 0X00,
+	USB_TYPE_CFG          = 0X10,
+	USB_TYPE_CFG_CMD_RSP  = 0X11,
+	USB_TYPE_CFG_DATA_CFM = 0X12,
+	USB_TYPE_CFG_PRINT    = 0X13,
+} usb_type;
+
+enum aicwf_usb_state {
+	USB_DOWN_ST,
+	USB_UP_ST,
+	USB_SLEEP_ST
+};
+
+struct aicwf_usb_buf {
+	struct list_head list;
+	struct aic_usb_dev *usbdev;
+	struct urb *urb;
+	struct sk_buff *skb;
+	bool cfm;
+};
+
+struct aic_usb_dev {
+	struct rwnx_hw *rwnx_hw;
+	struct aicwf_bus *bus_if;
+	struct usb_device *udev;
+	struct device *dev;
+	struct aicwf_rx_priv *rx_priv;
+	enum aicwf_usb_state state;
+	struct rwnx_cmd_mgr cmd_mgr;
+	u16 chipid;
+
+	struct usb_anchor rx_submitted;
+	struct work_struct rx_urb_work;
+	struct usb_anchor msg_rx_submitted;
+	struct work_struct msg_rx_urb_work;
+
+	spinlock_t rx_free_lock;
+	spinlock_t tx_free_lock;
+	spinlock_t tx_post_lock;
+	spinlock_t tx_flow_lock;
+	spinlock_t msg_rx_free_lock;
+
+	struct list_head rx_free_list;
+	struct list_head tx_free_list;
+	struct list_head tx_post_list;
+	struct list_head msg_rx_free_list;
+
+	uint bulk_in_pipe;
+	uint bulk_out_pipe;
+	uint msg_in_pipe;
+	uint msg_out_pipe;
+
+	int tx_free_count;
+	int tx_post_count;
+
+	struct aicwf_usb_buf usb_tx_buf[AICWF_USB_TX_URBS];
+	struct aicwf_usb_buf usb_rx_buf[AICWF_USB_RX_URBS];
+	struct aicwf_usb_buf usb_msg_rx_buf[AICWF_USB_MSG_RX_URBS];
+
+	int msg_finished;
+	wait_queue_head_t msg_wait;
+	ulong msg_busy;
+	struct urb *msg_out_urb;
+
+	bool tbusy;
+};
+
+extern void aicwf_usb_exit(void);
+extern void aicwf_usb_register(void);
+extern void aicwf_usb_tx_flowctrl(struct rwnx_hw *rwnx_hw, bool state);
+int usb_bustx_thread(void *data);
+int usb_busrx_thread(void *data);
+int usb_msg_busrx_thread(void *data);
+extern void aicwf_hostif_ready(void);
+extern void aicwf_hostif_fail(void);
+bool aicwf_usb_activity_get(struct rwnx_hw *rwnx_hw, struct wakeup_source *ws);
+void aicwf_usb_activity_put(struct rwnx_hw *rwnx_hw, struct wakeup_source *ws);
+bool aicwf_usb_scan_activity_get(struct rwnx_hw *rwnx_hw);
+void aicwf_usb_scan_activity_put(struct rwnx_hw *rwnx_hw);
+
+#endif /* AICWF_USB_SUPPORT */
+#endif /* _AICWF_USB_H_       */

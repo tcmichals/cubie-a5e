@@ -2,6 +2,23 @@
 
 obj-$(CONFIG_AIC8800_WLAN_SUPPORT) += aic8800_fdrv.o
 
+# One bus per build. Setting neither keeps the SDIO build.
+ifeq ($(CONFIG_AIC8800_SDIO_SUPPORT)$(CONFIG_AIC8800_USB_SUPPORT),yy)
+$(error aic8800: choose CONFIG_AIC8800_SDIO_SUPPORT or CONFIG_AIC8800_USB_SUPPORT, not both)
+endif
+
+ifeq ($(CONFIG_AIC8800_USB_SUPPORT),y)
+aic-bus-host := usb_host.o
+aic-bus := aicwf_usb.o
+ccflags-y += -DAICWF_USB_SUPPORT
+else
+aic-bus-host := sdio_host.o
+aic-bus := aicwf_sdio.o
+ccflags-y += -DAICWF_SDIO_SUPPORT
+ccflags-$(CONFIG_AIC8800_SDIO_PWRCTRL) += -DCONFIG_SDIO_PWRCTRL
+ccflags-$(CONFIG_AIC8800_FDRV_NO_REG_SDIO) += -DCONFIG_FDRV_NO_REG_SDIO
+endif
+
 aic8800_fdrv-y := \
 	rwnx_msg_tx.o \
 	rwnx_msg_rx.o \
@@ -25,9 +42,9 @@ aic8800_fdrv-y := \
 	aicwf_compat_8800d80.o \
 	regdb.o \
 	aic_priv_cmd.o \
-	sdio_host.o \
+	$(aic-bus-host) \
 	aicwf_txrxif.o \
-	aicwf_sdio.o \
+	$(aic-bus) \
 	aicwf_rx_prealloc.o
 
 aic8800_fdrv-$(CONFIG_AIC8800_NONSTA_SUPPORT) += rwnx_mesh.o rwnx_tdls.o
@@ -38,9 +55,6 @@ ccflags-y += -I$(srctree)
 ccflags-y += -I$(src)
 ccflags-y += -I$(src)/../aic8800_bsp
 ccflags-y += -DAIC_TRACE_INCLUDE_PATH=$(src)
-ccflags-y += -DAICWF_SDIO_SUPPORT
-ccflags-$(CONFIG_AIC8800_SDIO_PWRCTRL) += -DCONFIG_SDIO_PWRCTRL
-ccflags-$(CONFIG_AIC8800_FDRV_NO_REG_SDIO) += -DCONFIG_FDRV_NO_REG_SDIO
 ccflags-y += -DCONFIG_RWNX_FULLMAC
 ccflags-y += -DUSE_5G
 ccflags-y += -DAICWF_RX_REORDER
