@@ -11,7 +11,7 @@ Top-level workspace for the **Radxa Cubie A5E** (Allwinner T527/A527) and **Radx
 git clone git@github.com:tcmichals/cubie-a5e.git
 ./cubie-a5e/tools/setup_workspace.sh
 ```
-* Automatically clones `linux-cubie` (`cubie-linux-7.1`), clones `buildroot`, configures `local.mk` (`LINUX_OVERRIDE_SRCDIR`) for both targets, and initializes `bld.a5e` and `bld.a7a`.*
+* Automatically clones `linux-cubie` (`feature/a733-e902-remoteproc`), adds the `linux-v4-71` worktree (`cubie-linux-7.1`), clones `buildroot`, configures `local.mk` (`LINUX_OVERRIDE_SRCDIR`) for both targets, and initializes `bld.a5e` and `bld.a7a`.*
 
 ---
 
@@ -64,7 +64,8 @@ Active driver upstreaming for the Allwinner sun55i/sun60i RemoteProc and Message
   * **[`cubie-a5e/upstream-remoteproc/`](cubie-a5e/upstream-remoteproc/)**: Upstream patch series, Lore discussion archives, and [Sashiko review protocols](cubie-a5e/upstream-remoteproc/reviews/sashiko_protocols.md).
   * **[`cubie-a5e/tools/setup_workspace.sh`](cubie-a5e/tools/setup_workspace.sh)**: Automated multi-machine workspace setup.
   * **[`cubie-a5e/tools/sync_kernel.sh`](cubie-a5e/tools/sync_kernel.sh)**: Kernel push/pull/rebuild sync tool.
-* **[`linux-cubie/`](linux-cubie/)**: Standalone Linux kernel Git tree (tracking `cubie-linux-7.1`), shared by both Cubie A5E and Cubie A7A.
+* **[`linux-cubie/`](linux-cubie/)**: Linux kernel Git tree for the Cubie A7A (`feature/a733-e902-remoteproc`: camera, E902 remoteproc).
+* **[`linux-v4-71/`](linux-v4-71/)**: Git worktree of `linux-cubie` for the Cubie A5E (`cubie-linux-7.1`). See `cubie-a5e/.agents/rules/kernel-branch-discipline.md`.
 * **[`buildroot/`](buildroot/)**: Upstream Buildroot repository.
 * **`bld.a5e/`**: Build output directory for Radxa Cubie A5E (configured via `cubie_a5e_defconfig` + `local.mk`).
 * **`bld.a7a/`**: Build output directory for Radxa Cubie A7A (configured via `cubie_a7a_defconfig` + `local.mk`).

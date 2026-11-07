@@ -13,7 +13,12 @@ WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_CUBIE_A5E="git@github.com:tcmichals/cubie-a5e.git"
 REPO_LINUX_CUBIE="git@github.com:tcmichals/linux-cubie.git"
 REPO_BUILDROOT="https://gitlab.com/buildroot.org/buildroot.git"
-KERNEL_BRANCH="cubie-linux-7.1"
+# Each board has its own kernel tree and branch (.agents/rules/kernel-branch-discipline.md).
+# linux-v4-71 is a git worktree of linux-cubie.
+A5E_KERNEL_TREE="linux-v4-71"
+A5E_KERNEL_BRANCH="cubie-linux-7.1"
+A7A_KERNEL_TREE="linux-cubie"
+A7A_KERNEL_BRANCH="feature/a733-e902-remoteproc"
 
 echo "======================================================================"
 echo " Cubie Multi-Machine Workspace Setup"
@@ -35,17 +40,22 @@ fi
 # 1. Clone or Update linux-cubie
 echo ""
 echo "[1/4] Checking linux-cubie repository..."
-if [ ! -d "linux-cubie/.git" ]; then
-    echo "  -> Cloning linux-cubie (${KERNEL_BRANCH}) from GitHub..."
-    git clone -b "${KERNEL_BRANCH}" "${REPO_LINUX_CUBIE}" linux-cubie
+if [ ! -d "${A7A_KERNEL_TREE}/.git" ]; then
+    echo "  -> Cloning ${A7A_KERNEL_TREE} (${A7A_KERNEL_BRANCH}) from GitHub..."
+    git clone -b "${A7A_KERNEL_BRANCH}" "${REPO_LINUX_CUBIE}" "${A7A_KERNEL_TREE}"
 else
-    echo "  -> linux-cubie already present. Fetching latest from GitHub..."
-    (
-        cd linux-cubie
-        git fetch origin "${KERNEL_BRANCH}" || true
-        git checkout "${KERNEL_BRANCH}" || true
-        echo "  -> Current branch: $(git branch --show-current)"
-    )
+    echo "  -> ${A7A_KERNEL_TREE} already present. Fetching latest from GitHub..."
+    git -C "${A7A_KERNEL_TREE}" fetch origin "${A7A_KERNEL_BRANCH}" "${A5E_KERNEL_BRANCH}" || true
+    # Never switch branches here: the tree may hold upstream or in-flight work.
+    current="$(git -C "${A7A_KERNEL_TREE}" branch --show-current)"
+    if [ "${current}" != "${A7A_KERNEL_BRANCH}" ]; then
+        echo "  -> WARNING: ${A7A_KERNEL_TREE} is on '${current}'; bld.a7a needs ${A7A_KERNEL_BRANCH}."
+    fi
+fi
+if [ ! -e "${A5E_KERNEL_TREE}/.git" ]; then
+    echo "  -> Adding worktree ${A5E_KERNEL_TREE} (${A5E_KERNEL_BRANCH})..."
+    git -C "${A7A_KERNEL_TREE}" fetch origin "${A5E_KERNEL_BRANCH}:${A5E_KERNEL_BRANCH}" || true
+    git -C "${A7A_KERNEL_TREE}" worktree add "../${A5E_KERNEL_TREE}" "${A5E_KERNEL_BRANCH}"
 fi
 
 # 2. Clone or Update Buildroot
@@ -64,7 +74,7 @@ echo "[3/4] Configuring bld.a5e build environment..."
 mkdir -p bld.a5e
 cat << 'EOF' > bld.a5e/local.mk
 # Local Buildroot package overrides for live development
-LINUX_OVERRIDE_SRCDIR = $(TOPDIR)/../linux-cubie
+LINUX_OVERRIDE_SRCDIR = $(TOPDIR)/../linux-v4-71
 EOF
 
 if [ ! -f "bld.a5e/.config" ]; then
@@ -108,6 +118,6 @@ echo "  Build A5E Full Image:  make -C bld.a5e"
 echo "  Rebuild Kernel Only:   make -C bld.a5e linux-rebuild"
 echo "  Build A7A Full Image:  make -C bld.a7a"
 echo "  Rebuild Kernel Only:   make -C bld.a7a linux-rebuild"
-echo "  Push Kernel Commits:   git -C linux-cubie push origin ${KERNEL_BRANCH}"
-echo "  Pull Kernel Commits:   git -C linux-cubie pull origin ${KERNEL_BRANCH}"
+echo "  Push Kernel Commits:   cubie-a5e/tools/sync_kernel.sh push"
+echo "  Pull Kernel Commits:   cubie-a5e/tools/sync_kernel.sh pull"
 echo "======================================================================"
