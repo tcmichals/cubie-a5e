@@ -19,7 +19,6 @@ This rule strictly governs all C++ development targeting the **XuanTie E906 RISC
 
 ## 2. Embedded Template Library (ETL) Standard
 * **ETL is Strictly 100% Upstream / Immutable:** ETL (`third_party/etl`) is an official Git submodule pointing to `https://github.com/ETLCPP/etl.git`. **NEVER edit ETL internal headers or create custom forks.** Always write client code adhering to official ETL container APIs.
-* **AbstractX Submodule:** AbstractX (`third_party/AbstractX`) is our open-source C++20 coroutine repository (`https://github.com/tcmichals/AbstractX.git`). Changes, enhancements, and bug fixes to coroutine primitives are allowed in AbstractX and should be committed/pushed back to upstream `tcmichals/AbstractX`.
 * **Prohibit Dynamic Heap Allocation:** All dynamic memory allocation (`malloc`, `free`, global `new`, global `delete`) is strictly prohibited.
 * **Mandatory ETL Containers:** Use `etl::vector<T, N>`, `etl::circular_buffer<T, N>`, `etl::array<T, N>`, `etl::span<T>`, `etl::string<N>`, `etl::flat_map<Key, Value, N>` in place of standard heap-allocating STL.
 
@@ -29,4 +28,3 @@ This rule strictly governs all C++ development targeting the **XuanTie E906 RISC
 1. **No C++ Exceptions:** Compile with `-fno-exceptions`. Use `pw::Status`, `std::expected`, or return codes.
 2. **No RTTI:** Compile with `-fno-rtti`.
 3. **No Thread-Safe Statics:** Compile with `-fno-threadsafe-statics`.
-4. **AbstractX Coroutine Allocation:** All coroutines must allocate frames statically in on-chip SRAM (`StaticCoroutinePool`) or elide frames via HALO optimization.

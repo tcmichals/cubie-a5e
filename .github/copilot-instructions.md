@@ -8,7 +8,7 @@ Primary mission: **flight controller platform** with NPU-assisted landing.
 ## Architecture split
 
 ```
-Cubie A5E (Linux / this repo)          FPGA (AbstractX repo)
+Cubie A5E (Linux / this repo)          FPGA
 ─────────────────────────────          ──────────────────────
 High-level flight logic                DSHOT motor output
 Mission state machine                  PWM generation/capture
@@ -16,11 +16,8 @@ TinyML / NPU inference                 IMU interface
 Camera + distance sensor fusion        Hard real-time timing
 Navigation / supervisory control
         │                                      │
-        └──────── dual SPI (AbstractX) ────────┘
+        └────────────── dual SPI ──────────────┘
 ```
-
-AbstractX repo: https://github.com/tcmichals/AbstractX
-SPI transport profile: https://github.com/tcmichals/AbstractX/blob/main/docs/ASP_SPI_TRANSPORT.md
 
 ## Repo layout
 
@@ -101,7 +98,7 @@ Prebuilt bundle path: `BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR` (defaults to `ti
 
 - `sunxi-galcore` — kernel NPU driver packaging not yet complete
 - TIM-VX runtime bundle — must be supplied externally or fetched via helper script
-- AbstractX integration — SPI driver/protocol bring-up pending FPGA hardware
+- FPGA integration — SPI driver/protocol bring-up pending FPGA hardware
 
 ## Build commands (from repo top level)
 
