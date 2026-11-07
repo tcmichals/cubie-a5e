@@ -29,7 +29,7 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
 ## Ground rules
 
 - Work happens on more than one PC: commit and push the kernel branches (`cubie-linux-7.1` for the
-  A5E in `linux-v4-71`, `feature/a733-e902-remoteproc` for the A7A in `linux-cubie`) and
+  A5E in `linux-v4-71`, `a7a_remoteproc_camera_usb` for the A7A in `linux-cubie`) and
   `cubie-a5e` (`main`) when a piece of work is done.
 - Never push upstream submission branches or send patches to a mailing list without the
   owner's explicit go-ahead.

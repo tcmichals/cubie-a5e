@@ -23,7 +23,7 @@ This guide documents the complete procedure to build, patch, package, and run th
 ## 2. Summary of Repository Changes
 
 ### A. Linux Kernel (`linux-cubie`)
-* **Topic Branch**: [`feature/a733-e902-remoteproc`](https://github.com/tcmichals/linux-cubie/tree/feature/a733-e902-remoteproc) (commit `8e92f2e5014e`).
+* **Topic Branch**: [`a7a_remoteproc_camera_usb`](https://github.com/tcmichals/linux-cubie/tree/a7a_remoteproc_camera_usb) (commit `8e92f2e5014e`).
 * **Isolation Rule**: `cubie-linux-7.1` and `next-sun55i-rproc-msgbox` remain 100% clean and untouched for upstream v3 patch submission.
 * **Driver Enhancements (`drivers/remoteproc/sunxi_rproc.c` & `sunxi_rproc.h`)**:
   - Added `SUN60I_SRAM_A2_SYS` (`0x00040000`), `SUN60I_SRAM_A2_SIZE` (`208 KB`), and `E902_STA_ADD_REG` (`0x0204`).
@@ -37,7 +37,7 @@ This guide documents the complete procedure to build, patch, package, and run th
 * **Device Tree Overlay (`project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-rproc.dtso`)**: Declares `rproc_e902` with 208 KB SRAM A2, 16 MB DRAM carveout (`0x4E000000`), and `msgbox` channel 0.
 * **Boot Configuration (`project-cubie-a5e/board/radxa/cubie_a7a/config.txt`)**: Enabled `dtoverlay=cubie-a7a-rproc`.
 * **Kernel Configuration (`project-cubie-a5e/board/radxa/cubie_a7a/linux.config`)**: Enabled `CONFIG_REMOTEPROC=y`, `CONFIG_SUNXI_REMOTEPROC=y`, `CONFIG_RPMSG_VIRTIO=y`, and `CONFIG_RPMSG_CHAR=y`.
-* **Defconfig (`project-cubie-a5e/configs/cubie_a7a_defconfig`)**: Set `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="feature/a733-e902-remoteproc"`.
+* **Defconfig (`project-cubie-a5e/configs/cubie_a7a_defconfig`)**: Set `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="a7a_remoteproc_camera_usb"`.
 
 ### C. RISC-V Coprocessor Firmware (`cubie-a5e`)
 * **Linker Script (`firmware/common/arch_riscv/e902_sram.ld`)**: Linked for SRAM A2 (`ORIGIN = 0x00040000`, `LENGTH = 208K`).
@@ -63,7 +63,7 @@ cp -f exampleRiscv.elf /home/tcmichals/projects/cubie/bld.a7a/target/lib/firmwar
 ### Step 2: Ensure the Kernel Topic Branch is Checked Out
 ```bash
 cd /home/tcmichals/projects/cubie/linux-cubie
-git checkout feature/a733-e902-remoteproc
+git checkout a7a_remoteproc_camera_usb
 ```
 
 ### Step 3: Rebuild the Linux Kernel

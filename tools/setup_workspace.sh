@@ -18,7 +18,7 @@ REPO_BUILDROOT="https://gitlab.com/buildroot.org/buildroot.git"
 A5E_KERNEL_TREE="linux-v4-71"
 A5E_KERNEL_BRANCH="cubie-linux-7.1"
 A7A_KERNEL_TREE="linux-cubie"
-A7A_KERNEL_BRANCH="feature/a733-e902-remoteproc"
+A7A_KERNEL_BRANCH="a7a_remoteproc_camera_usb"
 
 echo "======================================================================"
 echo " Cubie Multi-Machine Workspace Setup"

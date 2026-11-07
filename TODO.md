@@ -863,7 +863,7 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
 > - **Wi-Fi Driver Updated & Verified on A5E**: The mainline driver in `aic8800-upstream/` has completed physical hardware verification on Radxa Cubie A5E (`192.168.1.13`). Power save is defaulted to `off`, SDIO sleep/wakeup register handshaking is fixed (`sleep_reg` 0x01 bit 4), and `aicwf_sdio_wakeup()` is cleanly decoupled from dynamic power control so Buildroot builds warning-free with `CONFIG_AIC8800_SDIO_PWRCTRL=n`.
 > - **Zero USB Transport Regression**: All USB transport logic (`aicwf_usb.c`, `usb_host.c`, endpoint mapping `0xA69C:0x8800` / `0x8D81`) is 100% preserved.
 > - **A7A Rebuild**: When ready to rebuild target modules for A7A, run `make -C bld.a7a aic8800-driver-rebuild`.
-> - **Current A7A Focus**: The other agent is actively working in `linux-cubie` on branch `feature/a733-e902-remoteproc` focusing on the Camera & Video Input Subsystem (MIPI-CSI / CSIC DMA 1.40) and E902 RemoteProc.
+> - **Current A7A Focus**: The other agent is actively working in `linux-cubie` on branch `a7a_remoteproc_camera_usb` focusing on the Camera & Video Input Subsystem (MIPI-CSI / CSIC DMA 1.40) and E902 RemoteProc.
 
 ## 1. Hardware Overview & Current Bring-Up Status
 

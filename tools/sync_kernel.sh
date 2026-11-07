@@ -12,7 +12,7 @@ WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 A5E_KERNEL_DIR="${WORKSPACE_ROOT}/linux-v4-71"
 A5E_KERNEL_BRANCH="cubie-linux-7.1"
 A7A_KERNEL_DIR="${WORKSPACE_ROOT}/linux-cubie"
-A7A_KERNEL_BRANCH="feature/a733-e902-remoteproc"
+A7A_KERNEL_BRANCH="a7a_remoteproc_camera_usb"
 
 usage() {
     echo "Usage: $0 [push|pull|rebuild|status]"

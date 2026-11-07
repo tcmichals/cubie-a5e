@@ -13,7 +13,7 @@ Whenever working on board bring-up, peripheral drivers, device trees, Buildroot 
   | Board | `LINUX_OVERRIDE_SRCDIR` in `bld.<board>/local.mk` | Branch |
   |---|---|---|
   | Cubie A5E | `$(TOPDIR)/../linux-v4-71` (git worktree of `linux-cubie`) | `cubie-linux-7.1` |
-  | Cubie A7A | `$(TOPDIR)/../linux-cubie` | `feature/a733-e902-remoteproc` |
+  | Cubie A7A | `$(TOPDIR)/../linux-cubie` | `a7a_remoteproc_camera_usb` |
 
 * **The split is deliberate.** `cubie-linux-7.1` stays clean for upstream work. A7A camera (CSI, MIPI D-PHY) and A733 E902 remoteproc support exist only on the feature branch; the v4 remoteproc and mailbox fixes exist only on `cubie-linux-7.1` (checked 2026-11-06: 7 and 36 commits). Merging them conflicts in `sunxi_rproc.c` and `sunxi_rproc.h`.
 * **`local.mk` is not in git.** Keep a copy before deleting a build directory; `tools/setup_workspace.sh` writes the values above.
@@ -36,7 +36,7 @@ Whenever working on upstream Linux kernel mailing list submissions (`linux-remot
 * **Before returning to board builds or A7A/A5E development:**
   - Switch `linux-cubie` back to the A7A branch:
     ```bash
-    git -C /home/tcmichals/projects/cubie/linux-cubie checkout feature/a733-e902-remoteproc
+    git -C /home/tcmichals/projects/cubie/linux-cubie checkout a7a_remoteproc_camera_usb
     ```
 
 ---
@@ -47,4 +47,4 @@ Before running `make -C bld.a7a` or `make -C bld.a5e`, verify the active branch:
 ```bash
 ./cubie-a5e/tools/sync_kernel.sh status
 ```
-Confirm `[2]` shows `feature/a733-e902-remoteproc` and `[3]` shows `cubie-linux-7.1`, with no `WARNING: expected branch` line.
+Confirm `[2]` shows `a7a_remoteproc_camera_usb` and `[3]` shows `cubie-linux-7.1`, with no `WARNING: expected branch` line.
