@@ -7,10 +7,8 @@ Executes an end-to-end multi-profile test loop across live Radxa Cubie A5E hardw
 for the XuanTie E906 RISC-V real-time co-processor without manual intervention:
   1. Profile 1 (DDR VirtIO): run_tests.py, C++ ping_rpmsg, Python ping_rpmsg.py,
      C++ ping_dram, Python monitor_trace.py, testFreeRTOS (tick, IRQ-driven rpmsg),
-     message box clock/reset check across unbind/bind, TX-completion benchmark (timer)
-  1T. Message box TX completion, ISR mode (overlay cubie-a5e-msgbox-txirq, reboot):
-     the same benchmark plus a deterministic write-IRQ test; side-by-side timer vs ISR
-     latency, jitter, throughput and interrupt counts in the report
+     message box clock/reset check across unbind/bind, TX-completion benchmark and a
+     deterministic write-IRQ test
   2. Profile 2 (On-Chip SRAM Space 1 VirtIO): config.txt switch, reboot, run_tests.py,
      C++ ping_rpmsg, Python ping_rpmsg.py
   3. Profile 3 (Userspace UIO Direct Mailbox): config.txt switch, reboot, run_tests.py,
@@ -351,26 +349,20 @@ MSGBOX_TX_BENCH = [
     ("freertos", "FreeRTOS ping_rpmsg 2k (ISR wake)", "testFreeRTOS.elf", "/usr/bin/ping_rpmsg -n 2000 -D 0", 2000),
 ]
 
-def run_msgbox_tx_bench(mode, results):
+def run_msgbox_tx_bench(results):
     """
-    Message box TX completion benchmark for one mode ("timer" or "isr"):
-    checks which TX-done lines the driver holds, then runs MSGBOX_TX_BENCH and
-    records latency, jitter, throughput, interrupts per message and core queue
-    overflows. Returns {key: metrics}.
+    Message box TX completion benchmark, TX done by write IRQ: checks which TX-done
+    lines the driver holds, then runs MSGBOX_TX_BENCH and records latency, jitter,
+    throughput, interrupts per message and core queue overflows. Returns {key: metrics}.
     """
-    prof = "Profile 1" if mode == "timer" else "Profile 1T"
-    tag = "timer" if mode == "timer" else "ISR"
+    prof = "Profile 1"
+    tag = "ISR"
     out = {}
 
     lines = mailbox_irq_counts()
-    if mode == "timer":
-        bad = [n for n in lines if n in MSGBOX_TX_LINES]
-        ok = "3003000.mailbox" in lines and not bad
-        why = f"TX-done lines requested in timer mode: {bad}" if bad else "RX line (SPI 0) missing"
-    else:
-        # Only the E906 bank's line is requested, and only while channel 9 is in use
-        ok = MSGBOX_RV_LINE in lines and not any(n in lines for n in MSGBOX_TX_LINES if n != MSGBOX_RV_LINE)
-        why = f"expected only {MSGBOX_RV_LINE} besides SPI 0, got {sorted(lines)}"
+    # Only the E906 bank's line is requested, and only while channel 9 is in use
+    ok = MSGBOX_RV_LINE in lines and not any(n in lines for n in MSGBOX_TX_LINES if n != MSGBOX_RV_LINE)
+    why = f"expected only {MSGBOX_RV_LINE} besides SPI 0, got {sorted(lines)}"
     if not ok:
         print(f"  \033[91m[FAIL] {why}\033[0m")
     results.append((prof, f"Msgbox {tag}: lines held ({', '.join(sorted(lines)) or 'none'})", "PASS" if ok else "FAIL"))
@@ -422,7 +414,7 @@ echo "RESULT $c0 $c1 $c2 $wen"
 
 def run_msgbox_wrirq_test(results):
     """
-    ISR mode: E906 bank write IRQ (channel 11, port 2 p=3; E906 runs testMsgboxStep).
+    E906 bank write IRQ (channel 11, port 2 p=3; E906 runs testMsgboxStep).
     FIFO full + enable set -> no interrupt; E906 pops one -> exactly one interrupt on
     SPI 205 and the driver's handler clears the enable.
     """
@@ -443,7 +435,7 @@ def run_msgbox_wrirq_test(results):
             reasons.append("handler did not clear the write-IRQ enable")
     for r in reasons:
         print(f"  \033[91m[FAIL] {r}\033[0m")
-    results.append(("Profile 1T", "Msgbox ISR: write IRQ on SPI 205 (full -> pop -> 1 IRQ)", "FAIL" if reasons else "PASS"))
+    results.append(("Profile 1", "Msgbox ISR: write IRQ on SPI 205 (full -> pop -> 1 IRQ)", "FAIL" if reasons else "PASS"))
 
 def parse_target_json_report():
     c, out, _ = run_ssh("cat /tmp/remoteproc_test_results.json", timeout=10)
@@ -735,7 +727,7 @@ def extract_key_metrics(report_bundle):
                     metrics["p3_uio_py_rtt_us"] = m.get("avg_lat_us")
                     metrics["p3_uio_py_rate_msgs_s"] = m.get("throughput_msgs_s")
 
-    # Message box TX completion benchmarks, timer and write-IRQ mode
+    # Message box TX completion benchmarks
     for mode, benches in (report_bundle.get("msgbox_tx_modes") or {}).items():
         for key, m in (benches or {}).items():
             if m.get("status") != "PASS":
@@ -849,7 +841,7 @@ def audit_engineering_invariants():
             "rule": "priv->cl.knows_txdone = false, no mbox_client_txdone() (controller paces TX)",
             "file": "drivers/remoteproc/sunxi_rproc.c",
             "status": "PASS" if controller_paces else "FAIL",
-            "details": "TX completion decided by the controller's last_tx_done()" if controller_paces else "Client reports txdone itself; contradicts Lesson 3.2"
+            "details": "TX completion reported by the controller's write interrupt" if controller_paces else "Client reports txdone itself; contradicts Lesson 3.2"
         })
     
     # Check 2: Mailbox TX completion (DESIGN_DECISIONS.md "Message box TX completion", 2026-10-16)
@@ -857,16 +849,16 @@ def audit_engineering_invariants():
     if os.path.exists(msgbox_file):
         with open(msgbox_file, "r") as f:
             content = f.read()
-        m = re.search(r'static bool sun55i_msgbox_last_tx_done\(.*?\n}\n', content, re.S)
-        # Every "done = <FIFO count> < SUN55I_FIFO_MAX", however the count is read
-        dones = re.findall(r'\bdone\s*=\s*([^;]*);', m.group(0)) if m else []
-        has_room = bool(dones) and all(re.search(r'\)\s*<\s*SUN55I_FIFO_MAX$', d.strip()) for d in dones)
+        # TX done only by interrupt: no poll callback, and the write IRQ armed by send_data()
+        m = re.search(r'static int sun55i_msgbox_send_data\(.*?\n}\n', content, re.S)
+        by_irq = ("txdone_irq = true" in content and "last_tx_done" not in content
+                  and bool(m) and "__sun55i_msgbox_tx_irq_enable" in m.group(0))
         audit_results.append({
             "invariant": "Mailbox TX Completion",
-            "rule": "last_tx_done returns count < SUN55I_FIFO_MAX (FIFO has room); DT selects timer or ISR when full",
+            "rule": "TX done by write IRQ only: txdone_irq set, no last_tx_done, send_data() arms the IRQ under the lock",
             "file": "drivers/mailbox/sun55i-msgbox.c",
-            "status": "PASS" if has_room else "FAIL",
-            "details": "A kick is done once the FIFO accepted it" if has_room else "last_tx_done does not return count < SUN55I_FIFO_MAX (DESIGN_DECISIONS: TX completion)"
+            "status": "PASS" if by_irq else "FAIL",
+            "details": "A kick completes from the write interrupt" if by_irq else "TX completion is not interrupt-only",
         })
 
     # Check 3: Zero Arbitrary Sleep Hacks in Critical Benchmark Paths
@@ -1542,28 +1534,18 @@ def main():
         print("  \033[91m[FAIL] could not copy msgbox_clock_reset_check.sh to the target\033[0m")
         results.append(("Profile 1", "Msgbox clocks/resets (unbind -> bind)", "FAIL"))
 
-    # 1.8 Message box TX completion benchmark, timer mode (no allwinner,tx-done-irq)
-    msgbox_tx_modes = {"timer": run_msgbox_tx_bench("timer", results)}
+    # 1.8 Message box TX completion benchmark, and the write IRQ itself
+    msgbox_tx_modes = {"isr": run_msgbox_tx_bench(results)}
+    run_msgbox_wrirq_test(results)
 
     # 1.9 Kernel dmesg health check
     dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 1", allowed_patterns=["testCrash"])
     results.append(("Profile 1", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
 
-    # -------------------------------------------------------------------------
-    # PROFILE 1T: message box TX completion by write interrupt
-    # -------------------------------------------------------------------------
-    log_banner(1, "Profile 1T: message box TX done by write IRQ", "Overlay: cubie-a5e-flight-stack cubie-a5e-msgbox-txirq")
-    p1t_up = set_overlay_and_reboot("cubie-a5e-flight-stack cubie-a5e-msgbox-txirq")
-    results.append(("Profile 1T", "Boot + remoteproc0 present", "PASS" if p1t_up else "FAIL"))
-    msgbox_tx_modes["isr"] = run_msgbox_tx_bench("isr", results)
-    run_msgbox_wrirq_test(results)
-    dmesg_ok, dmesg_err = check_kernel_dmesg_health("Profile 1T", allowed_patterns=["Controller can't run the TX ticker"])
-    results.append(("Profile 1T", "Kernel Health (dmesg clean)", "PASS" if dmesg_ok else "FAIL"))
-
-    print("\n  Message box TX completion: timer vs ISR")
+    print("\n  Message box TX completion: write IRQ")
     print(f"  {'Benchmark':<36} {'mode':<6} {'avg us':>8} {'max us':>8} {'jitter':>8} {'p99 us':>8} {'msgs/s':>10} {'RX/msg':>7} {'TX IRQ':>7} {'ovf':>5}")
     for key, label, _, _, _ in MSGBOX_TX_BENCH:
-        for mode in ("timer", "isr"):
+        for mode in msgbox_tx_modes:
             m = msgbox_tx_modes.get(mode, {}).get(key, {})
             f = lambda v: "-" if v is None else (f"{v:.1f}" if isinstance(v, float) else str(v))
             print(f"  {label:<36} {mode:<6} {f(m.get('avg_us')):>8} {f(m.get('max_us')):>8} {f(m.get('jitter_us')):>8} "
@@ -1746,15 +1728,14 @@ def main():
             for prof, test, status in results:
                 f.write(f"| {prof} | {test} | **{status}** |\n")
 
-            f.write("\n## Message Box TX Completion: Timer vs ISR\n\n")
-            f.write("Timer: `last_tx_done()` = FIFO has room, 1 ms poll while full. ISR: overlay "
-                    "`cubie-a5e-msgbox-txirq` (`allwinner,tx-done-irq`), E906 bank write IRQ on SPI 205, "
-                    "enabled only while the FIFO is full. RX/msg = SPI 0 interrupts per message.\n\n")
+            f.write("\n## Message Box TX Completion\n\n")
+            f.write("TX done by write IRQ: E906 bank write IRQ on SPI 205, armed after every send. "
+                    "RX/msg = SPI 0 interrupts per message.\n\n")
             f.write("| Benchmark | Mode | Status | Avg (µs) | Max (µs) | Jitter (µs) | p99 (µs) | msgs/s | RX IRQ/msg | TX IRQs | Queue overflows |\n")
             f.write("| :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
             fmt = lambda v: "-" if v is None else (f"{v:,.1f}" if isinstance(v, float) else str(v))
             for key, label, _, _, _ in MSGBOX_TX_BENCH:
-                for mode in ("timer", "isr"):
+                for mode in msgbox_tx_modes:
                     m = msgbox_tx_modes.get(mode, {}).get(key, {})
                     f.write(f"| {label} | {mode} | **{m.get('status', 'NOT RUN')}** | {fmt(m.get('avg_us'))} | {fmt(m.get('max_us'))} | "
                             f"{fmt(m.get('jitter_us'))} | {fmt(m.get('p99_us'))} | {fmt(m.get('msgs_s'))} | "
