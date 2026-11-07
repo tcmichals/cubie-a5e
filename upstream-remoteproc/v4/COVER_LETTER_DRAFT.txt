@@ -45,9 +45,12 @@ Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT and PREEMPT
 with the same driver and test files:
   - KUnit under UML: 65 passed, 1 skipped (it needs SMP or spinlock
     debugging).
-  - TBD: KUnit on the board, built in and as modules.
-  - TBD: rpmsg ping and stress, message box unbind/bind, remoteproc
-    stop/start, with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP.
+  - KUnit on the board, built in: 37 and 23 passed, none skipped.
+    TBD: as modules.
+  - PREEMPT_RT: rpmsg ping and stress (100k messages, 16 in flight)
+    from DDR and SRAM, message box unbind/bind, 100 remoteproc
+    stop/start cycles; no errors in dmesg.
+    TBD: PREEMPT, and both with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP.
   - On next-20261105, each patch on its own: W=1 with GCC 15.1 and
     clang 21.1, as modules, no warnings. On 7.1 also built in, with
     CONFIG_PM=n, and as COMPILE_TEST on 32-bit ARM.

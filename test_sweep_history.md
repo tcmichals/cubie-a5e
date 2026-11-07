@@ -1,8 +1,8 @@
 # Silicon Sweep Performance History & Regression Tracking
 
-- **Total Recorded Runs**: 28
-- **Latest Run**: Run #28 (2026-10-29 19:20:54)
-- **Kernel Commit**: `0a77050147bd` | **Firmware/Tools Commit**: `a31e437`
+- **Total Recorded Runs**: 29
+- **Latest Run**: Run #29 (2026-11-07 17:23:22)
+- **Kernel Commit**: `da2fdad67e0d` | **Firmware/Tools Commit**: `89bf219`
 - **Latest Overall Status**: **PASS**
 
 ## Engineering Invariants & Code Hygiene Audit
@@ -10,11 +10,13 @@
 | Subsystem Invariant | Formal Design Rule | Component | Status |
 | :--- | :--- | :--- | :---: |
 | **RemoteProc VirtIO Doorbell Contract** | `priv->cl.knows_txdone = false, no mbox_client_txdone() (controller paces TX)` | `drivers/remoteproc/sunxi_rproc.c` | **PASS** |
-| **Mailbox TX Completion** | `last_tx_done returns count < SUN55I_FIFO_MAX (FIFO has room); DT selects timer or ISR when full` | `drivers/mailbox/sun55i-msgbox.c` | **PASS** |
+| **Mailbox TX Completion** | `TX done by write IRQ only: txdone_irq set, no last_tx_done, send_data() arms the IRQ under the lock` | `drivers/mailbox/sun55i-msgbox.c` | **PASS** |
 | **Zero-Sleep Benchmark Protocol** | `ping_rpmsg: blocking write, inotify for the node, no sleeps except optional -D (default 0)` | `apps/testPingRpmsg/linux/ping_rpmsg.cpp` | **PASS** |
 | **PREEMPT_RT Hardirq Execution Bound** | `sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX` | `drivers/mailbox/sun55i-msgbox.c` | **PASS** |
 
-### 🟢 Performance is Statistically Invariant & Stable
+### 🚀 Performance Improvements Detected
+
+- 🟢 **Profile 3 Python UIO RTT: 35.86 -> 32.30 µs (-9.9%)**
 
 ## Range Check Against the Last 10 Passing Runs
 
@@ -22,49 +24,42 @@ SLOW fails the sweep; FAST is reported only; NEW has fewer than 3 earlier runs.
 
 | Metric | Current | Median | Range | Runs | Verdict |
 | :--- | ---: | ---: | :---: | :---: | :---: |
-| mbx_isr_freertos_p99_us | 214.75 | 221.33 | 199.20 .. 243.47 | 3 | **OK** |
-| mbx_isr_freertos_rate_msgs_s | 5349.50 | 5308.90 | 4778.01 .. 5839.79 | 3 | **OK** |
-| mbx_isr_freertos_rtt_us | 186.16 | 187.64 | 168.87 .. 206.40 | 3 | **OK** |
-| mbx_isr_ping_p99_us | 197.04 | 195.00 | 175.50 .. 214.50 | 3 | **OK** |
-| mbx_isr_ping_rate_msgs_s | 5959.10 | 5965.40 | 5368.86 .. 6561.94 | 3 | **OK** |
-| mbx_isr_ping_rtt_us | 167.12 | 166.95 | 150.26 .. 183.65 | 3 | **OK** |
-| mbx_isr_stress_rate_msgs_s | 11570.60 | 11521.40 | 10369.26 .. 12673.54 | 3 | **OK** |
-| mbx_timer_freertos_p99_us | 216.50 | 230.25 | 207.22 .. 253.28 | 3 | **OK** |
-| mbx_timer_freertos_rate_msgs_s | 5278.70 | 5146.20 | 4631.58 .. 5660.82 | 3 | **OK** |
-| mbx_timer_freertos_rtt_us | 188.69 | 193.58 | 174.22 .. 212.94 | 3 | **OK** |
-| mbx_timer_ping_p99_us | 195.21 | 194.54 | 175.09 .. 214.00 | 3 | **OK** |
-| mbx_timer_ping_rate_msgs_s | 5988.90 | 5958.80 | 5362.92 .. 6554.68 | 3 | **OK** |
-| mbx_timer_ping_rtt_us | 166.29 | 167.16 | 150.44 .. 183.87 | 3 | **OK** |
-| mbx_timer_stress_rate_msgs_s | 11651.60 | 11513.90 | 10362.51 .. 12665.29 | 3 | **OK** |
-| p1_dram_rtt_us | 184.08 | 194.24 | 174.81 .. 213.66 | 10 | **OK** |
-| p1_dram_w16_rate_msgs_s | 5218.10 | 5089.95 | 4580.96 .. 5598.95 | 10 | **OK** |
-| p1_rpmsg_jitter_us | 10.13 | 8.84 | 0.00 .. 17.68 | 10 | **OK** |
-| p1_rpmsg_rate_msgs_s | 5947.30 | 5955.75 | 5360.18 .. 6551.32 | 10 | **OK** |
-| p1_rpmsg_rtt_us | 167.39 | 167.00 | 150.30 .. 183.70 | 10 | **OK** |
-| p1_stress_rate_msgs_s | 11651.50 | 11518.75 | 10366.88 .. 12670.62 | 10 | **OK** |
-| p2_rpmsg_rate_msgs_s | 7571.10 | 7617.50 | 6855.75 .. 8379.25 | 10 | **OK** |
-| p2_rpmsg_rtt_us | 131.25 | 130.42 | 117.38 .. 143.46 | 10 | **OK** |
-| p2_stress_rate_msgs_s | 20396.80 | 20395.10 | 18355.59 .. 22434.61 | 10 | **OK** |
-| p3_shm_bandwidth_mb_s | 8.59 | 8.77 | 7.89 .. 9.65 | 10 | **OK** |
-| p3_shm_rate_msgs_s | 8792.70 | 8982.75 | 8084.48 .. 9881.02 | 10 | **OK** |
-| p3_shm_rtt_us | 13.57 | 13.72 | 11.72 .. 15.72 | 10 | **OK** |
-| p3_uio_irq_rtt_us | 59.34 | 59.32 | 53.39 .. 65.26 | 10 | **OK** |
-| p3_uio_py_rate_msgs_s | 159.50 | 160.35 | 120.26 .. 200.44 | 10 | **OK** |
-| p3_uio_py_rtt_us | 35.86 | 32.47 | 24.35 .. 40.59 | 10 | **OK** |
+| mbx_isr_freertos_p99_us | 220.29 | 219.62 | 197.66 .. 241.59 | 4 | **OK** |
+| mbx_isr_freertos_rate_msgs_s | 5307.20 | 5310.95 | 4779.85 .. 5842.05 | 4 | **OK** |
+| mbx_isr_freertos_rtt_us | 187.69 | 187.58 | 168.82 .. 206.34 | 4 | **OK** |
+| mbx_isr_ping_p99_us | 193.92 | 195.46 | 175.91 .. 215.00 | 4 | **OK** |
+| mbx_isr_ping_rate_msgs_s | 5993.40 | 5962.25 | 5366.02 .. 6558.48 | 4 | **OK** |
+| mbx_isr_ping_rtt_us | 166.16 | 167.04 | 150.33 .. 183.74 | 4 | **OK** |
+| mbx_isr_stress_rate_msgs_s | 11568.60 | 11545.55 | 10390.99 .. 12700.10 | 4 | **OK** |
+| p1_dram_rtt_us | 192.16 | 192.87 | 173.58 .. 212.16 | 10 | **OK** |
+| p1_dram_w16_rate_msgs_s | 5119.40 | 5108.15 | 4597.34 .. 5618.96 | 10 | **OK** |
+| p1_rpmsg_jitter_us | 10.07 | 9.11 | 0.00 .. 18.23 | 10 | **OK** |
+| p1_rpmsg_rate_msgs_s | 5952.00 | 5957.00 | 5361.30 .. 6552.70 | 10 | **OK** |
+| p1_rpmsg_rtt_us | 167.20 | 167.00 | 150.30 .. 183.70 | 10 | **OK** |
+| p1_stress_rate_msgs_s | 11568.60 | 11544.35 | 10389.91 .. 12698.78 | 10 | **OK** |
+| p2_rpmsg_rate_msgs_s | 7672.20 | 7617.50 | 6855.75 .. 8379.25 | 10 | **OK** |
+| p2_rpmsg_rtt_us | 129.56 | 130.42 | 117.38 .. 143.46 | 10 | **OK** |
+| p2_stress_rate_msgs_s | 20384.30 | 20397.00 | 18357.30 .. 22436.70 | 10 | **OK** |
+| p3_shm_bandwidth_mb_s | 8.77 | 8.77 | 7.89 .. 9.65 | 10 | **OK** |
+| p3_shm_rate_msgs_s | 8982.50 | 8981.30 | 8083.17 .. 9879.43 | 10 | **OK** |
+| p3_shm_rtt_us | 13.89 | 13.72 | 11.72 .. 15.72 | 10 | **OK** |
+| p3_uio_irq_rtt_us | 59.06 | 59.35 | 53.41 .. 65.28 | 10 | **OK** |
+| p3_uio_py_rate_msgs_s | 159.90 | 160.30 | 120.23 .. 200.38 | 10 | **OK** |
+| p3_uio_py_rtt_us | 32.30 | 32.56 | 24.42 .. 40.70 | 10 | **OK** |
 
 ## Comparison Against Preceding Run
 
 | Metric | Previous Run | Current Run | Delta | Statistical Assessment |
 | :--- | :---: | :---: | :---: | :---: |
-| KUnit In-Kernel Tests (Passed) | 63 tests | 63 tests | `+0 tests` | 🟢 Invariant (100% Pass) |
-| Profile 1 C++ Rpmsg RTT | 166.78 µs | 167.39 µs | `+0.61 µs (+0.4%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 1 C++ Rpmsg Jitter | 9.29 µs | 10.13 µs | `+0.83 µs (+9.0%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 1 C++ Rpmsg Rate | 5966.70 msgs/s | 5947.30 msgs/s | `-19.40 msgs/s (-0.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 2 C++ Rpmsg RTT | 129.99 µs | 131.25 µs | `+1.27 µs (+1.0%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Direct SRAM RTT | 13.59 µs | 13.57 µs | `-0.02 µs (-0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Throughput | 8983.60 msgs/s | 8792.70 msgs/s | `-190.90 msgs/s (-2.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 C++ UIO Bandwidth | 8.77 MB/s | 8.59 MB/s | `-0.18 MB/s (-2.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
-| Profile 3 Python UIO RTT | 35.53 µs | 35.86 µs | `+0.33 µs (+0.9%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| KUnit In-Kernel Tests (Passed) | 63 tests | 60 tests | `-3 tests` | 🟢 100% Pass (Test Set Changed: 63 -> 60) |
+| Profile 1 C++ Rpmsg RTT | 167.39 µs | 167.20 µs | `-0.19 µs (-0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Jitter | 10.13 µs | 10.07 µs | `-0.06 µs (-0.6%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 1 C++ Rpmsg Rate | 5947.30 msgs/s | 5952.00 msgs/s | `+4.70 msgs/s (+0.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 2 C++ Rpmsg RTT | 131.25 µs | 129.56 µs | `-1.69 µs (-1.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Direct SRAM RTT | 13.57 µs | 13.89 µs | `+0.32 µs (+2.3%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Throughput | 8792.70 msgs/s | 8982.50 msgs/s | `+189.80 msgs/s (+2.2%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 C++ UIO Bandwidth | 8.59 MB/s | 8.77 MB/s | `+0.18 MB/s (+2.1%)` | 🟢 Invariant (Within Normal Jitter Band) |
+| Profile 3 Python UIO RTT | 35.86 µs | 32.30 µs | `-3.56 µs (-9.9%)` | 🚀 True Speedup (Lower Latency) |
 
 ## Every Run Against the Passing Runs Before It
 
@@ -100,11 +95,13 @@ SLOW: slower or lower rate than the band (fails the sweep since the check was ad
 | #26 | 2026-10-28 19:21 | `8671beca6667` | preempt+lockdep | PASS | 0/0 | - |
 | #27 | 2026-10-29 06:29 | `0a77050147bd` | rt | PASS | 15/15 | - |
 | #28 | 2026-10-29 19:20 | `0a77050147bd` | rt | PASS | 29/29 | - |
+| #29 | 2026-11-07 17:23 | `da2fdad67e0d` | rt | PASS | 22/22 | - |
 
 ## Historical Runs Timeline
 
 | Run # | Timestamp | Kernel | Tools | Status | KUnit | P1 Rpmsg RTT | P3 UIO RTT | P3 UIO Rate |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| #29 | 2026-11-07 17:23:22 | `da2fdad67e0d` | `89bf219` | **PASS** | 60/60 | 167.20 µs | 13.89 µs | 8,982/s |
 | #28 | 2026-10-29 19:20:54 | `0a77050147bd` | `a31e437` | **PASS** | 63/63 | 167.39 µs | 13.57 µs | 8,793/s |
 | #27 | 2026-10-29 06:29:10 | `0a77050147bd` | `15a83d5` | **PASS** | 63/63 | 166.78 µs | 13.59 µs | 8,984/s |
 | #26 | 2026-10-28 19:21:13 | `8671beca6667` | `e9b5795` | **PASS** | 63/63 | 364.94 µs | 14.20 µs | 8,415/s |
@@ -124,5 +121,4 @@ SLOW: slower or lower rate than the band (fails the sweep since the check was ad
 | #12 | 2026-10-16 20:16:16 | `82b64e947b5b` | `24890e7` | **PASS** | 47/47 | 171.95 µs | 14.66 µs | 8,995/s |
 | #11 | 2026-10-16 04:10:37 | `82b64e947b5b` | `2872b3e` | **PASS** | 47/47 | 167.21 µs | 13.65 µs | 8,823/s |
 | #10 | 2026-10-15 19:13:49 | `71b7756b25bb` | `37fe2db` | **PASS** | 47/47 | 169.67 µs | 13.48 µs | 8,992/s |
-| #9 | 2026-10-15 05:01:36 | `71b7756b25bb` | `37fe2db` | **FAIL** | 47/47 | N/A | 13.73 µs | 8,793/s |
 

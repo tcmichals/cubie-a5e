@@ -22,10 +22,17 @@ did not run: no `ply` module on this host.
 
 ## 2. Tests
 
-- [ ] KUnit: both suites built in and as modules, and under UML (`kunit.py run`)
+- [ ] KUnit: both suites built in and as modules, and under UML (`kunit.py run`) — built in on the board 2026-11-07 (`da2fdad67e0d`, 7.1 PREEMPT_RT, image md5 4d7089db): sun55i_msgbox 37/37, sunxi_rproc 23/23, nothing skipped (the UML skip needs SMP, which the board has). UML 65 pass / 1 skip on the fold. Modules on the board still to do
 - [x] New KUnit cases for V3-S2, S3, S4, S5 fail on the v3 code and pass on v4 — 2026-11-07, `77398ba801c3`, UML: each fix reverted inside v4 (the v4 tests do not compile against v3). Baseline all pass; S2 (`-EBUSY` on full) 6 fail incl. `test_held_message_dropped_after_timeout`; S3 (no latched-status clear) `test_tx_irq_armed_after_every_send`; S4 (no shutdown flag) `test_tx_irq_send_during_shutdown_refused`; S5 (no `RPROC_RUNNING` check) `test_vq_work_notifies_every_vring`. The S3 lock-section race itself needs two CPUs: code review only
 - [ ] Board (Cubie A5E): rpmsg ping + stress, mailbox unbind/bind, rproc stop/start loop,
-      under PREEMPT_RT and PREEMPT with PROVE_LOCKING + DEBUG_ATOMIC_SLEEP: no splat
+      under PREEMPT_RT and PREEMPT with PROVE_LOCKING + DEBUG_ATOMIC_SLEEP: no splat —
+      PREEMPT_RT without lock debugging done 2026-11-07: full sweep all 3 profiles PASS (rpmsg
+      ping 1000 and stress 100k/16 in flight on DDR and SRAM, FreeRTOS, UIO, msgbox unbind/bind,
+      write IRQ on SPI 205 full -> pop -> 1 IRQ, dmesg clean); 100 stop/start cycles with a
+      50-ping run each, 0 failures, dmesg clean. TX IRQ column: 0 for the bare-metal ping
+      firmware because it polls and sets `VRING_USED_F_NO_NOTIFY` (no kicks), 2000 for 2000
+      FreeRTOS messages (one write IRQ per kick). Still to do: PREEMPT and both with
+      PROVE_LOCKING + DEBUG_ATOMIC_SLEEP (needs a debug kernel on the board)
 - [ ] Owner board-tests the final series
 
 ## 3. Review (the v3 lessons)
