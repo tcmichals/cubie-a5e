@@ -1510,8 +1510,8 @@ def main():
     print(out)
     results.append(("Profile 1", "FreeRTOS stress_rpmsg (100k, 16 in flight)", ping_exchanged(c, out, expected=100000)))
 
-    # 1.6b The RAM beyond SRAM spaces 0/1 (testExtraRam): DSP local RAM (the AbstractX
-    # REPL heap), the DRAM carveout, and SRAMA3_2 shared by remap bit 1. The E906 checks
+    # 1.6b The RAM beyond SRAM spaces 0/1 (testExtraRam): DSP local RAM, the DRAM
+    # carveout, and SRAMA3_2 shared by remap bit 1. The E906 checks
     # each region; Linux then reads the signature it left in DRAM and SRAMA3_2.
     print("\n--- 1.6b Running testExtraRam (DSP RAM, DRAM, SRAMA3_2) ---")
     run_ssh('echo "stop" > /sys/class/remoteproc/remoteproc0/state 2>/dev/null; echo "testExtraRam.elf" > /sys/class/remoteproc/remoteproc0/firmware; echo "start" > /sys/class/remoteproc/remoteproc0/state; sleep 6')

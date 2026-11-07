@@ -182,7 +182,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. No f
 | **SRAM Space 0** | `0x3FFC0000` | `0x07280000` | `0x07200000` | 256 KB | Primary boot, `.vectors`, `.text`, `.data`, `.stack`, `.trace_buffer` |
 | **SRAM Space 1** | `0x40000000` | `0x072C0000` | `0x07280000` | 256 KB | SRAMA3_1; needs no remap bit (measured 2026-10-28), shared IPC |
 | **SRAMA3_2** | `0x07300000` | `0x07300000` | — | 512 KB | Shared with the E906 by `REMAP_CTRL_REG[1]=1` (sunxi_rproc `prepare()`); `testExtraRam` |
-| **DSP local RAM** | `0x00020000` | — | — | 128 KB | `REMAP_CTRL_REG[0]` (reset 1); AbstractX REPL heap while no DSP firmware runs; `testExtraRam` |
+| **DSP local RAM** | `0x00020000` | — | — | 128 KB | `REMAP_CTRL_REG[0]` (reset 1); usable as data while no DSP firmware runs; `testExtraRam` |
 | **Crash Signature** | `0x3FFFFF00` | `0x072BFF00` | `0x0723FF00` | 256 B | Top 256 bytes of SRAM Space 0 (`0xDEADF00D` post-mortem block) |
 | **DDR Carveout (`vdev`)** | `0x48000000` | `0x48000000` | `0x48000000` | 1 MB | Dedicated non-cacheable DDR payload pool for bulk streaming (`testDRAMMsg`) |
 | **DDR RPMsg Pool** | `0xf2f80000` | `0xf2f80000` | `0xf2f80000` | Coherent DMA | Dynamically allocated by Linux kernel (`dma_alloc_coherent`) in DDR DRAM for VirtIO vrings & RPMsg payload buffers (`testPingRpmsg`) |
@@ -283,8 +283,7 @@ All tests execute strictly from on-chip `SRAM` and dedicated DDR carveouts. No f
 
 ### App 3a: `testExtraRam` (DSP RAM, DRAM carveout, SRAMA3_2)
 
-The RAM the E906 has besides SRAM spaces 0 and 1, which AbstractX relies on (the
-`e906_repl_app` MicroPython heap is the DSP local RAM). The firmware runs from SRAM space 0 and,
+The RAM the E906 has besides SRAM spaces 0 and 1. The firmware runs from SRAM space 0 and,
 for each region, writes every word with an address-dependent pattern, reads it all back (catches
 aliasing), repeats inverted, then does byte and halfword stores read back as words. A region is
 left zeroed with a signature at its start (`0x45585452` "EXTR", base, errors).
@@ -1066,7 +1065,7 @@ During the hardware validation process on the Radxa Cubie A5E silicon, four crit
 ### 9.4 XuanTie E906 Instruction Compatibility & D-Cache Policy
 * **Problem**: Calling custom XuanTie cache invalidation opcodes (`.insn r 0x0b, ...`) triggered an illegal instruction exception (`mcause=0x00000002`).
 * **Root Cause**: On the XuanTie E906, custom T-Head instructions are disabled by default at reset. As proven in the Allwinner Tina SDK (`rtos/arch/risc-v/e90x/cache.c`), they require setting `CSR_MXSTATUS` (0x7C0) bit 22 (`THEADISAEE = 1`). Furthermore, standard RISC-V PMP only manages R/W/X permissions and cannot carve out non-cacheable regions.
-* **Resolution in Test Firmware**: In `riscv-firmware`, D-Cache is kept disabled (`mhcr.DE = 0`) and standard RISC-V memory barriers (`fence rw, rw`) are used. This guarantees 100% coherent uncached memory access across SRAM and DDR without cache maintenance complexity for Linux RemoteProc validation. Full high-performance cache architecture (`THEADISAEE=1`, `DE=1`, `IE=1`, line flushes) is deferred to the AbstractX production flight stack.
+* **Resolution in Test Firmware**: In `riscv-firmware`, D-Cache is kept disabled (`mhcr.DE = 0`) and standard RISC-V memory barriers (`fence rw, rw`) are used. This guarantees 100% coherent uncached memory access across SRAM and DDR without cache maintenance complexity for Linux RemoteProc validation. Cache maintenance is not part of this firmware.
 
 ### 9.5 Python UIO Device Memory Alignment (SIGBUS 135) & RPMsg Drain
 * **Problem**: In `ping_uio.py`, slice assignments (`sram_mmap[...] = ...`) and composite `struct.pack_into("<IIQQI10I", ...)` triggered immediate fatal Bus Errors (`EXIT=135`), while `ping_rpmsg.py` observed sequence mismatches if an earlier run was aborted mid-stream.

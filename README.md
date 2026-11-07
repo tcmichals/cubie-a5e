@@ -168,8 +168,8 @@ cubie-a5e/
 │   ├── UPSTREAM_LESSONS_LEARNED.md # Maintainer feedback and pre-submission checklist
 │   ├── SUBMISSION_TRACKER.md    # Versions, lore links, and status
 │   └── v1/, v2/, v3/, v4/       # Patch series, cover letters, and review responses
-├── aic8800-rfcv3/               # AIC8800 Wi-Fi driver, RFC v3 (A5E on SDIO)
-├── aic8800-upstream/            # Older AIC8800 driver (A7A on USB, until the port is board-tested)
+├── aic8800-rfcv3/               # AIC8800 Wi-Fi driver, RFC v3: A5E on SDIO; USB port awaiting its A7A board test
+├── aic8800-upstream/            # Older AIC8800 driver, still what the A7A builds until that test passes
 ├── project-cubie-a5e/           # Buildroot external tree (BR2_EXTERNAL)
 │   ├── board/radxa/             # Board configurations (cubie_a5e, cubie_a7a)
 │   ├── configs/                 # Defconfigs (cubie_a5e_defconfig, cubie_a7a_defconfig)

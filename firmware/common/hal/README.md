@@ -8,7 +8,7 @@ This document details the hard real-time, non-blocking, and zero-copy hardware d
 
 In a high-throughput **Hardware I/O Processor (`ioProcessor`)** moving PCIe Transaction Layer Packets (TLPs), IMU sensor data, and UART streams:
 * ❌ **Busy-waiting in `while()` loops is strictly forbidden.** Polling pegs the CPU at 100%, introduces severe jitter, and starves concurrent I/O channels.
-*  **All HAL operations are asynchronous and interrupt/DMA-driven via AbstractX C++20 coroutines (`co_await`).**
+*  **`spi` and `uart` are written as asynchronous, interrupt/DMA-driven drivers using C++20 coroutines (`co_await`).** They are not in any test build: `firmware/common/common.mk` builds `trace`, `timer`, `crash`, `pmp`, `msgbox` and `rpmsg`.
 
 When a transfer is initiated, the driver arms the hardware and **immediately suspends the coroutine (~18 ns)**. The CPU is instantly freed to process other streams or sleep in low-power `wfi`. When the hardware completes, the interrupt handler resumes the coroutine in **~25 ns**.
 
