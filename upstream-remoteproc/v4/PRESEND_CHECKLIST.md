@@ -9,7 +9,7 @@ Tick each line with the date, commit and result. A box without evidence is not d
       old sparse (Ubuntu 0.6.4) is rejected by `scripts/checker-valid.sh` and `C=` is silently ignored
 - [x] `CONFIG_PM=n` build, drivers and KUnit (missed in v3: V3-S7) — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): GCC W=1, 0 warnings; msgbox KUnit builds, rproc KUnit is off (it `depends on PM`)
 - [x] `CONFIG_COMPILE_TEST` on a non-arm64 arch — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): 32-bit ARM, clang W=1, `ARCH_SUNXI` off, drivers and KUnit as modules, 0 warnings. x86_64 not run: objtool needs `libelf-dev` on this host
-- [ ] `make dt_binding_check DT_SCHEMA_FILES=...` for both bindings, and `dtbs_check` — `dt_binding_check` clean for both, 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold); `dtbs_check` not run yet
+- [x] `make dt_binding_check DT_SCHEMA_FILES=...` for both bindings, and `dtbs_check` — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): `dt_binding_check` clean for both; `CHECK_DTBS=y sun55i-a527-cubie-a5e.dtb` (msgbox and rproc nodes present) has one warning, `gpu-trips` in thermal-zones, from the thermal series (`2ac0cd62a627`), not ours
 - [ ] `checkpatch.pl --strict` on every patch — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold), on the unfolded commits: only "Missing Signed-off-by" (owner adds it), plus 2 over-100-column lines in `70509dc4e6fe` and a long changelog line in `4931baf9d66b`, both gone once the fixups are folded. Re-run on the folded series
 
 ## 2. Tests
