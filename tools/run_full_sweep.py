@@ -58,6 +58,9 @@ def load_env_file():
 
 load_env_file()
 
+# The A5E builds from its own kernel tree; linux-cubie is the A7A's (AGENTS.md)
+A5E_KERNEL_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "linux-v4-71"))
+
 TARGET_IP = os.environ.get("TARGET_IP", "192.168.3.3")
 TARGET_USER = os.environ.get("TARGET_USER", "root")
 TARGET_PORT = int(os.environ.get("TARGET_PORT", 22))
@@ -474,10 +477,9 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
     return True, "Clean"
 
 def count_kunit_cases(rel_path):
-    """Count KUNIT_CASE entries in a linux-cubie test source; None if it is not checked out."""
-    linux_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "linux-cubie"))
+    """Count KUNIT_CASE entries in an A5E kernel test source; None if it is not checked out."""
     try:
-        with open(os.path.join(linux_dir, rel_path)) as f:
+        with open(os.path.join(A5E_KERNEL_DIR, rel_path)) as f:
             return len(re.findall(r'^\s*KUNIT_CASE\w*\(', f.read(), re.MULTILINE))
     except OSError:
         return None
@@ -502,7 +504,7 @@ def find_kernel_splats():
 def validate_kunit_tests():
     """
     Query, validate, and report in-kernel KUnit driver test suites on target hardware.
-    The expected count per suite comes from the KUNIT_CASE entries in linux-cubie,
+    The expected count per suite comes from the KUNIT_CASE entries in the A5E kernel tree,
     so it follows the test sources instead of going stale.
     """
     suites_info = {
@@ -825,7 +827,7 @@ def audit_engineering_invariants():
     Verifies that no delay hacks, arbitrary sleeps, polling loops, or band-aids exist.
     """
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    linux_dir = os.path.abspath(os.path.join(base_dir, "..", "linux-cubie"))
+    linux_dir = A5E_KERNEL_DIR
     
     audit_results = []
     
@@ -935,7 +937,7 @@ def record_and_compare_history(report_bundle, history_json_file, history_md_file
     statistical jitter-aware deltas/trends against previous runs.
     """
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    linux_dir = os.path.abspath(os.path.join(base_dir, "..", "linux-cubie"))
+    linux_dir = A5E_KERNEL_DIR
     git_kernel = get_git_commit_hash(linux_dir)
     git_cubie = get_git_commit_hash(base_dir)
 
