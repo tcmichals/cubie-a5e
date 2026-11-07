@@ -4,13 +4,21 @@ Tick each line with the date, commit and result. A box without evidence is not d
 
 ## 1. Build (on the linux-next base, each patch on its own)
 
+**Folded series:** local branch `v4-next-20261105` in `linux-v4-next`, not pushed. It is v3 `b47352fa3f97`
+rebased on next-20261105, with each patch's files set to `cubie-linux-7.1` `da2fdad67e0d` and the v4
+messages applied (V4-CHLOG). 2026-11-07, at each patch on its own, GCC 15.1 and clang 21.1 W=1 with the
+drivers and KUnit as modules: 0 driver warnings. At the tip: `dt_binding_check` clean, `dtbs_check`
+on the A5E clean, UML KUnit 65 pass and 1 skip. `checkpatch --strict` shows only the MAINTAINERS note on 1, 3, 6
+and 7 (the entries are added with the drivers in 2 and 4) and the missing Signed-off-by. `spdxcheck`
+did not run: no `ply` module on this host.
+
 - [x] `W=1`, GCC and clang, built in and as modules — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): GCC 15.1 (Buildroot) and clang 21.1.8, `y` and `m` (both KUnit suites as modules, modpost run), 0 driver warnings. allnoconfig + only the drivers' dependencies
 - [ ] `C=1` sparse clean on the new files (missed in v3: V3-S8). Check the log has `CHECK` lines: an
       old sparse (Ubuntu 0.6.4) is rejected by `scripts/checker-valid.sh` and `C=` is silently ignored
 - [x] `CONFIG_PM=n` build, drivers and KUnit (missed in v3: V3-S7) — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): GCC W=1, 0 warnings; msgbox KUnit builds, rproc KUnit is off (it `depends on PM`)
 - [x] `CONFIG_COMPILE_TEST` on a non-arm64 arch — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): 32-bit ARM, clang W=1, `ARCH_SUNXI` off, drivers and KUnit as modules, 0 warnings. x86_64 not run: objtool needs `libelf-dev` on this host
 - [x] `make dt_binding_check DT_SCHEMA_FILES=...` for both bindings, and `dtbs_check` — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold): `dt_binding_check` clean for both; `CHECK_DTBS=y sun55i-a527-cubie-a5e.dtb` (msgbox and rproc nodes present) has one warning, `gpu-trips` in thermal-zones, from the thermal series (`2ac0cd62a627`), not ours
-- [ ] `checkpatch.pl --strict` on every patch — 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold), on the unfolded commits: only "Missing Signed-off-by" (owner adds it), plus 2 over-100-column lines in `70509dc4e6fe` and a long changelog line in `4931baf9d66b`, both gone once the fixups are folded. Re-run on the folded series
+- [x] `checkpatch.pl --strict` on every patch — folded series 2026-11-07: clean apart from the notes above (blank lines left by the crash IRQ removal fixed in `da2fdad67e0d`). Earlier: 2026-11-07, `77398ba801c3` on the 7.1 base (repeat on the linux-next fold), on the unfolded commits: only "Missing Signed-off-by" (owner adds it), plus 2 over-100-column lines in `70509dc4e6fe` and a long changelog line in `4931baf9d66b`, both gone once the fixups are folded. Re-run on the folded series
 
 ## 2. Tests
 
