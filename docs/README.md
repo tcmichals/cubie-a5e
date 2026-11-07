@@ -45,11 +45,6 @@ docs/
 │   ├── A7A_KERNEL_PATCH_VALIDATION.md          <-- Required clean-tree Buildroot patch validation gate
 │   └── A7A_BRINGUP_AND_KNOWN_ISSUES.md        <-- A7A Bring-Up Post-Mortem & Verified Fixes
 │
-├── flightcontroller/                          <-- High-Level Avionics, FPGA & Application Stack
-│   ├── ArchitectureAndAbstractX.md            <-- Flight Stack Split-Responsibility Model (Linux + FPGA)
-│   ├── DevelopmentAndDebugging.md             <-- Cross-Compilation & VS Code Remote GDB Workflows
-│   └── LandingAssistML.md                     <-- Vision-Based Landing Guidance & TinyML Sensor Fusion
-│
 └── articles/                                  <-- Long-Form Engineering Whitepapers & Deep Dives
     ├── README.md                              <-- 4-Part XuanTie Heterogeneous RISC-V Series
     ├── Mainline_Flightstack_Bringup_Article.md<-- Master 6-Blueprint Avionics Architecture Case Study
