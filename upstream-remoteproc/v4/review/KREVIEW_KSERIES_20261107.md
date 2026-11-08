@@ -65,7 +65,7 @@ as `maxItems: 1`)?
 | L-4 | 7 | `<linux/irq.h>`, `<linux/irqdesc.h>` in `sunxi_rproc_kunit.c`, used only by the removed crash IRQ tests | drop |
 | L-5 | 4 | Commit body: ".parse_fw() registers ... carveouts ... then loads the resource table"; the code loads the table first, then adds the carveouts and segments | reword |
 | L-6 | 2 | msgbox Kconfig help: "(send, peek, startup, shutdown)" left on a short line after `last_tx_done` was dropped | rewrap |
-| L-7 | 7 | 7/7 changelog credits only Sashiko for `depends on PM`; the kernel test robot reported the same build error on v3 (parisc-allyesconfig, PM not available) | add "and the kernel test robot" (no tags: fixed in a new version of the same patch, as the robot asks) |
+| L-7 | 7 | 7/7 changelog credits only Sashiko for `depends on PM`; the kernel test robot reported the same build error on v3 twice (parisc-allyesconfig and s390-allmodconfig, PM not available) | add "and the kernel test robot" (no tags: fixed in a new version of the same patch, as the robot asks) |
 | L-8 | 0 | Cover letter: thanks Krzysztof only for v3; Uwe Kleine-König reviewed v3 2/7 and 4/7 | add Uwe (and Cc him) |
 | L-9 | 0 | Cover letter "checkpatch --strict clean": it reports the MAINTAINERS note on 1, 3, 6, 7 (the entries come with 2 and 4 and cover those files) | say so |
 | L-10 | 0 | Cover letter: UML "65 passed, 1 skipped" next to board "37 and 23": 60 cases, one runs 7 parameters | say "66 including the 7 parameters of one test" or count cases |
@@ -79,6 +79,10 @@ test robot on 7/7 (2026-11-08 13:13 +0800, `202611081239.zlQqllPm-lkp@intel.com`
 `sunxi_rproc_kunit.c:962,977,1107`, parisc-allyesconfig W=1. Same as V3-S7 / TC-1. The robot's
 config has no `CONFIG_PM` at all, so v4's `depends on ... && PM` turns the test off there. The
 same build compiled both drivers and the msgbox KUnit on 32-bit big-endian parisc without errors.
+2026-11-08: a second robot report on 7/7 (14:18 +0800, `202611081401.aakRznh0-lkp@intel.com`,
+s390-allmodconfig, clang 24), the same error, saved as `v3/emails/18_*` (V3-R2). That config has
+no `CONFIG_PM` either. Its `.config` on the fold tip, `ARCH=s390 LLVM=1` W=1: the rproc KUnit
+drops out, both drivers and the msgbox KUnit build with 0 warnings. No list reply (fixed in v4).
 
 **Stage 2, resolution.** Every V3 item has a v4 change (V3_TO_V4_RECONCILIATION_CHECKLIST.md);
 new row V3-R1 (robot) = V3-S7. Re-run on the v4 code: S2, S3, S4, S5 by the KUnit cases that fail
