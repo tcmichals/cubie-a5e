@@ -38,7 +38,7 @@ did not run: no `ply` module on this host.
       `rproc_add()` use-after-free, TODO CORE-RPROC-ADD). The first boot found a KUnit fixture
       bug that switched lockdep off (V4-LOCKDEP-KTEST, fixed). Coverage merged UML + board:
       100% line coverage of both drivers (V4-COV, `review/COVERAGE_20261107.md`). PREEMPT (non-RT) + PROVE_LOCKING + DEBUG_ATOMIC_SLEEP + DEBUG_OBJECTS, KUnit as modules: full sweep 42/42 PASS, 100 stop/start cycles 0 failures, `debug_locks: 1`, no reports
-- [ ] Owner board-tests the final series
+- [x] Owner board-tests the final series — 2026-11-08 (owner: "do 2"), 7.1 `c98ae2c88913` (driver, header, test and binding files equal fold tip `6250bc6f4df3`), board PREEMPT_RT config + PROVE_LOCKING + DEBUG_ATOMIC_SLEEP, GCC 15.1, KUnit built in (image md5 cf2765dc): boot KUnit sun55i_msgbox 37/37, sunxi_rproc 23/23 (29 results); full sweep all 3 profiles PASS (31 checks, dmesg clean, metrics in range of the last 10 runs); 100 stop/start cycles with a 50-ping run each, 0 failures, 0 reports, `debug_locks: 1`. Board restored to the Buildroot Image `7f115d26` and its modules (backup in `board-backups/a5e/*7f115d26-rt-20261108*`)
 
 ## 3. Review (the v3 lessons)
 

@@ -1,6 +1,6 @@
 # Autonomous 3-Profile Silicon Sweep Results
 
-- **Timestamp**: 2026-11-07 17:23:22
+- **Timestamp**: 2026-11-08 11:22:16
 - **Target**: 192.168.3.3 (Linux 7.1 PREEMPT_RT)
 - **Co-Processor**: XuanTie E906 RISC-V
 
@@ -65,7 +65,7 @@
 | Profile 3 | C++ ping_uio (1000 pkts, IRQ) | **PASS** |
 | Profile 3 | Python ping_uio.py (1000 pkts) | **PASS** |
 | Profile 3 | Kernel Health (dmesg clean) | **PASS** |
-| History | Metrics in range of last 10 PASS runs (rt) | **PASS** |
+| History | Metrics in range of last 10 PASS runs (rt+lockdep) | **PASS** |
 | Source | RemoteProc VirtIO Doorbell Contract | **PASS** |
 | Source | Mailbox TX Completion | **PASS** |
 | Source | Zero-Sleep Benchmark Protocol | **PASS** |
@@ -77,9 +77,9 @@ TX done by write IRQ: E906 bank write IRQ on SPI 205, armed after every send. RX
 
 | Benchmark | Mode | Status | Avg (µs) | Max (µs) | Jitter (µs) | p99 (µs) | msgs/s | RX IRQ/msg | TX IRQs | Queue overflows |
 | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ping_rpmsg 10k, -D 0 | isr | **PASS** | 166.2 | 231.0 | 8.7 | 193.9 | 5,993.4 | 1.0 | 0 | 0 |
-| stress_rpmsg 100k, 16 in flight | isr | **PASS** | 1,354.9 | 1,516.4 | - | 1,386.0 | 11,568.6 | 1.0 | 0 | 0 |
-| FreeRTOS ping_rpmsg 2k (ISR wake) | isr | **PASS** | 187.7 | 324.9 | 9.9 | 220.3 | 5,307.2 | 1.0 | 2000 | 0 |
+| ping_rpmsg 10k, -D 0 | isr | **PASS** | 608.4 | 4,176.4 | 70.8 | 681.7 | 1,638.9 | 1.0 | 0 | 0 |
+| stress_rpmsg 100k, 16 in flight | isr | **PASS** | 3,782.1 | 10,785.4 | - | 4,185.5 | 4,133.3 | 1.0 | 0 | 0 |
+| FreeRTOS ping_rpmsg 2k (ISR wake) | isr | **PASS** | 661.3 | 858.2 | 32.3 | 764.5 | 1,509.1 | 1.0 | 2000 | 0 |
 
 
 ## Detailed Quantitative Metrics per Profile
@@ -93,11 +93,11 @@ TX done by write IRQ: E906 bank write IRQ on SPI 205, armed after every send. RX
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
 | testCrash.elf (Autopsy) | **PASS** | N/A | 0x30000002 | N/A | N/A | Verified |
-| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 167.20 µs | 5,952.0 msgs/s | 5.63 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 1354.76 µs | 11,568.6 msgs/s | 10.94 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 114.43 µs | 6,477.2 msgs/s | 809.6 KB/s | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 192.16 µs | 3,361.6 msgs/s | 3.28 MB/sec | PASS (0 errors) |
-| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 3018.29 µs | 5,119.4 msgs/s | 5.00 MB/sec | PASS (0 errors) |
+| ping_rpmsg (C++ VirtIO) | **PASS** | 1000/1000 | 623.04 µs | 1,601.0 msgs/s | 1.51 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ VirtIO, 16 in flight) | **PASS** | 100000/100000 | 3981.10 µs | 3,927.9 msgs/s | 3.72 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python VirtIO) | **PASS** | 1000/1000 | 514.37 µs | 1,595.2 msgs/s | 199.4 KB/s | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR) | **PASS** | 1000/1000 | 193.23 µs | 3,307.5 msgs/s | 3.23 MB/sec | PASS (0 errors) |
+| ping_dram (C++ Hybrid DDR, 16 in flight) | **PASS** | 100000/100000 | 3014.82 µs | 5,117.6 msgs/s | 5.00 MB/sec | PASS (0 errors) |
 
 ### Profile 2 (Pure On-Chip SRAM VirtIO)
 
@@ -107,9 +107,9 @@ TX done by write IRQ: E906 bank write IRQ on SPI 205, armed after every send. RX
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | testBasic.elf | **PASS** | 1 beats | N/A | N/A | N/A | Verified |
 | testStringBinaryTrace0.elf | **PASS** | N/A | N/A | N/A | N/A | Verified |
-| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 129.56 µs | 7,672.2 msgs/s | 7.26 MB/s | PASS (0 errors) |
-| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 759.44 µs | 20,384.3 msgs/s | 19.28 MB/s | PASS (0 errors) |
-| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 99.72 µs | 6,976.1 msgs/s | 872.0 KB/s | PASS (0 errors) |
+| ping_rpmsg (C++ SRAM VirtIO) | **PASS** | 1000/1000 | 585.36 µs | 1,703.0 msgs/s | 1.61 MB/s | PASS (0 errors) |
+| stress_rpmsg (C++ SRAM VirtIO, 16 in flight) | **PASS** | 100000/100000 | 3716.47 µs | 4,202.8 msgs/s | 3.98 MB/s | PASS (0 errors) |
+| ping_rpmsg.py (Python SRAM VirtIO) | **PASS** | 1000/1000 | 498.13 µs | 1,637.4 msgs/s | 204.7 KB/s | PASS (0 errors) |
 
 ### Profile 3 (Userspace UIO Direct Mailbox)
 
@@ -117,7 +117,7 @@ TX done by write IRQ: E906 bank write IRQ on SPI 205, armed after every send. RX
 
 | Test / Application | Status | Packets | Avg RTT | Throughput | Bandwidth | Data Integrity |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 13.89 µs | 8,982.5 msgs/s | 8.77 MB/sec | PASS (0 errors) |
-| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 59.06 µs | 6,370.2 msgs/s | None | PASS (0 errors) |
-| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 32.30 µs | 159.9 msgs/s | None | PASS (0 errors) |
+| ping_shm (C++ Direct SRAM) | **PASS** | 1000/1000 | 13.86 µs | 8,496.7 msgs/s | 8.30 MB/sec | PASS (0 errors) |
+| ping_uio (C++ UIO Doorbell) | **PASS** | 1000/1000 | 48.69 µs | 6,477.1 msgs/s | None | PASS (0 errors) |
+| ping_uio.py (Python UIO Doorbell) | **PASS** | 1000/1000 | 86.61 µs | 151.0 msgs/s | None | PASS (0 errors) |
 

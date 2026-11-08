@@ -2215,5 +2215,105 @@
       "p3_uio_py_rate_msgs_s": "OK",
       "p3_uio_py_rtt_us": "OK"
     }
+  },
+  {
+    "run_id": 30,
+    "timestamp": "2026-11-08 11:22:16",
+    "git_kernel": "c98ae2c88913",
+    "git_cubie": "9283479",
+    "overall_status": "PASS",
+    "engineering_invariants": [
+      {
+        "invariant": "RemoteProc VirtIO Doorbell Contract",
+        "rule": "priv->cl.knows_txdone = false, no mbox_client_txdone() (controller paces TX)",
+        "file": "drivers/remoteproc/sunxi_rproc.c",
+        "status": "PASS",
+        "details": "TX completion reported by the controller's write interrupt"
+      },
+      {
+        "invariant": "Mailbox TX Completion",
+        "rule": "TX done by write IRQ only: txdone_irq set, no last_tx_done, send_data() arms the IRQ under the lock",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "A kick completes from the write interrupt"
+      },
+      {
+        "invariant": "Zero-Sleep Benchmark Protocol",
+        "rule": "ping_rpmsg: blocking write, inotify for the node, no sleeps except optional -D (default 0)",
+        "file": "apps/testPingRpmsg/linux/ping_rpmsg.cpp",
+        "status": "PASS",
+        "details": "Pure event-driven epoll/read loop with zero sleep overhead"
+      },
+      {
+        "invariant": "PREEMPT_RT Hardirq Execution Bound",
+        "rule": "sun55i_msgbox_irq drain loop strictly bounded to FIFO_MAX",
+        "file": "drivers/mailbox/sun55i-msgbox.c",
+        "status": "PASS",
+        "details": "Hardirq latency strictly capped against runaway co-processor lockup"
+      }
+    ],
+    "metrics": {
+      "kunit_passed": 60,
+      "kunit_total": 60,
+      "kunit_failed": 0,
+      "p1_rpmsg_rtt_us": 623.044,
+      "p1_rpmsg_jitter_us": 216.241,
+      "p1_rpmsg_rate_msgs_s": 1601.0,
+      "p1_dram_rtt_us": 193.232,
+      "p2_rpmsg_rtt_us": 585.357,
+      "p3_shm_rtt_us": 13.861,
+      "p3_shm_rate_msgs_s": 8496.7,
+      "p3_shm_bandwidth_mb_s": 8.3,
+      "p3_uio_py_rtt_us": 86.605,
+      "p3_uio_py_rate_msgs_s": 151.0,
+      "p1_stress_rate_msgs_s": 3927.9,
+      "p2_stress_rate_msgs_s": 4202.8,
+      "p1_dram_w16_rate_msgs_s": 5117.6,
+      "p2_rpmsg_rate_msgs_s": 1703.0,
+      "p3_uio_irq_rtt_us": 48.686,
+      "mbx_isr_ping_rtt_us": 608.383,
+      "mbx_isr_ping_p99_us": 681.666,
+      "mbx_isr_ping_rate_msgs_s": 1638.9,
+      "mbx_isr_stress_rate_msgs_s": 4133.3,
+      "mbx_isr_freertos_rtt_us": 661.259,
+      "mbx_isr_freertos_p99_us": 764.458,
+      "mbx_isr_freertos_rate_msgs_s": 1509.1
+    },
+    "deltas": {
+      "kunit_passed": "N/A",
+      "p1_rpmsg_rtt_us": "N/A",
+      "p1_rpmsg_jitter_us": "N/A",
+      "p1_rpmsg_rate_msgs_s": "N/A",
+      "p2_rpmsg_rtt_us": "N/A",
+      "p3_shm_rtt_us": "N/A",
+      "p3_shm_rate_msgs_s": "N/A",
+      "p3_shm_bandwidth_mb_s": "N/A",
+      "p3_uio_py_rtt_us": "N/A"
+    },
+    "kernel_flavor": "rt+lockdep",
+    "range_check": {
+      "mbx_isr_freertos_p99_us": "NEW",
+      "mbx_isr_freertos_rate_msgs_s": "NEW",
+      "mbx_isr_freertos_rtt_us": "NEW",
+      "mbx_isr_ping_p99_us": "NEW",
+      "mbx_isr_ping_rate_msgs_s": "NEW",
+      "mbx_isr_ping_rtt_us": "NEW",
+      "mbx_isr_stress_rate_msgs_s": "NEW",
+      "p1_dram_rtt_us": "NEW",
+      "p1_dram_w16_rate_msgs_s": "NEW",
+      "p1_rpmsg_jitter_us": "NEW",
+      "p1_rpmsg_rate_msgs_s": "NEW",
+      "p1_rpmsg_rtt_us": "NEW",
+      "p1_stress_rate_msgs_s": "NEW",
+      "p2_rpmsg_rate_msgs_s": "NEW",
+      "p2_rpmsg_rtt_us": "NEW",
+      "p2_stress_rate_msgs_s": "NEW",
+      "p3_shm_bandwidth_mb_s": "NEW",
+      "p3_shm_rate_msgs_s": "NEW",
+      "p3_shm_rtt_us": "NEW",
+      "p3_uio_irq_rtt_us": "NEW",
+      "p3_uio_py_rate_msgs_s": "NEW",
+      "p3_uio_py_rtt_us": "NEW"
+    }
   }
 ]
