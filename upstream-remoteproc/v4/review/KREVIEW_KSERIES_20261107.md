@@ -115,7 +115,7 @@ valid" (accepted; reply removed from REPLIES_DRAFT.md). The 3/7 reply stays (it 
 `minItems` is kept) and depends on K-1.
 
 **Stage 5, assembly.**
-- Changelogs below `---` in all 7, reviewers named, repeats say "sorry I missed it in v3".
+- Changelogs below `---` in all 7, reviewers named, repeats say "Reported on v2 too; v3 did not fix it" (owner 2026-11-08: no "sorry"; fold tip now `f5761f83b3f3`, messages only).
 - `checkpatch --strict`: 0 errors; 1 warning on 1, 3, 6, 7 (MAINTAINERS note), 0 on 2, 4, 5.
 - `get_maintainer.pl`: as v3 plus Chen-Yu at `wens@kernel.org`; the RT, RISC-V and reset people
   come by keyword and stay off (TODO T3). Add Uwe (L-8).

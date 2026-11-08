@@ -60,7 +60,7 @@ did not run: no `ply` module on this host.
 
 ## 4. Send (owner)
 
-- [ ] Changelog in each patch answers every v3 comment; repeats say "fixed, sorry I missed it in v3"
+- [ ] Changelog in each patch answers every v3 comment; repeats say what was missed and that v4 fixes it ("Reported on v2 too; v3 did not fix it"), no "sorry" (owner 2026-11-08)
 - [ ] Cover letter `TBD`s filled in; v3 link added
 - [ ] Owner Signed-off-by on every patch; no AI trailers
 - [ ] `git format-patch -v4 --cover-letter --base=<next tag>`
