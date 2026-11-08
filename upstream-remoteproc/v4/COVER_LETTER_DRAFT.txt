@@ -61,7 +61,7 @@ with the same driver and test files:
     CONFIG_PM=n, and as COMPILE_TEST on 32-bit ARM.
     dt_binding_check and dtbs_check (Cubie A5E) clean; checkpatch
     --strict clean.
-  - TBD: C=1 (sparse).
+  - sparse (C=2) clean on the new files.
 
 Tools: I used Claude Code (Anthropic) to help review the code against
 the v3 comments, write the KUnit tests, run the board tests and draft
