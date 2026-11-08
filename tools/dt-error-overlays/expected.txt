@@ -1,0 +1,10 @@
+# overlay name<TAB>probe error message the test expects in dmesg
+msgbox-3-clocks	need 4 clocks, found 3
+msgbox-bad-resets	failed to count resets
+msgbox-3-resets	need 4 resets, found 3
+rproc-sram-outside-map	is not in the
+rproc-no-remap	missing 'remap' register
+rproc-bad-firmware-name	invalid firmware-name
+rproc-4-regions	too many memory-region entries
+rproc-region-above-4g	above 4 GiB
+rproc-region-in-window	is not visible to the core

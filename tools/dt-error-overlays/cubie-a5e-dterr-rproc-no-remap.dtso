@@ -1,0 +1,24 @@
+/dts-v1/;
+/plugin/;
+
+/*
+ * DT error test for the A5E message box / remoteproc probe (tools/dt_error_tests.sh).
+ * Applied after cubie-a5e-flight-stack; replaces one property so that one probe
+ * check fails. Test only: never in a normal boot.
+ */
+
+#include <dt-bindings/clock/sun55i-a523-ccu.h>
+#include <dt-bindings/clock/sun55i-a523-mcu-ccu.h>
+#include <dt-bindings/clock/sun55i-a523-r-ccu.h>
+#include <dt-bindings/reset/sun55i-a523-ccu.h>
+#include <dt-bindings/reset/sun55i-a523-mcu-ccu.h>
+#include <dt-bindings/reset/sun55i-a523-r-ccu.h>
+
+/* The test script reads this back to see that U-Boot applied the overlay */
+&{/} {
+	dt-error-test = "rproc-no-remap";
+};
+
+&rproc {
+	reg-names = "cfg", "sram-a3-0", "sram-a3-1", "not-remap";
+};
