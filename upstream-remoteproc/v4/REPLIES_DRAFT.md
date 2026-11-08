@@ -9,24 +9,11 @@ get no reply; their points are answered in each patch's "Changes in v4".
 
 ---
 
-## 1. Krzysztof, v3 1/7 (mailbox binding)
-In-Reply-To: `<20261102-hot-glistening-cassowary-c1da4e@quoll>`
+No reply to Krzysztof's v3 1/7 comment ("Sashiko comment looks valid"): it is accepted and
+answered by the 1/7 and 2/7 changelogs (owner, 2026-11-07: no list reply unless we disagree).
+The kernel test robot's v3 7/7 report (PM=n build error) gets no reply either: v4 7/7 fixes it.
 
-```text
-On Mon, Nov 02, 2026 at 11:17:39AM +0100, Krzysztof Kozlowski wrote:
-> Sashiko comment looks valid, rest seems ok.
-
-Agreed. v4 drops allwinner,tx-done-irq: the driver always uses the
-receiver bank's write interrupt for TX done, and the poll mode is gone:
-<v4 lore link>
-
-Thanks,
-Tim
-```
-
----
-
-## 2. Krzysztof, v3 3/7 (remoteproc binding)
+## 1. Krzysztof, v3 3/7 (remoteproc binding)
 In-Reply-To: `<20261102-warping-victorious-shrew-7cee1e@quoll>`
 
 ```text

@@ -26,6 +26,7 @@ Triple check of v1/v2/v3: [review/TRIPLE_CHECK_20261103.md](review/TRIPLE_CHECK_
 | V3-K1 | Krzysztof | 1 | "Sashiko comment looks valid, rest seems ok" (`allwinner,tx-done-irq` is policy) | – | Drop the property; TX done always by the receiver bank's write interrupt; delete the poll/timer mode and `tx_held` path | DECIDED | |
 | V3-K2a | Krzysztof | 3 | `memory-region` `minItems: 1`: "same comments as for v2" | v2 | Keep `minItems: 1`; binding description says why `dram`/`trace` are optional (Q2) | DECIDED | |
 | V3-K2b | Krzysztof | 3 | `memory-region-names` `minItems: 1` | v2 | Same as V3-K2a | DECIDED | |
+| | | | **2026-11-07 /kreview K-1: reopened for the owner.** The v4 description promises combinations the schema rejects (no `vram`; `[vram, trace]`), and the reason is firmware, not hardware; no peer with one compatible does this | | | **OPEN** | [review/KREVIEW_KSERIES_20261107.md](review/KREVIEW_KSERIES_20261107.md) K-1 |
 | V3-K2c | Krzysztof | 3 | `interrupts` (crash): "same comments as for v2" | v2 | Drop `interrupts` (Q1 = yes) | DECIDED | |
 | V3-U1 | Uwe Kleine-König | 2, 4 | Do not include `<linux/mod_devicetable.h>` (build dependencies); `<linux/platform_device.h>` provides `of_device_id` | – | Remove the include from `sun55i-msgbox.c` and `sunxi_rproc.c` | FIXED | 7.1 `9a5f36c0628d`; W=1 clean on 7.1 and next-20261105 |
 
@@ -40,6 +41,7 @@ Triple check of v1/v2/v3: [review/TRIPLE_CHECK_20261103.md](review/TRIPLE_CHECK_
 | V3-S5 | 4 | High | `sunxi_rproc_vq_work()` walks `rproc->notifyids` without `rproc->lock` → UAF against `rproc_resource_cleanup()`. Closed in v3 on a wrong precedent (TC-2: imx/xlnx free the mailbox in `stop()`) | v2 | Take `rproc->lock` and check `RPROC_RUNNING`, as `stm32_rproc_mb_vq_work()` and `imx_dsp_rproc_vq_work()` do. No `cancel_work_sync()` in `stop()`: `stop()` runs under `rproc->lock` and the work takes it → deadlock | PLANNED | KUnit: work after stop is a no-op |
 | V3-S6 | 4 | High | `stop()` skips `synchronize_irq()` when the crash handler already cleared ARMED → unbalanced `enable_irq()`, crash reported after restart | v2 | Crash interrupt removed (Q1 = yes) | DECIDED | |
 | V3-S7 | 7 | Med (**build break**, TC-1) | `SUNXI_REMOTEPROC_KUNIT_TEST` needs `depends on PM` (`power.usage_count`, PM-domain failure test) | – | Add `PM` to `depends on` | PLANNED | PM=n build (PRESEND_CHECKLIST) |
+| V3-R1 | 7 | Med (**build break**) | kernel test robot, 2026-11-08 (`202611081239.zlQqllPm-lkp@intel.com`, parisc-allyesconfig, no `CONFIG_PM`): `dev_pm_info` has no `usage_count`. Same as V3-S7; ingested late (`v3/emails/17_*`) | – | Same as V3-S7; credit the robot in the 7/7 changelog | FIXED | Robot config has no PM, so `depends on PM` turns the test off; PM=n build of the fold tip 2026-11-07 ([review/KREVIEW_KSERIES_20261107.md](review/KREVIEW_KSERIES_20261107.md)) |
 | V3-S8 | 7 | Low | `use_mmio_mocks()` `__iomem` casts lack `__force` | – | Add `__force` | PLANNED | `C=1` sparse clean (PRESEND_CHECKLIST) |
 
 ## Why these came back

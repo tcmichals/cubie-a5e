@@ -48,8 +48,13 @@ did not run: no `ply` module on this host.
       after `synchronize_irq()`, (d) stop/recovery while work or a threaded IRQ runs — 2026-11-07,
       [review/CONCURRENCY_PASS_20261107.md](review/CONCURRENCY_PASS_20261107.md): no High/Medium, two Low (C1, C2) for the owner
 - [ ] Every v1, v2 and v3 finding re-checked against the v4 code by re-running its failure
-      scenario, not by confirming the code exists
-- [ ] Every precedent argument cites all peer drivers, including those that do it differently
+      scenario, not by confirming the code exists — 2026-11-07 /kreview + /kseries
+      ([review/KREVIEW_KSERIES_20261107.md](review/KREVIEW_KSERIES_20261107.md)): all re-run and fixed
+      except V3-K2a/b, reopened as K-1 (owner); late kernel test robot report on v3 7/7 ingested
+      (V3-R1 = V3-S7, fixed). PM=n and built-in builds repeated on the fold tip: clean
+- [x] Every precedent argument cites all peer drivers, including those that do it differently —
+      2026-11-07: vq work (stm32, imx_dsp lock; imx, xlnx free the mailbox in stop), shared reset
+      (sun6i-msgbox), `memory-region` (every remoteproc binding in next-20261105, K-1)
 - [ ] Every High/Medium finding from our reviews is fixed or answered by the owner (yes/no)
 - [ ] Bindings: no `minItems` on a list unless the binding gives the hardware reason
 
