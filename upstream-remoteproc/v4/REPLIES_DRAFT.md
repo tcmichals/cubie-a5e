@@ -27,12 +27,22 @@ On Mon, Nov 02, 2026 at 11:19:54AM +0100, Krzysztof Kozlowski wrote:
 Sorry, v3 did not explain why memory-region can have fewer than three
 entries. v4 fixes that.
 
-The regions depend on the firmware loaded into the E906, not on the
-SoC. Firmware that runs only from the two SRAMs and does not use virtio
-needs none. Otherwise the first region is always the vring and buffer
-pool, followed by a DRAM region for firmware code and data and then a
-trace buffer, in that order. v4 says this in the binding description,
-the same way xlnx,zynqmp-r5fss describes its optional virtio regions.
+Which regions are needed depends on how the firmware loaded into the
+E906 is built, not on the SoC:
+
+- vram: the virtio vring and buffer pool, a shared-dma-pool. Needed
+  only by firmware that uses virtio (rpmsg). The pool can be in DRAM
+  or in one of the E906 SRAMs.
+- dram: firmware code and data in DRAM. Needed only by firmware linked
+  to run from DRAM; firmware linked to the two SRAMs has no DRAM
+  sections.
+- trace: the trace buffer. Needed only by firmware that has one.
+
+So firmware that runs only from the SRAMs and does not use virtio
+needs no memory-region at all. When the property is present, vram is
+always first, then dram and trace, in that order. v4 says this in the
+binding description, the same way xlnx,zynqmp-r5fss describes its
+optional virtio regions.
 
 The crash interrupt is dropped: the A523 has no line for it.
 
