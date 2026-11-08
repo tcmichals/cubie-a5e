@@ -61,6 +61,7 @@ did not run: no `ply` module on this host.
 ## 4. Send (owner)
 
 - [ ] Changelog in each patch answers every v3 comment; repeats say what was missed and that v4 fixes it ("Reported on v2 too; v3 did not fix it"), no "sorry" (owner 2026-11-08)
+- [x] No first person (we/our/us) or "sorry" in code comments, commit messages, cover letter, replies (owner 2026-11-08) — 2026-11-08: 7.1 `22a93a2f6d9c` (5 msgbox comments: "the host"), 2/7 changelog line; fold tip `010b0ec0b69f`, `grep -i -wE "sorry|we|our|us"` on all 7 patches and both drafts: none; arm64 GCC W=1 drivers + KUnit as modules: 0 warnings; checkpatch 2/7: only the missing Signed-off-by
 - [ ] Cover letter `TBD`s filled in; v3 link added
 - [ ] Owner Signed-off-by on every patch; no AI trailers
 - [ ] `git format-patch -v4 --cover-letter --base=<next tag>`
