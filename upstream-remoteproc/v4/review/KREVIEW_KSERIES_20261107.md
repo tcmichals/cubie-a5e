@@ -48,6 +48,15 @@ All authored by Tim Michals <tcmichals@gmail.com>; no Signed-off-by yet (owner),
    `ti,omap-remoteproc`, most `qcom,*-pas`/`-pil`; free form: `st,stm32-rproc`, `renesas,rcar-rproc`,
    `ti,k3-m4f-rproc`. None has one compatible, named positional entries and `minItems` for a firmware
    reason.
+   **Correction 2026-11-08:** the survey missed the child-node bindings. `xlnx,zynqmp-r5fss`
+   (`r5f@` nodes) has `memory-region` `minItems: 1`, `maxItems: 8`, positional descriptions
+   (firmware image, vdev buffer, vring0, vring1), `additionalItems: true`, not narrowed per
+   compatible, no `-names`: the virtio entries are optional for a firmware reason, with the
+   always-needed region **first**. `ti,k3-r5f-rproc` uses `oneOf` with two complete layouts
+   (basic: DMA pool + firmware; detailed: 6 regions). `ti,k3-dsp-rproc`: the pool and firmware
+   regions are the required first two. Our problem is narrower than "minItems": the pool, which is
+   always needed (the driver fails without it), is first, so the description's "firmware without
+   virtio" layout cannot exist.
 
 Owner question: keep Q2 as decided (then fix the description so it matches the schema: the
 pool is always first and always present when `memory-region` is; dram and trace are optional in
