@@ -17,14 +17,18 @@ Changes in v4 (details in each patch):
     armed in the same locked section as the FIFO write, and a channel
     is never re-armed once its shutdown has started (Sashiko).
   - Remoteproc: the vring work takes rproc->lock and runs only while
-    the core is running, as stm32 does; this was reported on v2 and
-    I missed it in v3 (Sashiko).
+    the core is running, as stm32 and imx_dsp do; reported on v2 too,
+    v3 did not fix it (Sashiko).
   - Remoteproc: the crash interrupt is removed from the driver and the
     binding: the A523 has no line for it (Krzysztof, Sashiko).
-  - Remoteproc binding: the description now says why the dram and
-    trace memory regions are optional (they depend on the firmware);
-    v2 and v3 did not say it (Krzysztof).
-  - Remoteproc KUnit: depends on PM; __force on the __iomem casts
+  - Remoteproc binding: the memory-region description says why the
+    regions are optional (they depend on the firmware, not on the SoC)
+    and which layouts are valid: none, or the vring and buffer pool
+    first (in DRAM or in an E906 SRAM), then dram and trace, in that
+    order. v2 and v3 did not say it (Krzysztof).
+  - Both drivers: <linux/mod_devicetable.h> dropped (Uwe).
+  - Remoteproc KUnit: depends on PM (Sashiko; the kernel test robot
+    reported the same build error on v3); __force on the __iomem casts
     (Sashiko).
   - Rebased on next-20261105.
 
@@ -33,8 +37,9 @@ Notes for review:
     shares the 512 KiB SRAM A3_2 with the E906's subsystem, bit 0
     belongs to the DSP. The driver maps only this register and
     read-modify-writes bit 1, which is safe while no other Linux driver
-    writes it. I can move it to a syscon or the R-CCU, or describe SRAM
-    A3_2 through the sunxi SRAM driver (allwinner,sram), if preferred.
+    writes it. It can move to a syscon or the R-CCU, or SRAM A3_2 can
+    be described through the sunxi SRAM driver (allwinner,sram), if
+    preferred.
   - System suspend is not supported: the E906 runs next to a Linux that
     stays up, so the driver has no PM callbacks.
   - Merging: patches 1, 2 and 6 are for the mailbox tree, 3, 4 and 7
@@ -43,7 +48,8 @@ Notes for review:
 
 Testing on a Radxa Cubie A5E (A527), Linux 7.1 PREEMPT_RT and PREEMPT
 with the same driver and test files:
-  - KUnit under UML: 65 passed, 1 skipped (it needs SMP or spinlock
+  - KUnit under UML: 66 results from the 60 test cases (one case runs
+    7 parameters): 65 passed, 1 skipped (it needs SMP or spinlock
     debugging).
   - KUnit on the board, built in and as modules: 37 and 23 passed,
     none skipped.
@@ -52,21 +58,28 @@ with the same driver and test files:
     stop/start cycles; no errors in dmesg.
     The same with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP: no reports.
   - Every slab allocation in remoteproc start, stop and probe and in
-    message box probe failed once (fail-nth): each error path unwinds,
-    and the next attempt succeeds.
+    message box probe failed once (fail-nth): each error path in these
+    drivers unwinds, and the next attempt succeeds.
+    In remoteproc probe this also hits a bug in the core: when
+    device_add() fails, rproc_add() calls put_device() and drops the
+    only reference, so rproc_char_device_remove() then uses the freed
+    rproc and the driver's rproc_free() puts it again (kobject_put()
+    WARN on a freed kobject). next-20261105 has the same code. A patch
+    that removes that put_device() can follow, if wanted.
   - PREEMPT with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP: the same rpmsg,
     unbind/bind and stop/start runs, no reports.
   - On next-20261105, each patch on its own: W=1 with GCC 15.1 and
     clang 21.1, as modules, no warnings. On 7.1 also built in, with
     CONFIG_PM=n, and as COMPILE_TEST on 32-bit ARM.
-    dt_binding_check and dtbs_check (Cubie A5E) clean; checkpatch
-    --strict clean.
+    dt_binding_check and dtbs_check (Cubie A5E) clean. checkpatch
+    --strict: only the MAINTAINERS note on 1, 3, 6 and 7 (the entries
+    come with the drivers in 2 and 4 and cover those files).
   - sparse (C=2) clean on the new files.
 
-Tools: I used Claude Code (Anthropic) to help review the code against
-the v3 comments, write the KUnit tests, run the board tests and draft
-commit messages. I reviewed every change; all tests above ran on my
-board.
+Tools: Claude Code (Anthropic) helped review the code against the v3
+comments, write the KUnit tests, run the board tests and draft commit
+messages. Every change was reviewed by the author, and all tests above
+ran on the author's board.
 
-Thanks to Krzysztof Kozlowski for reviewing v3, and to Krzysztof
-Kozlowski, Chen-Yu Tsai and Rob Herring for v1 and v2.
+Thanks to Krzysztof Kozlowski and Uwe Kleine-König for reviewing v3,
+and to Krzysztof Kozlowski, Chen-Yu Tsai and Rob Herring for v1 and v2.

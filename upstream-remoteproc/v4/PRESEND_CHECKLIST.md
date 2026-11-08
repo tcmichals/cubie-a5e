@@ -47,25 +47,25 @@ did not run: no `ply` module on this host.
       (a) a blocking send that times out, (b) unbind during traffic, (c) a second interrupt
       after `synchronize_irq()`, (d) stop/recovery while work or a threaded IRQ runs — 2026-11-07,
       [review/CONCURRENCY_PASS_20261107.md](review/CONCURRENCY_PASS_20261107.md): no High/Medium, two Low (C1, C2) for the owner
-- [ ] Every v1, v2 and v3 finding re-checked against the v4 code by re-running its failure
+- [x] Every v1, v2 and v3 finding re-checked against the v4 code by re-running its failure
       scenario, not by confirming the code exists — 2026-11-07 /kreview + /kseries
       ([review/KREVIEW_KSERIES_20261107.md](review/KREVIEW_KSERIES_20261107.md)): all re-run and fixed
-      except V3-K2a/b, reopened as K-1 (owner); late kernel test robot report on v3 7/7 ingested
+      except V3-K2a/b, reopened as K-1 and answered by the owner 2026-11-08 (option A, description fixed); late kernel test robot report on v3 7/7 ingested
       (V3-R1 = V3-S7, fixed). PM=n and built-in builds repeated on the fold tip: clean
 - [x] Every precedent argument cites all peer drivers, including those that do it differently —
       2026-11-07: vq work (stm32, imx_dsp lock; imx, xlnx free the mailbox in stop), shared reset
       (sun6i-msgbox), `memory-region` (every remoteproc binding in next-20261105, K-1)
-- [ ] Every High/Medium finding from our reviews is fixed or answered by the owner (yes/no)
-- [ ] Bindings: no `minItems` on a list unless the binding gives the hardware reason
+- [x] Every High/Medium finding from our reviews is fixed or answered by the owner (yes/no) — 2026-11-08: the only one, K-1 (Medium), answered: option A
+- [x] Bindings: no `minItems` on a list unless the binding gives the hardware reason — owner exception (D10, 2026-11-08): the rproc `memory-region` keeps `minItems: 1` with the firmware reason and the valid layouts in the description (precedent `xlnx,zynqmp-r5fss`); the 3/7 reply restates it
 
 ## 4. Send (owner)
 
 - [ ] Changelog in each patch answers every v3 comment; repeats say what was missed and that v4 fixes it ("Reported on v2 too; v3 did not fix it"), no "sorry" (owner 2026-11-08)
-- [x] No first person (we/our/us) or "sorry" in code comments, commit messages, cover letter, replies (owner 2026-11-08) — 2026-11-08: 7.1 `22a93a2f6d9c` (5 msgbox comments: "the host"), 2/7 changelog line; fold tip `010b0ec0b69f`, `grep -i -wE "sorry|we|our|us"` on all 7 patches and both drafts: none; arm64 GCC W=1 drivers + KUnit as modules: 0 warnings; checkpatch 2/7: only the missing Signed-off-by
+- [x] No first person (we/our/us) or "sorry" in code comments, commit messages, cover letter, replies (owner 2026-11-08) — 2026-11-08: 7.1 `22a93a2f6d9c` (5 msgbox comments: "the host"), 2/7 changelog line; fold tip `010b0ec0b69f`, `grep -i -wE "sorry|we|our|us"` on all 7 patches and both drafts: none; arm64 GCC W=1 drivers + KUnit as modules: 0 warnings; checkpatch 2/7: only the missing Signed-off-by. Cover letter: "I" lines reworded too (Tools section, remap note)
 - [ ] Cover letter `TBD`s filled in; v3 link added
 - [ ] Owner Signed-off-by on every patch; no AI trailers
 - [ ] `git format-patch -v4 --cover-letter --base=<next tag>`
-- [ ] Recipients as v3, except Chen-Yu at `wens@kernel.org` (MAINTAINERS; v3 went to `wens@csie.org`, TC-5);
+- [ ] Recipients as v3, except Chen-Yu at `wens@kernel.org` (MAINTAINERS; v3 went to `wens@csie.org`, TC-5), plus Cc Uwe Kleine-König `<u.kleine-koenig@baylibre.com>` (reviewed v3 2/7, 4/7; L-8);
       re-run `get_maintainer.pl` on the v4 patches
 - [ ] New thread, no `--in-reply-to`; owner's go-ahead
 - [ ] After sending: post [REPLIES_DRAFT.md](REPLIES_DRAFT.md) replies; record the lore link in

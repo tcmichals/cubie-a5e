@@ -124,6 +124,15 @@ valid" (accepted; reply removed from REPLIES_DRAFT.md). The 3/7 reply stays (it 
   PM=y everything built in: exit 0, 0 warnings in our files; with PM=n the rproc KUnit is off
   (`depends on PM`), the msgbox KUnit builds.
 
+## Cleanups done (2026-11-08)
+
+Owner go-ahead for L-1 … L-11 (L-11: yes, mention `rproc_add()` in the cover letter and offer
+the patch). Code on 7.1 `c98ae2c88913` (L-1 … L-4, L-6, plus the binding: the pool can be in
+DRAM or an E906 SRAM, owner: "the examples show that this works, we have tests"), folded into
+2/7, 3/7, 4/7, 6/7, 7/7; messages: 3/7 changelog (pool location), 4/7 body (L-5), 7/7 changelog
+(L-7). Cover letter: L-8 (Uwe thanked; Cc in PRESEND §4), L-9, L-10, L-11, binding and
+`mod_devicetable.h` lines, no first person. Fold tip `6250bc6f4df3`; every touched file equals 7.1.
+
 ## Verdict
 
 **ACTION REQUIRED**: K-1 needs the owner's answer, and L-1 … L-11 are open (L-11 owner yes/no).
