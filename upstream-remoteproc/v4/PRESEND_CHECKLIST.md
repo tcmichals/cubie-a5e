@@ -31,8 +31,13 @@ did not run: no `ply` module on this host.
       write IRQ on SPI 205 full -> pop -> 1 IRQ, dmesg clean); 100 stop/start cycles with a
       50-ping run each, 0 failures, dmesg clean. TX IRQ column: 0 for the bare-metal ping
       firmware because it polls and sets `VRING_USED_F_NO_NOTIFY` (no kicks), 2000 for 2000
-      FreeRTOS messages (one write IRQ per kick). Still to do: PREEMPT and both with
-      PROVE_LOCKING + DEBUG_ATOMIC_SLEEP (needs a debug kernel on the board)
+      FreeRTOS messages (one write IRQ per kick). PREEMPT_RT with PROVE_LOCKING +
+      DEBUG_ATOMIC_SLEEP + gcov + FAILSLAB (`c22242e478f5`) 2026-11-07: full sweep all PASS,
+      `debug_locks: 1` at the end; fail-nth over every allocation of rproc start/stop/probe and
+      msgbox probe, 0 recovery failures, no splat from our drivers (the only WARNs are the core
+      `rproc_add()` use-after-free, TODO CORE-RPROC-ADD). The first boot found a KUnit fixture
+      bug that switched lockdep off (V4-LOCKDEP-KTEST, fixed). Coverage merged UML + board:
+      msgbox 98.52%, rproc 97.8% (V4-COV). Still to do: PREEMPT (non-RT) with lockdep
 - [ ] Owner board-tests the final series
 
 ## 3. Review (the v3 lessons)

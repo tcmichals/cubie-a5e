@@ -474,6 +474,18 @@ def check_kernel_dmesg_health(stage_name="Test", allowed_patterns=None):
             for err in filtered[:5]:
                 print(f"    \033[91m>> {err}\033[0m")
             return False, "\n".join(filtered[:3])
+    # Lockdep and debug-object reports name no call trace on their first line
+    _, out, _ = run_ssh(f"(cat {SWEEP_DMESG_LOG} 2>/dev/null; dmesg) | grep -E "
+                        f"'{KERNEL_SPLAT_RE}' | tail -n 10", timeout=10)
+    reports = [line.strip() for line in out.splitlines()
+               if line.strip() and not any(p in line for p in allowed_patterns)]
+    if lockdep_turned_off():
+        reports.append("lockdep is off (debug_locks: 0)")
+    if reports:
+        print(f"  \033[91m[KERNEL REPORT in {stage_name}]\033[0m")
+        for err in reports[:5]:
+            print(f"    \033[91m>> {err}\033[0m")
+        return False, "\n".join(reports[:3])
     return True, "Clean"
 
 def count_kunit_cases(rel_path):
@@ -485,20 +497,37 @@ def count_kunit_cases(rel_path):
         return None
 
 # Kernel log reports that make a run fail even when every KUnit case passed
-KERNEL_SPLAT_RE = r"WARNING:|BUG:|Oops|inconsistent lock state|possible circular locking|sleeping function called"
+KERNEL_SPLAT_RE = (r"WARNING:|BUG:|Oops|inconsistent lock state|possible circular locking|"
+                   r"possible recursive locking|sleeping function called|suspicious RCU usage|"
+                   r"trying to register non-static key|ODEBUG:")
 # A report belongs to us if it names a KUnit test thread or one of the drivers
 OUR_SPLAT_RE = re.compile(r"kunit_try_catch|sun55i|sunxi.rproc|msgbox|remoteproc")
 
 
+def lockdep_turned_off():
+    """
+    True when the kernel has PROVE_LOCKING but lockdep switched itself off. After
+    its first report (2026-11-07: a KUnit fixture locked an uninitialised mutex)
+    lockdep checks nothing more, so the rest of the run proves nothing about locking.
+    """
+    _, out, _ = run_ssh("grep -E 'debug_locks:' /proc/lockdep_stats 2>/dev/null", timeout=10)
+    m = re.search(r"debug_locks:\s*(\d+)", out)
+    return bool(m) and m.group(1) == "0"
+
+
 def find_kernel_splats():
     """
-    WARNING/BUG reports in the kernel log that come from a KUnit test thread or
-    from our drivers. KUnit does not fail a case that only triggers a warning
+    WARNING/BUG and lockdep reports in the kernel log that come from a KUnit test
+    thread or from our drivers. KUnit does not fail a case that only triggers a warning
     (2026-10-27: a test raised its IRQ with interrupts on, the kernel warned,
-    and every case still passed), so these are checked separately.
+    and every case still passed), so these are checked separately. Lockdep reports
+    put the call trace about ten lines below the headline, hence -A20.
     """
-    _, out, _ = run_ssh(f"dmesg | grep -A6 -E '{KERNEL_SPLAT_RE}'", timeout=10)
-    return [b.strip() for b in out.split("\n--\n") if b.strip() and OUR_SPLAT_RE.search(b)]
+    _, out, _ = run_ssh(f"dmesg | grep -A20 -E '{KERNEL_SPLAT_RE}'", timeout=10)
+    splats = [b.strip() for b in out.split("\n--\n") if b.strip() and OUR_SPLAT_RE.search(b)]
+    if lockdep_turned_off():
+        splats.append("lockdep is off (debug_locks: 0): an earlier report disabled it")
+    return splats
 
 
 def validate_kunit_tests():

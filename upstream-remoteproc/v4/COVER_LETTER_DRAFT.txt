@@ -50,7 +50,11 @@ with the same driver and test files:
   - PREEMPT_RT: rpmsg ping and stress (100k messages, 16 in flight)
     from DDR and SRAM, message box unbind/bind, 100 remoteproc
     stop/start cycles; no errors in dmesg.
-    TBD: PREEMPT, and both with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP.
+    The same with PROVE_LOCKING and DEBUG_ATOMIC_SLEEP: no reports.
+  - Every slab allocation in remoteproc start, stop and probe and in
+    message box probe failed once (fail-nth): each error path unwinds,
+    and the next attempt succeeds.
+    TBD: PREEMPT with PROVE_LOCKING.
   - On next-20261105, each patch on its own: W=1 with GCC 15.1 and
     clang 21.1, as modules, no warnings. On 7.1 also built in, with
     CONFIG_PM=n, and as COMPILE_TEST on 32-bit ARM.

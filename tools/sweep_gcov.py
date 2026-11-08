@@ -275,9 +275,29 @@ def main():
     u.add_argument("--build-dir", required=True)
     u.add_argument("--gcov-tool", default="gcov")
     u.add_argument("--out", required=True)
+    b = sub.add_parser("board", help="snapshot the counters on the board now (e.g. after "
+                                     "tools/fail_nth_drivers.sh), no reboot")
+    b.add_argument("--build-dir", required=True, help="O= dir of the gcov kernel on the board")
+    b.add_argument("--gcov-tool", default=None)
+    b.add_argument("--target", default="root@192.168.3.3")
+    b.add_argument("--label", default="board")
+    b.add_argument("--out", required=True)
     m = sub.add_parser("merge", help="combine coverage JSON files (sweep results or uml output)")
     m.add_argument("files", nargs="+")
     args = parser.parse_args()
+
+    if args.cmd == "board":
+        def run_ssh(cmd, timeout=30, report_timeout=True):
+            p = subprocess.run(["ssh", "-o", "BatchMode=yes", args.target, cmd],
+                               capture_output=True, text=True, timeout=timeout)
+            return p.returncode, p.stdout, p.stderr
+        cov = BoardCoverage(run_ssh, args.build_dir, args.gcov_tool)
+        cov.snapshot(args.label)
+        result = cov.report()
+        with open(args.out, "w") as f:
+            json.dump(result, f, indent=2)
+        print_report(result, f"ON THE BOARD ({args.label})")
+        return 0 if result.get("status") == "COLLECTED" else 1
 
     if args.cmd == "uml":
         cov = BoardCoverage(_local_reader(args.build_dir), args.build_dir, args.gcov_tool)
