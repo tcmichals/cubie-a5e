@@ -64,6 +64,11 @@ that order) or switch to the alternative already offered in the reply draft (dro
 from the binding; the firmware requests them through its resource table, leaving `memory-region`
 as `maxItems: 1`)?
 
+**Resolved 2026-11-08: owner chose A.** Description rewritten (7.1 `d685a4cd8d49`), folded into
+3/7 with the changelog line corrected: fold tip now `614ecedae5d7`, 3/7 `b7e96f74b2e1`, range-diff
+against `3eedd6a66aea` changes 3/7 only. `dt_binding_check` clean; checkpatch as before. The 3/7
+reply cites `xlnx,zynqmp-r5fss`; whether it goes before or after v4 is the next discussion.
+
 ### Low findings (cleanups, no behaviour change)
 
 | ID | Patch | Finding | Fix |

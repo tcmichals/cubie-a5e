@@ -41,6 +41,13 @@ comment.
 > `qcom,milos-pas.yaml`. Positional list: `trace` needs `dram` before it (the driver does not
 > care; only index 0 must be the pool). Fallback if rejected a third time: drop `dram`/`trace`
 > from DT and use resource-table carveouts (conflicts with D7, owner to decide then).
+>
+> **Owner, 2026-11-08 (/kreview K-1, option A):** keep `minItems: 1`, fix the description so it
+> matches the schema and the driver: no `memory-region` for firmware that runs only from the
+> SRAMs without virtio; when present, the pool first, then `dram`, then `trace`. 7.1
+> `d685a4cd8d49`, folded into v4 3/7. Closest precedent: `xlnx,zynqmp-r5fss.yaml` (`r5f@` child
+> node), `minItems: 1` with positional items and optional virtio regions after the firmware
+> region. `[vram, trace]` stays invalid (needs `dram` before it).
 
 The binding lists the `memory-region` items in order: `vram` (the DMA pool, index 0), then
 `dram`, then `trace`, with matching `memory-region-names`. Krzysztof asked for listed items
