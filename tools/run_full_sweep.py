@@ -566,6 +566,9 @@ def validate_kunit_tests():
     total_executed = 0
 
     for suite_name, meta in suites_info.items():
+        # KUnit built as modules (CONFIG_*_KUNIT_TEST=m): loading the module runs the suite
+        run_ssh(f"[ -d /sys/kernel/debug/kunit/{suite_name} ] || modprobe {suite_name}_kunit 2>/dev/null",
+                timeout=60)
         # Attempt 1: Read results from debugfs
         code, out, _ = run_ssh(f"cat /sys/kernel/debug/kunit/{suite_name}/results 2>/dev/null", timeout=10)
         source = "debugfs"

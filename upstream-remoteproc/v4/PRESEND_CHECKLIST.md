@@ -22,9 +22,9 @@ did not run: no `ply` module on this host.
 
 ## 2. Tests
 
-- [ ] KUnit: both suites built in and as modules, and under UML (`kunit.py run`) — built in on the board 2026-11-07 (`da2fdad67e0d`, 7.1 PREEMPT_RT, image md5 4d7089db): sun55i_msgbox 37/37, sunxi_rproc 23/23, nothing skipped (the UML skip needs SMP, which the board has). UML 65 pass / 1 skip on the fold. Modules on the board still to do
+- [x] KUnit: both suites built in and as modules, and under UML (`kunit.py run`) — built in on the board 2026-11-07 (`da2fdad67e0d`, 7.1 PREEMPT_RT, image md5 4d7089db): sun55i_msgbox 37/37, sunxi_rproc 23/23, nothing skipped (the UML skip needs SMP, which the board has). UML 65 pass / 1 skip on the fold. As modules on the board (PREEMPT kernel): `modprobe` twice, 37/37 and 23/23 each time, clean `rmmod`
 - [x] New KUnit cases for V3-S2, S3, S4, S5 fail on the v3 code and pass on v4 — 2026-11-07, `77398ba801c3`, UML: each fix reverted inside v4 (the v4 tests do not compile against v3). Baseline all pass; S2 (`-EBUSY` on full) 6 fail incl. `test_held_message_dropped_after_timeout`; S3 (no latched-status clear) `test_tx_irq_armed_after_every_send`; S4 (no shutdown flag) `test_tx_irq_send_during_shutdown_refused`; S5 (no `RPROC_RUNNING` check) `test_vq_work_notifies_every_vring`. The S3 lock-section race itself needs two CPUs: code review only
-- [ ] Board (Cubie A5E): rpmsg ping + stress, mailbox unbind/bind, rproc stop/start loop,
+- [x] Board (Cubie A5E): rpmsg ping + stress, mailbox unbind/bind, rproc stop/start loop,
       under PREEMPT_RT and PREEMPT with PROVE_LOCKING + DEBUG_ATOMIC_SLEEP: no splat —
       PREEMPT_RT without lock debugging done 2026-11-07: full sweep all 3 profiles PASS (rpmsg
       ping 1000 and stress 100k/16 in flight on DDR and SRAM, FreeRTOS, UIO, msgbox unbind/bind,
@@ -37,7 +37,7 @@ did not run: no `ply` module on this host.
       msgbox probe, 0 recovery failures, no splat from our drivers (the only WARNs are the core
       `rproc_add()` use-after-free, TODO CORE-RPROC-ADD). The first boot found a KUnit fixture
       bug that switched lockdep off (V4-LOCKDEP-KTEST, fixed). Coverage merged UML + board:
-      msgbox 98.52%, rproc 97.8% (V4-COV). Still to do: PREEMPT (non-RT) with lockdep
+      100% line coverage of both drivers (V4-COV, `review/COVERAGE_20261107.md`). PREEMPT (non-RT) + PROVE_LOCKING + DEBUG_ATOMIC_SLEEP + DEBUG_OBJECTS, KUnit as modules: full sweep 42/42 PASS, 100 stop/start cycles 0 failures, `debug_locks: 1`, no reports
 - [ ] Owner board-tests the final series
 
 ## 3. Review (the v3 lessons)
