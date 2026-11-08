@@ -16,27 +16,25 @@ The kernel test robot's v3 7/7 report (PM=n build error) gets no reply either: v
 ## 1. Krzysztof, v3 3/7 (remoteproc binding)
 In-Reply-To: `<20261102-warping-victorious-shrew-7cee1e@quoll>`
 
-Owner 2026-11-08: option A (keep `minItems`, description fixed). This one is a disagreement,
-so it gets a reply. **Open (follow-up discussion):** send it on v3 before v4 (so he can say no
-before v4) or after v4 with the link, as below.
+Owner 2026-11-08: option A (keep `minItems`, description fixed). **Not a disagreement:** v3 did
+not make the reason clear and v4 fixes that. The reply restates the why, so his comment is
+visibly answered and we do not get "you are not listening". No alternatives offered.
 
 ```text
 On Mon, Nov 02, 2026 at 11:19:54AM +0100, Krzysztof Kozlowski wrote:
 > and here, same comments as for v2.
 
-Sorry, I missed these again in v3.
+Sorry, v3 did not explain why memory-region can have fewer than three
+entries. v4 fixes that.
 
-I should have said why the regions are optional, and the binding did
-not say it either. They depend on the firmware, not on the SoC:
-firmware that runs only from the two SRAMs and does not use virtio
-needs none. When the property is present, the first region is always
-the vring and buffer pool; a DRAM region for firmware code and data,
-and then a trace buffer, may follow in that order. v4 says this in the
-binding. xlnx,zynqmp-r5fss does the same for its optional virtio
-regions. If you prefer dram and trace gone from the binding, the
-firmware can request both through its resource table instead.
+The regions depend on the firmware loaded into the E906, not on the
+SoC. Firmware that runs only from the two SRAMs and does not use virtio
+needs none. Otherwise the first region is always the vring and buffer
+pool, followed by a DRAM region for firmware code and data and then a
+trace buffer, in that order. v4 says this in the binding description,
+the same way xlnx,zynqmp-r5fss describes its optional virtio regions.
 
-The crash interrupt is gone: the A523 has no line for it.
+The crash interrupt is dropped: the A523 has no line for it.
 
 <v4 lore link>
 
