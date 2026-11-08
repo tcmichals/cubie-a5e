@@ -24,8 +24,8 @@ visibly answered and we do not get "you are not listening". No alternatives offe
 On Mon, Nov 02, 2026 at 11:19:54AM +0100, Krzysztof Kozlowski wrote:
 > and here, same comments as for v2.
 
-Sorry, v3 did not explain why memory-region can have fewer than three
-entries. v4 fixes that.
+Yes, v3 did not explain why memory-region can have fewer than three
+entries. v4 does.
 
 Which regions are needed depends on how the firmware loaded into the
 E906 is built, not on the SoC:
