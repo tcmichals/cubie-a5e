@@ -2,10 +2,12 @@
 BR2_aarch64=y
 BR2_cortex_a55=y
 
-# Bleeding-Edge External Toolchain (Required for Linux 7.1 compliance)
-BR2_TOOLCHAIN_EXTERNAL=y
-BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
-BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_BLEEDING_EDGE=y
+# Buildroot toolchain: GCC 16 (C++26, -freflection), glibc, Linux 7.1 headers
+BR2_TOOLCHAIN_BUILDROOT=y
+BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
+BR2_KERNEL_HEADERS_7_1=y
+BR2_GCC_VERSION_16_X=y
+BR2_TOOLCHAIN_BUILDROOT_CXX=y
 
 # Target System Global Parameters
 BR2_TARGET_GENERIC_HOSTNAME="cubie-a5e-flight"
