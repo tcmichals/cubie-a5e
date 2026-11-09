@@ -81,6 +81,15 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=GB10 --stream-mmap --stream-count=90`.
     Verified on silicon: 1080p @ **30.00 FPS** (`vblank=79`, `VTS=1159` for physical 24 MHz sensor crystal) continuous streaming with 0 frame drops, 0 errors, and all 1080 scanlines populated with valid Bayer pixel data.
   - [x] Verify userspace camera capture & demosaicing on target via `/usr/bin/a7a-cam-capture -o /tmp/test_1080p.ppm` and enable `CONFIG_DMABUF_HEAPS_CMA=y` + `libcamera` `cam` (`BR2_PACKAGE_LIBEVENT=y`) + `sun6i-csi` Software ISP.
+- [ ] **Next A7A board session (same image as the camera work): E902 without the vendor SCP** (Part II §5, SCP-1/SCP-2; added 2026-11-09):
+  - Why: vendor U-Boot (`radxa-cubie-a7a_defconfig`: `CONFIG_SUNXI_ARISC_EXIST=y`, `CONFIG_ARISC_DEASSERT_BEFORE_KERNEL=y`) asks BL31 to start the arisc (SMC `0x8000ff10`, `arch/arm/lib/bootm.c:387`) right before the kernel; BL31 keeps R_SPC port 3 secure for it. We use Radxa's prebuilt U-Boot, so the arisc is stopped by dropping `scp` from the boot-package FIT instead (that step was lost in `4a276a2`). Nobody has a boot log showing what stock BL31 does when U-Boot asks for an arisc that is not there. Needed before sending the TF-A list question.
+  - [ ] SCP-1: restore the FIT `loadables` edit in `post-image.sh` (fail the build if the line is not found); keep the port-3 patch.
+  - [ ] Read back the FIT in the built `radxa_a733_bootloader.bin`: no `scp` in `loadables`.
+  - [ ] Boot with serial console: Linux comes up, no `[SCP] :arisc startup ready`. Save what BL31 prints when U-Boot calls `ARM_SVC_ARISC_STARTUP` (error and continue, or hang in `wait arisc ready`).
+  - [ ] PMIC rails still fine without the arisc: USB hub, AIC8800 Wi-Fi, camera all come up.
+  - [ ] E902 remoteproc: start/stop firmware 10 times, run `tools/run_full_sweep.py --target a7a`.
+  - [ ] `reboot` works; `poweroff` really cuts power (vendor U-Boot's own power-off starts the arisc first, `board_sun60iw2.c:40`); try suspend (expected unsupported) and record what happens.
+  - [ ] Record results in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` (Milestone 20) and `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.B/§6.E.
 - [ ] **Allwinner Hardware ISP 5.22 Integration**:
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/vin/vin-isp/` (`isp522/`, `sunxi_isp.c`, and default hardware tables in `isp_default_tbl.h`).
