@@ -1129,6 +1129,10 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
 - [x] **Silicon & Security Discovery**:
   - [x] Identified co-processor as XuanTie E902 (distinct from A5E's E906).
   - [x] Stock BL31 write-protects `0x07032204` for factory `scp.fex`.
+  - [x] Why (corrected 2026-11-09): the lock is intentional, not an omission. Vendor BL31 owns the E902 as its arisc/SCP power-management core: it loads `scp.fex`, releases reset and talks to it over hwmsgbox (strings in stock `bl31.bin`). See `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` Milestone 20.
+  - [ ] SCP-1: check whether our A7A image still packs `/images/scp` with the port-3 patch applied. If it does, BL31 starts the arisc and Linux remoteproc then takes the core away from it.
+  - [ ] SCP-2: on the board, with the SCP removed and port 3 open, test PSCI suspend, power-off and reboot on the stock BL31. The `sunxi_native_pm.c` fallback in the architecture doc §6.A is not in the stock Radxa BL31.
+  - [ ] SCP-3: for any other image that "works without a BL31 patch" (Orange Pi BL31 used by Armbian sun60iw2, mainline-style TF-A), check both that it opens port 3 and that it does not start the arisc.
 - [x] **Dual-Mode Operating Model**:
   - **Mode 1 (Suspend/Resume)**: Stock TOC1 with `scp.fex` for consumer S3 deep sleep.
   - **Mode 2 (Real-Time Control / Linux RemoteProc)**: 24/7 industrial real-time control without suspend/resume.

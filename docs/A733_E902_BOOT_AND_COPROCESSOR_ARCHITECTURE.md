@@ -34,7 +34,7 @@ Unlike the Allwinner T527 / A523 which features a XuanTie E906 core with a singl
 | **On-Chip SRAM** | 256 KB Dedicated MCU SRAM (`0x07280000`) | **208 KB System SRAM A2 (`0x00040000`–`0x00073FFF`)** |
 | **CFG Register Base** | `0x07130000` (`MCU_CFG`) | **`0x07032000` (`E902_CFG`)** |
 | **Start Vector Register**| `0x07130204` (`STA_ADD`) | **`0x07032204` (`STA_ADD`)** |
-| **TrustZone Firewall** | **Open Non-Secure** (Directly writable in EL1) | **Secure-Gated by default** in factory BL31 |
+| **TrustZone Firewall** | **Open Non-Secure** (Directly writable in EL1) | **Secure-only by design** in vendor BL31: the E902 runs the vendor SCP (arisc) power-management firmware (see §3.A) |
 
 ---
 
@@ -44,7 +44,9 @@ Unlike the Allwinner T527 / A523 which features a XuanTie E906 core with a singl
 The start address register `0x07032204` defines the instruction fetch entry point of the E902 upon reset:
 * **Hardware Readback**: In stock bootloader configurations, reading `0x07032204` returns **`0x40014000`**.
 * **DRAM Offset**: In Allwinner SPL architecture (`sun60iw2p1.h`), `SCP_CODE_DRAM_OFFSET` is `0x14000`. With DRAM mapped at `0x40000000`, this equals `0x40014000`.
-* **Default BL31 Lockout**: In factory ARM Trusted Firmware (BL31), `0x07032000` is mapped in the Secure World. Writes from Non-Secure Linux EL1 are filtered by the interconnect firewall unless BL31 is unlocked (see §5).
+* **Default BL31 Lockout (intentional)**: In vendor ARM Trusted Firmware (BL31), `0x07032000` is mapped in the Secure World. Writes from Non-Secure Linux EL1 are filtered by the interconnect firewall unless BL31 is unlocked (see §5).
+* **Why it is locked**: in the vendor design the E902 is not a free coprocessor. It is the power-management core (Allwinner "arisc"/SCP). BL31 itself loads `scp.fex` into the E902, releases its reset and talks to it over the hardware msgbox, and uses it for idle/suspend clock and power gating and PMIC control. The stock Radxa `bl31.bin` (`device-a733/bin/bl31.bin` in the vendor BSP) contains the strings `[SCP] :load arisc image finish`, `[SCP] :set arisc reset to de-assert state`, `[SCP] :release arisc reset finish`, `[SCP] :hwmsgbox initialize` and `[SCP] :wait arisc ready....`, and `device-a733/configs/default/boot_package.cfg` packs `item=scp, scp.fex`. Leaving R_SPC port 3 secure keeps Linux from touching the core the secure world owns. It is a design choice, not an omission (corrected 2026-11-09; earlier text called it "missing").
+* **Consequence**: opening port 3 alone gives the E902 two owners. If BL31 still loads `scp.fex`, Linux remoteproc stops and reloads the core the secure world depends on for suspend/idle/power-off. Mode 2 therefore needs **both** the port opened **and** the SCP removed from the boot package (and BL31 not starting arisc), not the port patch alone.
 
 ---
 
@@ -218,6 +220,7 @@ To allow Linux `remoteproc` to write `0x07032204` and load code into System SRAM
    ```
 2. **Native Power Management Fallback**:
    When `scp.fex` is absent, TF-A detects that SCPI is unavailable and falls back to `sunxi_native_pm.c` (direct watchdog reset and CPU power gating without requiring SCP).
+   **Unverified (2026-11-09)**: the stock Radxa `bl31.bin` has no `sunxi_native_pm.c` path string, only `plat/allwinner/sun60iw2p1/plat_pm.c`. What the stock BL31 does for PSCI suspend, power-off and reset when the arisc is absent or has been taken over by Linux has not been tested on the board.
 
 ---
 

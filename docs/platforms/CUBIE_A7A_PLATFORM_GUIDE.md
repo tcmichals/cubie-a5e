@@ -234,8 +234,8 @@ sudo dd if=$PWD/bld.a7a/images/sdcard.img of=/dev/sdX bs=4M status=progress conv
 
 The Allwinner A733 features an integrated **T-Head XuanTie E902** 32-bit RISC-V core (`RV32EMC`) operating in the Always-On (`R_`) power management domain at 200 MHz.
 
-* **Mode 1 (Vendor Default)**: `scp.fex` loaded into SRAM A2 (`0x00040000`) by TF-A / U-Boot at EL3 before Linux boots; acts as CPUS firmware for S3 Suspend-to-RAM.
-* **Mode 2 (Mainline Linux RemoteProc)**: Enabled via the `allwinner,sun60i-a733-rproc` driver, dynamic Device Tree Overlay (`cubie-a7a-rproc.dtbo`), and automated BL31 security un-gating (`patch_bl31_security.py`). Allows loading custom bare-metal or RTOS firmware (`exampleRiscv.elf`) dynamically from `/lib/firmware/` with hardware mailbox IPC and virtio rpmsg.
+* **Mode 1 (Vendor Default)**: `scp.fex` loaded into SRAM A2 (`0x00040000`) by TF-A / U-Boot at EL3 before Linux boots; acts as CPUS firmware for S3 Suspend-to-RAM. This is why vendor BL31 keeps the E902 configuration block (R_SPC port 3) secure: the secure world owns the core and uses it to gate clocks and power when idle or suspended (see `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §3.A).
+* **Mode 2 (Mainline Linux RemoteProc)**: Enabled via the `allwinner,sun60i-a733-rproc` driver, dynamic Device Tree Overlay (`cubie-a7a-rproc.dtbo`), and automated BL31 security un-gating (`patch_bl31_security.py`). Allows loading custom bare-metal or RTOS firmware (`exampleRiscv.elf`) dynamically from `/lib/firmware/` with hardware mailbox IPC and virtio rpmsg. Opening port 3 is only half of Mode 2: the vendor SCP must also be removed from the boot package, or Linux and BL31 both own the E902.
 
 > [!TIP]
 > For the complete, authoritative step-by-step procedure to rebuild the RISC-V firmware, compile the Linux remoteproc driver, patch TF-A BL31, package the SD card image, and verify hardware execution on silicon, refer to the dedicated guide:

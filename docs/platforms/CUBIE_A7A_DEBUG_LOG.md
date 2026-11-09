@@ -1367,7 +1367,9 @@ Binary analysis of `radxa_a733_bootloader.bin` uncovered the exact boot chain:
     480131c0: str   w0, [x1]                  ; Un-gate R_SPC Port 0
     480131c4: str   w0, [x1, #16]             ; Un-gate R_SPC Port 1 (0x07002014)
     480131c8: str   w0, [x1, #32]             ; Un-gate R_SPC Port 2 (0x07002024)
-    ; MISSING: R_SPC Port 3 (0x07002034) was omitted, locking 0x07032000!
+    ; R_SPC Port 3 (0x07002034) left secure ON PURPOSE: the E902 is the
+    ; secure world's arisc/SCP power-management core (corrected 2026-11-09,
+    ; see Milestone 20). Earlier text called this an omission.
     480131cc: mov   x1, #0x290
     ```
 
@@ -1584,7 +1586,7 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
 #### 3. Full-Stack Boot Chain Enablement (TF-A BL31, U-Boot, and Linux Kernel)
 * **ARM Trusted Firmware (TF-A BL31) TrustZone Un-Gating**:
   - The XuanTie E902 start vector register (`E902_STA_ADD_REG` @ `0x07032204`) sits within the Always-On CPUS address domain.
-  - In stock vendor BL31 images, the Security Peripheral Controller (`R_SPC`) and TrustZone Memory Adapter (`R_TZMA`) lock down Port 3 to Secure EL3 access only. Reads or writes from Linux Non-Secure EL1 result in immediate external aborts (SError).
+  - In stock vendor BL31 images, the Security Peripheral Controller (`R_SPC`) and TrustZone Memory Adapter (`R_TZMA`) lock down Port 3 to Secure EL3 access only, on purpose: BL31 owns the E902 as its arisc/SCP power-management core (see Milestone 20). Reads or writes from Linux Non-Secure EL1 result in immediate external aborts (SError).
   - Reverse engineering identified the BL31 security configuration routine. We patched the security initialization trampoline at sector 2804 (byte offset `0x15e96c` on `/dev/mmcblk0`) from `0x140008ea` to `0x48015570`. This un-gates `R_SPC` Port 3 during early EL3 boot, permitting standard Linux Non-Secure EL1 driver execution without requiring custom runtime SMC traps.
 * **Das U-Boot Dynamic Multi-Overlay Architecture**:
   - Confirmed that U-Boot source code requires **zero modifications** for A7A RemoteProc.
@@ -1841,3 +1843,17 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
 
 
 
+
+---
+
+## 9. Milestone 20: Correction — Why Vendor BL31 Keeps the E902 Secure (Nov 9, 2026)
+
+- **Correction**: Milestone 11 described R_SPC port 3 (`0x07002034`, E902 configuration block `0x07032000`) as "missing" or "omitted" from the vendor BL31 `sunxi_security_setup`. That was wrong. The port is left secure **on purpose**: in the vendor design the E902 is the secure world's power-management core (Allwinner "arisc"/SCP). BL31 uses it to gate clocks and power when idle or suspended and to control the PMIC.
+- **Evidence (vendor BSP, no board needed)**:
+  - The stock Radxa `bl31.bin` (`device-a733/bin/bl31.bin`) contains an arisc driver: `[SCP] :sunxi-arisc driver is starting`, `[SCP] :load arisc image finish`, `[SCP] :set arisc reset to de-assert state`, `[SCP] :release arisc reset finish`, `[SCP] :hwmsgbox initialize`, `[SCP] :wait arisc ready....`, `[SCP] :arisc version: [%s]`. BL31 loads the image into the E902, releases its reset, and talks to it over the hardware msgbox.
+  - `device-a733/configs/default/boot_package.cfg` packs `item=scp, scp.fex` next to `monitor.fex` (BL31).
+  - The boot package FIT in `radxa_a733_bootloader.bin` has an `/images/scp` image (Milestone 11 §2).
+- **Consequence for Mode 2 (Linux remoteproc)**:
+  - Opening port 3 is not enough. If `scp.fex` is still in the boot package, BL31 starts the arisc at boot and then relies on it; Linux remoteproc stopping and reloading the E902 takes the core away from the secure world. Mode 2 needs the SCP removed from the boot package and BL31 not starting the arisc, as well as port 3 opened.
+  - Whether our current A7A image still ships `/images/scp` with the port-3 patch applied, and what PSCI suspend / power-off / reset do in the stock BL31 once the arisc is gone, has **not been checked**. The `sunxi_native_pm.c` fallback in `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.A is not in the stock Radxa BL31 (its only platform PM file is `plat/allwinner/sun60iw2p1/plat_pm.c`).
+- **Other boards and builds**: a BL31 that opens port 3 (another vendor's build or a mainline-style TF-A) only works with Linux remoteproc if it also does not use the E902 as its SCP. "Someone else's image works without a BL31 patch" therefore says nothing until we know whether that image runs the arisc.
