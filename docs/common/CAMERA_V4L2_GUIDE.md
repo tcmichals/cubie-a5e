@@ -85,7 +85,7 @@ v4l2-ctl -d /dev/video0 \
 
 **Status (2026-11-09):** not started. The verified pipeline is OV5647 → MIPI CSI-2 → CSI bridge → `/dev/video0` raw `SGBRG10` 1080p @ 30.00 fps (CUBIE_A7A_DEBUG_LOG.md Milestone 19). Debayering is done by the libcamera Software ISP (`0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`).
 
-Progress is tracked in TODO.md (Part I §2, "A733 Hardware ISP"). This section is the plan; TODO.md only holds the phase checkboxes.
+The step-by-step checklist (Phases 0–4, steps 0.1–4.6) is in TODO.md (Part I §2, "A733 Hardware ISP"), the project's only tracker. This section holds the rules, the facts and each phase's exit criteria.
 
 ### 5.1 Rules
 1. Phases run in order. A phase starts only when the previous phase's exit criteria have passed **on the board** and the result is recorded in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
@@ -103,6 +103,9 @@ Progress is tracked in TODO.md (Part I §2, "A733 Hardware ISP"). This section i
 | Settings path | Driver writes register values and tables into a DRAM "load" buffer; hardware fetches it (`bsp_isp_set_load_addr()`, `PARA_LOAD_INT_EN`). `ISP_LOAD_REG_SIZE` `0x1000`; `ISP_LOAD_DRAM_SIZE` `0xAF40` or `0x7700` depending on config | `vin-isp/isp600/isp600_reg_cfg.h:32-36,172,377` |
 | Statistics path | Hardware writes 3A statistics to DRAM (`bsp_isp_set_statistics_addr()`), `ISP_STAT_TOTAL_SIZE` `0x6a00` | `isp600_reg_cfg.h:48-51,389` |
 | Default settings | `isp_default_reg[]` and tables | `vin-isp/isp_default_tbl.h:32` |
+| VIN top / routing | CSI_TOP `0x05800800`; VIPP (scalers) `0x05910000`–`0x05910C00`; CSI DMA `0x05830000`–`0x05835000` | `platform/sun60iw2_vin_cfg.h:18-37` |
+| IOMMU masters | ISP = master 2, CSI = master 1; mainline `sun50i-iommu.c` has no A733 support | `platform/sun60iw2_vin_cfg.h:52-53` |
+| Mainline CSI ↔ ISP link | `sun6i-csi` already supports an ISP on a DT graph port (`SUN6I_CSI_PORT_ISP`, `sun6i_csi_isp_detect()`); the ISP then owns the media device | `drivers/media/platform/sunxi/sun6i-csi/sun6i_csi.c:40-63,336-346` |
 | Mainline reference | `drivers/staging/media/sunxi/sun6i-isp` (V3s ISP, ~2,400 lines): driver structure only, different hardware, no statistics node | `linux-cubie` |
 
 ### 5.3 Phases
