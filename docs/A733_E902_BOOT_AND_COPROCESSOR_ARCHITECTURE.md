@@ -288,6 +288,25 @@ Because the E902 is RV32E, firmware applications must be built targeting:
 
 ---
 
+### E. Checklist for Other Distributions (Armbian, Debian, Yocto, ...)
+
+Linux remoteproc on the A733 E902 does not work with a stock vendor boot chain, whatever distribution sits on top. Any distribution that wants it has to make the same two boot-firmware changes we make; only the way it makes them can differ.
+
+| # | Requirement | Why | Our way (reference) | Other ways |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | BL31 must **not start the arisc** | Otherwise the secure world owns the E902 and Linux takes it away (two owners) | Drop `"scp"` from the boot-package FIT `loadables` (§6.B; SCP-1) | Leave `scp` out of `boot_package.cfg` when packing with `dragonsecboot`; a TF-A build without the arisc driver |
+| 2 | **R_SPC port 3** (`0x07002034`) non-secure | Linux must write `E902_STA_ADD_REG` (`0x07032204`); otherwise SError | Binary trampoline in stock BL31 (`patch_bl31_security.py`, §6.A) | One `mmio_write_32()` in a TF-A built from source; a vendor BL31 that already opens it |
+| 3 | Accept no arisc power management | Suspend/idle/PMIC paths that used the arisc are gone; PSCI behaviour without it is unverified (SCP-2) | Mode 2 runs without suspend; Linux drives the PMIC over `s_twi0` | Test suspend, power-off and reboot on that BL31 build |
+| 4 | Kernel driver and DT | — | `allwinner,sun60i-a733-rproc` in `sunxi_rproc.c`, `cubie-a7a-rproc.dtbo` | — |
+
+**Do not assume** from "it boots" or "remoteproc starts" that a BL31 is suitable. Both checks below must pass on the image the distribution ships:
+1. The serial log shows no `[SCP]` lines (`[SCP] :arisc startup ready` means requirement 1 is not met).
+2. With the remoteproc clock on and reset released, reading `0x07032204` from Linux does not abort (requirement 2).
+
+Each vendor builds its own BL31 (Radxa, Orange Pi, ...), so check these for every BL31 build, not once per SoC.
+
+---
+
 ## 7. Comparison Matrix: Mode 1 vs. Mode 2
 
 | Feature / Subsystem | Mode 1: Suspend/Resume (`scp.fex`) | Mode 2: Linux RemoteProc (Real-Time Control) |
