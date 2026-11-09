@@ -200,4 +200,27 @@ Write-up of what differs between the two chips for the camera path, kept up to d
 
 **Pattern so far:** the register map is the same; interrupt numbers move (T527 is 4–5 higher), the ISP's IOMMU master differs, and the T527 has one more CSI/MIPI receiver. The backport should mostly be per-SoC data, not new code; Phase 0 and 6.1 confirm or break that.
 
+---
+
+## 7. Driver Sources, Our Changes and Open Fixes (A733 first)
+
+Where each piece of the camera path comes from, what we changed, and what still has to be fixed before it can go upstream. Kernel tree: `linux-cubie`, branch `a7a_remoteproc_camera_usb`. History of each fix: `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` Milestones 16, 17, 19 and the Nov 1 handoff. The T527 column of §6 says which of these are expected to apply to the A5E.
+
+| Piece | File(s) | Source | Our changes (commit) | Board status | Still to fix |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Sensor OV5647 | `drivers/media/i2c/ov5647.c` | Mainline | `ov5647_set_pad_fmt()` now writes `hblank` (`928a9c657b3f`, fixes 24 fps cap); 1080p default mode, VTS `0x487` (`eb680fc2b40b`) | 1080p30 verified | Send the `hblank` fix upstream on its own (real mainline bug). Changing the driver's default mode is board policy, not upstreamable. The driver insists on a 25 MHz clock but the module crystal is 24 MHz, so the reported pixel rate is 4% high; needs a proper fix (24 MHz support or a correct clock description) |
+| MIPI D-PHY | `drivers/phy/allwinner/phy-sun55i-a523-mipi-dphy.c` | **New, written by us** (`bf888f8962eb`) | Programs combo-top `0x05810000`: LDO, VREF, termination calibration | Works (dphy1) | DT binding; upstream review; not tried on the T527 |
+| MIPI CSI-2 receiver | `drivers/media/platform/sunxi/sun6i-mipi-csi2/` | Mainline + A523/A733 support added by us (`bf888f8962eb`, +282 lines) | OUT_NUM only for >2 lanes (`928a9c657b3f`); format defaults (`eb680fc2b40b`) | Works (mipi1, 2 lanes) | Split into upstreamable patches; binding compatible |
+| CSI controller / DMA | `drivers/media/platform/sunxi/sun6i-csi/sun55i_a523_csi.c` (new, 471 lines) + `sun6i_csi.c` | **New file by us** on the mainline `sun6i-csi` driver (`bf888f8962eb`) | Ungates CSI-internal clocks at `0x05800000`, CSI_TOP enable, parser 1 routing, parser reset toggle (`928a9c657b3f`) | Works | Parser 1 routing is fixed in code; must come from the DT graph. Review against the vendor `top_reg.c` in ISP Phase 0.5 |
+| CSI bridge | `sun6i_csi_bridge.c` | Mainline | Default format at setup, SINK/SOURCE pads mirrored, NULL-state guard (`bf888f8962eb`, `928a9c657b3f`) | Works | The NULL-state guard hides a caller passing no state; find the real cause before upstream |
+| Capture node | `sun6i_csi_capture.c` | Mainline | Default 1920×1080 SGBRG10 (`eb680fc2b40b`) | Works | Default-format change is board policy; drop for upstream |
+| Clocks | `drivers/clk/sunxi-ng/ccu-sun60i-a733.c` | Our A733 CCU driver | CSI clocks added (`bf888f8962eb`); CSI_TOP `0x1840` and ISP `0x1860` set to 600 MHz in code (`928a9c657b3f`); blind CSI gate unmask removed (`ce747fed491f`) | Works | 600 MHz should be set from DT (`assigned-clock-rates`), not hard-coded |
+| Power domain | DTS `power-domains = <&pck600 PD_VI>` on dphy1/mipi1/csi | Our PCK600 driver | Added after genpd powered VI off (Milestone 17/18 log) | Works | — |
+| Device tree | `sun60i-a733-cubie-a7a.dts`; overlay `project-cubie-a5e/dts-overlay/allwinner/cubie-a7a-ov5647.dtso` | Ours | i2c3 + pins (`9d77ea5d3106`); dphy1, mipi1, csi nodes (`bf888f8962eb`); overlay with 25 MHz `camera-clk` | Works | Bindings for the new compatibles; clock value (see OV5647 row) |
+| ISP | — | **None yet**; vendor reference `vin-isp/isp600/` | — | — | §5 plan (Phases 0–4) |
+| IOMMU | — | None; mainline `sun50i-iommu.c` has no A733 support | — | CSI DMA works without it | ISP Phase 0.7 |
+| Userspace | libcamera simple pipeline + `0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`; `/usr/bin/a7a-cam-capture` | libcamera (Buildroot) + our patch and tool | Software ISP enabled for `sun6i-csi` | Works | Replace the Software ISP (§5 Phase 4) |
+| H.264 encoder | — | None yet | — | — | §5 Phase 5 |
+
+**Branch state:** `928a9c657b3f` is a WIP commit that also contains a watchdog change (`sunxi_wdt.c`); split it before any of this is prepared for upstream. Commits carry no `Signed-off-by` (the owner adds his own).
 
