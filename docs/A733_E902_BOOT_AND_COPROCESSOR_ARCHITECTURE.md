@@ -1,7 +1,7 @@
 # Allwinner A733 (sun60iw2) XuanTie E902 Boot & Coprocessor Architecture
 
-**Document Version:** 2.0  
-**Date:** September 6, 2026  
+**Document Version:** 2.1  
+**Date:** November 9, 2026 (2.0: September 6, 2026)  
 **Target SoCs / Boards:** Allwinner A733 / sun60iw2 (Radxa Cubie A7A, Banana Pi A733, Radxa Cubie A7Z)  
 **Author / Integration:** Embedded Real-Time & Heterogeneous Compute Team  
 
@@ -17,6 +17,17 @@ This document provides the complete hardware, security, and boot architecture fo
 2. **Mode 2: Real-Time Embedded Control (Linux `remoteproc`)**
    - Industrial automation, robotics, deterministic I/O, and real-time control where suspend/resume is disabled.
    - E902 is repurposed as an on-chip real-time coprocessor managed dynamically by the Linux `remoteproc` framework (`sunxi_rproc.c`) or loaded via custom boot firmware.
+
+The two modes are exclusive. In the vendor firmware the E902 belongs to the secure world: BL31 starts the vendor SCP firmware ("arisc") on it and uses it for power management, which is why BL31 keeps the E902 configuration block secure (§3.A). Mode 2 has to undo **both** halves: stop BL31 from starting the arisc, and open the configuration block to Linux.
+
+**How Mode 2 is built today (Cubie A7A Buildroot image):** we do not rebuild TF-A or U-Boot. `project-cubie-a5e/board/radxa/cubie_a7a/post-image.sh` takes the stock Radxa `radxa_a733_bootloader.bin` and applies two binary edits (§6):
+
+| Edit | What it does | Where | Status (2026-11-09) |
+| :--- | :--- | :--- | :--- |
+| Drop the SCP from the boot package | Boot-package FIT at sector 848: `loadables = "scp", "uboot";` → `loadables = "uboot";`, so the arisc is never started | added in commit `cf724ae` | **Lost**: commit `4a276a2` (2026-09-04) deleted the step. Restore: TODO.md Part II §5, SCP-1 |
+| Open R_SPC port 3 | Trampoline in BL31 `sunxi_security_setup` adds the port 3 write (`0x07002034`) | `patch_bl31_security.py`, commit `99fc419` | Applied |
+
+Until SCP-1 is fixed, images built since 2026-09-04 start the arisc **and** give Linux the E902: the core has two owners.
 
 ---
 
@@ -66,10 +77,10 @@ The start address register `0x07032204` defines the instruction fetch entry poin
                    ▼                                                           ▼
        [ MODE 1: Suspend / Resume ]                                [ MODE 2: Real-Time RemoteProc ]
   ┌─────────────────────────────────────┐                     ┌─────────────────────────────────────┐
-  │ • TOC1 contains scp.fex             │                     │ • TOC1 omits scp.fex                │
+  │ • TOC1 contains scp.fex             │                     │ • FIT loadables drop "scp"          │
   │ • Loads to 0x40014000 at power-on   │                     │ • E902 held in reset at boot        │
   │ • E902 manages AXP8191 PMIC (s_twi0)│                     │ • U-Boot/Linux controls AXP8191 PMIC│
-  │ • BL31 installs SCPI PSCI handlers  │                     │ • BL31 unlocks R_SPC & TZMA to NS   │
+  │ • BL31 installs SCPI PSCI handlers  │                     │ • BL31 patched: R_SPC port 3 to NS  │
   │ • Linux reserves 0x40014000 (no-map)│                     │ • Linux sunxi_rproc loads firmware  │
   │ • remoteproc node disabled in DTS   │                     │ • remoteproc node enabled in DTS    │
   └─────────────────────────────────────┘                     └─────────────────────────────────────┘
@@ -199,33 +210,24 @@ In Mode 2, the XuanTie E902 is repurposed as a **high-speed I/O Front-End and Ha
 
 When building embedded control systems, robotics, or industrial automation platforms that run 24/7 without suspend/resume, follow this blueprint across all firmware and kernel layers:
 
-### A. ARM Trusted Firmware (TF-A / BL31) Changes
-To allow Linux `remoteproc` to write `0x07032204` and load code into System SRAM A2 without bus aborts:
+### A. ARM Trusted Firmware (TF-A / BL31): Open R_SPC Port 3
 
-1. **Un-gate R_SPC and R_TZMA in `plat/allwinner/common/sunxi_security.c`**:
-   ```c
-   void sunxi_security_setup(void)
-   {
-       /* Configure R_SPC to grant Non-Secure access to CPUS / PRCM / R_PIO */
-       mmio_write_32(SUNXI_R_SPC_BASE + 0x04, 0xffffffff);
-       mmio_write_32(SUNXI_R_SPC_BASE + 0x14, 0xffffffff);
-       mmio_write_32(SUNXI_R_SPC_BASE + 0x24, 0xffffffff);
-       mmio_write_32(SUNXI_R_SPC_BASE + 0x34, 0xffffffff);
+**What the stock Radxa BL31 already opens** (disassembly of `sunxi_security_setup` at VA `0x48013180`, CUBIE_A7A_DEBUG_LOG.md Milestone 11): SPC ports 0..7 (`0x02054000`), R_TZMA registers 0/4/8 (`0x07003000`, so System SRAM A2 is already non-secure), and R_SPC ports 0, 1 and 2. It leaves **R_SPC port 3** (`0x07002034`) secure on purpose, because the E902 behind it (`E902_CFG` `0x07032000`, `E902_STA_ADD_REG` `0x07032204`) is the arisc it owns. Mode 2 only needs port 3.
 
-       /* Open System SRAM A2 (0x00040000 - 0x00078000) to Non-Secure world */
-       mmio_write_32(SUNXI_R_TZMA_BASE + 0, 0);
-       mmio_write_32(SUNXI_R_TZMA_BASE + 4, 0);
-       mmio_write_32(SUNXI_R_TZMA_BASE + 8, 0);
-   }
-   ```
-2. **Native Power Management Fallback**:
-   When `scp.fex` is absent, TF-A detects that SCPI is unavailable and falls back to `sunxi_native_pm.c` (direct watchdog reset and CPU power gating without requiring SCP).
-   **Unverified (2026-11-09)**: the stock Radxa `bl31.bin` has no `sunxi_native_pm.c` path string, only `plat/allwinner/sun60iw2p1/plat_pm.c`. What the stock BL31 does for PSCI suspend, power-off and reset when the arisc is absent or has been taken over by Linux has not been tested on the board.
+**What we do (binary patch, no TF-A rebuild)**: `patch_bl31_security.py` hooks the port 2 store at VA `0x480131c8` (file offset `0x15e96c` in `radxa_a733_bootloader.bin`) with a branch to a trampoline in alignment padding at VA `0x48015570`, which repeats the port 2 write, adds `str w0, [x1, #48]` (port 3), and branches back. The script is idempotent and runs from `post-image.sh`. (Its docstring still says port 3 was "omitted"; read that as "left secure on purpose".)
+
+**If you build TF-A from source instead**, the same change in `sunxi_security_setup()` is one more write:
+```c
+mmio_write_32(SUNXI_R_SPC_BASE + 0x34, 0xffffffff);   /* R_SPC port 3: E902_CFG */
+```
+A BL31 from another vendor (e.g. the Orange Pi build Armbian uses for sun60iw2) or a mainline-style TF-A may already open port 3. That only helps if the same build does not also start the arisc (§6.B).
+
+**Power management without the arisc (unverified)**: the stock Radxa BL31 has no `sunxi_native_pm.c`; its only platform PM file is `plat/allwinner/sun60iw2p1/plat_pm.c`. What PSCI suspend, power-off and reset do once the arisc is not running has not been tested on the board (TODO.md Part II §5, SCP-2). Mode 2 assumes no suspend.
 
 ---
 
 ### B. U-Boot & TOC1 Packaging Changes
-1. **Packaging**: Generate a TOC1 container without `scp.fex` (e.g. `radxa_a733_bootloader_rt.bin`).
+1. **Packaging**: Remove the SCP from the boot package so BL31 never starts the arisc. In our image this is a FIT edit in `post-image.sh` (sector 848 of `radxa_a733_bootloader.bin`): `loadables = "scp", "uboot";` → `loadables = "uboot";`, re-packed with `dtc` at the same offset (commit `cf724ae`). **This step is currently missing** (deleted in `4a276a2`; SCP-1). When restoring it, fail the build if the `loadables` line is not found (the old code silently did nothing), then check the serial log has no `[SCP]` lines.
 2. **PMIC Standalone Initialization**:
    Ensure U-Boot initializes the **AXP8191 PMIC** over I2C (`s_twi0` / `sunxi_r_i2c0` @ `0x07083000`):
    - Enable `DCDC1` (3.3V system power for USB hub, Wi-Fi, Ethernet).
@@ -291,10 +293,10 @@ Because the E902 is RV32E, firmware applications must be built targeting:
 | Feature / Subsystem | Mode 1: Suspend/Resume (`scp.fex`) | Mode 2: Linux RemoteProc (Real-Time Control) |
 | :--- | :--- | :--- |
 | **Primary Use Case** | Consumer Battery Devices (S3 Sleep) | **24/7 Embedded Control, Robotics, Real-Time I/O** |
-| **TOC1 Container** | Contains `scp.fex` | **Omits `scp.fex`** |
+| **Boot package** | FIT `loadables = "scp", "uboot"` | **FIT `loadables = "uboot"` (SCP-1: step currently lost)** |
 | **E902 Boot Time** | Starts at power-on (`boot0`) | **Starts dynamically from Linux (`remoteproc`)** |
 | **PMIC Control** | Handled by `scp.fex` over `s_twi0` (I2C) | **Handled directly by U-Boot / Linux I2C driver** |
-| **BL31 Security** | `0x07032204` locked in Secure World | **`R_SPC` & `R_TZMA` unlocked for Non-Secure EL1** |
+| **BL31 Security** | R_SPC port 3 secure (E902 owned by the arisc) | **R_SPC port 3 opened by binary patch; R_TZMA and ports 0–2 are already open in stock BL31** |
 | **DRAM Map** | `0x40014000` reserved (`no-map`) | **`0x4E000000` DMA pool / SRAM A2 (`0x00040000`)** |
 | **Linux RemoteProc** | Disabled (`status = "disabled"`) | **Enabled (`sunxi_rproc.c`)** |
 | **Firmware Toolchain**| Vendor binary | **Bare-metal C++ (`-march=rv32emc_zicsr -mabi=ilp32e`)** |
@@ -314,13 +316,14 @@ To safely repurpose the XuanTie E902 without power collapse or rail instability,
     • Vendor boot0 sets core DRAM voltages (DCDC2/3 = 0.9V, DCDC4 = 1.1V).
     • U-Boot initializes s_twi0 (0x07083000) directly:
       - Writes AXP8191 registers to latch DCDC1 = 3.3V, ALDO1 = 1.8V, ELDO1/2/4 ON.
-      - Never issues arm_svc_arisc_startup(); leaves E902 in reset.
+      - Boot-package FIT has no "scp" loadable, so BL31 never starts
+        the arisc and the E902 stays in reset (SCP-1: step currently lost).
 
  2. SECURE MONITOR (TF-A / BL31):
-    • Replaces SCPI communication with native CPU power controls (sunxi_native_pm.c).
-    • Configures R_SPC and R_TZMA to allow Non-Secure Linux EL1 access to:
-      - E902_CFG (0x07032000)
-      - System SRAM A2 (0x00040000)
+    • Stock Radxa BL31 with one binary patch: R_SPC port 3 opened so
+      Non-Secure Linux EL1 can access E902_CFG (0x07032000).
+    • System SRAM A2 (0x00040000) is already non-secure (stock R_TZMA setup).
+    • PSCI suspend/off/reset without the arisc: unverified (SCP-2).
 
  3. LINUX HOST KERNEL:
     • Binds s_twi0 to allwinner,sun6i-a31-i2c (NOT sun8i-a23-rsb).
@@ -338,5 +341,7 @@ To safely repurpose the XuanTie E902 without power collapse or rail instability,
 - [ ] **Task P.1 (U-Boot Bus Probe)**: Verify `s_twi0` bus ID in U-Boot (`i2c bus`), probe PMIC addresses `0x36` and `0x34`, and confirm register read/write works without ARISC.
 - [ ] **Task P.2 (DTS Bus Correction)**: In `0001-arm64-dts-allwinner-add-sun60i-a733-cubie-a7a.patch`, replace `r_rsb: rsb@7083000` with `s_twi0: i2c@7083000` (`allwinner,sun6i-a31-i2c`). This eliminates the `-110` timeout and brings up the AXP8191 regulator tree in Linux.
 - [ ] **Task P.3 (Fixed Voltage Stability)**: Lock CPU and system rails to standard high-performance operating points in Device Tree (`regulator-always-on`) so DVFS is not required during real-time flight operation.
-- [ ] **Task P.4 (TF-A Firewall Patch)**: In `bl31`, un-gate `R_SPC` and `R_TZMA` for non-secure access so `sunxi_rproc` can write `0x07032204` (`E902_STA_ADD_REG`) without bus fault.
+- [x] **Task P.4 (TF-A Firewall Patch)**: Open R_SPC port 3 so `sunxi_rproc` can write `0x07032204` (`E902_STA_ADD_REG`) without a bus fault. Done as a binary patch (`patch_bl31_security.py`, commit `99fc419`); R_TZMA needed no change.
+- [ ] **Task P.6 (Restore SCP removal)**: Put the FIT `loadables` edit back in `post-image.sh` (TODO SCP-1).
+- [ ] **Task P.7 (PSCI without arisc)**: Test suspend, power-off and reboot with the arisc not running (TODO SCP-2).
 - [ ] **Task P.5 (E902 Firmware Build)**: Target `-march=rv32emc_zicsr -mabi=ilp32e` linked to SRAM A2 (`0x00044000`) for ping and telemetry testing over `msgbox0`.
