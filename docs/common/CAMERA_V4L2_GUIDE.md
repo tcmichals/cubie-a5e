@@ -85,7 +85,7 @@ v4l2-ctl -d /dev/video0 \
 
 **Status (2026-11-09):** not started. The verified pipeline is OV5647 → MIPI CSI-2 → CSI bridge → `/dev/video0` raw `SGBRG10` 1080p @ 30.00 fps (CUBIE_A7A_DEBUG_LOG.md Milestone 19). Debayering is done by the libcamera Software ISP (`0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`).
 
-The step-by-step checklist (Phases 0–4, steps 0.1–4.6) is in TODO.md (Part I §2, "A733 Hardware ISP"), the project's only tracker. This section holds the rules, the facts and each phase's exit criteria.
+This section is the detailed plan: rules, facts, exit criteria and the step checklist (§5.3, steps 0.1–4.6). TODO.md (Part I §2, "A733 Hardware ISP") holds only the phase status and a "Where we are" line, updated whenever camera work stops for something else.
 
 ### 5.1 Rules
 1. Phases run in order. A phase starts only when the previous phase's exit criteria have passed **on the board** and the result is recorded in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
@@ -108,27 +108,61 @@ The step-by-step checklist (Phases 0–4, steps 0.1–4.6) is in TODO.md (Part I
 | Mainline CSI ↔ ISP link | `sun6i-csi` already supports an ISP on a DT graph port (`SUN6I_CSI_PORT_ISP`, `sun6i_csi_isp_detect()`); the ISP then owns the media device | `drivers/media/platform/sunxi/sun6i-csi/sun6i_csi.c:40-63,336-346` |
 | Mainline reference | `drivers/staging/media/sunxi/sun6i-isp` (V3s ISP, ~2,400 lines): driver structure only, different hardware, no statistics node | `linux-cubie` |
 
-### 5.3 Phases
+### 5.3 Phases and steps
 
-**Phase 0 — Hardware map (no driver code).**
-Document from the vendor code, with file:line citations: ISP 600 register map and the load/save buffer layouts; clocks, resets and power domain for the ISP (from the `vind` node and CCU); how frames are routed CSI → ISP → DMA writer (the top-level `vind`/CSI routing registers); interrupt bits; whether the A733 IOMMU is supported by a mainline driver or the ISP can run with the IOMMU bypassed.
-*Exit:* a register/buffer reference section in this document, reviewed by the owner.
+Tick steps here as they are done. When a phase's exit test passes on the board, also tick that phase in TODO.md and update its "Where we are" line. Vendor paths are under `linux-a733/bsp/drivers/vin/`.
 
-**Phase 1 — ISP outputs an image (fixed settings).**
-New ISP subdev in the media graph: sensor → CSI-2 → CSI → ISP → capture. Load the vendor default settings, fixed white-balance gains, exposure set through the sensor's V4L2 controls.
-*Exit:* 1920×1080 NV12 at 30 fps from the capture node, 300 frames with 0 drops; colours correct on a saved frame; CPU load measured and compared with the Software ISP; `v4l2-compliance` passes.
+**Exit criteria per phase:**
+- Phase 0: §5.4 (hardware map) written with file:line citations and reviewed by the owner.
+- Phase 1: 1920×1080 NV12 at 30 fps, 300 frames, 0 drops; colours correct; CPU load compared with the Software ISP; `v4l2-compliance` passes.
+- Phase 2: white-balance gains set from userspace change the image within 2 frames; `v4l2-compliance` passes.
+- Phase 3: statistics follow the scene, one buffer per frame at 30 fps; `v4l2-compliance` passes.
+- Phase 4: `cam` captures with exposure and white balance converging on their own, with the Software ISP patch removed.
 
-**Phase 2 — Settings from userspace.**
-Metadata output node (parameters buffer, own uAPI struct) for a first subset: black level, white-balance gains, colour matrix, gamma.
-*Exit:* changing white-balance gains from userspace changes the image as expected on the next frames; `v4l2-compliance` passes.
-
-**Phase 3 — Statistics to userspace.**
-Metadata capture node carrying the hardware AE/AWB statistics.
-*Exit:* statistics follow the scene (covering the lens drops the brightness statistics; a coloured light shifts the AWB sums); one statistics buffer per frame at 30 fps.
-
-**Phase 4 — Auto exposure and white balance (libcamera).**
-libcamera pipeline handler + IPA module running AE/AWB from Phase 3 statistics and writing Phase 2 parameters (pattern: mainline `rkisp1`).
-*Exit:* `cam` captures with exposure and white balance converging on their own; Software ISP patch removed from Buildroot and the camera still works.
+- [ ] **Phase 0 — Hardware map (documentation only, no driver code)**. Output: new §5.4 in the camera guide, every fact cited by file:line.
+  - [ ] 0.1 Vendor call sequence: `vin.c` probe order, `vin-video/vin_core.c` stream on/off, `vin-isp/sunxi_isp.c` (`s_stream`, load/save buffer allocation, IRQ handler).
+  - [ ] 0.2 ISP 600 register map from `vin-isp/isp600/isp600_reg.h` and `isp600_reg_cfg.c`: enable/control, input and output format, interrupt enable/status bits, load/save/statistics address registers, version register.
+  - [ ] 0.3 Load buffer layout: `ISP_LOAD_REG_SIZE` (`0x1000`) register image plus table offsets; which `ISP_LOAD_DRAM_SIZE` (`0xAF40` or `0x7700`) applies to the A733 build and why.
+  - [ ] 0.4 Statistics buffer layout (AE, AWB, AF, histogram offsets inside `ISP_STAT_TOTAL_SIZE` `0x6a00`).
+  - [ ] 0.5 Frame routing: CSI_TOP (`0x05800800`, `top_reg.c`) registers that connect CSI parser → ISP → VIPP (`0x05910000`) → DMA (`0x05830000`); is VIPP required between ISP and DMA?
+  - [ ] 0.6 Clocks, resets, power domain for the ISP (vendor `vind` node `sun60iw2p1.dtsi:2563`); which already exist in our `ccu-sun60i-a733.c` and PCK600 driver, which are missing.
+  - [ ] 0.7 IOMMU: ISP is IOMMU master 2, CSI master 1 (`platform/sun60iw2_vin_cfg.h:52-53`). Find out how our CSI DMA works today without an IOMMU driver (mainline `sun50i-iommu.c` has no A733 support) and whether ISP DMA works the same way.
+  - [ ] 0.8 Interrupt `GIC_SPI 129`: which status bits fire per frame (load done, statistics ready, frame end) and what the vendor handler does for each.
+  - [ ] 0.9 Mainline reference: `sun6i-csi` ISP port (`SUN6I_CSI_PORT_ISP`, `sun6i_csi_isp_detect()`, async registration) and staging `sun6i-isp`: list what is reused and what is new.
+  - [ ] 0.10 Owner decision, recorded in the camera guide: new driver (e.g. `sun60i-isp`) or extending `sun6i-isp`; driver and compatible names.
+  - [ ] 0.11 Owner reviews §5.4. **Exit Phase 0.**
+- [ ] **Phase 1 — ISP outputs an image (fixed settings)**. Work in `linux-cubie`, A7A branch.
+  - [ ] 1.1 DT: ISP node (reg, IRQ, clocks, resets, power domain) and graph link CSI → ISP in the A733 dtsi / board DTS; binding YAML draft.
+  - [ ] 1.2 Missing clocks/resets/power-domain entries added (from 0.6).
+  - [ ] 1.3 Driver skeleton: probe, clocks, reset, runtime PM, IRQ request. Board check: probe OK, version register matches the vendor value.
+  - [ ] 1.4 V4L2 subdev: Bayer sink pad, YUV source pad, media links; async registration with the `sun6i-csi` bridge. Board check: `media-ctl -p` shows sensor → CSI-2 → CSI → ISP → capture.
+  - [ ] 1.5 Load buffer: `dma-contig` allocation, filled from vendor `isp_default_reg[]` and tables; program load address, trigger load. Board check: load-done interrupt seen.
+  - [ ] 1.6 Formats: 1920×1080 `SGBRG10` in, NV12 out; routing CSI → ISP → (VIPP) → DMA per 0.5.
+  - [ ] 1.7 Board test: 300 frames 1080p30 NV12, 0 drops (`v4l2-ctl --stream-count=300`).
+  - [ ] 1.8 Board test: save a frame, colours correct (compare with the Software ISP image of the same scene).
+  - [ ] 1.9 CPU load during 1080p30 capture, ISP vs Software ISP, recorded.
+  - [ ] 1.10 `v4l2-compliance -m /dev/media0`: no failures.
+  - [ ] 1.11 Logged in CUBIE_A7A_DEBUG_LOG.md. **Exit Phase 1.**
+- [ ] **Phase 2 — Parameters from userspace**.
+  - [ ] 2.1 First subset chosen and located in the load buffer (from 0.3): black level, white-balance gains, colour matrix, gamma.
+  - [ ] 2.2 uAPI header with a versioned parameters struct (pattern: `include/uapi/linux/rkisp1-config.h`).
+  - [ ] 2.3 Metadata output node (`V4L2_BUF_TYPE_META_OUTPUT`) and new meta format.
+  - [ ] 2.4 Parameters applied at a frame boundary (double-buffered load buffer), never mid-frame.
+  - [ ] 2.5 Board test: changing white-balance gains changes the image within 2 frames.
+  - [ ] 2.6 `v4l2-compliance`: no failures. Logged. **Exit Phase 2.**
+- [ ] **Phase 3 — Statistics to userspace**.
+  - [ ] 3.1 uAPI statistics struct from the 0.4 layout (AE, AWB first; AF optional).
+  - [ ] 3.2 Metadata capture node (`V4L2_BUF_TYPE_META_CAPTURE`), one buffer per frame from the statistics DMA.
+  - [ ] 3.3 Board test: covering the lens lowers the AE statistics; a coloured light shifts the AWB sums.
+  - [ ] 3.4 Board test: 30 statistics buffers/s at 1080p30, none dropped.
+  - [ ] 3.5 `v4l2-compliance`: no failures. Logged. **Exit Phase 3.**
+- [ ] **Phase 4 — libcamera auto exposure and white balance; Software ISP removed**.
+  - [ ] 4.1 Owner decision: extend libcamera's simple pipeline or add a new pipeline handler (pattern: `rkisp1`).
+  - [ ] 4.2 IPA AE: sensor exposure/gain from AE statistics.
+  - [ ] 4.3 IPA AWB: white-balance gains through the parameters node.
+  - [ ] 4.4 Buildroot: libcamera patches/package for the above.
+  - [ ] 4.5 Remove `0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`; `cam` still captures.
+  - [ ] 4.6 Board test: exposure and white balance converge on their own (bright/dark scene, indoor/outdoor light). Logged. **Exit Phase 4: goal met.**
 
 **Phase 5 — Hardware H.264 encoder.** Separate plan (`docs/common/VIDEO_ENCODING_VPU_GUIDE.md`); consumes Phase 1 NV12 by `dma-buf`.
 
