@@ -87,6 +87,7 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - **Now:** Phase 0, step 0.1 (vendor call sequence).
   - **Next, in order:** Phase 0 → 1 → 2 → 3 → 4 (goal met at Phase 4).
   - **Not now:** Phase 5 H.264 encoder (after Phase 1); Phase 6 backport to the A5E (after Phase 4).
+  - **Not now (upstream cleanup of the working capture path, camera guide §7 "Still to fix"):** OV5647 `hblank` fix sent upstream on its own; 24 vs 25 MHz sensor clock; parser 1 routing from DT instead of code; real cause behind the CSI bridge NULL-state guard; 600 MHz CSI/ISP clocks from DT; bindings for the new compatibles; drop board-only default formats; split WIP commit `928a9c657b3f` (contains a watchdog change).
   - [ ] Phase 0: hardware map (docs only)
   - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings
   - [ ] Phase 2: parameters from userspace
