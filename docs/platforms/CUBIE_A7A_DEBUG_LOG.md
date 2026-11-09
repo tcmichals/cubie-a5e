@@ -1744,13 +1744,20 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
 - **Issue**: Calling `media-ctl` to set active format on `sun6i-csi-bridge` triggered a kernel backtrace warning (`WARN_ON_ONCE(!state)` in `__v4l2_subdev_state_get_format()`) because `sun6i_csi_bridge_set_fmt()` passed `state == NULL` when `format->which == V4L2_SUBDEV_FORMAT_ACTIVE`.
 - **Resolution**: Wrapped `v4l2_subdev_state_get_format(state, ...)` inside an `if (state)` guard in `drivers/media/platform/sunxi/sun6i-csi/sun6i_csi_bridge.c`. Verified zero warnings during full media controller pipeline configuration.
 
-### 3. Allwinner Watchdog Restart Priority vs TF-A PSCI Conflict (Strict Rule: Priority 255)
-- **Issue**: Issuing `reboot` via SSH or command line cleanly unmounted ext4 filesystems, sent SIGKILL to all processes, and printed `Requesting system reboot`, but halted there without resetting the hardware, requiring a manual press of the physical RST button.
-- **Root Cause**: In mainline Linux, PSCI system reset has restart priority 129 (`drivers/firmware/psci/psci.c`). The vendor TF-A BL31 on Allwinner A733 does not implement PSCI `SYSTEM_RESET`. When `sunxi_wdt.c` had its restart priority lowered to 128 (`watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 128);`), Linux called PSCI first. PSCI returned `NOTIFY_DONE` or stalled, breaking reboot.
-- **Resolution & Strict Rule**:
-  1. `watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 255);` **MUST ALWAYS REMAIN 255**. Do NOT lower it to 128.
-  2. In `sunxi_wdt_restart()`, keep `while (1) cpu_relax();` after the watchdog trigger and delay to ensure the CPU remains halted while the hardware watchdog reset counter expires (0.5s) and triggers SoC reset.
-  3. LPDDR5 Retraining: The ~20-25s delay before serial console output resumes upon warm reboot is normal BootROM LPDDR5 retraining behavior.
+### 3. System Reset & Hardware Watchdog Architecture Investigation
+- **Symptom**: Issuing `reboot` via SSH or command line cleanly unmounts filesystems, terminates userspace processes, and prints `Requesting system reboot`, but halts without resetting the hardware, requiring a manual press of the physical RST button or power cycle.
+- **Analysis of Watchdog Priority vs True Root Cause**:
+  - Previous sessions introduced churn around `watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 255)` vs `128`, hypothesizing a priority conflict against PSCI system reset (priority 129). **Silicon verification proves that altering restart priority between 128 and 255 does NOT resolve the hang.**
+  - Cross-referencing the official Radxa vendor BSP (`bsp/drivers/watchdog/sunxi_wdt.c`): the vendor driver sets restart priority to **128**, identical to mainline defaults.
+  - **Hardware & PMIC Dependency**:
+    - Per the Radxa Cubie A7A V1.10 schematic (`radxa_cubie_a7a_v1.10_schematic.txt`), SoC reset pin `RESET` (1M24) is tied directly to `AP-RESET`, driven by the AXP318/AXP8191 PMIC (`PWROK` pin P2/R1).
+    - In the vendor BSP (`bsp/drivers/power/mfd/axp2101.c` line 3301), PMIC register `AXP2101_COMM_CFG` bit 3 is explicitly configured to enable `PWROK` pull-down restart (`/* enable pwrok pin pull low to restart the system */`).
+    - In mainline Linux, the AXP PMIC is currently unprobed in `sun60i-a733-cubie-a7a.dts`. Consequently, internal SoC watchdog expiration or `WDT_SRST_REG` (`0x02050008` = `0x16aa0001`) does not cycle the external PMIC power rails (`DCDC1`..`DCDC6`, LPDDR5 power), leaving the memory controller and core in a stalled warm-reset state.
+  - **TF-A BL31 PSCI Defect**:
+    - In `arm-trusted-firmware-A733/plat/allwinner/common/sunxi_native_pm.c`, `sunxi_system_reset()` contains an `#ifdef SUNXI_STANDALONE_WATCHDOG` check. In stock builds without this flag, TF-A writes to legacy H6 offsets (`0x14` / `0x18`) without key `0x16AA`, panics at EL3, and halts.
+- **Action Plan**:
+  - Cease priority churn on `sunxi_wdt`. Keep `sunxi_wdt` at clean standard priority (128).
+  - Bind `s_twi0` PMIC node in DTS to enable the AXP PMIC driver and configure `PWROK` reset behavior per vendor BSP, or investigate BL31 PSCI firmware rebuild with `SUNXI_STANDALONE_WATCHDOG`.
 
 ### 4. CSI Top & ISP Clock Tree Reclocking to 600 MHz (`0x1840` / `0x1860`)
 - **Issue**: Sensor streaming captured only scanline 0 (3,840 bytes) followed by zeros for lines 1..1079, accompanied by MIPI Lane FIFO Overflow (`0x058115f4 = 0x00000033`).
@@ -1767,6 +1774,69 @@ To un-gate Port 3 without altering FIT lengths or memory layout, an in-segment e
   - Added `__v4l2_ctrl_s_ctrl(sensor->hblank, hblank);` in `ov5647.c::ov5647_set_pad_fmt()`.
   - When $hblank = 496$ ($HTS = 2416$) and $vblank = 24$ ($VTS = 1104$), framerate is $87,500,000 / (2416 \times 1104) = 32.8\text{ fps}$ (measured at 31.49 fps).
   - For exact $30.0\text{ fps}$, setting $vblank = 127$ ($VTS = 1207$) yields $87,500,000 / (2416 \times 1207) = 30.005\text{ fps}$ (measured live at 29-30 fps).
+
+---
+
+## 7. Session Handoff — Nov 1, 2026 21:53 (pick up here)
+
+### Board state
+- Cubie A7A at `192.168.3.4`, serial `/dev/ttyUSB1` (never touch `/dev/ttyUSB0`, that is the A5E).
+- Running kernel: `7.1.0-00105-gce747fed491f-dirty #12 Sun Nov 1 20:29:26 CST 2026`, `/boot/Image` md5 `a88102018087419310bea42b423e84fe`.
+- Host `linux-cubie/arch/arm64/boot/Image` (21:25 build, md5 `f833bb3d…`) is **not deployed**. The DTB on the board matches the host (`7200b0b8…`).
+- Before deploying, follow `.agents/rules/testing-strict-pass.md` §5 (kernel.release / vermagic must match `/lib/modules`).
+
+### Camera (OV5647 on J7) — working
+- Media graph on the board: `ov5647 3-0036` → `sun6i-mipi-csi2` → `sun6i-csi-bridge` → `/dev/video0`, all SGBRG10 1920x1080.
+- Verified on silicon: full 1080-line RAW10 frames, 60-frame mmap stream, 0 drops, ~30 fps with `hblank=496`, `vblank=127`.
+- Uncommitted kernel changes (`linux-cubie`, branch `feature/a733-e902-remoteproc`, committed as WIP with this handoff):
+  - `ccu-sun60i-a733.c`: CSI_TOP `0x1840` and ISP `0x1860` at 600 MHz from PERI0_600M (fixes MIPI FIFO overflow `0x058115f4=0x33`).
+  - `ov5647.c`: `__v4l2_ctrl_s_ctrl(sensor->hblank, hblank)` in `ov5647_set_pad_fmt()` (fixes 24 fps cap).
+  - `sun55i_a523_csi.c`: ISP/POST/parser/MIPI clock gates, CSI TOP enable, parser 1 routing, parser reset toggle.
+  - `sun6i_csi_bridge.c`: NULL-state guard, default format at setup.
+  - `sun6i_mipi_csi2.c`: OUT_NUM only for >2 lanes.
+  - DTS: `power-domains = <&pck600 PD_VI>` on dphy1/mipi1/csi.
+- Next camera steps: userspace capture test (convert a RAW10 frame to an image and look at it), make 30 fps the driver default instead of setting controls by hand, then ISP.
+
+### Reboot / watchdog — NOT fixed, stop changing the priority
+- The restart priority was changed 128 → 255 → 128 → 255 → 128 across sessions. **Changing it does not fix reboot.** Stop changing it. It is left at 128 (same as the vendor BSP).
+- Facts collected this session:
+  - Vendor BSP `sunxi_wdt.c` uses priority 128, `wdt-v103` offsets (same as ours), plus the timer path. The vendor DTS uses `watchdog@2050000`.
+  - The A733 manual §8.3.6.3: `WDT_SRST_REG` 0x08, key 0x16AA, bit 0 = reset system. Register reads on the running board: `0x02050010=0x1` (CFG: whole system), MODE=0, OCFG=0x1F; the same at `0x07021000`.
+  - The schematic: SoC `RESET` is the `AP-RESET` net, which goes to the AXP PMIC `PWROK` pin and the reset key.
+  - The vendor `axp2101.c` sets `AXP2101_COMM_CFG` bit 3 ("enable pwrok pin pull low to restart the system"). Our DTS has no PMIC node.
+  - TF-A `sunxi_native_pm.c`: `sunxi_system_reset()` uses `SRST_REG` only with `SUNXI_STANDALONE_WATCHDOG`. Otherwise it writes CFG/MODE without the 0x16AA key, which does nothing on A733.
+- Hypothesis (not proven): the SoC reset fires but the PMIC/PWROK path does not complete a board reset. Next test (no rebuild): from SSH run `devmem 0x02050008 32 0x16aa0001` with the serial console open on ttyUSB1, and see whether the board resets, prints BootROM output, or hangs. Then compare the PMIC register `COMM_CFG` (vendor image vs ours).
+
+### Repos
+- `cubie-a5e` `main`: this log and the TODO §3 update.
+- `linux-cubie` `feature/a733-e902-remoteproc`: WIP camera + watchdog commit (no Signed-off-by).
+
+---
+
+## 8. Milestone 19: Live 1080p @ 30.00 FPS Silicon Capture, 24 MHz Crystal Timing & Userspace Pipeline (Nov 8, 2026)
+
+### 1. Live 1080p RAW10 Capture & Demosaic Verification (`192.168.3.4`)
+- Booted freshly built GCC 16.2.0 `sdcard.img` (`Linux cubie-a7a-flight 7.1.0 #15 SMP PREEMPT_RT`) with `dtoverlay=cubie-a7a-rproc cubie-a7a-ov5647`.
+- Verified media graph topology (`media-ctl -d /dev/media0 -p`):
+  - `ov5647 3-0036` (`/dev/v4l-subdev2`) $\rightarrow$ `sun6i-mipi-csi2` (`/dev/v4l-subdev1`) $\rightarrow$ `sun6i-csi-bridge` (`/dev/v4l-subdev0`) $\rightarrow$ `sun6i-csi-capture` (`/dev/video0`).
+- Captured 1920x1080 `SGBRG10_1X10` (`GB10`) frames from `/dev/video0`:
+  - All 1,080 scanlines populated with valid image data (`1,912..1,920` non-zero pixels per row across rows `0..1079`, zero horizontal tearing, zero MIPI FIFO overflows).
+  - Installed `/usr/bin/a7a-cam-capture` on target (`project-cubie-a5e/board/radxa/cubie_a7a/rootfs-overlay/usr/bin/a7a-cam-capture`) for one-command 1080p capture and SGBRG10-to-PPM demosaicing.
+  - Added `cubie-a7a-ov5647.dtbo` to `project-cubie-a5e/board/radxa/cubie_a7a/genimage.cfg` so future `sdcard.img` builds include the camera overlay automatically.
+
+### 2. Exact `30.00 fps` Timing (24.000 MHz Physical Crystal vs 25.000 MHz Driver Nominal)
+- `drivers/media/i2c/ov5647.c` enforces `xclk_freq == 25000000` and reports `.pixel_rate = 87500000`.
+- The physical crystal oscillator on the OV5647 camera module is **24.000 MHz**, producing an actual pixel clock of $87,500,000 \times \frac{24}{25} = 84,000,000\text{ Hz}$:
+  - At `vblank = 24` (`VTS = 1104`, `HTS = 2416`): $84,000,000 / (2416 \times 1104) = 31.49\text{ fps}$ (measured: `31.49 fps`).
+  - At `vblank = 127` (`VTS = 1207`, `HTS = 2416`): $84,000,000 / (2416 \times 1207) = 28.81\text{ fps}$ (measured: `28.81 fps`).
+  - At **`vblank = 79` (`VTS = 1159` / `0x0487`, `HTS = 2416` / `0x0970`)**: $84,000,000 / (2416 \times 1159) = 30.00\text{ fps}$ (measured live: **`30.00 fps`** across 90 consecutive frames with 0 dropped buffers).
+- Updated `ov5647.c` (`ov5647_modes[1].vts = 0x487`, `ov5647_1080p30_10bpp[]` HTS/VTS registers, `OV5647_DEFAULT_MODE = &ov5647_modes[1]`, and AEC/AGC/AWB control defaults), `sun6i_mipi_csi2.c`, and `sun6i_csi_capture.c` so the entire media graph initializes to `1920x1080 SGBRG10_1X10` @ `30.00 fps` at boot without manual `media-ctl` or `v4l2-ctl` setup.
+
+### 3. Userspace `libcamera` / `dma_heap` Configuration
+- Root-caused `rpicam-still` errors on A7A:
+  1. `Could not open any dmaHeap device`: `CONFIG_DMABUF_HEAPS` was unset and `CONFIG_CMA_SIZE_MBYTES` was 32 MB. Added `CONFIG_CMA_SIZE_MBYTES=128`, `CONFIG_DMABUF_HEAPS=y`, `CONFIG_DMABUF_HEAPS_SYSTEM=y`, and `CONFIG_DMABUF_HEAPS_CMA=y` to `board/radxa/cubie_a7a/linux.config`.
+  2. `rpicam-apps` checks `VIDIOC_QUERYCAP` `caps.card` for `"bcm2835-isp"` or `"pispbe"` (`core/options.cpp:174`). For Allwinner `sun6i-csi`, `libcamera`'s native `SimplePipeline` + `cam` utility is used: enabled `BR2_PACKAGE_LIBEVENT=y`, `BR2_PACKAGE_JPEG=y`, and `BR2_PACKAGE_LIBCAMERA_V4L2=y` in `configs/cubie_a7a_defconfig` and added `0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch` (`{ "sun6i-csi", {}, true }`) so `libcamera` enables Software ISP debayering on A7A.
+
 
 
 

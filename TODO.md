@@ -69,18 +69,18 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [x] Silicon-verified CCU register gating on live A7A (`0x020025E4` bit 8 MBUS_CSI, `0x02003840` bit 31 CSI_TOP, `0x02003844` bit 0/16 CSI_BUS/RST_BUS_CSI). Added CCU clocks to `ccu-sun60i-a733.c`.
   - [x] Integrated base DT nodes (`dphy1`, `mipi1`, `csi`) into `sun60i-a733-cubie-a7a.dts` and compiled base DTB.
   - [x] Preprocessed and compiled `cubie-a7a-ov5647.dtbo` overlay.
-- [ ] **Kernel Deployment & Target Capture Verification**:
+- [x] **Kernel Deployment & Target Capture Verification**:
   - [x] Identified early-boot freeze root cause: `0x1840 CSI_CLK_REG` gate with unclocked `VIDEO2PLL4X` reverted in CCU driver.
   - [x] Fixed silent console: added `CONFIG_SERIAL_8250_DW=y`, `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_SERIAL_EARLYCON=y` to `linux.config`.
   - [x] Rebuilt clean kernel `Image` (`arch/arm64/boot/Image`) with DesignWare serial driver and instant watchdog reset.
-  - [ ] Write new `Image` to target MicroSD card via PC card reader (`/dev/sdc`).
+  - [x] Write new `sdcard.img` (GCC 16.2.0 build) to target MicroSD card and deploy `cubie-a7a-ov5647.dtbo` (`genimage.cfg` updated).
   - [x] Boot A7A board and verify clean console + earlycon output.
   - [x] Verify `/dev/media0` and `/dev/video0` appear.
   - [x] Verify V4L2 sensor subdevice binding via `media-ctl -d /dev/media0 -p`.
   - [x] Verify raw 10-bit Bayer capture (`MEDIA_BUS_FMT_SBGGR10_1X10` / `GB10`):
-    `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=GB10 --stream-mmap --stream-count=30`.
-    Verified on silicon: 1080p @ 30 FPS continuous streaming with 0 frame drops, 0 errors, and all 1080 scanlines populated with valid Bayer pixel data.
-  - [ ] Test userspace camera capture with `rpicam-still -o /tmp/test.jpg`.
+    `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=GB10 --stream-mmap --stream-count=90`.
+    Verified on silicon: 1080p @ **30.00 FPS** (`vblank=79`, `VTS=1159` for physical 24 MHz sensor crystal) continuous streaming with 0 frame drops, 0 errors, and all 1080 scanlines populated with valid Bayer pixel data.
+  - [x] Verify userspace camera capture & demosaicing on target via `/usr/bin/a7a-cam-capture -o /tmp/test_1080p.ppm` and enable `CONFIG_DMABUF_HEAPS_CMA=y` + `libcamera` `cam` (`BR2_PACKAGE_LIBEVENT=y`) + `sun6i-csi` Software ISP.
 - [ ] **Allwinner Hardware ISP 5.22 Integration**:
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/vin/vin-isp/` (`isp522/`, `sunxi_isp.c`, and default hardware tables in `isp_default_tbl.h`).
@@ -1085,6 +1085,8 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
     - `0x0014`: `WDT_MODE_REG`
 - [x] **Task 3: Mainline Restart Handler Architecture & Fallback**:
   - [x] In commit `242c869eff8e`, `sunxi_wdt_restart()` attempted timer interval reload and spun in `cpu_relax()`, causing a hard stall when the timer reset path was not routed.
+  - [x] Priority churn check: verified that toggling restart priority (128 vs 255) does NOT fix reboot on silicon. Vendor BSP sets priority to standard 128.
+  - [x] Hardware fact: SoC `RESET` (pin 1M24) is driven by `AP-RESET` from the AXP318/AXP8191 PMIC (`PWROK`). Vendor BSP configures `AXP2101_COMM_CFG` bit 3 (`enable pwrok pin pull low to restart the system`). Without the PMIC probed or handling PWROK, SoC warm restart hangs.
   - [x] Updated `drivers/watchdog/sunxi_wdt.c` on branch `feature/a733-e902-remoteproc`:
     ```c
     if (regs->wdt_key_val == 0x16aa0000) {
@@ -1093,7 +1095,8 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
     }
     ```
   - [x] Rebuilt `sunxi_wdt.ko` against Linux 7.1.
-- [ ] **Task 4: Live Hardware Target Verification**:
+- [ ] **Task 4: Live Hardware Target Verification & PMIC PWROK Binding**:
+  - [ ] Bind AXP PMIC on `s_twi0` / configure `PWROK` or resolve TF-A BL31 `SUNXI_STANDALONE_WATCHDOG`.
   - [ ] Execute `reboot` from userspace command line on live Cubie A7A.
   - [ ] Verify immediate hardware reset into BootROM/U-Boot with 0% stall rate.
 

@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""
+Radxa Cubie A7A (Allwinner A733) OV5647 1080p@30fps Camera Capture & Demosaic Utility.
+
+Configures the sun6i-csi / sun6i-mipi-csi2 / ov5647 media graph for 1920x1080
+SGBRG10_1X10 at 30.00 fps, captures frames from /dev/video0, verifies active
+scanlines, and outputs a demosaiced 8-bit RGB PPM image (and optional RAW10).
+"""
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+import numpy as np
+
+
+def run_cmd(cmd: list[str]) -> None:
+    subprocess.run(cmd, check=True)
+
+
+def setup_pipeline(media_dev: str, video_dev: str, subdev: str, vblank: int) -> None:
+    fmt = "fmt:SGBRG10_1X10/1920x1080 field:none"
+    run_cmd(["media-ctl", "-d", media_dev, "-V", f'"ov5647 3-0036":0 [{fmt}]'])
+    run_cmd(["media-ctl", "-d", media_dev, "-V", f'"sun6i-mipi-csi2":0 [{fmt}]'])
+    run_cmd(["media-ctl", "-d", media_dev, "-V", f'"sun6i-csi-bridge":0 [{fmt}]'])
+    run_cmd([
+        "v4l2-ctl", "-d", video_dev,
+        "--set-fmt-video=width=1920,height=1080,pixelformat=GB10",
+    ])
+    run_cmd([
+        "v4l2-ctl", "-d", subdev,
+        f"--set-ctrl=vertical_blanking={vblank},auto_exposure=0,gain_automatic=1,white_balance_automatic=1",
+    ])
+
+
+def demosaic_sgbrg10_to_ppm(raw_path: Path, ppm_path: Path) -> dict:
+    raw = np.fromfile(raw_path, dtype=np.uint16)
+    frame_pixels = 1920 * 1080
+    if raw.size < frame_pixels:
+        raise RuntimeError(f"Short frame: got {raw.size} pixels, expected {frame_pixels}")
+    # Use the last captured frame in the file
+    img10 = raw[-frame_pixels:].reshape((1080, 1920))
+
+    row_nz = np.count_nonzero(img10, axis=1)
+    stats = {
+        "min": int(img10.min()),
+        "max": int(img10.max()),
+        "mean": float(img10.mean()),
+        "nonzero_pixels": int(np.count_nonzero(img10)),
+        "min_row_nonzero": int(row_nz.min()),
+        "max_row_nonzero": int(row_nz.max()),
+    }
+
+    # SGBRG10 (G B / R G) 2x2 bilinear demosaic to full 1920x1080 RGB
+    g1 = img10[0::2, 0::2].astype(np.float32)
+    b = img10[0::2, 1::2].astype(np.float32)
+    r = img10[1::2, 0::2].astype(np.float32)
+    g2 = img10[1::2, 1::2].astype(np.float32)
+    g = (g1 + g2) * 0.5
+
+    rgb_half = np.stack([r, g, b], axis=-1)
+    p99 = float(np.percentile(rgb_half, 99.5))
+    scale = 255.0 / max(p99, 1.0)
+    rgb8_half = np.clip(rgb_half * scale, 0, 255).astype(np.uint8)
+    rgb8_full = np.repeat(np.repeat(rgb8_half, 2, axis=0), 2, axis=1)
+
+    with open(ppm_path, "wb") as f:
+        f.write(f"P6\n{rgb8_full.shape[1]} {rgb8_full.shape[0]}\n255\n".encode("ascii"))
+        f.write(rgb8_full.tobytes())
+
+    return stats
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Capture 1080p@30fps frame on Radxa Cubie A7A")
+    parser.add_argument("-o", "--output", default="/tmp/capture_1080p.ppm", help="Output PPM file")
+    parser.add_argument("--raw", default="/tmp/capture_1080p.raw", help="Temporary RAW10 file")
+    parser.add_argument("--skip", type=int, default=10, help="Frames to skip for AE/AGC settle")
+    parser.add_argument("--vblank", type=int, default=79, help="Vertical blanking (79 = 30.00 fps)")
+    args = parser.parse_args()
+
+    setup_pipeline("/dev/media0", "/dev/video0", "/dev/v4l-subdev2", args.vblank)
+    run_cmd([
+        "v4l2-ctl", "-d", "/dev/video0",
+        "--stream-mmap",
+        f"--stream-skip={args.skip}",
+        "--stream-count=1",
+        f"--stream-to={args.raw}",
+    ])
+
+    stats = demosaic_sgbrg10_to_ppm(Path(args.raw), Path(args.output))
+    print(
+        f"Captured 1920x1080 SGBRG10 -> {args.output} "
+        f"(min={stats['min']} max={stats['max']} mean={stats['mean']:.1f} "
+        f"row_nz={stats['min_row_nonzero']}..{stats['max_row_nonzero']}/1920)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

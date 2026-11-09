@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sun, 8 Nov 2026 17:35:00 -0600
+Subject: [PATCH] libcamera: pipeline: simple: Enable Software ISP for
+ sun6i-csi
+
+Enable the CPU Software ISP (Debayer + SoftIPA AGC/AWB) on the Allwinner
+sun6i-csi pipeline so libcamera (`cam`) can produce both debayered RGB888
+and raw Bayer streams on Allwinner A733/A523 CSI hardware.
+---
+ src/libcamera/pipeline/simple/simple.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libcamera/pipeline/simple/simple.cpp b/src/libcamera/pipeline/simple/simple.cpp
+index a03ddb6..84d8d59 100644
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -264,7 +264,7 @@ static const SimplePipelineInfo supportedDevices[] = {
+ 	{ "mtk-seninf", { { "mtk-mdp", 3 } }, false },
+ 	{ "mxc-isi", {}, false },
+ 	{ "qcom-camss", {}, true },
+-	{ "sun6i-csi", {}, false },
++	{ "sun6i-csi", {}, true },
+ };
+ 
+ bool isRaw(const StreamConfiguration &cfg)
+-- 
+2.43.0
