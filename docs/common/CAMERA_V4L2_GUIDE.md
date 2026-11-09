@@ -85,7 +85,7 @@ v4l2-ctl -d /dev/video0 \
 
 **Status (2026-11-09):** not started. The verified pipeline is OV5647 → MIPI CSI-2 → CSI bridge → `/dev/video0` raw `SGBRG10` 1080p @ 30.00 fps (CUBIE_A7A_DEBUG_LOG.md Milestone 19). Debayering is done by the libcamera Software ISP (`0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`).
 
-This section is the detailed plan: rules, facts, exit criteria and the step checklist (§5.3, steps 0.1–4.6). TODO.md (Part I §2, "A733 Hardware ISP") holds only the phase status and a "Where we are" line, updated whenever camera work stops for something else.
+This section is the detailed plan: rules, facts, exit criteria and the step checklist (§5.3, steps 0.1–4.6). TODO.md (Part I §2, "A733 Hardware ISP") holds only a summary made from it: Done / Now / Next / Not now, and one box per phase.
 
 ### 5.1 Rules
 1. Phases run in order. A phase starts only when the previous phase's exit criteria have passed **on the board** and the result is recorded in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
@@ -111,7 +111,7 @@ This section is the detailed plan: rules, facts, exit criteria and the step chec
 
 ### 5.3 Phases and steps
 
-Tick steps here as they are done. When a phase's exit test passes on the board, also tick that phase in TODO.md and update its "Where we are" line. Vendor paths are under `linux-a733/bsp/drivers/vin/`.
+Tick steps here as they are done. This checklist is the source; the TODO.md entry is a summary made from it (**Done / Now / Next / Not now** plus one box per phase). Update that summary whenever camera work stops for something else, and tick a phase there only when its exit test passes on the board. Vendor paths are under `linux-a733/bsp/drivers/vin/`.
 
 **Exit criteria per phase:**
 - Phase 0: §5.4 (hardware map) written with file:line citations and reviewed by the owner.

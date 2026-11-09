@@ -82,13 +82,16 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     Verified on silicon: 1080p @ **30.00 FPS** (`vblank=79`, `VTS=1159` for physical 24 MHz sensor crystal) continuous streaming with 0 frame drops, 0 errors, and all 1080 scanlines populated with valid Bayer pixel data.
   - [x] Verify userspace camera capture & demosaicing on target via `/usr/bin/a7a-cam-capture -o /tmp/test_1080p.ppm` and enable `CONFIG_DMABUF_HEAPS_CMA=y` + `libcamera` `cam` (`BR2_PACKAGE_LIBEVENT=y`) + `sun6i-csi` Software ISP.
 - [ ] **Next A7A board session (same image as the camera work): E902 without the vendor SCP** — steps in [`docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.F](docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md). Needed before sending the TF-A list question. Status: not started (2026-11-09).
-- [ ] **A733 Hardware ISP (no Software ISP)**: detailed plan and step checklist in [`docs/common/CAMERA_V4L2_GUIDE.md` §5](docs/common/CAMERA_V4L2_GUIDE.md). Tick a phase here when its exit test passes on the board.
-  - **Where we are:** not started; next step is 0.1 (2026-11-09). Update this line whenever camera work stops for something else.
+- [ ] **A733 Hardware ISP (no Software ISP)**: summary of [`docs/common/CAMERA_V4L2_GUIDE.md` §5](docs/common/CAMERA_V4L2_GUIDE.md), which is the source. Update this from the guide's checklist whenever camera work stops or a phase passes. (2026-11-09)
+  - **Done:** raw 1080p30 capture through mainline CSI (Milestone 19); plan written. No ISP phase done yet.
+  - **Now:** Phase 0, step 0.1 (vendor call sequence).
+  - **Next, in order:** Phase 0 → 1 → 2 → 3 → 4 (goal met at Phase 4).
+  - **Not now:** Phase 5 H.264 encoder (after Phase 1); Phase 6 backport to the A5E (after Phase 4).
   - [ ] Phase 0: hardware map (docs only)
   - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings
   - [ ] Phase 2: parameters from userspace
   - [ ] Phase 3: statistics to userspace
-  - [ ] Phase 4: libcamera AE/AWB; Software ISP removed (goal met)
+  - [ ] Phase 4: libcamera AE/AWB; Software ISP removed
 - [ ] **Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)**:
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/ve/cedar-ve/` (`cedar_ve.c` @ `0x01c0e000`).
