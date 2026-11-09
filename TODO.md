@@ -90,14 +90,12 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [ ] E902 remoteproc: start/stop firmware 10 times, run `tools/run_full_sweep.py --target a7a`.
   - [ ] `reboot` works; `poweroff` really cuts power (vendor U-Boot's own power-off starts the arisc first, `board_sun60iw2.c:40`); try suspend (expected unsupported) and record what happens.
   - [ ] Record results in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` (Milestone 20) and `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.B/§6.E.
-- [ ] **Allwinner Hardware ISP 5.22 Integration**:
-  - [ ] Utilize verified vendor C source reference located on local disk:
-    `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/vin/vin-isp/` (`isp522/`, `sunxi_isp.c`, and default hardware tables in `isp_default_tbl.h`).
-  - [ ] **Dual-Delivery Strategy**:
-    - **Strategy 1 (Out-of-Tree Rapid Bring-Up)**: Buildroot kernel module package `project-cubie-a5e/package/sunxi-vin/` adapting `vin-isp` and `vin-video` against Linux 7.1 headers.
-    - **Strategy 2 (100% Mainline Upstream Refactor)**: Clean V4L2 platform subdev driver (`drivers/media/platform/sunxi/sunxi-isp.c`) exposing metadata nodes `/dev/video-isp-params` (`V4L2_BUF_TYPE_META_OUTPUT`) and `/dev/video-isp-stats` (`V4L2_BUF_TYPE_META_CAPTURE`).
-  - [ ] Verify hardware debayering and conversion from Raw Bayer 10-bit to NV12 / YUYV420.
-  - [ ] Verify 3A hardware statistics reporting (AEC histograms, AWB RGB grid sums, AF edge gradients).
+- [ ] **A733 Hardware ISP (no Software ISP)**: plan and rules in [`docs/common/CAMERA_V4L2_GUIDE.md` §5](docs/common/CAMERA_V4L2_GUIDE.md). Block is ISP 600 (`vin-isp/isp600/`), not ISP 5.22. Phases run in order; each exit is checked on the board.
+  - [ ] Phase 0: hardware map (registers, load/save buffers, clocks/resets, CSI→ISP→DMA routing, IOMMU)
+  - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings
+  - [ ] Phase 2: parameters buffer from userspace
+  - [ ] Phase 3: statistics buffer to userspace
+  - [ ] Phase 4: libcamera AE/AWB; Software ISP patch removed
 - [ ] **Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)**:
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/ve/cedar-ve/` (`cedar_ve.c` @ `0x01c0e000`).
