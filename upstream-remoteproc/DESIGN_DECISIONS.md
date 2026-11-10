@@ -282,8 +282,9 @@ trampoline in padding).
 That patch is a **workaround** that keeps the board working. It is not the answer: it cannot be
 reviewed, tracked or sent upstream, and it breaks on the next vendor build. The answer is a BL31
 built from source that is tracked in git, as the A5E already does (`jernejsk/arm-trusted-firmware`
-`a523-v4` from Buildroot): the open A733 port (`dlan17/trusted-firmware-a`, branch `A733`) with
-the changes the E902 needs, each one a commit. Until that BL31 boots the A7A, keep the binary patch
+`a523-v4` from Buildroot): the open A733 port with the changes the E902 needs, each one a commit,
+in **`tcmichals/trusted-firmware-a` branch `A733`** (fork of `dlan17/trusted-firmware-a`; port 3 is
+`315e08e004`). Until that BL31 boots the A7A, keep the binary patch
 and call it a workaround wherever it is described. Tracked in [TODO.md](../TODO.md) (A7A BL31 from
 source).
 
