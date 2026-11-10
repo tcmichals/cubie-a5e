@@ -180,3 +180,33 @@ devmem2 0x4e010000 w 4
 - §5.1 above is wrong: an SError was not seen, and a read alone proves nothing (non-secure reads always worked). The check is a **write with read-back while the core is out of reset**.
 - Next (driver): set the start address in a way that survives the reset. `RISCV_CFG_RST` is the only reset, so writing after releasing it races against the core fetching from `0x40014000`. Find the vendor sequence (how vendor BL31 "setup arisc para" then "release arisc reset"; vendor BSP), e.g. gate the E902 core clock, release reset, write the address, ungate. Until then, firmware linked at `0x40014000` would run, if that DRAM is reserved and mapped for the E902.
 
+### 6.1 Vendor start sequence and first E902 execution (2026-11-10)
+
+The vendor kernel has no E902 driver (`CONFIG_AW_REMOTEPROC` and `CONFIG_REMOTEPROC` off in `config-5.15.147-21-a733`); only BL31 starts the E902 (arisc). Disassembly of the shipped BL31 right after `[SCP] :set arisc reset to de-assert state` (VA `0x48011584`):
+
+```
+memcpy(0x00044000, 0x48100000, 0x28000)   ; SCP image into SRAM (ARM view)
+0x0701021c  = 0x00010003    ; R_CCU: riscv + riscv-cfg gates (bits 0,1), RST_BUS_RISCV_CFG released (bit 16)
+0x07032204  = 0x40004000    ; E902_STA_ADD_REG, written AFTER bit 16 is released
+0x07050008 |= 0x1           ; R_CPUCFG +0x8 bit 0: E902 core reset release (core runs)
+0x07010210 |= 0x80000000    ; R_PRCM +0x210 bit 31: riscv-24m clock gate
+0x50005120 &= ~0x1          ; not identified
+```
+
+Our driver (`a7a_remoteproc_camera_usb`) does only the first line: in "running" the board shows `0x0701021c=0x10003`, `0x07050008=0`, `0x07010210=0`, and the start address write is lost (done before bit 16). So the E902 was never released.
+
+**Board test, stock BL31, no `scp`, everything from Linux with `devmem`:** a 9-word position-independent RV32E probe at ARM `0x44000` (stores its own `auipc` address, `0x12345678` and a running counter at +0x100), then the vendor sequence above (except the unidentified last write):
+
+| Result | Value |
+| :--- | :--- |
+| `0x07032204` after the write | `0x40004000` (kept) |
+| marker: probe's own address as the E902 sees it | **`0x40004000`** |
+| marker 2 | `0x12345678` |
+| counter | `0x0208a984` → `0x040a0066` one second later (about 33 M/s) |
+| after clearing `0x07050008` bit 0 | counter stops: that bit is the core reset |
+
+Conclusions:
+1. **The E902 runs code from Linux with the stock BL31, no BL31 change, no SCP.**
+2. **The E902 sees SRAM at ARM address + `0x3ffc0000`** (ARM `0x44000` = E902 `0x40004000`). The A7A ATT in `sunxi_rproc.c` (SRAM A2 1:1 at `0x00040000`) and firmware linked at `0x40000` are wrong for the E902; vendor `scp` is linked at `0x40004000`. The power-on start address `0x40014000` is ARM `0x54000`. How DRAM looks from the E902 is not tested yet.
+3. **Driver start sequence to implement:** gates + `RST_BUS_RISCV_CFG` release, then write `E902_STA_ADD_REG`, then `riscv-24m` gate and `0x07050008` bit 0. Stop: clear `0x07050008` bit 0. The core reset (`R_CPUCFG` `0x07050008` bit 0) needs a reset provider; it is not in the A733 DT today.
+
