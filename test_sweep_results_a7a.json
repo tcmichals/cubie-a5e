@@ -1,0 +1,96 @@
+{
+  "timestamp": "2026-11-10 06:36:23",
+  "target": "root@192.168.1.12",
+  "board": "Radxa Cubie A7A (Allwinner A733)",
+  "coprocessor": "XuanTie E902 RISC-V (RV32EMC)",
+  "kunit_tests": {
+    "status": "FAIL",
+    "total_expected": 60,
+    "total_executed": 0,
+    "total_passed": 0,
+    "total_failed": 0,
+    "total_skipped": 0,
+    "kernel_splats": [],
+    "suites": {
+      "sunxi_rproc": {
+        "title": "sunxi_rproc (Remoteproc Driver)",
+        "expected_count": 23,
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "status": "MISSING",
+        "source": "dmesg",
+        "subtests": [],
+        "failed_tests": []
+      },
+      "sun55i_msgbox": {
+        "title": "sun55i_msgbox (Mailbox Driver)",
+        "expected_count": 37,
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "status": "MISSING",
+        "source": "dmesg",
+        "subtests": [],
+        "failed_tests": []
+      }
+    }
+  },
+  "sweep_summary": [
+    [
+      "A7A",
+      "KUnit: sunxi_rproc (Remoteproc Driver) (0/0 tests)",
+      "MISSING"
+    ],
+    [
+      "A7A",
+      "KUnit: sun55i_msgbox (Mailbox Driver) (0/0 tests)",
+      "MISSING"
+    ],
+    [
+      "A7A",
+      "run_tests.py (A7A Suite)",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "C++ ping_rpmsg (1000 pkts)",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "C++ stress_rpmsg (100k, 16 in flight)",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "Python ping_rpmsg.py (1000 pkts)",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "C++ ping_dram (1000 pkts)",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "Python monitor_trace.py",
+      "FAIL"
+    ],
+    [
+      "A7A",
+      "exampleRiscv lifecycle (start/running/stop)",
+      "PASS"
+    ],
+    [
+      "A7A",
+      "Kernel Health (dmesg clean)",
+      "FAIL"
+    ]
+  ],
+  "profiles": [],
+  "kernel_flavor": "rt",
+  "overall_status": "FAIL"
+}
