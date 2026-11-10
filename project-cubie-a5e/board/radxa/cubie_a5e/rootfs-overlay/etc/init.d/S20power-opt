@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# S20power-opt: Low-power idle optimization for Radxa Cubie A5E
+#
+
+case "$1" in
+  start)
+    printf "Applying A5E idle power optimization: "
+    # Offline secondary cluster big cores (cpu4..cpu7)
+    for c in 4 5 6 7; do
+      if [ -f "/sys/devices/system/cpu/cpu$c/online" ]; then
+        echo 0 > "/sys/devices/system/cpu/cpu$c/online" 2>/dev/null || true
+      fi
+    done
+
+    # Set scaling governor to schedutil / powersave if available
+    for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+      if [ -f "$g" ]; then
+        echo "schedutil" > "$g" 2>/dev/null || echo "powersave" > "$g" 2>/dev/null || true
+      fi
+    done
+    echo "OK"
+    ;;
+  stop)
+    printf "Restoring all CPUs online: "
+    for c in 4 5 6 7; do
+      if [ -f "/sys/devices/system/cpu/cpu$c/online" ]; then
+        echo 1 > "/sys/devices/system/cpu/cpu$c/online" 2>/dev/null || true
+      fi
+    done
+    echo "OK"
+    ;;
+  restart|reload)
+    $0 stop
+    $0 start
+    ;;
+  status)
+    echo "Online CPUs: $(cat /sys/devices/system/cpu/online 2>/dev/null)"
+    for t in /sys/class/thermal/thermal_zone*/temp; do
+      if [ -f "$t" ]; then
+        echo "Temp ($t): $(cat "$t") mC"
+      fi
+    done
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+
+exit 0
