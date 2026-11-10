@@ -14,7 +14,7 @@ This guide documents the complete procedure to build, patch, package, and run th
 | **Configuration Space (`E902_CFG`)** | **0x07032000 - 0x070323FF** | Core control registers in Always-On (`R_`) domain |
 | **Boot Address Register (`E902_STA_ADD_REG`)** | **0x07032204** | Latches E902 reset vector address upon core deassertion |
 | **Reset Control** | `R_CPUCFG` (`0x07050008`) / `R_PRCM` (`0x07010210`) | Managed by `sunxi_rproc.c` |
-| **EL3 Security Gate (`R_SPC` Port 3)** | **0x07002034** | Un-gated in TF-A / BL31 via in-segment executable trampoline |
+| **EL3 Security Gate (`R_SPC` Port 3)** | **0x07002034** | Not needed: with `scp` not loaded, the stock BL31 allows non-secure access (tested 2026-11-10, §6). The binary patch `patch_bl31_security.py` can go |
 | **Inter-Processor Signaling** | `msgbox0` (`0x07090000`, 8 bidirectional FIFO channels) | Channel 0 assigned to remoteproc doorbell kicks |
 | **Host Operating System** | **Linux 7.1 PREEMPT_RT** | Driver compatible: `allwinner,sun60i-a733-rproc` |
 
@@ -106,6 +106,7 @@ devmem2 0x07032204
 ```
 * **Success**: Reads `0x00040000` (or `0x00000000`) cleanly without hanging.
 * **Failure (Security Gated)**: Linux triggers an immediate kernel panic with `SError Interrupt / Asynchronous Data Abort`.
+* **Correction (2026-11-10, §6):** this check proves nothing. Reads work with the stock BL31 too (power-on value `0x40014000`), and writes are ignored while the core reset is held. Check a write with read-back while the core is out of reset instead.
 
 ### 2. Verify Remoteproc Driver Probing
 ```bash
@@ -146,3 +147,36 @@ devmem2 0x00050000 w 4
 devmem2 0x4e010000 w 4
 # Expected: Incremental heartbeat counter updated by E902 timer loop
 ```
+
+---
+
+## 6. Open Test: Is a BL31 Change Needed Without the SCP? (2026-11-10)
+
+**Why:** a review suggested that with `scp.fex` left out of the boot package, the stock BL31 would let Linux run the E902 with **no BL31 change**. Every image since `99fc419` (2026-10-24) has had the BL31 patch, so that was never tested. If it works, `patch_bl31_security.py` and the §5.1 expectation above go away, and the TF-A work (TODO.md "A7A BL31 from source") no longer needs the port-3 commit.
+
+**What the code says (reviewed 2026-11-10):**
+- Stock BL31 `sunxi_security_setup` (VA `0x48013180`) is straight-line: SPC ports 0–7, R_TZMA 0/4/8, R_SPC ports 0, 1, 2. It never writes R_SPC port 3, has no branch on whether an SCP was loaded, and nothing else in BL31 refers to R_SPC or to `0x07032000`/`0x07032204`.
+- So port 3 is left at its **power-on default**. The A733 User Manual lists `S_SPC` at `0x07002000` but documents no registers, so the default is not known from documents. The code cannot answer the question; the board test does.
+- Linux touches one register behind port 3: the start-address write in `sunxi_rproc_start()` (`sunxi_rproc.c:263`). Reset and clocks are in `r_ccu`, which is non-secure already.
+
+**Test:**
+1. On the SD card, put back the stock BL31 bytes (undo `patch_bl31_security.py`): `0xb9002020` at byte `0x15e96c` (sector 2804) and 12 zero bytes at `0x160d14` (sector 2822). Keep `scp` out of the FIT (`patch_fit_no_scp.py`).
+2. Boot. Set `sysctl kernel.panic=10`, so an SError reboots the board instead of hanging it. (Boot itself does not touch `0x07032204`: the boot-time firmware load fails before the driver writes it.)
+3. `devmem 0x07032204 32`, then start `exampleRiscv.elf` through `/sys/class/remoteproc/remoteproc0/state`.
+4. Pass: no SError, state `running`, start/stop works → **no BL31 change needed** once the SCP is not loaded. Fail: SError → port 3 defaults to secure → a BL31 change is needed (tracked TF-A commit `315e08e004`); put the patch back.
+
+**Result (2026-11-10): no BL31 change is needed. The real bug is in the driver.**
+
+| BL31 on the SD card | Core reset (`RISCV_CFG_RST`, r_ccu 12) | Read `0x07032204` | Write `0x00040000`, read back |
+| :--- | :--- | :--- | :--- |
+| stock (`b9002020` at `0x15e96c`), cold power-on | held (remoteproc offline) | `0x40014000`, no SError | `0x40014000`: write ignored |
+| patched (`140008ea`) | held | `0x40014000` | `0x40014000`: write ignored |
+| patched | released (remoteproc running) | `0x40014000` | **`0x00040000`: write sticks** |
+| **stock** | **released** | `0x40014000`, no SError | **`0x00040000`: write sticks, no SError** |
+
+- With `scp` not loaded, the **stock** BL31 lets Linux read and write `E902_STA_ADD_REG`. The review was right: R_SPC port 3 does not block it, and `patch_bl31_security.py` is not needed. (Port 3 is never written by the stock BL31, so its power-on default allows non-secure access; whether loading `scp` changes that was not tested, because our U-Boot never starts the arisc.)
+- The E902 config block **ignores writes while `RISCV_CFG_RST` is asserted**. `sunxi_rproc_start()` writes the start address and only then releases that reset (`sunxi_rproc.c:263`), so the write is always lost and the E902 starts from the power-on default `0x40014000` (zero-filled DRAM in the DT `scp@40014000` region), not from our firmware. That is why `state` says `running` while `trace0` stays empty (`testStringBinaryTrace0.elf`), and it explains the A7A RPMsg failures (TODO.md).
+- So the 2026-11-10 "10/10 start/stop" and the earlier "remoteproc running" results only show that the reset toggles. The E902 has not been shown to run our firmware on the A7A.
+- §5.1 above is wrong: an SError was not seen, and a read alone proves nothing (non-secure reads always worked). The check is a **write with read-back while the core is out of reset**.
+- Next (driver): set the start address in a way that survives the reset. `RISCV_CFG_RST` is the only reset, so writing after releasing it races against the core fetching from `0x40014000`. Find the vendor sequence (how vendor BL31 "setup arisc para" then "release arisc reset"; vendor BSP), e.g. gate the E902 core clock, release reset, write the address, ungate. Until then, firmware linked at `0x40014000` would run, if that DRAM is reserved and mapped for the E902.
+
