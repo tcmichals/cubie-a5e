@@ -84,6 +84,12 @@ namespace {
     VirtQueueLayout s_rx_vq; // vring[1]: Host -> Remote (RX)
 
     inline uintptr_t translate_da(uint32_t da) {
+#ifdef CORE_E902
+        // System SRAM A2 on Allwinner A733 (Host 0x00040000 -> E902 0x40000000)
+        if (da >= 0x00040000 && da < 0x00074000) {
+            return static_cast<uintptr_t>(da - 0x00040000 + 0x40000000);
+        }
+#endif
         // SRAM Space 1 on Allwinner A527 (Host 0x072c0000 -> E906 0x40000000)
         if (da >= 0x072c0000 && da < 0x07300000) {
             return static_cast<uintptr_t>(da - 0x072c0000 + 0x40000000);

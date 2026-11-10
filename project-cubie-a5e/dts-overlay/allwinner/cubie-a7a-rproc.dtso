@@ -14,7 +14,12 @@
  *
  * Hardware Lifecycle Controls:
  *   - CFG & Vector:   0x07032000 (E902_CFG, entry vector @ +0x204)
- *   - Clock / Reset:  r_ccu (CLK_RISCV, RST_BUS_RISCV_CFG, RST_BUS_R_CPUCFG)
+ *   - Clocks:         r_ccu CLK_RISCV (core), CLK_RISCV_CFG (bus)
+ *   - Resets:         r_ccu RST_BUS_RISCV_CFG = "cfg" (E902_CFG block; it ignores
+ *                     writes while held), R_CPUCFG 0x07050008 bit 0 = "core"
+ *                     (core run, active-low). Order and registers from the vendor
+ *                     BL31 arisc start; see CUBIE_A7A_E902_REBUILD_GUIDE.md 6.1.
+ *   - E902 view:      SRAM A2 host 0x00040000 = E902 0x40000000
  *   - Mailbox:        msgbox (@ 0x03004000 / 0x07094000)
  * ============================================================================
  */
@@ -39,6 +44,13 @@
 	fragment@1 {
 		target-path = "/soc";
 		__overlay__ {
+			/* E902 core reset: R_CPUCFG 0x07050008 bit 0, 1 = running */
+			e902_core_rst: reset-controller@7050008 {
+				compatible = "allwinner,sun6i-a31-clock-reset";
+				reg = <0x07050008 0x4>;
+				#reset-cells = <1>;
+			};
+
 			rproc_e902: remoteproc@7032000 {
 				compatible = "allwinner,sun60i-a733-rproc";
 				reg = <0x07032000 0x400>,
@@ -47,8 +59,9 @@
 				clocks = <&r_ccu 27>,  /* CLK_RISCV */
 				         <&r_ccu 26>;  /* CLK_RISCV_CFG */
 				clock-names = "core", "bus";
-				resets = <&r_ccu 12>;  /* RST_BUS_RISCV_CFG (E902 reset) */
-				reset-names = "core";
+				resets = <&r_ccu 12>,          /* RST_BUS_RISCV_CFG: E902_CFG block */
+				         <&e902_core_rst 0>;   /* R_CPUCFG 0x07050008 bit 0: core */
+				reset-names = "cfg", "core";
 				mboxes = <&msgbox 0>;
 				memory-region = <&rproc_carveout>;
 				firmware-name = "e902-firmware.elf";

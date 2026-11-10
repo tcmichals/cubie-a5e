@@ -34,7 +34,11 @@ static void put_uint(uint32_t val) {
 }
 
 int main(void) {
+#ifdef CORE_E902
+    volatile uint32_t *sram_counter = (volatile uint32_t *)0x40010004; /* host 0x00050004 */
+#else
     volatile uint32_t *sram_counter = (volatile uint32_t *)0x00050004;
+#endif
     volatile uint32_t *dram_counter = (volatile uint32_t *)0x4E010004;
 
     // 1. Initialize remoteproc trace buffer

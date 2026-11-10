@@ -22,7 +22,11 @@ _trap_handler:
     .type _start, @function
 
 _start:
+#ifdef CORE_E902
+    li t0, 0x40010000      /* SRAM A2 probe address (E902 view of host 0x00050000) */
+#else
     li t0, 0x00050000      /* SRAM A2 probe address */
+#endif
     li t1, 0x4E010000      /* DDR Carveout probe address */
     li t2, 0x31313131      /* Test signature */
 

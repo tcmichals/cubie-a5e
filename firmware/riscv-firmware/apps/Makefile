@@ -30,6 +30,9 @@ $(APPS):
 	@echo "================================================================"
 	@echo " Building RISC-V App for [$(CORE)]: $@ "
 	@echo "================================================================"
+	@# Clean first: each app writes $$app.elf for both cores, so without this a
+	@# stale ELF from the other core is seen as up to date and staged.
+	$(MAKE) -C $@ CORE=$(CORE) clean
 	$(MAKE) -C $@ CORE=$(CORE)
 
 host-tools: $(HOST_APPS)

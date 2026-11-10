@@ -2,11 +2,13 @@
  * e902_sram.ld - System SRAM A2 Linker Script for Allwinner A733 XuanTie E902
  *
  * Target: Allwinner XuanTie E902 RISC-V Co-Processor (RV32EMC)
- * Memory: Shared System SRAM A2 (Device Address 0x00040000 - 0x00073FFF, 208 KB)
+ * Memory: Shared System SRAM A2, 208 KB: host 0x00040000 - 0x00073FFF, seen by the E902
+ *         at 0x40000000 - 0x40033FFF (vendor BL31 starts its SCP at 0x40004000 after
+ *         copying it to host 0x00044000; confirmed on the board 2026-11-10).
  *
  * HARDWARE ARCHITECTURE (A733 Mode 2 RemoteProc):
  * - E902 has NO TCMs (no ITCM, no DTCM).
- * - Executes directly out of System SRAM A2 (0x00040000, 208 KB) or DRAM (0x4E000000).
+ * - Executes out of System SRAM A2 (E902 address 0x40000000, 208 KB).
  * - Entry address written to 0x07032204 (E902_STA_ADD_REG) by sunxi_rproc.
  */
 
@@ -15,7 +17,7 @@ ENTRY(_vectors)
 
 MEMORY
 {
-    SRAM_A2 (rwx) : ORIGIN = 0x00040000, LENGTH = 208K
+    SRAM_A2 (rwx) : ORIGIN = 0x40000000, LENGTH = 208K   /* E902 view of host 0x00040000 */
 }
 
 SECTIONS

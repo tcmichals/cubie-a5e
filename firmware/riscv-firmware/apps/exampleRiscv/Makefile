@@ -23,7 +23,7 @@ CORE ?= e906
 
 ifeq ($(CORE),e902)
 # Allwinner A733: XuanTie E902 (RV32E 16 registers, soft-float, 2-stage, up to 200 MHz)
-ARCH_FLAGS = -march=rv32emc_zicsr_zifencei -mabi=ilp32e -mcmodel=medany
+ARCH_FLAGS = -march=rv32emc_zicsr_zifencei -mabi=ilp32e -mcmodel=medany -DCORE_E902
 LDSCRIPT  ?= ../../../common/arch_riscv/e902_sram.ld
 else
 # Allwinner T527: XuanTie E906 (RV32IMAFCX, single-float, up to 200 MHz)

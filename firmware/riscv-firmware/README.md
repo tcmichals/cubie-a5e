@@ -31,12 +31,13 @@ This directory contains bare-metal firmware, runtime drivers, test applications,
 | Pipeline Architecture       | 5-stage dual-issue in-order                | 2-stage single-issue in-order                |
 | L1 Cache Architecture       | Configurable L1 I-Cache & L1 D-Cache       | Optional Instruction Cache, NO Data Cache    |
 | Dedicated RISC-V SRAM       | 512 KB (SRAM A3: Space 0 & Space 1)        | None                                         |
-| Shared System SRAM          | 160 KB (System SRAM A2 @ 0x00040000)       | 208 KB (System SRAM A2 @ 0x00040000)         |
+| Shared System SRAM          | 160 KB (System SRAM A2 @ 0x00040000)       | 208 KB (System SRAM A2, host 0x00040000 = E902 0x40000000) |
 | Audio DSP Local RAM Access  | 128 KB (HiFi4 DSP RAM @ 0x00020000)        | None (No DSP block on A733)                  |
 | Total On-Chip Fast Memory   | Up to 640 KB (SRAM A3 + DSP RAM)           | 208 KB (System SRAM A2)                      |
 | Boot Vector Register        | 0x07130204 (MCU_CFG STA_ADD)               | 0x07032204 (E902_CFG STA_ADD)                |
 | Hardware Mailbox Block      | Dual-bank: ARM 0x03003000 / MCU 0x07136000 | CPUS Shared Msgbox 0x07090000 (4 channels)   |
 | Default Target Build        | make CORE=e906 (stages to bin/e906/ & bin/)| make CORE=e902 (stages to bin/e902/)         |
+| Firmware link address       | 0x3ffc0000 (SRAM A3 space 0, E906 view)    | 0x40000000 (`e902_sram.ld`, E902 view)       |
 +-----------------------------------------------------------------------------------------------------------------+
 ```
 
