@@ -2,6 +2,12 @@
 """
 patch_bl31_security.py: Un-gate R_SPC Port 3 (E902_CFG @ 0x07032000) in Allwinner A733 BL31.
 
+WORKAROUND, not the solution: this edits the machine code of the closed vendor BL31. The
+solution is a BL31 built from tracked source (DESIGN_DECISIONS.md "A7A BL31: source code in
+git", TODO.md "A7A BL31 from source"). Remove this script once that BL31 boots the A7A.
+Port 3 is left secure on purpose by the vendor (arisc/SCP), not omitted; see the A7A debug log
+Milestone 20.
+
 Context:
 In the Radxa Cubie A7A vendor bootloader blob (radxa_a733_bootloader.bin), ARM Trusted Firmware
 (BL31) is embedded in a FIT image loaded to DRAM 0x48000000. During cold boot, sunxi_security_setup()

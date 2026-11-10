@@ -33,7 +33,9 @@ fi
 #     (lost in 4a276a2, SCP-1). Edits in place so the BL31 offsets below do not move.
 python3 "${BOARD_DIR}/patch_fit_no_scp.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
 
-# 3b. Un-gate BL31 R_SPC Port 3 (E902_CFG @ 0x07032000) for XuanTie E902 remoteproc
+# 3b. WORKAROUND (not the solution): binary-patch the closed vendor BL31 to un-gate R_SPC Port 3
+#     (E902_CFG @ 0x07032000) for XuanTie E902 remoteproc. To be replaced by a BL31 built from
+#     tracked source; see DESIGN_DECISIONS.md "A7A BL31: source code in git" and TODO.md.
 python3 "${BOARD_DIR}/patch_bl31_security.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
 
 # 4. Run genimage packaging pipeline

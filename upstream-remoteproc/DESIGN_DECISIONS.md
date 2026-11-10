@@ -270,6 +270,25 @@ today. Enabling the cache and the clean/invalidate helpers are firmware work, af
 
 ---
 
+## Boot firmware
+
+### A7A BL31: source code in git, the binary patch is only a workaround (owner, 2026-11-10)
+The E902 must be open for Linux remoteproc, which needs R_SPC port 3 (`0x07002034`) non-secure.
+The vendor BL31 that ships in `radxa_a733_bootloader.bin` (Allwinner TF-A v2.5, `177ce84c2`) has no
+public source (Radxa publishes only `bin/bl31.bin` in `radxa/allwinner-device`), and no Radxa
+release opens port 3. `patch_bl31_security.py` edits its machine code (a branch to a 3-instruction
+trampoline in padding).
+
+That patch is a **workaround** that keeps the board working. It is not the answer: it cannot be
+reviewed, tracked or sent upstream, and it breaks on the next vendor build. The answer is a BL31
+built from source that is tracked in git, as the A5E already does (`jernejsk/arm-trusted-firmware`
+`a523-v4` from Buildroot): the open A733 port (`dlan17/trusted-firmware-a`, branch `A733`) with
+the changes the E902 needs, each one a commit. Until that BL31 boots the A7A, keep the binary patch
+and call it a workaround wherever it is described. Tracked in [TODO.md](../TODO.md) (A7A BL31 from
+source).
+
+---
+
 ## Workflow
 
 ### Commit and push when work is done
