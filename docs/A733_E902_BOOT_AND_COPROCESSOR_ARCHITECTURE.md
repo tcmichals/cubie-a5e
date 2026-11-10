@@ -227,7 +227,7 @@ A BL31 from another vendor (e.g. the Orange Pi build Armbian uses for sun60iw2) 
 ---
 
 ### B. U-Boot & TOC1 Packaging Changes
-1. **Packaging**: Remove the SCP from the boot package so BL31 never starts the arisc. In our image this is a FIT edit in `post-image.sh` (sector 848 of `radxa_a733_bootloader.bin`): `loadables = "scp", "uboot";` → `loadables = "uboot";`, re-packed with `dtc` at the same offset (commit `cf724ae`). **This step is currently missing** (deleted in `4a276a2`; SCP-1). When restoring it, fail the build if the `loadables` line is not found (the old code silently did nothing), then check the serial log has no `[SCP]` lines.
+1. **Packaging**: Remove the SCP from the boot package so BL31 never starts the arisc. In our image this is a FIT edit in `post-image.sh` (sector 848 of `radxa_a733_bootloader.bin`): `loadables = "scp", "uboot";` → `loadables = "uboot";`, done by `patch_fit_no_scp.py` (restored 2026-11-10, SCP-1; first added in `cf724ae`, lost in `4a276a2`). It edits the property in place instead of re-packing with `dtc`, because the BL31 port-3 patch writes fixed offsets inside the same FIT, and the build fails if the property is not found. With the U-Boot 2026.04 blob we ship, the arisc is not started even with `scp` listed (nothing runs `sunxi_boot_arisc`); the edit keeps the SPL from loading the SCP at all (CUBIE_A7A_DEBUG_LOG.md Milestone 21).
 2. **PMIC Standalone Initialization**:
    Ensure U-Boot initializes the **AXP8191 PMIC** over I2C (`s_twi0` / `sunxi_r_i2c0` @ `0x07083000`):
    - Enable `DCDC1` (3.3V system power for USB hub, Wi-Fi, Ethernet).
@@ -300,7 +300,7 @@ Linux remoteproc on the A733 E902 does not work with a stock vendor boot chain, 
 | 4 | Kernel driver and DT | — | `allwinner,sun60i-a733-rproc` in `sunxi_rproc.c`, `cubie-a7a-rproc.dtbo` | — |
 
 **Do not assume** from "it boots" or "remoteproc starts" that a BL31 is suitable. Both checks below must pass on the image the distribution ships:
-1. The serial log shows no `[SCP]` lines (`[SCP] :arisc startup ready` means requirement 1 is not met).
+1. The serial log shows no `[SCP]` lines (`[SCP] :arisc startup ready` means requirement 1 is not met). This alone is not proof: with the Radxa U-Boot 2026.04 blob the log has no `[SCP]` lines whether or not `scp` is in the FIT, because that U-Boot only starts the arisc from its `sunxi_boot_arisc` command. Also check what the U-Boot build does (an older vendor U-Boot with `CONFIG_ARISC_DEASSERT_BEFORE_KERNEL=y` starts it before every kernel).
 2. With the remoteproc clock on and reset released, reading `0x07032204` from Linux does not abort (requirement 2).
 
 Each vendor builds its own BL31 (Radxa, Orange Pi, ...), so check these for every BL31 build, not once per SoC.
@@ -309,16 +309,17 @@ Each vendor builds its own BL31 (Radxa, Orange Pi, ...), so check these for ever
 
 ### F. Board Test: Mode 2 Without the Vendor SCP
 
-Run on the next A7A board session (same image as the camera work). Tick steps here; TODO.md (Part I §2) only shows the status. Results go in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` Milestone 20 and in §6.B / §6.E above.
+Run 2026-11-10 on the camera-work image. Results: `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` Milestone 21. TODO.md (Part I §2) only shows the status.
 
-- Why: vendor U-Boot (`radxa-cubie-a7a_defconfig`: `CONFIG_SUNXI_ARISC_EXIST=y`, `CONFIG_ARISC_DEASSERT_BEFORE_KERNEL=y`) asks BL31 to start the arisc (SMC `0x8000ff10`, `arch/arm/lib/bootm.c:387`) right before the kernel; BL31 keeps R_SPC port 3 secure for it. We use Radxa's prebuilt U-Boot, so the arisc is stopped by dropping `scp` from the boot-package FIT instead (that step was lost in `4a276a2`). Nobody has a boot log showing what stock BL31 does when U-Boot asks for an arisc that is not there. Needed before sending the TF-A list question.
-- [ ] SCP-1: restore the FIT `loadables` edit in `post-image.sh` (fail the build if the line is not found); keep the port-3 patch.
-- [ ] Read back the FIT in the built `radxa_a733_bootloader.bin`: no `scp` in `loadables`.
-- [ ] Boot with serial console: Linux comes up, no `[SCP] :arisc startup ready`. Save what BL31 prints when U-Boot calls `ARM_SVC_ARISC_STARTUP` (error and continue, or hang in `wait arisc ready`).
-- [ ] PMIC rails still fine without the arisc: USB hub, AIC8800 Wi-Fi, camera all come up.
-- [ ] E902 remoteproc: start/stop firmware 10 times, run `tools/run_full_sweep.py --target a7a`.
-- [ ] `reboot` works; `poweroff` really cuts power (vendor U-Boot's own power-off starts the arisc first, `board_sun60iw2.c:40`); try suspend (expected unsupported) and record what happens.
-- [ ] Record results in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` (Milestone 20) and `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.B/§6.E.
+- Why: vendor U-Boot (`radxa-cubie-a7a_defconfig`: `CONFIG_SUNXI_ARISC_EXIST=y`, `CONFIG_ARISC_DEASSERT_BEFORE_KERNEL=y`) asks BL31 to start the arisc (SMC `0x8000ff10`, `arch/arm/lib/bootm.c:387`) right before the kernel; BL31 keeps R_SPC port 3 secure for it. We use Radxa's prebuilt U-Boot, so the arisc is stopped by dropping `scp` from the boot-package FIT instead (that step was lost in `4a276a2`). Needed before sending the TF-A list question.
+- **Finding (2026-11-10):** that defconfig is the old vendor U-Boot. The U-Boot we ship (`2026.04-3-boot-dlan17-g24da4dae7637`) never asks BL31 for the arisc during a normal boot; it only does so from the `sunxi_boot_arisc` command. Boots with and without `scp` in the FIT print the same BL31 lines, no `[SCP]` lines, and the SCP image is not in SRAM A2. So the question "what does BL31 do when asked for a missing arisc" did not come up on this blob.
+- [x] SCP-1: restore the FIT `loadables` edit in `post-image.sh` (fail the build if the line is not found); keep the port-3 patch. (`patch_fit_no_scp.py`, in-place edit; both scripts now stop the build on failure.)
+- [x] Read back the FIT in the built `radxa_a733_bootloader.bin`: no `scp` in `loadables`. (Checked on a patched copy of the 2026-11-08 build and on the board's SD card; a full Buildroot rebuild has not run the new step yet.)
+- [x] Boot with serial console: Linux comes up, no `[SCP] :arisc startup ready`. Save what BL31 prints when U-Boot calls `ARM_SVC_ARISC_STARTUP` (error and continue, or hang in `wait arisc ready`). (U-Boot never makes that call; see the finding above.)
+- [x] PMIC rails still fine without the arisc: USB hub, AIC8800 Wi-Fi, camera all come up. (Camera: `/dev/video0` present, no frames captured in this test.)
+- [x] E902 remoteproc: start/stop firmware 10 times (10/10). `tools/run_full_sweep.py --target a7a`: **FAIL**, an existing RPMsg/msgbox bug that is not caused by removing the SCP (msgbox channel direction never set: `sun6i-msgbox.c:106` WARN, then `ping_rpmsg` hangs in the kernel and blocks `stop` and `reboot`). Tracked in TODO.md.
+- [ ] `reboot` works (done, three boots); `poweroff` really cuts power (vendor U-Boot's own power-off starts the arisc first, `board_sun60iw2.c:40`); try suspend (expected unsupported) and record what happens.
+- [x] Record results in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md` (Milestone 21) and `docs/A733_E902_BOOT_AND_COPROCESSOR_ARCHITECTURE.md` §6.B/§6.E.
 
 ---
 

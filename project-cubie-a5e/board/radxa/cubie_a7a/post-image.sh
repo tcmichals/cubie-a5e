@@ -29,8 +29,12 @@ else
     curl -sL "https://github.com/radxa-build/radxa-a733/releases/download/rsdk-t5/radxa-a733_trixie_cli_t5.output_512.img.xz" | xz -dc 2>/dev/null | head -c 16777216 > "${BINARIES_DIR}/radxa_a733_bootloader.bin"
 fi
 
+# 3a. Keep BL31 from starting the E902 as arisc/SCP: drop "scp" from the FIT loadables
+#     (lost in 4a276a2, SCP-1). Edits in place so the BL31 offsets below do not move.
+python3 "${BOARD_DIR}/patch_fit_no_scp.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
+
 # 3b. Un-gate BL31 R_SPC Port 3 (E902_CFG @ 0x07032000) for XuanTie E902 remoteproc
-python3 "${BOARD_DIR}/patch_bl31_security.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
+python3 "${BOARD_DIR}/patch_bl31_security.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
 
 # 4. Run genimage packaging pipeline
 rm -rf "${GENIMAGE_TMP}"
