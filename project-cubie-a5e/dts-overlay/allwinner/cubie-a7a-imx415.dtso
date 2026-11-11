@@ -82,8 +82,9 @@
 			imx415: camera-sensor@1a {
 				compatible = "sony,imx415";
 				reg = <0x1a>;
-				clocks = <&ccu 98>;		/* CLK_CSI_MASTER1 */
-				assigned-clocks = <&ccu 98>;
+				/* ID from dt-bindings/clock/allwinner,sun60i-a733-ccu.h */
+				clocks = <&ccu 259>;		/* CLK_CSI_MASTER1 */
+				assigned-clocks = <&ccu 259>;
 				assigned-clock-rates = <24000000>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&csi_mclk1_pin>;
