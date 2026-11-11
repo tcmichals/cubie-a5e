@@ -1,0 +1,111 @@
+                                 enable  prepare  protect                                duty  hardware                            connection
+   clock                          count    count    count        rate   accuracy phase  cycle    enable   consumer                         id
+---------------------------------------------------------------------------------------------------------------------------------------------
+       bus-r-i2c1                    0       0        0        24000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-i2c0                    0       0        0        24000000    0          0     50000      N         7081400.i2c                     no_connection_id         
+       bus-i2c1                      0       0        0        24000000    0          0     50000      N         2502400.i2c                     no_connection_id         
+       bus-i2c0                      0       0        0        24000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-uart3                     0       0        0        24000000    0          0     50000      N         2500c00.serial                  no_connection_id         
+    pll-npu-4x                       0       0        0        504000000   0          0     50000      N      deviceless                      no_connection_id         
+       pll-npu-1x                    0       0        0        126000000   0          0     50000      Y         deviceless                      no_connection_id         
+       pll-npu-2x                    0       0        0        252000000   0          0     50000      Y         deviceless                      no_connection_id         
+       ve                            0       0        0        432000000   0          0     50000      N         deviceless                      no_connection_id         
+       gpu                           0       0        0        432000000   0          0     50000      N         deviceless                      no_connection_id         
+          npu                        0       0        0        480000000   0          0     50000      N            7122000.npu                     core                     
+             emac1-25M               0       0        0        25000000    0          0     50000      N               deviceless                      no_connection_id         
+             emac0-25M               0       0        0        25000000    0          0     50000      N               deviceless                      no_connection_id         
+                bus-r-cpucfg         1       1        0        100000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                bus-r-cpu-bist       0       0        0        100000000   0          0     50000      N                  deviceless                      no_connection_id         
+                bus-npu-aclk         0       0        0        200000000   0          0     50000      N                  7122000.npu                     bus                      
+                bus-npu-hclk         0       0        0        200000000   0          0     50000      N                  7122000.npu                     reg                      
+             mmc0                    0       0        0        50000000    0          0     50000      N               4020000.mmc                     mmc                      
+             mmc1                    1       1        0        25000000    0          0     50000      Y               4021000.mmc                     mmc                      
+                bus-gpadc1           0       0        0        200000000   0          0     50000      N                  deviceless                      no_connection_id         
+                bus-gpadc0           0       0        0        200000000   0          0     50000      N                  deviceless                      no_connection_id         
+                bus-emac1            1       1        0        200000000   0          0     50000      Y                  4510000.ethernet                stmmaceth                
+                bus-emac0            1       1        0        200000000   0          0     50000      Y                  4500000.ethernet                stmmaceth                
+                bus-mmc1             1       1        0        200000000   0          0     50000      Y                  4021000.mmc                     ahb                      
+                bus-mmc0             0       0        0        200000000   0          0     50000      N                  4020000.mmc                     ahb                      
+                bus-dram             1       1        0        200000000   0          0     50000      Y                  deviceless                      no_connection_id         
+    pll-ddr0                         3       3        3        2400000000  0          0     50000      Y      deviceless                      no_connection_id         
+       dram                          1       1        0        600000000   0          0     50000      Y         deviceless                      no_connection_id         
+       mbus                          4       4        0        600000000   0          0     50000      Y         deviceless                      no_connection_id         
+          mbus-mcu                   1       1        0        600000000   0          0     50000      Y            deviceless                      no_connection_id         
+             mbus-mcu-dma            1       1        0        600000000   0          0     50000      Y               7121000.dma-controller          mbus                     
+          mbus-gmac1                 1       1        0        600000000   0          0     50000      Y            4510000.ethernet                mbus                     
+          mbus-isp                   0       0        0        600000000   0          0     50000      N            deviceless                      no_connection_id         
+          mbus-csi                   0       0        0        600000000   0          0     50000      N            deviceless                      no_connection_id         
+          mbus-ce                    0       0        0        600000000   0          0     50000      N            deviceless                      no_connection_id         
+          mbus-ve                    0       0        0        600000000   0          0     50000      N            deviceless                      no_connection_id         
+          mbus-dma                   1       1        0        600000000   0          0     50000      Y            3002000.dma-controller          mbus                     
+ gpadc1                              1       1        0        0           0          0     50000      Y   2009400.thermal-sensor          mod                      
+ gpadc0                              1       1        0        0           0          0     50000      Y   200a000.thermal-sensor          mod                      
+===REG
+regulator-dummy users=2
+vcc-5v 5000000 users=17
+vcc-pll-dxco-avcc 1800000 enabled users=1
+vcc-pg-iowifi 1800000 enabled users=3
+dcdc2 900000 enabled users=0
+vcc-pm-lpddr4 1800000 enabled users=1
+vdd-dnr 900000 enabled users=1
+vcc-mipi-cam 3300000 disabled users=0
+vcc-mipi-dsi 1800000 disabled users=0
+bldo4 1200000 disabled users=0
+dldo1 3300000 disabled users=0
+vcc-pc-and-their-dog 3300000 enabled users=1
+vdd-cpul 900000 enabled users=1
+rtc-ldo 1800000 users=1
+cldo2 3300000 disabled users=0
+vcc-io-mmc-spi-ana 3300000 enabled users=7
+vcc-pj-phy 3300000 enabled users=2
+vdd-cpus 900000 enabled users=1
+boost 5126000 disabled users=0
+wifi-en 3300000 enabled users=1
+3v3-wifi 3300000 enabled users=2
+usb-vbus 5000000 enabled users=1
+vdd-gpu-sys 920000 enabled users=1
+vdd-dram 1100000 enabled users=1
+dcdc4 1000000 enabled users=0
+aldo1 1800000 disabled users=0
+vcc-pe 1800000 disabled users=0
+vcc-pl-usb 3300000 enabled users=2
+vdd-cpub 900000 enabled users=1
+===IDLE
+ls: /sys/devices/system/cpu/cpu0/cpuidle: No such file or directory
+/sys/devices/system/cpu/cpuidle:
+available_governors  current_governor
+current_driver       current_governor_ro
+none
+menu
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: MIGRATE_INFO_TYPE not supported.
+[    0.000000] psci: SMC Calling Convention v1.5
+[    5.884296] psci: CPU4 killed (polled 0 ms)
+[    5.896235] psci: CPU5 killed (polled 0 ms)
+[    5.905067] psci: CPU6 killed (polled 0 ms)
+[    5.916017] psci: CPU7 killed (polled 0 ms)
+---
+[    5.884296] psci: CPU4 killed (polled 0 ms)
+[    5.896235] psci: CPU5 killed (polled 0 ms)
+[    5.905067] psci: CPU6 killed (polled 0 ms)
+[    5.916017] psci: CPU7 killed (polled 0 ms)
+===TOP
+Mem: 98876K used, 3918864K free, 204K shrd, 5612K buff, 17024K cached
+CPU:   0% usr   2% sys   0% nic  97% idle   0% io   0% irq   0% sirq
+Load average: 0.00 0.00 0.00 1/184 1129
+  PID  PPID USER     STAT   RSS %RSS %CPU COMMAND
+ 1128   505 root     R     1736   0%   2% top -bn1
+  370     1 root     S     5132   0%   0% /sbin/udevd
+  475     1 root     S     4780   0%   0% wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
+  505     1 root     S     1888   0%   0% -sh
+  358     1 root     S     1788   0%   0% /sbin/klogd -n
+  498     1 root     S     1572   0%   0% /usr/sbin/crond -f
+ 1129   505 root     S     1572   0%   0% head -15
+  354     1 root     S     1556   0%   0% /sbin/syslogd -n
+    1     0 root     S     1528   0%   0% init
+  502     1 root     S     1188   0%   0% /usr/sbin/dropbear -R
+  494     1 root     S      700   0%   0% udhcpc -b -i wlan0 -R
+/sys/class/thermal/cooling_device0
+blue:activity  green:power
