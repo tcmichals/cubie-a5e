@@ -355,7 +355,14 @@ memcpy of frames. RAW capture without the ISP is a bring-up/debug tool only. Suc
 CPU load during 1080p30/4K capture + encode (target: < 2 % of one core). Plan: CAMERA_V4L2_GUIDE.md
 §5, TODO.md "A733 Hardware ISP" and "Zero-Copy Hardware Video Encoding".
 
-### A733 clock driver: use Junhui Liu's upstream v3 (2026-11-11)
+### A733 clock driver: use Junhui Liu's upstream series, now v6 (2026-11-11)
+
+Update 2026-11-11 (owner): move from v3 to v6
+(`<20261009-a733-clk-v6-0-ae8178fce7e8@pigmoral.tech>`), with its prerequisite "clk: sunxi-ng: a523:
+Fix single-divider clocks" (`<20260906-sunxi-clk-no-p-v1-0-cbde21c9fe69@pigmoral.tech>`, in
+sunxi/clk-for-7.4). On `a7a_remoteproc_camera_usb` as one revert commit of v3 plus our driver
+commits, then the 4 + 8 patches with Junhui Liu's authorship, then our commits re-applied. The
+original v3 decision follows.
 
 Our `ccu-sun60i-a733.c` (copied from the A523) does not match the A733 (PLL_PERI0 modelled at the
 PLL_DDR offset, APB/AHB/CSIC registers wrong; TODO.md). Replace it with Junhui Liu's "[PATCH v3 0/8]
