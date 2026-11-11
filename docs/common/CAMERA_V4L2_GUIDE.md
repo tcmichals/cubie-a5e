@@ -195,7 +195,7 @@ Source: `vendor-a733-reference/A733_Datasheet_V0.93.txt` §3.3.1 ISP (line 1173)
 
 What this means:
 - **4K-wide (3840) capture is beyond online ISP mode** (max width 3264). Radxa PR #33 (ISP1 limited to 3264×2160) is a hardware limit, not a driver bug; 3840×2160 needs offline mode (frame through DRAM) or a sensor mode ≤ 3264 wide.
-- **2F-WDR / DOL** needs two exposures per frame; the IMX415 "2-frame stitch with one buffer" report is a configuration of that mode.
+- **Wider than 3264 online:** the vendor splits one frame into left and right halves (with overlap) for ISP0 and ISP1 (`STITCH_2IN1`, `large_image == 3`: vendor `vin.c:1448-1453`, `vin-csi/sunxi_csi.c:451-460`, `vin-tdm/vin_tdm.c:387-394`, `vin-isp/sunxi_isp.c:1075-1084`). The IMX415 "2-frame stitch with one buffer" report is this split, not 2F-WDR/DOL (corrected 2026-11-11, triage doc). Whether the split is a documented hardware mode: not found.
 - The **TDM** in the `tdm0 rx0 frame error` reports is the BK0-3 time-division input stage (`tdm0@5908000`).
 - Our target (ov5647, 2-lane, 1080p30 RAW10, ISP online) is well inside every limit.
 
@@ -219,11 +219,13 @@ Ours (`linux-cubie` `ccu-sun60i-a733.c`): `csi-top` is a gate only (`:117`); the
 
 ### 5.5 Vendor and community reports (inputs for Phase 0, 2026-11-11)
 
+Root-cause triage of each report (code / config / tuning / hardware limit / unknown, checked against the datasheet): [`A733_CAMERA_VE_ISSUES_TRIAGE.md`](A733_CAMERA_VE_ISSUES_TRIAGE.md).
+
 Anecdotal; check each against the vendor source before relying on it.
 
 - CSI/ISP clock: `tdm0 rx0 frame error! width is 0` on IMX219 (A7Z), reported fixed by lowering the DT CSI/ISP clocks 704/704 → 360/300 MHz: https://github.com/radxa-build/radxa-a733/issues/39 . Our `ccu-sun60i-a733.c` probe sets the ISP clock to 600 MHz: check the vendor rate in Phase 0.6.
 - Colour depends on closed per-sensor tuning: IMX415 red/magenta cast, `libisp_ini.so` falls back to an ov13850 profile: https://github.com/radxa-build/radxa-a733/issues/19 . Radxa's userspace ISP package `allwinner-isp6xx` (tuning, e.g. GC2093): https://github.com/radxa-pkg/allwinner-isp6xx/pull/3
-- IMX415 DOL (2-frame stitch) with one buffer makes continuous capture unusable: https://forum.radxa.com/t/cubie-a7z-camera-4k-imx415-continuous-capture-is-unusable-isp-runs-a-2-frame-dol-stitch-with-only-one-buffer/31224
+- IMX415 2-ISP split ("2-frame stitch", see 5.3a; not DOL) with one buffer makes continuous capture unusable: https://forum.radxa.com/t/cubie-a7z-camera-4k-imx415-continuous-capture-is-unusable-isp-runs-a-2-frame-dol-stitch-with-only-one-buffer/31224
 - ISP1 frame size limit 3264×2160 (not 3840×2160): https://github.com/radxa/allwinner-bsp/pull/33
 - A7A IMX214: wrong colours, `ISP_ERR` in `isp_dev_start` (TDM event subscribe failed): https://forum.radxa.com/t/radxa-cubie-a7a-radxa-13m-214-camera/29717 ; IMX415 `sensor_detect=0x0`: https://forum.radxa.com/t/cubie-a7a-radxa-camera-4k-imx415-detected-but-no-video-output-sensor-detect-0x0/30357
 - VE (not camera, for the encoder work): vendor Cedar H.264 encoder IRQ never fires (`cedar_dev_ve2`, "wait interrupt overtime"), decode works: https://github.com/radxa-build/radxa-a733/issues/35
