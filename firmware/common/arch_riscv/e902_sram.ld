@@ -3,12 +3,17 @@
  *
  * Target: Allwinner XuanTie E902 RISC-V Co-Processor (RV32EMC)
  * Memory: Shared System SRAM A2, 208 KB: host 0x00040000 - 0x00073FFF, seen by the E902
- *         at 0x40000000 - 0x40033FFF (vendor BL31 starts its SCP at 0x40004000 after
- *         copying it to host 0x00044000; confirmed on the board 2026-11-10).
+ *         at 0x40000000 - 0x40033FFF.
+ *
+ * The E902 does not run code from the first 16 KB (host 0x00040000 - 0x00043FFF): a
+ * position-independent probe runs at host 0x00044000 (E902 0x40004000) and never starts
+ * at host 0x00040000 (E902 0x40000000) (board, 2026-11-10). The vendor BL31 also loads its
+ * SCP at host 0x00044000 and starts it at 0x40004000. Firmware is linked there:
+ * 192 KB, E902 0x40004000 - 0x40033FFF = host 0x00044000 - 0x00073FFF.
  *
  * HARDWARE ARCHITECTURE (A733 Mode 2 RemoteProc):
  * - E902 has NO TCMs (no ITCM, no DTCM).
- * - Executes out of System SRAM A2 (E902 address 0x40000000, 208 KB).
+ * - Executes out of System SRAM A2.
  * - Entry address written to 0x07032204 (E902_STA_ADD_REG) by sunxi_rproc.
  */
 
@@ -17,7 +22,7 @@ ENTRY(_vectors)
 
 MEMORY
 {
-    SRAM_A2 (rwx) : ORIGIN = 0x40000000, LENGTH = 208K   /* E902 view of host 0x00040000 */
+    SRAM_A2 (rwx) : ORIGIN = 0x40004000, LENGTH = 192K   /* E902 view of host 0x00044000 */
 }
 
 SECTIONS

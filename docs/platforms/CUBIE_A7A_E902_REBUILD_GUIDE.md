@@ -210,3 +210,24 @@ Conclusions:
 2. **The E902 sees SRAM at ARM address + `0x3ffc0000`** (ARM `0x44000` = E902 `0x40004000`). The A7A ATT in `sunxi_rproc.c` (SRAM A2 1:1 at `0x00040000`) and firmware linked at `0x40000` are wrong for the E902; vendor `scp` is linked at `0x40004000`. The power-on start address `0x40014000` is ARM `0x54000`. How DRAM looks from the E902 is not tested yet.
 3. **Driver start sequence to implement:** gates + `RST_BUS_RISCV_CFG` release, then write `E902_STA_ADD_REG`, then `riscv-24m` gate and `0x07050008` bit 0. Stop: clear `0x07050008` bit 0. The core reset (`R_CPUCFG` `0x07050008` bit 0) needs a reset provider; it is not in the A733 DT today.
 
+
+### 6.2 First Linux remoteproc run, and the 16 KB the E902 cannot run from (2026-11-10, evening)
+
+Image of 19:07 (kernel #20 with the `cfg`/`core` resets and the `0x40000000` ATT, stock BL31, no `scp`), firmware linked at `0x40000000`: `remoteproc` said `running`, the registers were right (`0x07032204=0x40000000`, `0x07050008=1`, `0x0701021c=0x10003`, code loaded at host `0x40000`), but nothing ran (`.bss`, trace buffer and the exampleRiscv probe address stayed 0).
+
+The §6.1 probe, by hand with `devmem`:
+
+| Probe at host → started at (E902) | Result |
+| :--- | :--- |
+| `0x44000` → `0x40004000` | runs: marker `0x40004000`, counter ~33 M/s |
+| `0x40000` → `0x40000000` | never runs |
+| `0x44000` → `0x40004000`, `riscv-24m` gate (`0x07010210` bit 31) **off** | runs: the gate is not needed |
+
+**The E902 does not run code from the first 16 KB of SRAM A2** (host `0x40000`–`0x43fff`). The vendor SCP sits at `0x44000` for that reason. `e902_sram.ld` now links at `0x40004000`, 192 KB (host `0x44000`–`0x73fff`); the ATT and `translate_da` need no change. Whether the E902 can read or write that first 16 KB as data is not tested.
+
+With firmware linked at `0x40004000` (copied to `/tmp` over serial, `firmware_class.path=/tmp`):
+- `exampleRiscv.elf`: its `_start` probe loop counts at host `0x50000` (about 20 M/s). It never reaches `main()` by design, so `0x50004` stays 0.
+- `testStringBinaryTrace0.elf`: `trace0` shows the banner and telemetry frames; the packet at host `0x468e0` (`MLET`, sequence number) goes up by 2 a second, so the firmware timer works.
+- 10 stop/start cycles: all `running`, no remoteproc errors.
+
+So **Linux remoteproc runs the E902 with the stock vendor BL31, no SCP and no BL31 patch.** Still open: RPMsg (msgbox channel direction, TODO), the E902 view of DRAM and the msgbox, `0x50005120`. The firmware banner text still says "T527 E906".
