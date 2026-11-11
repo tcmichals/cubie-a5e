@@ -83,8 +83,8 @@
 				compatible = "sony,imx415";
 				reg = <0x1a>;
 				/* ID from dt-bindings/clock/allwinner,sun60i-a733-ccu.h */
-				clocks = <&ccu 259>;		/* CLK_CSI_MASTER1 */
-				assigned-clocks = <&ccu 259>;
+				clocks = <&ccu 260>;		/* CLK_CSI_MASTER1 */
+				assigned-clocks = <&ccu 260>;
 				assigned-clock-rates = <24000000>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&csi_mclk1_pin>;

@@ -59,8 +59,8 @@
 				      <0x00044000 0x30000>;
 				reg-names = "cfg", "sram";
 				/* IDs from dt-bindings/clock/allwinner,sun60i-a733-r-ccu.h */
-				clocks = <&r_ccu 26>,  /* CLK_BUS_R_RISCV */
-				         <&r_ccu 27>;  /* CLK_BUS_R_RISCV_CFG */
+				clocks = <&r_ccu 25>,  /* CLK_BUS_R_RISCV */
+				         <&r_ccu 26>;  /* CLK_BUS_R_RISCV_CFG */
 				clock-names = "core", "bus";
 				resets = <&r_ccu 11>,          /* RST_BUS_R_RISCV_CFG: E902_CFG block */
 				         <&e902_core_rst 0>;   /* R_CPUCFG 0x07050008 bit 0: core */
