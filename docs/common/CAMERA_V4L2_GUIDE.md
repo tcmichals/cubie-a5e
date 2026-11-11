@@ -90,6 +90,7 @@ This section is the detailed plan: rules, facts, exit criteria and the step chec
 ### 5.1 Rules
 
 0. **No video processing on the CPU** (owner, 2026-11-11, DESIGN_DECISIONS.md): sensor → CSI → hardware ISP → NV12 dma-buf → hardware VE encoder; the CPU only queues buffers. RAW capture without the ISP is for bring-up only. Target CPU load during capture + encode: < 2 % of one core.
+   - If RAW is ever recorded, it is DMA end to end (owner, 2026-11-11): CSI DMA writes the frame into a DRAM dma-buf; userspace passes that buffer to the storage driver (`O_DIRECT` / io_uring, no memcpy, no page cache); the storage controller's DMA (NVMe, or the SMHC IDMAC) reads it. The CPU only queues buffers and submits I/O. Bandwidth: IMX415 full 3864×2192 RAW10 packed at 30 fps ≈ 320 MB/s (16-bit ≈ 510 MB/s), 1080p RAW10 ≈ 78 MB/s: full-resolution RAW needs NVMe over PCIe (A7A PCIe signals exist in the schematic; no mainline A733 PCIe driver yet). ISP → H.264 needs only 2-6 MB/s.
 1. Phases run in order. A phase starts only when the previous phase's exit criteria have passed **on the board** and the result is recorded in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
 2. Hardware facts come from the vendor BSP (`linux-a733/bsp/drivers/vin/`, `bsp/configs/linux-5.15/sun60iw2p1.dtsi`) or silicon readbacks, cited by file:line. Not from this document alone.
 3. Driver work happens in `linux-cubie` on the A7A branch, as a proper V4L2 driver (media controller, subdevs, `videobuf2-dma-contig`), so it can go upstream later. No vendor `vin` module port.
