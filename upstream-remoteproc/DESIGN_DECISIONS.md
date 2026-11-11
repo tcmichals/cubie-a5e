@@ -354,3 +354,12 @@ H.264/H.265 encoder → storage or radio. No software ISP, no CPU debayer, no CP
 memcpy of frames. RAW capture without the ISP is a bring-up/debug tool only. Success is measured as
 CPU load during 1080p30/4K capture + encode (target: < 2 % of one core). Plan: CAMERA_V4L2_GUIDE.md
 §5, TODO.md "A733 Hardware ISP" and "Zero-Copy Hardware Video Encoding".
+
+### A733 clock driver: use Junhui Liu's upstream v3 (2026-11-11)
+
+Our `ccu-sun60i-a733.c` (copied from the A523) does not match the A733 (PLL_PERI0 modelled at the
+PLL_DDR offset, APB/AHB/CSIC registers wrong; TODO.md). Replace it with Junhui Liu's "[PATCH v3 0/8]
+clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM" (linux-sunxi 2026-09-04,
+https://ratatoskr.run/linux-sunxi/2026/09/17515754/t), fetched locally on `a7a_remoteproc_camera_usb`
+(nothing sent). Our additions (THS, CSI master, VE, ISP/ISP-MBUS, E902 R-CCU) go on top as separate
+commits; problems found in v3 become review comments only with the owner's go-ahead.
