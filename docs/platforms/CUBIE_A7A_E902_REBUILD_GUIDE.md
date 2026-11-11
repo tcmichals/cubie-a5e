@@ -231,3 +231,17 @@ With firmware linked at `0x40004000` (copied to `/tmp` over serial, `firmware_cl
 - 10 stop/start cycles: all `running`, no remoteproc errors.
 
 So **Linux remoteproc runs the E902 with the stock vendor BL31, no SCP and no BL31 patch.** Still open: RPMsg (msgbox channel direction, TODO), the E902 view of DRAM and the msgbox, `0x50005120`. The firmware banner text still says "T527 E906".
+
+### 6.3 E902 memory map (A733 User Manual, the source of truth)
+
+Host view: **SRAM A2 `0x00040000`–`0x00073FFF`, "16K+192K (The 16K is only used by CPUS.)"**. E902 view:
+
+| E902 address | Size | What | Use |
+| :--- | :--- | :--- | :--- |
+| `0x40000000`–`0x40003FFF` | 16 KB | SRAM A2, CPUS-only part (host `0x40000`–`0x43fff`) | **Not used.** The E902 does not run code there; some words ignore host writes (§6.2) |
+| `0x40004000`–`0x40033FFF` | 192 KB | SRAM A2, general part (host `0x44000`–`0x73fff`) | Firmware (`e902_sram.ld`), driver ATT, overlay `sram` window |
+| `0x40034000`–`0x7FFFFFFF` | 1 GB − 208 KB | DRAM, same address as the host | Carveouts (`0x4e000000`), no ATT entry needed |
+| `0x80000000`–`0xBFFFFFFF` | 1 GB | DRAM window, `e902_remap` selects the DDR GB (0 = not mapped) | Not used |
+| `0x00080000`–`0x0709FFFF` | | Peripherals at the host addresses | msgbox banks `0x03004000` (host) / `0x07094000` (E902) |
+
+Shared SRAM (`0x74000`–`0xF3FFF`, 512 KB) is usable only after NPU mapping with the NPU powered (manual), so not for the E902 today.

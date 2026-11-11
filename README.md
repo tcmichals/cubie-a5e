@@ -52,7 +52,7 @@ The reasoning and the record are in [`DESIGN_DECISIONS.md`](upstream-remoteproc/
 | Board | Done | Next |
 | :--- | :--- | :--- |
 | **Cubie A5E**<br>*(Allwinner A527 / T527)* | • Mainline Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A BL31)<br>• XuanTie E906 remoteproc + message box: sysfs start/stop, trace0 debugfs streaming, exception capture (`0xDEADF00D`)<br>• VirtIO RPMsg and UIO IPC across 3 memory profiles (DRAM, SRAM A3, userspace UIO)<br>• Full sweep passing on v3 code (`tools/run_full_sweep.py --target a5e`)<br>• Upstream v3 sent<br>• Wi-Fi 6 AIC8800D80 (SDIO) on the RFC v3 driver | • Update the sweep and overlay for v4, then run the full test set on v4<br>• v4 pre-send checks, then submit<br>• Camera: OV5647 over MIPI CSI-2<br>• Cadence HiFi4 Audio DSP applications |
-| **Cubie A7A**<br>*(Allwinner A733)* | • Mainline Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A BL31)<br>• USB 2.0 host + FE1.1S hub at High-Speed (480 Mbps)<br>• Wi-Fi 6 AIC8800 (USB) with a DHCP lease, on the older `aic8800-upstream` driver<br>• E902 runs code from Linux with the **stock** BL31 and no SCP: no BL31 change needed (2026-11-10, [rebuild guide §6](docs/platforms/CUBIE_A7A_E902_REBUILD_GUIDE.md))<br>• E902 start sequence found in the vendor BL31; E902 sees System SRAM A2 (host `0x00040000`, 208 KB) at `0x40000000`. Kernel ATT, overlay resets and firmware link address fixed, board test pending<br>• Watchdog soft reset via `WDT_SRST_REG` in `sunxi_wdt.c`<br>• 11 E902 ELFs staged (incl. `testFreeRTOS`)<br>• Camera capture (CSI-2) as work in progress | • Board-test Wi-Fi USB on the RFC v3 driver, then retire `aic8800-upstream`<br>• GMAC210 Ethernet TX DMA timeout fix<br>• Board-test E902 remoteproc with the new resets, ATT and firmware; then RPMsg and the sweep<br>• Enable the thermal sensor (`sun8i_thermal`): no thermal zones today<br>• Bring the v3 and v4 remoteproc and msgbox fixes to this board's branch<br>• Extend the sweep to USB, Wi-Fi, camera and watchdog; run the full test set<br>• Finish camera capture |
+| **Cubie A7A**<br>*(Allwinner A733)* | • Mainline Linux 7.1 `PREEMPT_RT` boot (U-Boot + TF-A BL31)<br>• USB 2.0 host + FE1.1S hub at High-Speed (480 Mbps)<br>• Wi-Fi 6 AIC8800 (USB) with a DHCP lease, on the older `aic8800-upstream` driver<br>• E902 runs code from Linux with the **stock** BL31 and no SCP: no BL31 change needed (2026-11-10, [rebuild guide §6](docs/platforms/CUBIE_A7A_E902_REBUILD_GUIDE.md))<br>• **Linux remoteproc runs the E902** (2026-11-10): `testStringBinaryTrace0` fills `trace0`, 10 stop/start cycles. E902 sees System SRAM A2 (host `0x00040000`) at `0x40000000` but its first 16 KB is the CPUS-only part (A733 User Manual): firmware and the driver use the 192 KB at `0x40004000`<br>• **Thermal sensor (THS)** with 5 zones (2026-11-10): ~35-39 °C idle, ~50 °C after 30 s on all 8 cores<br>• Watchdog soft reset via `WDT_SRST_REG` in `sunxi_wdt.c`<br>• 11 E902 ELFs staged (incl. `testFreeRTOS`)<br>• Camera capture (CSI-2) as work in progress | • Board-test Wi-Fi USB on the RFC v3 driver, then retire `aic8800-upstream`<br>• GMAC210 Ethernet TX DMA timeout fix<br>• Board-test the A733 message box fix (`sun55i-msgbox` A733 variant, the old `sun6i-msgbox` fallback bound and hung RPMsg), then RPMsg and the sweep<br>• Thermal cooling device (fan / cpufreq)<br>• Bring the v3 and v4 remoteproc and msgbox fixes to this board's branch<br>• Extend the sweep to USB, Wi-Fi, camera and watchdog; run the full test set<br>• Finish camera capture |
 
 > [!NOTE]
 > Not yet enabled on either board: display / HDMI output and hardware video codec. For full task tracking, see [TODO.md](TODO.md).
@@ -84,11 +84,28 @@ Material removed from this repo when it was refocused on 2026-11-07 is kept on t
 | **Co-Proc Memory** | SRAM A3 (32 KB) + DSP RAM (64 KB) | System SRAM A2 (208 KB shared) |
 | **System RAM** | 2 GiB / 4 GiB LPDDR4X | 4 GiB / 6 GiB LPDDR5 |
 | **Wi-Fi / BT** | AIC8800D80 (SDIO) | AIC8800D80 (USB) |
+| **Thermal sensor (THS)** | `sun8i_thermal` A523 support: `ths0` + `ths1`, zones `cpu0`, `cpu4`, `gpu`, `ddr`; ~41-42 °C idle (2026-11-10) | `sun8i_thermal` A733 support (this repo): 5 sensors at `0x02522000`, zones `cpu-big`, `ddr`, `npu`, `cpu-little`, `gpu`; SID calibration; hot 90 °C / critical 110 °C, no cooling device yet |
 | **Base DTB** | `sun55i-a527-cubie-a5e.dtb` | `sun60i-a733-cubie-a7a.dtb` |
 
 The tree also has configuration for the Yuzuki Avaota A1 and the Radxa Cubie A7Z, which are not part of the test goal.
 
 ---
+
+## 🌡️ Thermal Sensors (THS)
+
+Both boards report CPU, GPU and DRAM temperatures through mainline `sun8i_thermal` (`/sys/class/thermal/thermal_zone*/temp`, millidegree Celsius; also hwmon).
+
+| | Cubie A5E (A527/T527) | Cubie A7A (A733) |
+| :--- | :--- | :--- |
+| Driver support | A523 (`ths0` + `ths1`), in the tree | A733, added on `a7a_remoteproc_camera_usb` (2026-11-10) |
+| Sensors / zones | `cpu0`, `cpu4`, `gpu`, `ddr` | THS at `0x02522000`, 5 sensors: `cpu-big` (0), `ddr` (1), `npu` (2), `cpu-little` (3), `gpu` (4) |
+| Clocks, IRQ | A523 CCU `bus-ths`, `gpadc0/1` | CCU `THS0_BGR` `0x0fe4` (gate + reset), `GPADC0_24M` `0x0fc0`; IRQ 71 (GIC SPI 39) |
+| Conversion | A523 two-segment formula | Vendor `sun60iw2`: code > 1769: `62 × (2822 − code)` m°C, else `59 × (2835 − code)` m°C |
+| Calibration | SID cells `0x38` and `0x44` | SID `0x44`, 72 bits: factory temperature (0.1 °C) + one 12-bit reading per sensor → per-sensor offset in `THSn_CDATA` |
+| Trips | A523 DT | hot 90 °C, critical 110 °C (shutdown); no cooling device yet (no fan or cpufreq in the DT) |
+| Measured | ~41-42 °C idle | ~35-39 °C idle; 30 s on all 8 cores: ~49-51 °C, back to ~42 °C 10 s after |
+
+The A733 values come from the A733 User Manual (7.1, 4.1.6.170-172) and the vendor `sunxi_thermal.c` / `sun60iw2p1.dtsi`; details in [CUBIE_A7A_DEBUG_LOG.md](docs/platforms/CUBIE_A7A_DEBUG_LOG.md) Milestone 22.
 
 ## 🧪 Automated Silicon Verification Suite
 

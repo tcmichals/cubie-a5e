@@ -5,11 +5,12 @@
  * Memory: Shared System SRAM A2, 208 KB: host 0x00040000 - 0x00073FFF, seen by the E902
  *         at 0x40000000 - 0x40033FFF.
  *
- * The E902 does not run code from the first 16 KB (host 0x00040000 - 0x00043FFF): a
+ * A733 User Manual memory map: SRAM A2 is "16K+192K (The 16K is only used by CPUS.)".
+ * The E902 does not run code from that 16 KB part (host 0x00040000 - 0x00043FFF): a
  * position-independent probe runs at host 0x00044000 (E902 0x40004000) and never starts
  * at host 0x00040000 (E902 0x40000000) (board, 2026-11-10). The vendor BL31 also loads its
- * SCP at host 0x00044000 and starts it at 0x40004000. Firmware is linked there:
- * 192 KB, E902 0x40004000 - 0x40033FFF = host 0x00044000 - 0x00073FFF.
+ * SCP at host 0x00044000 and starts it at 0x40004000. Firmware is linked in the 192 KB
+ * part: E902 0x40004000 - 0x40033FFF = host 0x00044000 - 0x00073FFF.
  *
  * HARDWARE ARCHITECTURE (A733 Mode 2 RemoteProc):
  * - E902 has NO TCMs (no ITCM, no DTCM).

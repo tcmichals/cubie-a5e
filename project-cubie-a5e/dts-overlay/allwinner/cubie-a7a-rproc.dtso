@@ -9,7 +9,8 @@
  * running under Linux RemoteProc (Mode 2: Real-Time Coprocessor).
  *
  * Memory Regions:
- *   - System SRAM A2: 0x00040000 (208 KB) fast on-chip execution window
+ *   - System SRAM A2: 0x00044000 (192 KB) firmware window; host 0x00040000-0x00043FFF is the
+ *     16 KB CPUS-only part (A733 User Manual memory map), not used
  *   - DMA Carveout:   0x4E000000 (16 MB) shared DRAM vdev/virtio buffer pool
  *
  * Hardware Lifecycle Controls:
@@ -19,7 +20,7 @@
  *                     writes while held), R_CPUCFG 0x07050008 bit 0 = "core"
  *                     (core run, active-low). Order and registers from the vendor
  *                     BL31 arisc start; see CUBIE_A7A_E902_REBUILD_GUIDE.md 6.1.
- *   - E902 view:      SRAM A2 host 0x00040000 = E902 0x40000000
+ *   - E902 view:      SRAM A2 host 0x00044000 = E902 0x40004000; DRAM 1:1 from 0x40034000
  *   - Mailbox:        msgbox (@ 0x03004000 / 0x07094000)
  * ============================================================================
  */
@@ -54,7 +55,7 @@
 			rproc_e902: remoteproc@7032000 {
 				compatible = "allwinner,sun60i-a733-rproc";
 				reg = <0x07032000 0x400>,
-				      <0x00040000 0x34000>;
+				      <0x00044000 0x30000>;
 				reg-names = "cfg", "sram";
 				clocks = <&r_ccu 27>,  /* CLK_RISCV */
 				         <&r_ccu 26>;  /* CLK_RISCV_CFG */

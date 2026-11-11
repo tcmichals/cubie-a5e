@@ -3,6 +3,17 @@
 
 namespace hal {
 
+#ifdef CORE_E902
+/*
+ * Allwinner A733 2-bank Hardware Message Box
+ * E902 (CPUS) Local Bank: 0x07094000 (S_MBOX)
+ * ARM Host Bank:          0x03004000 (CPUX_MSGBOX)
+ * Each side reaches the other on port n = 0 (Offset: 0x000). No DSP.
+ */
+#define RV_MSGBOX_LOCAL_BASE        0x07094000U
+#define ARM_MSGBOX_REMOTE_BASE      0x03004000U
+#define MSGBOX_PORT_OFFSET          0x00000000U
+#else
 /*
  * Allwinner T527 4-Port Hardware Message Box
  * RISC-V Local Port Base: 0x07136000 (Port 3, Channels 8..11)
@@ -12,11 +23,13 @@ namespace hal {
  * Port Index for RV <-> ARM communication: n = 2 (Offset: 0x200)
  * Port Index for DSP <-> ARM communication: n = 1 (Offset: 0x100)
  */
+#define HAS_DSP_MSGBOX              1
 #define RV_MSGBOX_LOCAL_BASE        0x07136000U
 #define DSP_MSGBOX_LOCAL_BASE       0x07120000U
 #define ARM_MSGBOX_REMOTE_BASE      0x03003000U
 #define MSGBOX_PORT_OFFSET          0x00000200U
 #define ARM_DSP_MSGBOX_REMOTE_BASE  (ARM_MSGBOX_REMOTE_BASE + 0x100)
+#endif
 
 #define RV_READ_IRQ_EN_REG          (*(volatile uint32_t *)(RV_MSGBOX_LOCAL_BASE + 0x020 + MSGBOX_PORT_OFFSET))
 #define RV_READ_IRQ_STA_REG         (*(volatile uint32_t *)(RV_MSGBOX_LOCAL_BASE + 0x024 + MSGBOX_PORT_OFFSET))
@@ -44,17 +57,21 @@ void MsgBox::init(bool enable_irq) noexcept
     RV_READ_IRQ_EN_REG = enable_irq ? 0x00000055U : 0x00000000U;
     RV_READ_IRQ_STA_REG = 0xFFFFFFFFU; // W1C clear pending
 
+#ifdef HAS_DSP_MSGBOX
     DSP_READ_IRQ_EN_REG = enable_irq ? 0x00000055U : 0x00000000U;
     DSP_READ_IRQ_STA_REG = 0xFFFFFFFFU;
+#endif
 
     // Flush any stale words in receive FIFOs
     for (uint8_t c = 0; c < 4; ++c) {
         while ((RV_MSG_STA_REG(c) & MSG_NUM_MASK) > 0) {
             (void)RV_MSG_FIFO_REG(c);
         }
+#ifdef HAS_DSP_MSGBOX
         while ((DSP_MSG_STA_REG(c) & MSG_NUM_MASK) > 0) {
             (void)DSP_MSG_FIFO_REG(c);
         }
+#endif
     }
 
     s_doorbell_token.store(0, std::memory_order_relaxed);
@@ -150,6 +167,7 @@ void MsgBox::clear_irq_status(Channel ch) noexcept
     std::atomic_thread_fence(std::memory_order_seq_cst);
 }
 
+#ifdef HAS_DSP_MSGBOX
 bool MsgBox::is_dsp_rx_pending(Channel ch) noexcept
 {
     const auto c = static_cast<uint8_t>(ch);
@@ -200,6 +218,13 @@ void MsgBox::send_dsp_blocking(Channel ch, uint32_t data) noexcept
     ARM_DSP_MSG_FIFO_REG(c) = data;
     std::atomic_thread_fence(std::memory_order_seq_cst);
 }
+#else
+/* The A733 has no DSP message box bank */
+bool MsgBox::is_dsp_rx_pending(Channel) noexcept { return false; }
+std::optional<uint32_t> MsgBox::receive_dsp(Channel) noexcept { return std::nullopt; }
+bool MsgBox::send_dsp(Channel, uint32_t) noexcept { return false; }
+void MsgBox::send_dsp_blocking(Channel, uint32_t) noexcept {}
+#endif
 
 void MsgBox::notify_doorbell(uint32_t token) noexcept
 {
