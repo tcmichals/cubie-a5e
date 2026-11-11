@@ -1,0 +1,116 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay for the Radxa Camera 4K (Sony IMX415) on the Radxa Cubie A7A
+ *
+ * Not yet tested on hardware (no module on hand, 2026-11-11). Every value
+ * below is cited; check them on the first board test.
+ *
+ * Board wiring (radxa_cubie_a7a_v1.10_schematic, J7 CAM_31P):
+ * - MIPI: MCSIB D0-D3 + CK on PK10-PK19, 4 lanes (J7 pins 3-18). The
+ *   OV5647 overlay muxes only PK10-PK15 (2 lanes); this one adds PK16-PK19.
+ * - I2C: TWI3 (PE3 SCL, PE4 SDA), sensor address 0x1a (vendor overlay
+ *   cubie-a7a-radxa-camera-4k-415: sensor0_twi_addr 0x34, 8-bit).
+ * - MCLK: PE5 MCSI1-MCLK (net MCSI-MCLK, J7 pin 20 CAM0-CLK; manual PE_CFG0
+ *   PE5_SELECT 0010), from CCU CSI_MASTER1 (0x1804) at 24 MHz. Vendor
+ *   sensor0_mclk_id = 1.
+ * - Enable: PE8 (net MCSI-STBY-R, J7 pin 23 CM-PDN0, 100k pull-up), the
+ *   module's power enable, as GPIO1 RK_PB0 vcc_cam0 on the ROCK 5B+ overlay
+ *   for the same module (lkml 2603.2/02856).
+ * - Reset: PE9 (net MCSI-RST-R, J7 pin 27 RESET, 100k pull-up) = XCLR,
+ *   active low.
+ * - Supply: J7 3V3_CAM1 (DCDC1 via FB1, always on); the module makes its
+ *   own 2.9/1.8/1.1 V.
+ *
+ * Sensor mode: INCK 24 MHz, 720 Mbps/lane (link frequency 360 MHz), 4 lanes:
+ * an entry of the mainline imx415 clock table (imx415.c imx415_clk_params),
+ * and the vendor 10-bit 30 fps mode ("ALL PIXEL - 720Mbps - 24MHZ",
+ * vendor imx415_mipi.c).
+ *
+ * Open: whether the A733 MIPI1 D-PHY / sun6i-mipi-csi2 path runs 4 lanes
+ * (only 2 tested, OV5647); the online ISP is limited to 3264 px wide, so
+ * full 3840x2160 needs ISP offline mode (camera guide 5.3a).
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "radxa,cubie-a7a", "allwinner,sun60i-a733";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			vcc_cam_imx415: regulator-vcc-cam-imx415 {
+				compatible = "regulator-fixed";
+				regulator-name = "vcc-cam-imx415";
+				gpio = <&pio 4 8 GPIO_ACTIVE_HIGH>;	/* PE8 CM-PDN0 */
+				enable-active-high;
+				startup-delay-us = <10000>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&pio>;
+		__overlay__ {
+			csi_mclk1_pin: csi-mclk1-pin {
+				pins = "PE5";
+				function = "mcsi1";
+				allwinner,pinmux = <2>;		/* PE5_SELECT 0010: MCSI1-MCLK */
+				drive-strength = <10>;
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&mipi1_pins>;
+		__overlay__ {
+			pins = "PK10", "PK11", "PK12", "PK13", "PK14",
+			       "PK15", "PK16", "PK17", "PK18", "PK19";
+		};
+	};
+
+	fragment@3 {
+		target = <&i2c3>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			imx415: camera-sensor@1a {
+				compatible = "sony,imx415";
+				reg = <0x1a>;
+				clocks = <&ccu 98>;		/* CLK_CSI_MASTER1 */
+				assigned-clocks = <&ccu 98>;
+				assigned-clock-rates = <24000000>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&csi_mclk1_pin>;
+				avdd-supply = <&vcc_cam_imx415>;
+				dvdd-supply = <&vcc_cam_imx415>;
+				ovdd-supply = <&vcc_cam_imx415>;
+				reset-gpios = <&pio 4 9 GPIO_ACTIVE_LOW>;	/* PE9 XCLR */
+				orientation = <2>;		/* external */
+
+				port {
+					imx415_ep: endpoint {
+						remote-endpoint = <&mipi1_in_imx415>;
+						data-lanes = <1 2 3 4>;
+						link-frequencies = /bits/ 64 <360000000>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@4 {
+		target = <&mipi1_in>;
+		__overlay__ {
+			mipi1_in_imx415: endpoint {
+				remote-endpoint = <&imx415_ep>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
+};
