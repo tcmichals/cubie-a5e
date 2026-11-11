@@ -176,6 +176,18 @@ Tick steps here as they are done. This checklist is the source; the TODO.md entr
 
 ---
 
+### 5.5 Vendor and community reports (inputs for Phase 0, 2026-11-11)
+
+Anecdotal; check each against the vendor source before relying on it.
+
+- CSI/ISP clock: `tdm0 rx0 frame error! width is 0` on IMX219 (A7Z), reported fixed by lowering the DT CSI/ISP clocks 704/704 → 360/300 MHz: https://github.com/radxa-build/radxa-a733/issues/39 . Our `ccu-sun60i-a733.c` probe sets the ISP clock to 600 MHz: check the vendor rate in Phase 0.6.
+- Colour depends on closed per-sensor tuning: IMX415 red/magenta cast, `libisp_ini.so` falls back to an ov13850 profile: https://github.com/radxa-build/radxa-a733/issues/19 . Radxa's userspace ISP package `allwinner-isp6xx` (tuning, e.g. GC2093): https://github.com/radxa-pkg/allwinner-isp6xx/pull/3
+- IMX415 DOL (2-frame stitch) with one buffer makes continuous capture unusable: https://forum.radxa.com/t/cubie-a7z-camera-4k-imx415-continuous-capture-is-unusable-isp-runs-a-2-frame-dol-stitch-with-only-one-buffer/31224
+- ISP1 frame size limit 3264×2160 (not 3840×2160): https://github.com/radxa/allwinner-bsp/pull/33
+- A7A IMX214: wrong colours, `ISP_ERR` in `isp_dev_start` (TDM event subscribe failed): https://forum.radxa.com/t/radxa-cubie-a7a-radxa-13m-214-camera/29717 ; IMX415 `sensor_detect=0x0`: https://forum.radxa.com/t/cubie-a7a-radxa-camera-4k-imx415-detected-but-no-video-output-sensor-detect-0x0/30357
+- VE (not camera, for the encoder work): vendor Cedar H.264 encoder IRQ never fires (`cedar_dev_ve2`, "wait interrupt overtime"), decode works: https://github.com/radxa-build/radxa-a733/issues/35
+- Armbian A7Z community support (no camera found): https://github.com/armbian/build/pull/10036 ; forum: https://forum.armbian.com/topic/56130-radxa-cubie-a7aa7z-allwinner-a733/page/2/
+
 ## 6. T527 (A5E) vs A733 (A7A) Camera Differences
 
 Write-up of what differs between the two chips for the camera path, kept up to date as the work moves forward (rule §5.1.6). Each row cites its source; a T527 value is "not checked" until it is. Vendor trees: A733 `linux-a733/bsp/`, T527 `linux-aw2501/bsp/`.
