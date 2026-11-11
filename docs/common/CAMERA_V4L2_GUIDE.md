@@ -88,6 +88,8 @@ v4l2-ctl -d /dev/video0 \
 This section is the detailed plan: rules, facts, exit criteria and the step checklist (§5.3, steps 0.1–4.6). TODO.md (Part I §2, "A733 Hardware ISP") holds only a summary made from it: Done / Now / Next / Not now, and one box per phase.
 
 ### 5.1 Rules
+
+0. **No video processing on the CPU** (owner, 2026-11-11, DESIGN_DECISIONS.md): sensor → CSI → hardware ISP → NV12 dma-buf → hardware VE encoder; the CPU only queues buffers. RAW capture without the ISP is for bring-up only. Target CPU load during capture + encode: < 2 % of one core.
 1. Phases run in order. A phase starts only when the previous phase's exit criteria have passed **on the board** and the result is recorded in `docs/platforms/CUBIE_A7A_DEBUG_LOG.md`.
 2. Hardware facts come from the vendor BSP (`linux-a733/bsp/drivers/vin/`, `bsp/configs/linux-5.15/sun60iw2p1.dtsi`) or silicon readbacks, cited by file:line. Not from this document alone.
 3. Driver work happens in `linux-cubie` on the A7A branch, as a proper V4L2 driver (media controller, subdevs, `videobuf2-dma-contig`), so it can go upstream later. No vendor `vin` module port.

@@ -345,3 +345,12 @@ cannot throttle. The work goes on `linux-v4-71` `cubie-linux-7.1` as separate co
 v4 remoteproc/msgbox commits, so v4 is exported without them. OPP tables and idle states go in a
 new `sun55i-a523-cpu-opp.dtsi` (mainline pattern `sun50i-h616-cpu-opp.dtsi`), not in
 `sun55i-a523.dtsi`, which v4 edits. Plan and steps: TODO.md, "T527/A5E cpufreq + cpuidle".
+
+### Camera: no video processing on the CPU (2026-11-11)
+
+The CPUs are for flight tasks. The camera path (IMX415 and later sensors) is hardware only:
+sensor → CSI → hardware ISP (ISP 600) → NV12 in DRAM (dma-buf, zero copy) → hardware VE
+H.264/H.265 encoder → storage or radio. No software ISP, no CPU debayer, no CPU encoding, no
+memcpy of frames. RAW capture without the ISP is a bring-up/debug tool only. Success is measured as
+CPU load during 1080p30/4K capture + encode (target: < 2 % of one core). Plan: CAMERA_V4L2_GUIDE.md
+§5, TODO.md "A733 Hardware ISP" and "Zero-Copy Hardware Video Encoding".
