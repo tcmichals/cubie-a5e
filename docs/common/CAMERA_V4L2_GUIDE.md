@@ -183,6 +183,7 @@ Write-up of what differs between the two chips for the camera path, kept up to d
 | Item | A733 (Cubie A7A) | T527 (Cubie A5E) | Same? | Source |
 | :--- | :--- | :--- | :--- | :--- |
 | ISP block in vendor build | `isp600` | `isp600` | Same | vin `Makefile`: A733 `:66` (`SUN60IW2`), T527 `:60` (`SUN55IW3`) |
+| ISP version (libisp) | 600 family; sub-version not in the files (vendor `vin_v4l2.ko` prints `ISP_VERSION: ISP%x_%x` at runtime: read it on a vendor image) | **601** (`ISP_SMALL_VERSION` 100, tag `isp-601-600-v1.00`, "AI985") | Close, **revision differs** | T527: tina-source `rtos-hal/hal/source/vin/vin_isp/isp_server/isp_version.h:38-40`; T527-only code under `#if defined CONFIG_ARCH_SUN55IW3`: `isp600/isp600_reg_cfg.h:313`, `isp_default_tbl.h:95`, `isp_server/isp_server.h:136`, `vin.c:308,777` (2026-11-11) |
 | ISP registers | `0x05900000`, `0x1300` | `0x05900000`, `0x1300` | Same | dtsi `isp00`: A733 `sun60iw2p1.dtsi:2668`, T527 `sun55iw3p1.dtsi:4235` |
 | ISP interrupt | `GIC_SPI 129` | `GIC_SPI 133` | **Differs** | same nodes |
 | ISP IOMMU master | 2 | 0 | **Differs** | `platform/sun60iw2_vin_cfg.h:52`, `platform/sun55iw3_vin_cfg.h:54`; dtsi `iommus` |
