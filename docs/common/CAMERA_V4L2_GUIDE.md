@@ -176,6 +176,24 @@ Tick steps here as they are done. This checklist is the source; the TODO.md entr
 
 ---
 
+### 5.4 Hardware map (Phase 0, in progress)
+
+#### 0.6 Clocks, resets, power domain (2026-11-11)
+
+Vendor DT `old-kernels/linux-a733/bsp/configs/linux-5.15/sun60iw2p1.dtsi:2563` (`vind0`): `csi_top = <600000000>`, `csi_isp = <540000000>`; clocks `CLK_CSI` (src `PLL_VIDEO0_4X`), `CLK_CSI_MASTER0..2` (src `sys24M` / `PLL_VIDEO0_3X`, sensor MCLK), `CLK_ISP` (src `PLL_VIDEO0_4X`), `CLK_BUS_CSI`, `CLK_CSI_MBUS`, `CLK_ISP_MBUS`; resets `RST_BUS_CSI` ("csi_ret") and an empty "isp_ret"; `power-domains = <&pd SUN60IW2_PCK_VI>`. ISP `isp00@5900000` SPI 129, `isp01@58ffffc` (`work_mode 0xff`), TDM (ISP input stage) `tdm0@5908000` SPI 134, all `iommus = <&mmu_aw 2 0>`.
+
+Vendor CCU `bsp/drivers/clk/sunxi-ng/ccu-sun60iw2.c`:
+
+| Clock | Register | Fields | Parents (mux index order) |
+| :--- | :--- | :--- | :--- |
+| `csi` | `0x1840` | M [4:0], mux [26:24], gate 31 | video2-4x, de-4x, peri0-480m, peri0-400m, peri0-600m, video0-4x, video1-4x (`:1763`) |
+| `isp` | `0x1860` | M [4:0], mux [26:24], gate 31 | video2-4x, peri0-480m, peri0-400m, peri0-600m, video0-4x, video1-4x (`:1776`) |
+| `csi-bus` | `0x1844` bit 0; reset bit 16 | | |
+| `csi-mclk` / `isp-mclk` (MBUS) | `0x05E4` bit 8 / bit 9, keyed (`MBUS_GATE_KEY_VALUE`) | | (`:680-688`) |
+| `csi-master0..2` | `0x1800` / `0x1804` / `0x1808` | MP + mux + gate | sys24M, video0-4x, video0-3x, video1-4x, video1-3x, video2-4x, video2-3x |
+
+Ours (`linux-cubie` `ccu-sun60i-a733.c`): `csi-top` is a gate only (`:117`); the mux is a raw `writel((4 << 24), 0x1840)` = peri0-600m (`:449`); **the ISP clock is a raw `writel(BIT(31) | (3 << 24), 0x1860)` = peri0-600m, 600 MHz, always on (`:452`)**, not a clock. Missing: `CLK_ISP` (M + mux + gate), `CLK_ISP_MBUS` (bit 9), `CLK_CSI_MASTERx`. Phase 1.2: add `CLK_ISP` and `CLK_ISP_MBUS` as real clocks, remove the raw writes, set the ISP rate from the DT (`assigned-clock-rates`, vendor 540 MHz; Radxa issue #39 reports frame errors at 704 MHz, fixed at 300 MHz, see §5.5), and confirm the `PD_VI` power domain covers the ISP.
+
 ### 5.5 Vendor and community reports (inputs for Phase 0, 2026-11-11)
 
 Anecdotal; check each against the vendor source before relying on it.
