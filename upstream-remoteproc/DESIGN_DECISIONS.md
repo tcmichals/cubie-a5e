@@ -337,3 +337,11 @@ series branch had drifted apart. For every revision from v3 on:
 5. **Export with the base recorded:** `git format-patch -v<N> --cover-letter --base=<next tag>`.
 6. **Send** only with the owner's go-ahead, to the list in TODO.md §5.6a T3, with
    `--suppress-cc=all` and no `--in-reply-to`; `--dry-run` first.
+
+### T527 cpufreq/cpuidle on `cubie-linux-7.1`, outside the v4 series (2026-11-11)
+
+The A5E (T527) needs cpufreq and cpuidle for flight: it idles at 87 °C fanless with 4 cores and
+cannot throttle. The work goes on `linux-v4-71` `cubie-linux-7.1` as separate commits on top of the
+v4 remoteproc/msgbox commits, so v4 is exported without them. OPP tables and idle states go in a
+new `sun55i-a523-cpu-opp.dtsi` (mainline pattern `sun50i-h616-cpu-opp.dtsi`), not in
+`sun55i-a523.dtsi`, which v4 edits. Plan and steps: TODO.md, "T527/A5E cpufreq + cpuidle".
