@@ -176,6 +176,29 @@ Tick steps here as they are done. This checklist is the source; the TODO.md entr
 
 ---
 
+### 5.3a What the A733 camera hardware can do (datasheet, the reference)
+
+Source: `vendor-a733-reference/A733_Datasheet_V0.93.txt` §3.3.1 ISP (line 1173), §3.7.1 MIPI CSI (line 1415), front page (lines 34-42). Owner, 2026-11-11: vendor code, vendor tests and forum reports are not trusted; the datasheet and User Manual set what to build and test against. Every report in §5.5 / `A733_CAMERA_VE_ISSUES_TRIAGE.md` is checked against these limits.
+
+| Block | Capability |
+| :--- | :--- |
+| MIPI CSI | 3 ports, 4 + 4 + 2 lanes, CSI-2 v1.1, D-PHY v1.2, 2 Gbit/s per lane; crop, frame-rate down, sensor frame sync |
+| Parallel CSI | 2 ports, 8/10/12/16-bit; up to 4×720p30 BT.656, 4×1080p30 BT.1120 |
+| ISP input | up to 4 sensors; RAW8/10/12/14/16 |
+| ISP max resolution | **online 3264×4224**, offline 5874×4224 (CSI section: 5664×4248 offline) |
+| ISP throughput, one sensor | online: 8 MP@60 linear, 8 MP@30 2-frame WDR; offline: 24 MP@25 linear, 8 MP@30 2F-WDR |
+| ISP output | up to 16 streams; YUV422/YUV420/RGB888/RGB565; mirror/flip; 1/16-1× downscaler; bounding boxes |
+| ISP algorithms (hardware) | crop, 2F-WDR, DRC, local tone mapping, BLC, digital gain, WB, LSC, gamma, DPC, crosstalk, CAC, 2D/3D NR, demosaic, sharpness, 3D-LUT colour; AE/AWB/AF, anti-flicker and histogram **statistics** (the 3A loop itself is software) |
+| DMA writers (BK) | 6: BK0/1 up to 20 MP@30 / 24 MP@25, BK2/3 up to 2.5K@60, BK4/5 up to 1080p30; BK0-3 4-lane time-division multiplexing (TDM) |
+| CSI format conversion | YUV422→420, 422→400, 420→400; H/V flip for YUV and RAW |
+| Encoder (VE) | H.265/H.264 up to 4K@30, MJPEG/JPEG up to 4K@15 |
+
+What this means:
+- **4K-wide (3840) capture is beyond online ISP mode** (max width 3264). Radxa PR #33 (ISP1 limited to 3264×2160) is a hardware limit, not a driver bug; 3840×2160 needs offline mode (frame through DRAM) or a sensor mode ≤ 3264 wide.
+- **2F-WDR / DOL** needs two exposures per frame; the IMX415 "2-frame stitch with one buffer" report is a configuration of that mode.
+- The **TDM** in the `tdm0 rx0 frame error` reports is the BK0-3 time-division input stage (`tdm0@5908000`).
+- Our target (ov5647, 2-lane, 1080p30 RAW10, ISP online) is well inside every limit.
+
 ### 5.4 Hardware map (Phase 0, in progress)
 
 #### 0.6 Clocks, resets, power domain (2026-11-11)
