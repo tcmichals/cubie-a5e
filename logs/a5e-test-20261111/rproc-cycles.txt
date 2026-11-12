@@ -1,0 +1,7 @@
+cycle 1: after stop=offline after start=running chans=3
+cycle 2: after stop=offline after start=running chans=3
+cycle 3: after stop=offline after start=running chans=3
+[  777.718560] remoteproc remoteproc0: remote processor 7130000.remoteproc is now up
+[  777.719785] virtio_rpmsg_bus virtio0: creating channel abstractx-repl addr 0x402
+[  777.720032] virtio_rpmsg_bus virtio0: creating channel abstractx-tlp addr 0x400
+[  777.720192] virtio_rpmsg_bus virtio0: creating channel abstractx-trace addr 0x401

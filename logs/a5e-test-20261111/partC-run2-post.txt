@@ -1,0 +1,14 @@
+7.1.0-cpufreq
+ 00:47:43 up 3 min,  load average: 0.00, 0.00, 0.00
+bootstatus=0 state=inactive timeleft=0
+46736 45700 44812 45256 /usr/bin/chrt
+rcu_cpu_stall_cputime
+rcu_cpu_stall_ftrace_dump
+rcu_cpu_stall_suppress
+rcu_cpu_stall_suppress_at_boot
+rcu_cpu_stall_timeout
+rcu_exp_cpu_stall_timeout
+rcu_exp_stall_task_details
+rcu_task_stall_info
+rcu_task_stall_info_mult
+rcu_task_stall_timeout

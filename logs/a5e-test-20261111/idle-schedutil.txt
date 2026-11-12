@@ -1,0 +1,26 @@
+0
+792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 792000 
+0
+408000 0
+600000 0
+792000 22694
+Mem: 96320K used, 3921344K free, 208K shrd, 3108K buff, 20336K cached
+CPU:   0% usr   2% sys   0% nic  97% idle   0% io   0% irq   0% sirq
+Load average: 0.19 0.05 0.01 1/197 615
+  PID  PPID USER     STAT   RSS %RSS %CPU COMMAND
+  614   577 root     R     1704   0%   2% top -b -n1
+  348     1 root     S     5000   0%   0% /sbin/udevd
+  445     1 root     S     4636   0%   0% wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
+  576   472 root     S     1984   0%   0% /usr/sbin/dropbear -R -2 9
+  577   576 root     S     1916   0%   0% sh -c p=/sys/devices/system/cpu/cpufreq/policy0; cat $p/stats/total_trans; for i in $(seq 1 15); do echo -n "$(cat $p/scaling_cur_freq) "; sleep 2; done; echo; cat $p/stats/total_trans; cat $p/stats/time_in_state; ls $p/schedutil 2>/dev/null; cat $p/schedutil/rate_limit_us 2>/dev/null; top -b -n1 | head -20
+  336     1 root     S     1756   0%   0% /sbin/klogd -n
+    1     0 root     S     1632   0%   0% init
+  468     1 root     S     1620   0%   0% /usr/sbin/crond -f
+  479     1 root     S     1612   0%   0% /sbin/getty -L console 0 vt100
+  331     1 root     S     1580   0%   0% /sbin/syslogd -n
+  615   577 root     S     1536   0%   0% head -20
+  472     1 root     S     1368   0%   0% /usr/sbin/dropbear -R
+  464     1 root     S      512   0%   0% udhcpc -b -i wlan0 -R
+   16     2 root     SW<      0   0%   0% [pr/legacy]
+   93     2 root     IW       0   0%   0% [kworker/u32:1-e]
+   18     2 root     SW       0   0%   0% [rcub/0]

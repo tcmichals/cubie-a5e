@@ -1,0 +1,53 @@
+Linux cubie-a5e-flight 7.1.0-cpufreq #1 SMP PREEMPT_RT Wed Nov 11 18:04:30 CST 2026 aarch64 GNU/Linux
+ 00:29:15 up 0 min,  load average: 0.05, 0.01, 0.00
+0-3
+    inet 127.0.0.1/8 scope host lo
+    inet 192.168.3.3/24 brd 192.168.3.255 scope global eth0
+    inet 192.168.1.4/24 brd 192.168.1.255 scope global wlan0
+Module                  Size  Used by    Tainted: G  
+rpmsg_ctrl             12288  0 
+aic8800_fdrv          335872  0 
+sha256                 16384  0 
+cfg80211              462848  1 aic8800_fdrv
+rfkill                 28672  2 cfg80211
+aic8800_bsp            61440  1 aic8800_fdrv
+dwmac_sun8i            24576  0 
+dwmac_sun55i           12288  0 
+sun6i_dma              24576  0 
+sunxi_wdt              12288  0 
+running
+cpu4-thermal
+cpu0-thermal
+gpu-thermal
+ddr-thermal
+47624
+46736
+45774
+46662
+boost
+policy0
+policy4
+schedutil
+/sys/devices/system/cpu/cpufreq/policy0
+/sys/devices/system/cpu/cpufreq/policy0/affected_cpus:0 1 2 3
+/sys/devices/system/cpu/cpufreq/policy0/related_cpus:0 1 2 3
+/sys/devices/system/cpu/cpufreq/policy0/scaling_available_frequencies:408000 600000 792000 
+/sys/devices/system/cpu/cpufreq/policy0/scaling_governor:schedutil
+/sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq:792000
+/sys/devices/system/cpu/cpufreq/policy0/cpuinfo_cur_freq:792000
+/sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq:408000
+/sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq:792000
+/sys/devices/system/cpu/cpufreq/policy0/cpuinfo_transition_latency:244144
+/sys/devices/system/cpu/cpufreq/policy4
+/sys/class/thermal/cooling_device0/type:7122000.npu
+/sys/class/thermal/cooling_device1/type:cpufreq-cpu0
+/sys/class/thermal/cooling_device2/type:cpufreq-cpu4
+grep: /sys/kernel/debug/clk/clk_summary: No such file or directory
+[    0.000000] Linux version 7.1.0-cpufreq (tcmichals@hp) (aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot 2026.05-805-g9e9110bf23) 16.2.0, GNU ld (GNU Binutils) 2.45.1) #1 SMP PREEMPT_RT Wed Nov 11 18:04:30 CST 2026
+[    1.173480] cpufreq: cpufreq_policy_online: CPU0: Running at unlisted initial frequency: 768000 kHz, changing to: 792000 kHz
+[    1.176645] cpufreq: cpufreq_policy_online: CPU4: Running at unlisted initial frequency: 768000 kHz, changing to: 792000 kHz
+[    3.138693]     ok 17 test_held_message_dropped_after_timeout
+[    4.451638] sunxi-wdt 2050000.watchdog: Watchdog enabled (timeout=16 sec, nowayout=0)
+[    4.491958] dwmac-sun55i 4510000.ethernet: Enable RX Mitigation via HW Watchdog Timer
+[    4.516945] AIC_BSP driver, built against Linux 7.1.0-cpufreq
+[    4.721269] AIC8800 WiFi driver, built against Linux 7.1.0-cpufreq

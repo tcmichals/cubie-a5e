@@ -1,0 +1,8 @@
+pid 16's current scheduling policy: SCHED_OTHER
+pid 16's current scheduling priority: 0
+pid 16's new scheduling policy: SCHED_FIFO
+pid 16's new scheduling priority: 98
+408000
+0xF8802201
+ 00:54:11 up 3 min,  load average: 0.24, 0.07, 0.01
+47180 46366 45626 45404 

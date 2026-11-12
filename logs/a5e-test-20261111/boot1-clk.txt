@@ -1,0 +1,38 @@
+                                 enable  prepare  protect                                duty  hardware                            connection
+   clock                          count    count    count        rate   accuracy phase  cycle    enable   consumer                         id
+---------------------------------------------------------------------------------------------------------------------------------------------
+ osc24M                              9       9        2        24000000    0          0     50000      Y   4100400.phy                     usb1_phy                 
+    pll-cpu-b                        2       2        0        792000000   0          0     50000      Y      deviceless                      no_connection_id         
+       pll-cpu-b-div                 1       1        0        792000000   0          0     50000      Y         deviceless                      no_connection_id         
+          cpu-b                      1       1        0        792000000   0          0     50000      Y            cpu4                            no_connection_id         
+                                                                                                                    cpu4                            no_connection_id         
+    pll-cpu-dsu                      2       2        0        768000000   0          0     50000      Y      deviceless                      no_connection_id         
+       pll-cpu-dsu-div               1       1        0        768000000   0          0     50000      Y         deviceless                      no_connection_id         
+          cpu-dsu                    1       1        0        768000000   0          0     50000      Y            deviceless                      no_connection_id         
+    pll-cpu-l                        2       2        0        792000000   0          0     50000      Y      deviceless                      no_connection_id         
+       pll-cpu-l-div                 1       1        0        792000000   0          0     50000      Y         deviceless                      no_connection_id         
+          cpu-l                      1       1        0        792000000   0          0     50000      Y            cpu0                            no_connection_id         
+                                                                                                                    cpu0                            no_connection_id         
+    pll-cpu-0                        0       0        0        408000000   0          0     50000      N      deviceless                      no_connection_id         
+    osc24M-32k                       0       0        0        32000       0          0     50000      N      deviceless                      no_connection_id         
+       pll-periph0-2x                3       3        0        1200000000  0          0     50000      Y         deviceless                      no_connection_id         
+                bus-r-cpucfg         1       1        0        100000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                bus-r-cpu-bist       0       0        0        100000000   0          0     50000      N                  deviceless                      no_connection_id         
+0x08817000x00 0xF6001000
+0x08817000x04 0xF8802100
+0x08817000x08 0xF8802000
+0x08817000x0c 0xF8802100
+0x08817000x60 0x03000305
+0x08817000x64 0x03000000
+0x08817000x6c 0x03000000
+console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: MIGRATE_INFO_TYPE not supported.
+[    0.000000] psci: SMC Calling Convention v1.5
+[    0.673817] Detected VIPT I-cache on CPU4
+[    0.673896] GICv3: CPU4: found redistributor 400 region 0:0x00000000034e0000
+[    0.673929] GICv3: CPU4: using allocated LPI pending table @0x0000000100120000
+[    0.673986] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[    0.750910] Detected VIPT I-cache on CPU5

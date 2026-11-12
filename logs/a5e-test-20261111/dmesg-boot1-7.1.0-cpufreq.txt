@@ -1,0 +1,530 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x412fd050]
+[    0.000000] Linux version 7.1.0-cpufreq (tcmichals@hp) (aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot 2026.05-805-g9e9110bf23) 16.2.0, GNU ld (GNU Binutils) 2.45.1) #1 SMP PREEMPT_RT Wed Nov 11 18:04:30 CST 2026
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: Radxa Cubie A5E
+[    0.000000] efi: UEFI not found.
+[    0.000000] earlycon: uart0 at MMIO32 0x0000000002500000 (options '115200n8')
+[    0.000000] printk: legacy bootconsole [uart0] enabled
+[    0.000000] OF: reserved mem: 0x0000000048100000..0x00000000481fffff (1024 KiB) nomap non-reusable dram@48100000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000048000000, size 1 MiB
+[    0.000000] OF: reserved mem: initialized node vdev@48000000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000048000000..0x00000000480fffff (1024 KiB) nomap non-reusable vdev@48000000
+[    0.000000] OF: reserved mem: 0x0000000007280000..0x00000000072bffff (256 KiB) nomap non-reusable riscvsram0@7280000
+[    0.000000] NUMA: Faking a node at [mem 0x0000000040000000-0x000000013fffffff]
+[    0.000000] NODE_DATA(0) allocated [mem 0x13f7d0140-0x13f7d287f]
+[    0.000000] cma: Reserved 128 MiB at 0x00000000f2e00000
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: MIGRATE_INFO_TYPE not supported.
+[    0.000000] psci: SMC Calling Convention v1.5
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000040000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000013fffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000040000000-0x0000000047ffffff]
+[    0.000000]   node   0: [mem 0x0000000048000000-0x00000000481fffff]
+[    0.000000]   node   0: [mem 0x0000000048200000-0x000000013fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000040000000-0x000000013fffffff]
+[    0.000000] percpu: Embedded 26 pages/cpu s67056 r8192 d31248 u106496
+[    0.000000] pcpu-alloc: s67056 r8192 d31248 u106496 alloc=26*4096
+[    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 [0] 4 [0] 5 [0] 6 [0] 7 
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] CPU features: detected: GICv3 CPU interface
+[    0.000000] CPU features: detected: Virtualization Host Extensions
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: console=ttyS0,115200 earlycon root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8
+[    0.000000] printk: log buffer data + meta data: 131072 + 458752 = 589824 bytes
+[    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.000000] software IO TLB: area num 8.
+[    0.000000] software IO TLB: mapped [mem 0x00000000fbfff000-0x00000000fffff000] (64MB)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1048576
+[    0.000000] Policy zone: Normal
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=8, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=512 to nr_cpu_ids=8.
+[    0.000000] rcu: 	RCU priority boosting: priority 1 delay 500 ms.
+[    0.000000] rcu: 	RCU_SOFTIRQ processing moved to rcuc kthreads.
+[    0.000000] 	No expedited grace period (rcu_normal_after_boot).
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 100 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=8
+[    0.000000] RCU Tasks: Setting shift to 3 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=8.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for GICv3: non-coherent attribute
+[    0.000000] GICv3: GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv3: 256 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: GICv3 features: 16 PPIs
+[    0.000000] GICv3: GICD_CTLR.DS=0, SCR_EL3.FIQ=0
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x0000000003460000
+[    0.000000] ITS [mem 0x03440000-0x0345ffff]
+[    0.000000] GIC: enabling workaround for ITS: non-coherent attribute
+[    0.000000] ITS@0x0000000003440000: allocated 8192 Devices @1000b0000 (indirect, esz 8, psz 64K, shr 0)
+[    0.000000] ITS@0x0000000003440000: allocated 32768 Interrupt Collections @1000c0000 (flat, esz 2, psz 64K, shr 0)
+[    0.000000] ITS: using cache flushing for cmd queue
+[    0.000000] GICv3: using LPI property table @0x00000001000d0000
+[    0.000000] GIC: using cache flushing for LPI property table
+[    0.000000] GICv3: CPU0: using allocated LPI pending table @0x00000001000e0000
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer running at 24.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x588fe9dc0, max_idle_ns: 440795202592 ns
+[    0.000000] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps every 4398046511097ns
+[    0.000802] Console: colour dummy device 80x25
+[    0.000921] Calibrating delay loop (skipped), value calculated using timer frequency.. 48.00 BogoMIPS (lpj=24000)
+[    0.000937] pid_max: default: 32768 minimum: 301
+[    0.001387] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.001413] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.001862] VFS: Finished mounting rootfs on nullfs
+[    0.003123] cacheinfo: Unable to detect cache hierarchy for CPU 0
+[    0.005140] rcu: Hierarchical SRCU implementation.
+[    0.005146] rcu: 	Max phase no-delay instances is 400.
+[    0.070402] Timer migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.119033] EFI services will not be available.
+[    0.167585] smp: Bringing up secondary CPUs ...
+[    0.252774] Detected VIPT I-cache on CPU1
+[    0.252848] GICv3: CPU1: found redistributor 100 region 0:0x0000000003480000
+[    0.252881] GICv3: CPU1: using allocated LPI pending table @0x00000001000f0000
+[    0.252944] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[    0.409654] Detected VIPT I-cache on CPU2
+[    0.409728] GICv3: CPU2: found redistributor 200 region 0:0x00000000034a0000
+[    0.409762] GICv3: CPU2: using allocated LPI pending table @0x0000000100100000
+[    0.409822] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[    0.541852] Detected VIPT I-cache on CPU3
+[    0.541927] GICv3: CPU3: found redistributor 300 region 0:0x00000000034c0000
+[    0.541960] GICv3: CPU3: using allocated LPI pending table @0x0000000100110000
+[    0.542017] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[    0.673817] Detected VIPT I-cache on CPU4
+[    0.673896] GICv3: CPU4: found redistributor 400 region 0:0x00000000034e0000
+[    0.673929] GICv3: CPU4: using allocated LPI pending table @0x0000000100120000
+[    0.673986] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[    0.750910] Detected VIPT I-cache on CPU5
+[    0.750991] GICv3: CPU5: found redistributor 500 region 0:0x0000000003500000
+[    0.751021] GICv3: CPU5: using allocated LPI pending table @0x0000000100130000
+[    0.751076] CPU5: Booted secondary processor 0x0000000500 [0x412fd050]
+[    0.779181] Detected VIPT I-cache on CPU6
+[    0.779267] GICv3: CPU6: found redistributor 600 region 0:0x0000000003520000
+[    0.779297] GICv3: CPU6: using allocated LPI pending table @0x0000000100140000
+[    0.779350] CPU6: Booted secondary processor 0x0000000600 [0x412fd050]
+[    0.807766] Detected VIPT I-cache on CPU7
+[    0.807852] GICv3: CPU7: found redistributor 700 region 0:0x0000000003540000
+[    0.807882] GICv3: CPU7: using allocated LPI pending table @0x0000000100150000
+[    0.807932] CPU7: Booted secondary processor 0x0000000700 [0x412fd050]
+[    0.812361] smp: Brought up 1 node, 8 CPUs
+[    0.812371] SMP: Total of 8 processors activated.
+[    0.812376] CPU: All CPU(s) started at EL2
+[    0.812382] CPU features: detected: 32-bit EL0 Support
+[    0.812385] CPU features: detected: 32-bit EL1 Support
+[    0.812391] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
+[    0.812396] CPU features: detected: Common not Private translations
+[    0.812401] CPU features: detected: CRC32 instructions
+[    0.812431] CPU features: detected: RCpc load-acquire (LDAPR)
+[    0.819980] CPU features: detected: LSE atomic instructions
+[    0.819989] CPU features: detected: Privileged Access Never
+[    0.819994] CPU features: detected: PMUv3
+[    0.819999] CPU features: detected: RAS Extension Support
+[    0.820006] CPU features: detected: XNX
+[    0.820013] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
+[    0.820101] alternatives: applying system-wide alternatives
+[    0.827063] CPU features: detected: ICV_DIR_EL1 trapping
+[    0.827783] Memory: 3879052K/4194304K available (16704K kernel code, 2074K rwdata, 7568K rodata, 1920K init, 673K bss, 178560K reserved, 131072K cma-reserved)
+[    0.837952] devtmpfs: initialized
+[    0.855898] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[    0.855977] posixtimers hash table entries: 4096 (order: 6, 163840 bytes, linear)
+[    0.856199] futex hash table entries: 2048 (131072 bytes on 1 NUMA nodes, total 128 KiB, linear).
+[    0.857663] 25472 pages in range for non-PLT usage
+[    0.857676] 516992 pages in range for PLT usage
+[    0.859390] DMI: not present or invalid.
+[    0.863044] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.864699] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+[    0.864908] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.864980] audit: initializing netlink subsys (disabled)
+[    0.865234] audit: type=2000 audit(0.854:1): state=initialized audit_enabled=0 res=1
+[    0.866089] thermal_sys: Registered thermal governor 'step_wise'
+[    0.866098] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.866179] cpuidle: using governor menu
+[    0.866480] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.866795] ASID allocator initialised with 65536 entries
+[    0.867976] Serial: AMBA PL011 UART driver
+[    0.874095] /soc/clock-controller@2001000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.874258] /soc/interrupt-controller@3400000: Fixed dependency cycle(s) with /soc/interrupt-controller@3400000
+[    0.874722] /soc/clock-controller@7010000: Fixed dependency cycle(s) with /soc/clock-controller@2001000
+[    0.874745] /soc/clock-controller@7010000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.874848] /soc/rtc@7090000: Fixed dependency cycle(s) with /soc/clock-controller@7010000
+[    0.876077] /soc/clock-controller@2001000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.885236] /soc/clock-controller@7010000: Fixed dependency cycle(s) with /soc/clock-controller@2001000
+[    0.885362] /soc/clock-controller@7010000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.886781] /soc/i2c@7081400: Fixed dependency cycle(s) with /soc/pinctrl@7022000/r-i2c-pins
+[    0.887438] /soc/clock-controller@7010000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.887647] /soc/clock-controller@2001000: Fixed dependency cycle(s) with /soc/rtc@7090000
+[    0.887865] /soc/rtc@7090000: Fixed dependency cycle(s) with /soc/clock-controller@7010000
+[    0.893774] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.893783] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.893791] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+[    0.893796] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+[    0.893802] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.893807] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.893814] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+[    0.893818] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    0.898711] ACPI: Interpreter disabled.
+[    0.899762] iommu: Default domain type: Translated
+[    0.899770] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.901694] SCSI subsystem initialized
+[    0.901995] libata version 3.00 loaded.
+[    0.902417] usbcore: registered new interface driver usbfs
+[    0.902482] usbcore: registered new interface driver hub
+[    0.902539] usbcore: registered new device driver usb
+[    0.903038] mc: Linux media interface: v0.10
+[    0.903123] videodev: Linux video capture interface: v2.00
+[    0.903183] pps_core: LinuxPPS API ver. 1 registered
+[    0.903189] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.903210] PTP clock support registered
+[    0.903341] EDAC MC: Ver: 3.0.0
+[    0.903970] scmi_core: SCMI protocol bus registered
+[    0.904631] FPGA manager framework
+[    0.911368] vgaarb: loaded
+[    0.911844] clocksource: Switched to clocksource arch_sys_counter
+[    0.912428] VFS: Disk quotas dquot_6.6.0
+[    0.912461] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.913171] pnp: PnP ACPI: disabled
+[    0.927179] NET: Registered PF_INET protocol family
+[    0.927473] IP idents hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.931860] tcp_listen_portaddr_hash hash table entries: 2048 (order: 5, 81920 bytes, linear)
+[    0.932000] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.932023] TCP established hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    0.932582] TCP bind hash table entries: 32768 (order: 10, 2621440 bytes, linear)
+[    0.934890] TCP: Hash tables configured (established 32768 bind 32768)
+[    0.935082] UDP hash table entries: 2048 (order: 7, 327680 bytes, linear)
+[    0.935620] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.936294] RPC: Registered named UNIX socket transport module.
+[    0.936303] RPC: Registered udp transport module.
+[    0.936307] RPC: Registered tcp transport module.
+[    0.936312] RPC: Registered tcp-with-tls transport module.
+[    0.936316] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.936333] PCI: CLS 0 bytes, default 64
+[    0.943400] kvm [1]: nv: 570 coarse grained trap handlers
+[    0.943737] kvm [1]: nv: 710 fine grained trap handlers
+[    0.944555] kvm [1]: IPA Size Limit: 40 bits
+[    0.944601] kvm [1]: GICv3: no GICV resource entry
+[    0.944607] kvm [1]: disabling GICv2 emulation
+[    0.944651] kvm [1]: GIC system register CPU interface enabled
+[    0.944687] kvm [1]: vgic interrupt IRQ9
+[    0.944747] kvm [1]: VHE mode initialized successfully
+[    0.948457] Initialise system trusted keyrings
+[    0.948748] workingset: timestamp_bits=42 (anon: 38) max_order=20 bucket_order=0 (anon: 0)
+[    0.949463] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.950006] NFS: Registering the id_resolver key type
+[    0.950039] Key type id_resolver registered
+[    0.950045] Key type id_legacy registered
+[    0.950082] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.950089] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.950375] 9p: Installing v9fs 9p2000 file system support
+[    0.950678] Key type asymmetric registered
+[    0.950687] Asymmetric key parser 'x509' registered
+[    0.950776] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 242)
+[    0.950785] io scheduler mq-deadline registered
+[    0.950792] io scheduler kyber registered
+[    0.950924] io scheduler bfq registered
+[    0.970471] sunxi-pck-600 7060000.power-controller: domain "VE" (id 0) pstate=0x8, on
+[    0.970494] sunxi-pck-600 7060000.power-controller: domain "GPU" (id 1) pstate=0x8, on
+[    0.970509] sunxi-pck-600 7060000.power-controller: domain "VI" (id 2) pstate=0x8, on
+[    0.970524] sunxi-pck-600 7060000.power-controller: domain "VO0" (id 3) pstate=0x8, on
+[    0.970538] sunxi-pck-600 7060000.power-controller: domain "VO1" (id 4) pstate=0x8, on
+[    0.970552] sunxi-pck-600 7060000.power-controller: domain "DE" (id 5) pstate=0x8, on
+[    0.970565] sunxi-pck-600 7060000.power-controller: domain "NAND" (id 6) pstate=0x8, on
+[    0.970579] sunxi-pck-600 7060000.power-controller: domain "PCIE" (id 7) pstate=0x8, on
+[    0.980474] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    0.985094] STM32 USART driver initialized
+[    1.002691] loop: module loaded
+[    1.003931] megasas: 07.734.00.00-rc1
+[    1.011549] tun: Universal TUN/TAP device driver, 1.6
+[    1.012540] thunder_xcv, ver 1.0
+[    1.012624] thunder_bgx, ver 1.0
+[    1.012701] nicpf, ver 1.0
+[    1.013527] e1000: Intel(R) PRO/1000 Network Driver
+[    1.013534] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    1.013615] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.013619] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.013695] igb: Intel(R) Gigabit Ethernet Network Driver
+[    1.013701] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    1.013776] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    1.013781] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    1.014063] sky2: driver version 1.30
+[    1.015172] VFIO - User Level meta-driver version: 0.3
+[    1.018266] usbcore: registered new interface driver usb-storage
+[    1.023659] sun6i-rtc 7090000.rtc: registered as rtc0
+[    1.023706] sun6i-rtc 7090000.rtc: setting system clock to 1970-01-02T00:28:50 UTC (88130)
+[    1.024148] i2c_dev: i2c /dev entries driver
+[    1.031686] SMCCC: SOC_ID: ID = jep106:091e:1890 Revision = 0x00000003
+[    1.032294] usbcore: registered new interface driver usbhid
+[    1.032301] usbhid: USB HID core driver
+[    1.036506] hw perfevents: enabled with armv8_cortex_a55 PMU driver, 7 (0,8000003f) counters available
+[    1.039972] NET: Registered PF_INET6 protocol family
+[    1.041446] Segment Routing with IPv6
+[    1.041513] In-situ OAM (IOAM) with IPv6
+[    1.041588] NET: Registered PF_PACKET protocol family
+[    1.041710] 9pnet: Installing 9P2000 support
+[    1.041824] Key type dns_resolver registered
+[    1.068247] registered taskstats version 1
+[    1.068619] Loading compiled-in X.509 certificates
+[    1.091032] Demotion targets for Node 0: null
+[    1.113037] gpio gpiochip0: Static allocation of GPIO base is deprecated, use dynamic allocation.
+[    1.117936] sun55i-a523-r-pinctrl 7022000.pinctrl: initialized sunXi PIO driver
+[    1.118401] sun55i-a523-r-pinctrl 7022000.pinctrl: supply vcc-pl not found, using dummy regulator
+[    1.138410] etnaviv etnaviv: bound 7122000.npu (ops gpu_ops)
+[    1.138522] etnaviv-gpu 7122000.npu: model: GC9000, revision: 9003
+[    1.139335] [drm] Initialized etnaviv 1.4.0 for etnaviv on minor 0
+[    1.146162] axp20x-i2c 2-0034: AXP20x variant AXP717 found
+[    1.154653] platform axp717-adc: DMA mask not set
+[    1.156366] platform axp20x-usb-power-supply: DMA mask not set
+[    1.157023] axp20x-i2c 2-0034: AXP20X driver loaded
+[    1.158464] axp20x-i2c 2-0036: AXP20x variant AXP323 found
+[    1.162400] axp20x-i2c 2-0036: AXP20X driver loaded
+[    1.167383] thermal_sys: No trip points found for thermal-sensor@2009400 id=2
+[    1.173480] cpufreq: cpufreq_policy_online: CPU0: Running at unlisted initial frequency: 768000 kHz, changing to: 792000 kHz
+[    1.173735] cpu cpu0: EM: created perf domain
+[    1.176645] cpufreq: cpufreq_policy_online: CPU4: Running at unlisted initial frequency: 768000 kHz, changing to: 792000 kHz
+[    1.176945] cpu cpu4: EM: created perf domain
+[    1.183472] sunxi-rproc 7130000.remoteproc: assigned reserved memory node vdev@48000000
+[    1.184137] remoteproc remoteproc0: 7130000.remoteproc is available
+[    1.184348] remoteproc remoteproc0: Direct firmware load for riscv-firmware.elf failed with error -2
+[    1.184365] remoteproc remoteproc0: powering up 7130000.remoteproc
+[    1.184423] remoteproc remoteproc0: Direct firmware load for riscv-firmware.elf failed with error -2
+[    1.184436] remoteproc remoteproc0: request_firmware failed: -2
+[    1.188440] gpio gpiochip1: Static allocation of GPIO base is deprecated, use dynamic allocation.
+[    1.210448] sun55i-a523-pinctrl 2000000.pinctrl: initialized sunXi PIO driver
+[    1.212561] printk: legacy console [ttyS0] disabled
+[    1.234289] 2500000.serial: ttyS0 at MMIO 0x2500000 (irq = 469, base_baud = 1500000) is a 16550A
+[    2.061197] printk: legacy console [ttyS0] enabled
+[    2.061210] printk: legacy bootconsole [uart0] disabled
+[    2.091774] sunxi-mmc 4020000.mmc: Got CD GPIO
+[    2.095934] phy phy-4100400.phy.0: Changing dr_mode to 1
+[    2.096041] ehci-platform 4101000.usb: EHCI Host Controller
+[    2.096077] ehci-platform 4101000.usb: new USB bus registered, assigned bus number 1
+[    2.096406] ehci-platform 4101000.usb: irq 472, io mem 0x04101000
+[    2.096586] usb_phy_generic usb_phy_generic.1.auto: dummy supplies not allowed for exclusive requests (id=vbus)
+[    2.097133] ehci-platform 4200000.usb: EHCI Host Controller
+[    2.097162] ehci-platform 4200000.usb: new USB bus registered, assigned bus number 2
+[    2.097487] ehci-platform 4200000.usb: irq 473, io mem 0x04200000
+[    2.101901] ehci-platform 4101000.usb: USB 2.0 started, EHCI 1.00
+[    2.103066] hub 1-0:1.0: USB hub found
+[    2.103112] hub 1-0:1.0: 1 port detected
+[    2.107913] ehci-platform 4200000.usb: USB 2.0 started, EHCI 1.00
+[    2.109004] hub 2-0:1.0: USB hub found
+[    2.109048] hub 2-0:1.0: 1 port detected
+[    2.113650] sunxi-mmc 4020000.mmc: initialized, max. request size: 2048 KB, uses new timings mode
+[    2.114926] sunxi-mmc 4021000.mmc: initialized, max. request size: 2048 KB, uses new timings mode
+[    2.135596] mmc1: new high speed SDIO card at address 390b
+[    2.146260] mmc0: host does not support reading read-only switch, assuming write-enable
+[    2.149792] mmc0: new high speed SDHC card at address aaaa
+[    2.150801] mmcblk0: mmc0:aaaa SK32G 29.7 GiB
+[    2.154014]  mmcblk0: p1 p2
+[    3.119171] ohci-platform 4101400.usb: Generic Platform OHCI controller
+[    3.119200] ohci-platform 4101400.usb: new USB bus registered, assigned bus number 3
+[    3.119549] ohci-platform 4101400.usb: irq 475, io mem 0x04101400
+[    3.119612] clk: Disabling unused clocks
+[    3.119772] ohci-platform 4200400.usb: Generic Platform OHCI controller
+[    3.119800] ohci-platform 4200400.usb: new USB bus registered, assigned bus number 4
+[    3.119984] PM: genpd: Disabling unused power domains
+[    3.120065] KTAP version 1
+[    3.120069] 1..2
+[    3.120204]     KTAP version 1
+[    3.120208]     # Subtest: sun55i_msgbox
+[    3.120214]     # module: sun55i_msgbox_kunit
+[    3.120226]     1..37
+[    3.120281] ohci-platform 4200400.usb: irq 476, io mem 0x04200400
+[    3.120623]     ok 1 test_chan_to_route_all
+[    3.121583]     ok 2 test_functional_send_data_all_twelve_channels
+[    3.122479]     ok 3 test_functional_send_data_null
+[    3.123366]     ok 4 test_tx_irq_send_during_shutdown_refused
+[    3.124200]     ok 5 test_functional_send_data_holds_for_full_fifo
+[    3.125079]     ok 6 test_functional_shutdown_drops_held_message
+[    3.125972]     ok 7 test_functional_peek_data_sweep
+[    3.127571]     ok 8 test_functional_startup_and_shutdown
+[    3.129138]     ok 9 test_functional_shutdown_isolation
+[    3.130627]     ok 10 test_functional_startup_flushes_stale_fifo
+[    3.132154]     ok 11 test_functional_startup_capped_at_fifo_max
+[    3.133595]     ok 12 test_functional_shutdown_flushes
+[    3.135135]     ok 13 test_functional_shutdown_drain_capped_at_fifo_max
+[    3.136048]     ok 14 test_irq_delivers_in_fifo_order
+[    3.136949]     ok 15 test_send_data_keeps_order
+[    3.137808]     ok 16 test_held_message_follows_earlier_ones
+[    3.138693]     ok 17 test_held_message_dropped_after_timeout
+[    3.139601]     ok 18 test_irq_spurious_returns_none
+[    3.140456]     ok 19 test_irq_disabled_channel_ignored
+[    3.141347]     ok 20 test_irq_single_message_received
+[    3.142220]     ok 21 test_irq_clears_pending_after_drain
+[    3.143127]     ok 22 test_irq_callback_may_reply
+[    3.144013]     ok 23 test_irq_callback_runs_unlocked
+[    3.144987]     ok 24 test_irq_pending_with_empty_fifo
+[    3.145815]     ok 25 test_irq_multi_channel_concurrency
+[    3.146753]     ok 26 test_irq_multi_port_burst_interleaved
+[    3.147627]     ok 27 test_irq_fifo_drain_capped_at_max
+[    3.148551]     ok 28 test_irq_channel_crosstalk_isolation
+[    3.149398]     ok 29 test_tx_irq_armed_after_every_send
+[    3.150279]     ok 30 test_tx_irq_handler_disarms_and_acks
+[    3.151193]     ok 31 test_tx_irq_handler_ignores_unarmed
+[    3.152108] sun55i-msgbox-test test_tx_irq_startup_failure_leaves_rx_off.sun55i-msgbox-test: failed to request sun55i-msgbox-test-cpus: -107
+[    3.152750]     ok 32 test_tx_irq_startup_failure_leaves_rx_off
+[    3.154274]     ok 33 test_tx_irq_startup_enables_rx_after_line
+[    3.155750]     ok 34 test_tx_irq_handler_reports_tx_done
+[    3.157309]     ok 35 test_tx_irq_writes_held_message
+[    3.158819]     ok 36 test_tx_irq_line_shared_by_channels
+[    3.160385]     ok 37 test_tx_irq_shutdown_disarms_after_handler
+[    3.160404] # sun55i_msgbox: pass:37 fail:0 skip:0 total:37
+[    3.160417] # Totals: pass:37 fail:0 skip:0 total:37
+[    3.160428] ok 1 sun55i_msgbox
+[    3.160488]     KTAP version 1
+[    3.160492]     # Subtest: sunxi_rproc
+[    3.160498]     # module: sunxi_rproc_kunit
+[    3.160507]     1..23
+[    3.161294]     ok 1 test_da_to_va_zero_length_returns_null
+[    3.162080]     ok 2 test_da_to_va_rejects_overflow
+[    3.162830]     ok 3 test_da_to_va_sram_space0
+[    3.163594]     ok 4 test_da_to_va_sram_space1
+[    3.164502]     ok 5 test_da_to_va_sram_bounds
+[    3.165295]     ok 6 test_da_to_va_rejects_non_sram
+[    3.166107]     ok 7 test_da_to_va_unmapped_regions_return_null
+[    3.166890]     ok 8 test_rproc_da_to_va_dram_carveout
+[    3.167642]     ok 9 test_start_bootaddr_programming
+[    3.168714]     ok 10 test_start_rejects_bootaddr_overflow
+[    3.169516]     ok 11 test_prepare_and_unprepare_remap
+[    3.170324]     ok 12 test_prepare_clears_sram
+[    3.170774]  sunxi-rproc-test-pd: failed to power up: -5
+[    3.171207]     ok 13 test_prepare_power_up_failure
+[    3.175147] hub 3-0:1.0: USB hub found
+[    3.175231] hub 3-0:1.0: 1 port detected
+[    3.176762] hub 4-0:1.0: USB hub found
+[    3.176907] hub 4-0:1.0: 1 port detected
+[    3.188600]     ok 14 test_prepare_unprepare_order
+[    3.188622]         KTAP version 1
+[    3.188641]         # Subtest: test_prepare_unwinds_failure
+[    3.189927] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to assert core reset: -5
+[    3.209763]         ok 1 assert core
+[    3.211058] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to deassert cfg reset: -5
+[    3.232494]         ok 2 deassert cfg
+[    3.233684] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to deassert sram reset: -5
+[    3.255059]         ok 3 deassert sram
+[    3.256303] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to deassert debug reset: -5
+[    3.277251]         ok 4 deassert debug
+[    3.278453] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to enable bus clock: -5
+[    3.298348]         ok 5 bus clock
+[    3.299560] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to enable sram clock: -5
+[    3.318761]         ok 6 sram clock
+[    3.319941] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to enable core clock: -5
+[    3.340571]         ok 7 core clock
+[    3.340591]     # test_prepare_unwinds_failure: pass:7 fail:0 skip:0 total:7
+[    3.340607]     ok 15 test_prepare_unwinds_failure
+[    3.341913] sunxi-rproc-test test_start_core_reset_failure.sunxi-rproc-test-dev: failed to release core reset: -5
+[    3.369593]     ok 16 test_start_core_reset_failure
+[    3.370068]  (null): firmware is not a 32-bit RISC-V ELF
+[    3.370080]  (null): Image is corrupted (bad magic)
+[    3.370472]     ok 17 test_sanity_check_machine
+[    3.370929]  (null): unsupported fw ver: 2
+[    3.371303]     ok 18 test_parse_fw_resource_table
+[    3.371921] remoteproc remoteproc1: releasing sunxi-rproc-test
+[    3.372114]     ok 19 test_parse_fw_registers_memory
+[    3.372539] sunxi-rproc-test test_kick_payload_outlives_call.sunxi-rproc-test: no kick payload for vring 2
+[    3.372553] sunxi-rproc-test test_kick_payload_outlives_call.sunxi-rproc-test: no kick payload for vring -1
+[    3.372572] sunxi-rproc-test test_kick_payload_outlives_call.sunxi-rproc-test: Try increasing MBOX_TX_QUEUE_LEN
+[    3.372579] sunxi-rproc-test test_kick_payload_outlives_call.sunxi-rproc-test: failed to send mailbox kick: -105
+[    3.372588] sunxi-rproc-test test_kick_payload_outlives_call.sunxi-rproc-test: vring kick without a mailbox (no mboxes in DT)
+[    3.372993]     ok 20 test_kick_payload_outlives_call
+[    3.373982]     ok 21 test_rx_callback_defers_to_workqueue
+[    3.374569] remoteproc remoteproc1: releasing sunxi-rproc-test
+[    3.374770]     ok 22 test_vq_work_notifies_every_vring
+[    3.375363] remoteproc remoteproc1: releasing sunxi-rproc-test
+[    3.375553]     ok 23 test_vq_notify_unknown_vring
+[    3.375570] # sunxi_rproc: pass:23 fail:0 skip:0 total:23
+[    3.375583] # Totals: pass:29 fail:0 skip:0 total:29
+[    3.375594] ok 2 sunxi_rproc
+[    3.451905] EXT4-fs (mmcblk0p2): mounted filesystem 88e41101-f86e-4836-b70d-c0612d4dd141 r/w with ordered data mode. Quota mode: none.
+[    3.451973] VFS: Mounted root (ext4 filesystem) on device 179:2.
+[    3.452706] devtmpfs: mounted
+[    3.453819] VFS: Pivoted into new rootfs
+[    3.454811] Freeing unused kernel memory: 1920K
+[    3.454983] Run /sbin/init as init process
+[    3.454991]   with arguments:
+[    3.454994]     /sbin/init
+[    3.454997]   with environment:
+[    3.455000]     HOME=/
+[    3.455003]     TERM=linux
+[    3.608143] EXT4-fs (mmcblk0p2): re-mounted 88e41101-f86e-4836-b70d-c0612d4dd141.
+[    3.627332] FAT-fs (mmcblk0p1): Volume was not properly unmounted. Some data may be corrupt. Please run fsck.
+[    3.760936] random: crng init done
+[    4.090405] udevd[348]: starting version 3.2.14
+[    4.161769] udevd[348]: starting eudev-3.2.14
+[    4.451638] sunxi-wdt 2050000.watchdog: Watchdog enabled (timeout=16 sec, nowayout=0)
+[    4.490966] dwmac-sun55i 4510000.ethernet: IRQ eth_wake_irq not found
+[    4.490985] dwmac-sun55i 4510000.ethernet: IRQ sfty not found
+[    4.491137] dwmac-sun55i 4510000.ethernet: PTP uses main clock
+[    4.491898] dwmac-sun55i 4510000.ethernet: User ID: 0x20, Synopsys ID: 0x52
+[    4.491920] dwmac-sun55i 4510000.ethernet: 	DWMAC4/5
+[    4.491929] dwmac-sun55i 4510000.ethernet: DMA HW capability register supported
+[    4.491937] dwmac-sun55i 4510000.ethernet: Active PHY interface: RGMII (1)
+[    4.491945] dwmac-sun55i 4510000.ethernet: RX Checksum Offload Engine supported
+[    4.491951] dwmac-sun55i 4510000.ethernet: TX Checksum insertion supported
+[    4.491958] dwmac-sun55i 4510000.ethernet: Enable RX Mitigation via HW Watchdog Timer
+[    4.491967] dwmac-sun55i 4510000.ethernet: Enabled RFS Flow TC (entries=10)
+[    4.491977] dwmac-sun55i 4510000.ethernet: Using 32/40 bits DMA host/device width
+[    4.498735] dwmac-sun8i 4500000.ethernet: IRQ eth_wake_irq not found
+[    4.498752] dwmac-sun8i 4500000.ethernet: IRQ sfty not found
+[    4.499320] dwmac-sun8i 4500000.ethernet: PTP uses main clock
+[    4.499831] dwmac-sun8i 4500000.ethernet: No HW DMA feature register supported
+[    4.499963] dwmac-sun8i 4500000.ethernet: RX Checksum Offload Engine supported
+[    4.499972] dwmac-sun8i 4500000.ethernet: COE Type 2
+[    4.499980] dwmac-sun8i 4500000.ethernet: TX Checksum insertion supported
+[    4.499988] dwmac-sun8i 4500000.ethernet: Normal descriptors
+[    4.499994] dwmac-sun8i 4500000.ethernet: Chain mode enabled
+[    4.515542] aic8800_bsp: loading out-of-tree module taints kernel.
+[    4.516945] AIC_BSP driver, built against Linux 7.1.0-cpufreq
+[    4.580418] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    4.681111] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    4.682115] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    4.721269] AIC8800 WiFi driver, built against Linux 7.1.0-cpufreq
+[    4.739971] aicbsp 8800d80 u02 wifi firmware: fmacfw_8800d80_u02.bin
+[    4.739984] aicbsp rwnx_plat_bin_fw_upload
+[    4.739988] aicbsp rwnx_load_firmware: request firmware = fmacfw_8800d80_u02.bin
+[    4.943361] AICWF rd_version_val=06090101
+[    4.974576] AICWF Firmware Version: la Dec 05 2025 19:42:40 - g586bc1e8
+[    6.176284] ieee80211 phy0: AICWF HT supp 1, VHT supp 1, HE supp 1
+[    6.386920] psci: CPU4 killed (polled 0 ms)
+[    6.395813] psci: CPU5 killed (polled 0 ms)
+[    6.406936] psci: CPU6 killed (polled 1 ms)
+[    6.416675] psci: CPU7 killed (polled 0 ms)
+[    6.521057] dwmac-sun8i 4500000.ethernet eth0: Register MEM_TYPE_PAGE_POOL RxQ-0
+[    6.524581] dwmac-sun8i 4500000.ethernet eth0: PHY [stmmac-0:01] driver [Generic PHY] (irq=POLL)
+[    6.525857] dwmac-sun8i 4500000.ethernet eth0: No Safety Features support found
+[    6.525873] dwmac-sun8i 4500000.ethernet eth0: No MAC Management Counters available
+[    6.538186] dwmac-sun8i 4500000.ethernet eth0: PTP not supported by HW
+[    6.538201] dwmac-sun8i 4500000.ethernet eth0: configuring for phy/rgmii-id link mode
+[    6.559905] dwmac-sun55i 4510000.ethernet eth1: Register MEM_TYPE_PAGE_POOL RxQ-0
+[    6.563405] dwmac-sun55i 4510000.ethernet eth1: PHY [stmmac-1:01] driver [Generic PHY] (irq=POLL)
+[    6.568265] dwmac4: Master AXI performs fixed burst length
+[    6.568286] dwmac-sun55i 4510000.ethernet eth1: No Safety Features support found
+[    6.575118] dwmac-sun55i 4510000.ethernet eth1: IEEE 1588-2008 Advanced Timestamp supported
+[    6.575496] dwmac-sun55i 4510000.ethernet eth1: registered PTP clock
+[    6.575509] dwmac-sun55i 4510000.ethernet eth1: configuring for phy/rgmii-id link mode
+[   12.649492] remoteproc remoteproc0: powering up 7130000.remoteproc
+[   12.800124] remoteproc remoteproc0: Booting fw image riscv-firmware.elf, size 3351468
+[   12.805087] rproc-virtio rproc-virtio.3.auto: assigned reserved memory node vdev@48000000
+[   12.805670] virtio_rpmsg_bus virtio0: rpmsg host is online
+[   12.805718] rproc-virtio rproc-virtio.3.auto: registered virtio0 (type 7)
+[   12.805728] remoteproc remoteproc0: remote processor 7130000.remoteproc is now up
+[   12.806549] virtio_rpmsg_bus virtio0: creating channel abstractx-repl addr 0x402
+[   12.806810] virtio_rpmsg_bus virtio0: creating channel abstractx-tlp addr 0x400
+[   12.807058] virtio_rpmsg_bus virtio0: creating channel abstractx-trace addr 0x401
+[   23.020060] sunxi-pck-600 7060000.power-controller: sync_state() pending due to 1800000.gpu
+[  172.567206] Detected VIPT I-cache on CPU4
+[  172.567279] GICv3: CPU4: found redistributor 400 region 0:0x00000000034e0000
+[  172.567369] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[  172.587077] psci: CPU4 killed (polled 0 ms)

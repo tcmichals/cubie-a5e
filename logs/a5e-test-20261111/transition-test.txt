@@ -1,0 +1,19 @@
+max=408000 cur=408000 hw=408000 PLL_L=0xF8802201 CPUA=0x03000305 DSU=0xF8802000 clk=408000000
+max=600000 cur=600000 hw=600000 PLL_L=0xF8801900 CPUA=0x03000305 DSU=0xF8802000 clk=600000000
+max=792000 cur=792000 hw=792000 PLL_L=0xF8802100 CPUA=0x03000305 DSU=0xF8802000 clk=792000000
+62
+   From  :    To
+         :    408000    600000    792000 
+   408000:         0        30         1 
+   600000:        30         0         0 
+   792000:         1         0         0 
+[   23.020060] sunxi-pck-600 7060000.power-controller: sync_state() pending due to 1800000.gpu
+[  172.567206] Detected VIPT I-cache on CPU4
+[  172.567279] GICv3: CPU4: found redistributor 400 region 0:0x00000000034e0000
+[  172.567369] CPU4: Booted secondary processor 0x0000000400 [0x412fd050]
+[  172.587077] psci: CPU4 killed (polled 0 ms)
+cat: can't open '/proc/sys/kernel/sched_util_clamp_min_rt_default': No such file or directory
+trans in 20s at max=792: 0
+408000 172
+600000 43
+792000 27836

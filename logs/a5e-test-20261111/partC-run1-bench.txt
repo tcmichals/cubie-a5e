@@ -1,0 +1,5 @@
+board lock taken: /run/abstractx-board.lock on 192.168.1.4
+1 rows, about 1 min; evidence: docs/verification/evidence/2026-11/part4_bench_2026-11-12T002202
+[1/1] freertos_wait_cyclic_load (~60 s, 47.2 C)
+   ok, 49.5 C
+1/1 rows passed

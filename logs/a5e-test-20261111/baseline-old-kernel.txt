@@ -1,0 +1,11 @@
+/sbin/devmem
+0x00000049
+0x03405F10
+nvmem0
+sunxi-sid0
+[    4.367080] sunxi-wdt 2050000.watchdog: Watchdog enabled (timeout=16 sec, nowayout=0)
+[    4.531438] dwmac-sun55i 4510000.ethernet: Enable RX Mitigation via HW Watchdog Timer
+  107 watchdogd
+           CPU0       CPU1       CPU2       CPU3       
+  9:          0          0          0          0    GICv3  25 Level     vgic
+ 12:          0          0          0          0    GICv3  30 Level     kvm guest ptimer

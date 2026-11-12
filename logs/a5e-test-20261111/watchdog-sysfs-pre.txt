@@ -1,0 +1,11 @@
+identity=sunxi-wdt
+state=inactive
+status=0x0
+timeout=16
+timeleft=0
+bootstatus=0
+nowayout=0
+pretimeout=cat: can't open '/sys/class/watchdog/watchdog0/pretimeout': No such file or directory
+cat: can't open '/proc/sys/kernel/{watchdog,watchdog_thresh,softlockup_panic,hardlockup_panic,hung_task_timeout_secs}': No such file or directory
+1
+ 00:41:57 up 13 min,  load average: 1.44, 2.10, 1.21

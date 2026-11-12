@@ -1,0 +1,11 @@
+host=hp owner=claude cubie A5E test time=2026-11-11T18:08:53-06:00
+ 00:42:23 up 13 min,  load average: 0.95, 1.93, 1.17
+46884 45922 45404 45848 ls: /run/abstractx-board.lock: No such file or directory
+ 00:23:27 up 15 min,  load average: 8.08, 4.16, 2.04
+running
+e906_repl_app.elf
+freertos_wait.elf
+[    0.950375] 9p: Installing v9fs 9p2000 file system support
+[    1.041710] 9pnet: Installing 9P2000 support
+[    3.256303] sunxi-rproc-test test_prepare_unwinds_failure.sunxi-rproc-test-dev: failed to deassert debug reset: -5
+[    3.277251]         ok 4 deassert debug

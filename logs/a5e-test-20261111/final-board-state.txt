@@ -1,0 +1,21 @@
+sh: line 0: can't open /proc/14476/cmdline: no such file
+pid 16's current scheduling policy: SCHED_FIFO
+pid 16's current scheduling priority: 98
+pid 16's new scheduling policy: SCHED_OTHER
+pid 16's new scheduling priority: 0
+pid 16's current scheduling policy: SCHED_OTHER
+fw was: abstractx.elf
+rproc: running riscv-firmware.elf -> e906_repl_app.elf
+max/cur: 792000 792000
+10
+21
+Linux cubie-a5e-flight 7.1.0-cpufreq #1 SMP PREEMPT_RT Wed Nov 11 18:04:30 CST 2026 aarch64 GNU/Linux
+ 00:36:24 up 6 min,  load average: 4.89, 2.69, 1.05
+    inet 127.0.0.1/8 scope host lo
+    inet 192.168.3.3/24 brd 192.168.3.255 scope global eth0
+    inet 192.168.1.4/24 brd 192.168.1.255 scope global wlan0
+a1bc9d4d2e1f8896c28693281e24fd0f  /boot/Image
+d15650d8d5b4e30ae3a123fe5734e975  /boot/sun55i-a527-cubie-a5e.dtb
+cmdline=
+dtoverlay=cubie-a5e-flight-stack-e906
+47254 46736 46070 46588 

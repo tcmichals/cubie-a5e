@@ -1,0 +1,31 @@
+/etc/init.d/S20power-opt:11:      if [ -f "/sys/devices/system/cpu/cpu$c/online" ]; then
+/etc/init.d/S20power-opt:12:        echo 0 > "/sys/devices/system/cpu/cpu$c/online" 2>/dev/null || true
+/etc/init.d/S20power-opt:41:      if [ -f "/sys/devices/system/cpu/cpu$c/online" ]; then
+/etc/init.d/S20power-opt:42:        echo 1 > "/sys/devices/system/cpu/cpu$c/online" 2>/dev/null || true
+/etc/init.d/S20power-opt:52:    echo "Online CPUs: $(cat /sys/devices/system/cpu/online 2>/dev/null)"
+/sys/devices/system/cpu/cpufreq/policy4/affected_cpus:4
+/sys/devices/system/cpu/cpufreq/policy4/related_cpus:4 5 6 7
+/sys/devices/system/cpu/cpufreq/policy4/scaling_available_frequencies:408000 600000 792000 
+/sys/devices/system/cpu/cpufreq/policy4/scaling_governor:performance
+/sys/devices/system/cpu/cpufreq/policy4/scaling_cur_freq:792000
+/sys/devices/system/cpu/cpufreq/policy4/cpuinfo_cur_freq:792000
+0-3
+/sys/class/thermal/thermal_zone0 cpu4-thermal temp=47550 policy=step_wise
+  trip_point_0_temp 70000 passive
+  trip_point_1_temp 90000 passive
+  trip_point_2_temp 110000 critical
+/sys/class/thermal/thermal_zone1 cpu0-thermal temp=46514 policy=step_wise
+  trip_point_0_temp 70000 passive
+  trip_point_1_temp 90000 passive
+  trip_point_2_temp 110000 critical
+/sys/class/thermal/thermal_zone2 gpu-thermal temp=45922 policy=step_wise
+  trip_point_*_temp  
+/sys/class/thermal/thermal_zone3 ddr-thermal temp=46144 policy=step_wise
+  trip_point_0_temp 110000 critical
+/sys/class/thermal/cooling_device0 7122000.npu cur=0 max=6
+/sys/class/thermal/cooling_device1 cpufreq-cpu0 cur=0 max=2
+/sys/class/thermal/cooling_device2 cpufreq-cpu4 cur=0 max=2
+reset
+time_in_state
+total_trans
+trans_table

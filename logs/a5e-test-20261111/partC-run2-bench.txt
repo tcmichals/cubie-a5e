@@ -1,0 +1,6 @@
+board lock taken: /run/abstractx-board.lock on 192.168.1.4
+1 rows, about 0 min; evidence: docs/verification/evidence/2026-11/part4_bench_2026-11-12T002340
+[1/1] abstractx_bench_load (~15 s, 47.5 C)
+   FAILED, timed out
+warning: board lock /run/abstractx-board.lock not released (board unreachable, rebooted or lock taken by another session); check it with: ssh root@192.168.1.4 cat /run/abstractx-board.lock/owner
+0/1 rows passed; failed: abstractx_bench_load
