@@ -1,0 +1,34 @@
+/dev/media0
+/dev/video0
+/dev/video0 sun6i-csi-capture
+- entity 1: sun6i-csi-bridge (2 pads, 2 links, 0 routes)
+		[stream:0 fmt:SGBRG10_1X10/1920x1080 field:none colorspace:raw]
+		[stream:0 fmt:SGBRG10_1X10/1920x1080 field:none colorspace:raw]
+- entity 4: sun6i-csi-capture (1 pad, 1 link)
+- entity 10: sun6i-mipi-csi2 (2 pads, 2 links, 0 routes)
+		[stream:0 fmt:SGBRG10_1X10/1920x1080 field:none colorspace:raw]
+		[stream:0 fmt:SGBRG10_1X10/1920x1080 field:none colorspace:raw]
+- entity 15: ov5647 3-0036 (1 pad, 1 link, 0 routes)
+		[stream:0 fmt:SGBRG10_1X10/1920x1080 field:none colorspace:raw
+pre 0x02003840=0x04000000 0x020025E4=0x00040A06
+45694
+during 0x02003840=0x84000000 0x020025E4=0x00040B06
+mbus-csi 1 600000000
+csi 1 600000000
+isp 0 600000000
+bus-csi 1 200000000
+rc=0
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< 30.00 fps
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+[    0.375911] /soc/i2c@2513000/camera@36: Fixed dependency cycle(s) with /soc/csi@5811400
+[    0.376077] ov5647 3-0036: supply avdd not found, using dummy regulator
+[    0.376140] ov5647 3-0036: supply dovdd not found, using dummy regulator
+[    0.376157] ov5647 3-0036: supply dvdd not found, using dummy regulator
+[    0.404374] sun6i-mipi-csi2 5811400.csi: failed to get MIPI D-PHY
+46562

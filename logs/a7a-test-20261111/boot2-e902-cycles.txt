@@ -1,0 +1,11 @@
+cycle 1: offline -> running channel=0 Packets Recv   : 200 (100.00% success)
+cycle 2: offline -> running channel=1 Packets Recv   : 200 (100.00% success)
+cycle 3: offline -> running channel=1 Packets Recv   : 200 (100.00% success)
+cycle 4: offline -> running channel=1 Packets Recv   : 200 (100.00% success)
+cycle 5: offline -> running channel=1 Packets Recv   : 200 (100.00% success)
+[    3.818909] AICWFDBG(LOGERROR)	120198=177158
+[    3.818969] AICWFDBG(LOGERROR)	1201a0=177c00
+[    4.853901] aic_load_fw 1-1.4:1.0: probe with driver aic_load_fw failed with error -1
+[    4.854365] aic_load_fw 1-1.4:1.1: probe with driver aic_load_fw failed with error -1
+[    4.854836] aic_load_fw 1-1.4:1.2: probe with driver aic_load_fw failed with error -1
+ 19:      12430          0          0          0          0          0          0          0    GICv3  32 Level     3004000.mailbox

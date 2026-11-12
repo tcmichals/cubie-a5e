@@ -1,0 +1,64 @@
+Linux cubie-a7a-flight 7.1.0 #23 SMP PREEMPT_RT Tue Nov 10 20:21:27 CST 2026 aarch64 GNU/Linux
+0x02002000 0xF8675F00
+0x02002020 0xF9006300
+0x020020A0 0xFF126310
+0x02003840 0x04000000
+0x020025E4 0x00041B2F
+0x020025C0 0x110103FF
+0x02003D00 0x00000000
+17
+Bus 005 Device 001: ID 1d6b:0001 Linux 7.1.0 ohci_hcd Generic Platform OHCI controller
+Bus 003 Device 001: ID 1d6b:0002 Linux 7.1.0 ehci_hcd EHCI Host Controller
+Bus 001 Device 001: ID 1d6b:0002 Linux 7.1.0 xhci-hcd xHCI Host Controller
+Bus 006 Device 001: ID 1d6b:0001 Linux 7.1.0 ohci_hcd Generic Platform OHCI controller
+Bus 001 Device 002: ID 1a40:0101 USB 2.0 Hub
+Bus 004 Device 001: ID 1d6b:0002 Linux 7.1.0 ehci_hcd EHCI Host Controller
+Bus 002 Device 001: ID 1d6b:0003 Linux 7.1.0 xhci-hcd xHCI Host Controller
+Bus 001 Device 004: ID a69c:8d81 AICSemi AIC 8800D80
+BusyBox v1.38.0 (2026-11-08 15:06:42 CST) multi-call binary.
+
+Usage: ip [OPTIONS] address|route|link|tunnel|neigh|rule [ARGS]
+
+OPTIONS := -f[amily] inet|inet6|link | -o[neline]
+
+ip addr add|del IFADDR dev IFACE | show|flush [dev IFACE] [to PREFIX]
+ip route list|flush|add|del|change|append|replace|test ROUTE
+ip link set IFACE [up|down] [arp on|off] [multicast on|off]
+	[promisc on|off] [mtu NUM] [name NAME] [qlen NUM] [address MAC]
+	[master IFACE | nomaster] [netns PID] [type TYPE ARGS]
+ip tunnel add|change|del|show [NAME]
+	[mode ipip|gre|sit] [remote ADDR] [local ADDR] [ttl TTL]
+ip neigh show|flush [to PREFIX] [dev DEV] [nud STATE]
+ip rule [list] | add|del SELECTOR ACTION
+remoteproc0
+offline
+aic8800
+aic8800D80
+aic8800D80N
+aic8800D80X2
+aic8800DC
+aic8800DLN
+e902-firmware.elf
+exampleRiscv.bin
+exampleRiscv.elf
+regulatory.db
+regulatory.db.p7s
+riscv-firmware.elf
+testBasic.bin
+testBasic.elf
+testCrash.bin
+testCrash.elf
+testDRAMMsg.bin
+testDRAMMsg.elf
+testFreeRTOS.bin
+testFreeRTOS.elf
+testMsgbox.bin
+testMsgbox.elf
+testMsgboxStep.bin
+testMsgboxStep.elf
+testPing.bin
+testPing.elf
+testPingRpmsg.bin
+testPingRpmsg.elf
+testPingRpmsgSram.bin
+testPingRpmsgSram.elf

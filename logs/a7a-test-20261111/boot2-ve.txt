@@ -1,0 +1,33 @@
+v4l2_mem2mem           36864  0 
+insmod_rc=0
+[  210.863657] rproc-virtio rproc-virtio.1.auto: registered virtio0 (type 7)
+[  210.863665] remoteproc remoteproc0: remote processor 7032000.remoteproc is now up
+[  212.922711] remoteproc remoteproc0: stopped remote processor 7032000.remoteproc
+[  213.929111] remoteproc remoteproc0: powering up 7032000.remoteproc
+[  213.929327] remoteproc remoteproc0: Booting fw image testPingRpmsg.elf, size 119024
+[  213.930964] rproc-virtio rproc-virtio.1.auto: assigned reserved memory node rproc@4e000000
+[  213.931888] virtio_rpmsg_bus virtio0: rpmsg host is online
+[  213.931921] virtio_rpmsg_bus virtio0: creating channel rpmsg-ping-channel addr 0x400
+[  213.931933] rproc-virtio rproc-virtio.1.auto: registered virtio0 (type 7)
+[  213.931941] remoteproc remoteproc0: remote processor 7032000.remoteproc is now up
+[  215.998208] remoteproc remoteproc0: stopped remote processor 7032000.remoteproc
+[  217.004643] remoteproc remoteproc0: powering up 7032000.remoteproc
+[  217.004866] remoteproc remoteproc0: Booting fw image testPingRpmsg.elf, size 119024
+[  217.006435] rproc-virtio rproc-virtio.1.auto: assigned reserved memory node rproc@4e000000
+[  217.007327] virtio_rpmsg_bus virtio0: rpmsg host is online
+[  217.007355] virtio_rpmsg_bus virtio0: creating channel rpmsg-ping-channel addr 0x400
+[  217.007373] rproc-virtio rproc-virtio.1.auto: registered virtio0 (type 7)
+[  217.007381] remoteproc remoteproc0: remote processor 7032000.remoteproc is now up
+[  261.457233] sunxi_cedrus: module is from the staging directory, the quality is unknown, you have been warned.
+[  265.333199] sunxi-pck-600 7060000.power-controller: failed to turn domain "VE_ENC" off: -110
+/dev/video0
+/dev/video1
+/sys/class/video4linux/v4l-subdev0 sun6i-csi-bridge
+/sys/class/video4linux/v4l-subdev1 sun6i-mipi-csi2
+/sys/class/video4linux/v4l-subdev2 ov5647 3-0036
+/sys/class/video4linux/video0 sun6i-csi-capture
+/sys/class/video4linux/video1 cedrus-enc
+ve-enc0 0 400000000
+mbus-ve-enc0 0 600000000
+bus-ve-enc0 0 200000000
+lrwxrwxrwx    1 root     root             0 Jan  1 00:04 /sys/bus/platform/devices/1c10000.video-codec/driver -> ../../../../bus/platform/drivers/cedrus

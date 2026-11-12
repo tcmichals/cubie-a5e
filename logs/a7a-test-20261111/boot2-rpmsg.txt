@@ -1,0 +1,70 @@
+44764
+Packets Sent   : 1000
+Packets Recv   : 1000 (100.00% success)
+Data Integrity : PASS (0 corrupted / mismatched packets)
+Timeouts       : 0
+Total Duration : 0.790 s
+Throughput     : 1265.3 msgs/sec
+Bandwidth      : 1.20 MB/s (bi-directional)
+
+------------------- Latency Statistics -------------------
+Min Latency    : 117.292 us
+Avg Latency    : 785.754 us
+Max Latency    : 659626.542 us
+Jitter (StdDev): 20844.801 us
+
+---------------------- Percentiles ----------------------
+50th Percentile: 128.417 us
+90th Percentile: 134.416 us
+99th Percentile: 150.708 us
+99.9th Perc.   : 659626.542 us
+==========================================================
+---10s
+  Allwinner T527 Linux VirtIO RPMsg Ping-Pong Benchmark        
+  Protocol: Linux kernel virtio_rpmsg_bus                      
+  Channel : rpmsg-ping-channel (Endpoint Addr: 1024)           
+  Payload : 496 bytes (512-byte VirtIO buffer) | Count: 0 iterations
+  Check   : Lightweight tag (PONG) & seq integrity matching   
+================================================================
+[INFO] Target device: /dev/rpmsg0
+[INFO] Successfully opened /dev/rpmsg0. Starting ping-pong loop...
+
+  Progress: 200 packets sent, last RTT: 118.46 us  Progress: 400 packets sent, last RTT: 118.92 us  Progress: 600 packets sent, last RTT: 117.88 us  Progress: 800 packets sent, last RTT: 118.83 us  Progress: 1000 packets sent, last RTT: 118.17 us  Progress: 1200 packets sent, last RTT: 123.79 us[WARN] Ping seq=1280 TIMEOUT (1000 ms)
+  Progress: 1400 packets sent, last RTT: 119.75 us  Progress: 1600 packets sent, last RTT: 107.58 us  Progress: 1800 packets sent, last RTT: 118.50 us[WARN] Ping seq=1911 TIMEOUT (1000 ms)
+  Progress: 2000 packets sent, last RTT: 127.29 us[WARN] Ping seq=2109 TIMEOUT (1000 ms)
+  Progress: 2200 packets sent, last RTT: 119.67 us  Progress: 2400 packets sent, last RTT: 118.29 us[WARN] Ping seq=2412 TIMEOUT (1000 ms)
+  Progress: 2600 packets sent, last RTT: 119.38 us  Progress: 2800 packets sent, last RTT: 117.96 us  Progress: 3000 packets sent, last RTT: 123.92 us  Progress: 3200 packets sent, last RTT: 119.79 us  Progress: 3400 packets sent, last RTT: 123.96 us  Progress: 3600 packets sent, last RTT: 120.21 us  Progress: 3800 packets sent, last RTT: 119.08 us  Progress: 4000 packets sent, last RTT: 118.75 us  Progress: 4200 packets sent, last RTT: 118.54 us[WARN] Ping seq=4235 TIMEOUT (1000 ms)
+  Progress: 4400 packets sent, last RTT: 118.83 us15
+ 19:       5425          0          0          0          0          0          0          0    GICv3  32 Level     3004000.mailbox
+[  126.552821] remoteproc remoteproc0: Booting fw image testPingRpmsg.elf, size 119024
+[  126.554923] virtio_rpmsg_bus virtio0: rpmsg host is online
+[  126.554963] virtio_rpmsg_bus virtio0: creating channel rpmsg-ping-channel addr 0x400
+45198
+Packets Recv   : 1000 (100.00% success)
+Timeouts       : 0
+Min Latency    : 107.083 us
+Avg Latency    : 1720.396 us
+Max Latency    : 961424.750 us
+Jitter (StdDev): 36471.792 us
+99th Percentile: 137.916 us
+Packets Recv   : 1000 (100.00% success)
+Timeouts       : 0
+Min Latency    : 106.750 us
+Avg Latency    : 1090.950 us
+Max Latency    : 958621.917 us
+Jitter (StdDev): 30298.165 us
+99th Percentile: 140.417 us
+Packets Recv   : 999 (99.90% success)
+Timeouts       : 1
+Min Latency    : 116.916 us
+Avg Latency    : 1967.056 us
+Max Latency    : 961556.709 us
+Jitter (StdDev): 41265.399 us
+99th Percentile: 139.708 us
+Packets Recv   : 3000 (100.00% success)
+Timeouts       : 0
+Min Latency    : 41.459 us
+Avg Latency    : 1018.929 us
+Max Latency    : 973917.959 us
+99th Percentile: 72.083 us
+running

@@ -1,0 +1,350 @@
+                                 enable  prepare  protect                                duty  hardware                            connection
+   clock                          count    count    count        rate   accuracy phase  cycle    enable   consumer                         id
+---------------------------------------------------------------------------------------------------------------------------------------------
+ iosc                                0       0        0        16000000    0          0     50000      Y   deviceless                      no_connection_id         
+ losc                                0       0        0        32768       0          0     50000      Y   deviceless                      no_connection_id         
+    r-ir-rx                          0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    fanout3                          0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    fanout2                          0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    fanout1                          0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    fanout0                          0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    hdmi-cec                         0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    sgpio                            0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    irtx                             0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+    irrx                             0       0        0        32768       0          0     50000      N      deviceless                      no_connection_id         
+ hosc                                3       3        1        26000000    0          0     50000      Y   deviceless                      no_connection_id         
+    r-riscv                          0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-spi                            0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-pwm                            0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-timer3                         0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-timer2                         0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-timer1                         0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-timer0                         0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    r-apb1                           1       1        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+       bus-r-i2c2                    0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-i2c1                    0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-i2c0                    1       1        0        26000000    0          0     50000      Y         7083000.i2c                     no_connection_id         
+                                                                                                                 deviceless                      no_connection_id         
+       bus-r-uart1                   0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-uart0                   0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+    r-apb0                           3       3        0        26000000    0          0     50000      Y      7025000.pinctrl                 apb                      
+                                                                                                              deviceless                      no_connection_id         
+       bus-r-cpucfg                  1       1        0        26000000    0          0     50000      Y         deviceless                      no_connection_id         
+       bus-r-riscv-cfg               0       0        0        26000000    0          0     50000      N         7032000.remoteproc              bus                      
+                                                                                                                 deviceless                      no_connection_id         
+       bus-r-riscv                   0       0        0        26000000    0          0     50000      N         7032000.remoteproc              core                     
+                                                                                                                 deviceless                      no_connection_id         
+       bus-r-ir-rx                   0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-cpu-bist                0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-tzma                    0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+       bus-r-ppu                     1       1        0        26000000    0          0     50000      Y         7060000.power-controller        no_connection_id         
+                                                                                                                 deviceless                      no_connection_id         
+       bus-r-pwm                     0       0        0        26000000    0          0     50000      N         deviceless                      no_connection_id         
+    res-dcap-24m                     0       0        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+    bus-i2spcm4                      0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-i2spcm3                      0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-i2spcm2                      0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-i2spcm1                      0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-i2spcm0                      0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-lpc                          0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-sgpio                        0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-npu                          0       0        0        26000000    0          0     50000      N      deviceless                      no_connection_id         
+    bus-msi-lite2                    0       0        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+    bus-msi-lite1                    0       0        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+    bus-msi-lite0                    0       0        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+    bus-its-pcie0-aclk               0       0        0        26000000    0          0     50000      Y      deviceless                      no_connection_id         
+    pll-ref                          4       4        7        24000000    0          0     50000      Y      deviceless                      no_connection_id         
+       pll-de                        0       0        0        2088000000  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-de-3x                  0       0        0        696000000   0          0     50000      N            deviceless                      no_connection_id         
+             de0                     0       0        0        696000000   0          0     50000      N               deviceless                      no_connection_id         
+          pll-de-4x                  0       0        0        1044000000  0          0     50000      N            deviceless                      no_connection_id         
+       pll-npu                       0       0        0        840000000   0          0     50000      N         deviceless                      no_connection_id         
+          npu                        0       0        0        840000000   0          0     50000      N            deviceless                      no_connection_id         
+       pll-audio1                    0       0        0        3072000000  0          0     50000      N         deviceless                      no_connection_id         
+          pll-audio1-div5            0       0        0        614400000   0          0     50000      Y            deviceless                      no_connection_id         
+          pll-audio1-div2            0       0        0        1536000000  0          0     50000      Y            deviceless                      no_connection_id         
+       pll-audio0-4x                 0       0        0        98285714    0          0     50000      N         deviceless                      no_connection_id         
+          dmic                       0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          spdif-tx                   0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm4                    0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm3                    0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm2_asrc               0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm2                    0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm1                    0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+          i2spcm0                    0       0        0        98285714    0          0     50000      N            deviceless                      no_connection_id         
+       pll-ve1                       0       0        0        696000000   0          0     50000      N         deviceless                      no_connection_id         
+          ve-dec0                    0       0        0        696000000   0          0     50000      N            deviceless                      no_connection_id         
+       pll-ve0                       0       0        0        546000000   0          0     50000      N         deviceless                      no_connection_id         
+          ve-enc0                    0       0        0        546000000   0          0     50000      N            deviceless                      no_connection_id         
+       pll-video2                    0       0        0        2376000000  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-video2-3x              0       0        0        792000000   0          0     50000      N            deviceless                      no_connection_id         
+          pll-video2-4x              0       0        0        1188000000  0          0     50000      N            deviceless                      no_connection_id         
+       pll-video1                    0       0        0        2376000000  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-video1-3x              0       0        0        792000000   0          0     50000      N            deviceless                      no_connection_id         
+          pll-video1-4x              0       0        0        1188000000  0          0     50000      N            deviceless                      no_connection_id         
+       pll-video0                    0       0        0        2376000000  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-video0-3x              0       0        0        792000000   0          0     50000      N            deviceless                      no_connection_id         
+             lpc                     0       0        0        792000000   0          0     50000      N               deviceless                      no_connection_id         
+          pll-video0-4x              0       0        0        1188000000  0          0     50000      N            deviceless                      no_connection_id         
+             fanout-27M              0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             hdmi-tv                 0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             edp-tv                  0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             combphy1                0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             combphy0                0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             tcon-lcd2               0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             tcon-lcd1               0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             tcon-lcd0               0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+             eink-panel              0       0        0        1188000000  0          0     50000      N               deviceless                      no_connection_id         
+       pll-gpu0                      0       0        0        840000000   0          0     50000      N         deviceless                      no_connection_id         
+          gpu0                       0       0        0        840000000   0          0     50000      N            deviceless                      no_connection_id         
+       pll-periph1-4x                1       1        1        2400000000  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-periph1-480M           0       0        0        480000000   0          0     50000      N            deviceless                      no_connection_id         
+             pll-periph1-160M        0       0        0        160000000   0          0     50000      Y               deviceless                      no_connection_id         
+          pll-periph1-800M           0       0        0        800000000   0          0     50000      N            deviceless                      no_connection_id         
+          pll-periph1-2x             1       1        0        1200000000  0          0     50000      Y            deviceless                      no_connection_id         
+             pll-periph1-400M        0       0        0        400000000   0          0     50000      Y               deviceless                      no_connection_id         
+                pll-periph1-200M     0       0        0        200000000   0          0     50000      Y                  deviceless                      no_connection_id         
+             pll-periph1-600M        1       1        0        600000000   0          0     50000      Y               deviceless                      no_connection_id         
+                mbus                 3       3        0        600000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   mbus-ve-dec0      0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-gmac1        0       0        0        600000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   mbus-gmac0        1       1        0        600000000   0          0     50000      Y                     4500000.ethernet                mbus                     
+                                                                                                                             deviceless                      no_connection_id         
+                   mbus-isp          0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-csi          0       0        0        600000000   0          0     50000      N                     5800800.csi                     mbus                     
+                                                                                                                             deviceless                      no_connection_id         
+                   mbus-dma1         0       0        0        600000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   mbus-ce           0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-ve-enc0      0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-dma0         0       0        0        600000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   mbus-msi-lite2    0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-store        1       1        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                      mbus-nand0     0       0        0        600000000   0          0     50000      N                        deviceless                      no_connection_id         
+                   mbus-msi-lite0    0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-serdes       0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-vid-in       0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-npu          0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-gpu0         0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-ve-dec0-gate 0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-ve-enc0-gate 0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-desys        0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-iommu1       0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-iommu0       0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-iommu1-sys   0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   mbus-iommu0-sys   0       0        0        600000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                pll-periph1-300M     0       0        0        300000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   pll-periph1-150M  0       0        0        150000000   0          0     50000      Y                     deviceless                      no_connection_id         
+       pll-periph0-4x                3       3        3        2400000000  0          0     50000      Y         deviceless                      no_connection_id         
+          usb-ohci1                  2       2        0        12000000    0          0     50000      Y            usb@4200000                     no_connection_id         
+                                                                                                                    usb@4200400                     no_connection_id         
+                                                                                                                    deviceless                      no_connection_id         
+          usb-ohci0                  2       2        0        12000000    0          0     50000      Y            usb@4101000                     no_connection_id         
+                                                                                                                    usb@4101400                     no_connection_id         
+                                                                                                                    deviceless                      no_connection_id         
+          pll-periph0-480M           0       0        0        480000000   0          0     50000      Y            deviceless                      no_connection_id         
+             fanout-16M              0       0        0        16000000    0          0     50000      N               deviceless                      no_connection_id         
+             ufs-cfg                 0       0        0        19200000    0          0     50000      Y               deviceless                      no_connection_id         
+             eink                    0       0        0        480000000   0          0     50000      N               deviceless                      no_connection_id         
+             pll-periph0-160M        0       0        0        160000000   0          0     50000      Y               deviceless                      no_connection_id         
+          pll-periph0-800M           0       0        0        800000000   0          0     50000      Y            deviceless                      no_connection_id         
+          pll-periph0-2x             2       2        0        1200000000  0          0     50000      Y            deviceless                      no_connection_id         
+             fanout-25M              0       0        0        25000000    0          0     50000      N               deviceless                      no_connection_id         
+             hdmi-cec-32k            0       0        0        32768       0          0     50000      N               deviceless                      no_connection_id         
+             pll-periph0-400M        3       3        0        400000000   0          0     50000      Y               deviceless                      no_connection_id         
+                mmc0                 1       1        0        50000000    0          0     50000      Y                  4020000.mmc                     mmc                      
+                                                                                                                          deviceless                      no_connection_id         
+                ce                   0       0        0        400000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                g2d                  0       0        0        400000000   0          0     50000      N                  deviceless                      no_connection_id         
+                gic                  1       1        0        100000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                pll-periph0-200M     1       1        0        200000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   r-ahb             1       1        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                      bus-r-rtc      0       0        0        200000000   0          0     50000      Y                        deviceless                      no_connection_id         
+                      bus-r-msgbox   1       1        0        200000000   0          0     50000      Y                        mailbox@3004000                 no_connection_id         
+                                                                                                                                deviceless                      no_connection_id         
+                      bus-r-spi      0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-r-timer    0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                   spdif-rx          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+             pll-periph0-600M        3       3        0        600000000   0          0     50000      Y               deviceless                      no_connection_id         
+                csi                  0       0        0        600000000   0          0     50000      N                  5800800.csi                     top                      
+                                                                                                                          deviceless                      no_connection_id         
+                isp                  0       0        0        600000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                pcie-axi-slv         0       0        0        600000000   0          0     50000      N                  deviceless                      no_connection_id         
+                di                   0       0        0        600000000   0          0     50000      N                  deviceless                      no_connection_id         
+                apb0                 1       1        0        100000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   fanout-pclk       0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-ledc          0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-lradc         0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-irtx          0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-irrx          0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-ths0          1       1        0        100000000   0          0     50000      Y                     2522000.thermal-sensor          bus                      
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-pwm1          0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-pwm0          0       0        0        100000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   apb-iommu1-sys    0       0        0        100000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   apb-iommu0-sys    0       0        0        100000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                ahb                  9       9        0        200000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   bus-csi           0       0        0        200000000   0          0     50000      N                     5800800.csi                     bus                      
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-dsc           0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dpss-top1     0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dpss-top0     0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-hdmi-tv       0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-edp-tv        0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-tcon-tv1      0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-tcon-tv0      0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dsi1          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dsi0          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-tcon-lcd2     0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-tcon-lcd1     0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-tcon-lcd0     0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-gmac1         0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-gmac0         1       1        0        200000000   0          0     50000      Y                     4500000.ethernet                stmmaceth                
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-ehci1         1       1        0        200000000   0          0     50000      Y                     usb@4200000                     no_connection_id         
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-ohci1         2       2        0        200000000   0          0     50000      Y                     usb@4200000                     no_connection_id         
+                                                                                                                             usb@4200400                     no_connection_id         
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-otg           0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-ehci0         1       1        0        200000000   0          0     50000      Y                     usb@4101000                     no_connection_id         
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-ohci0         2       2        0        200000000   0          0     50000      Y                     usb@4101000                     no_connection_id         
+                                                                                                                             usb@4101400                     no_connection_id         
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-gpadc0        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-dram0         1       1        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-gpu0          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-ce-sys        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-ce            0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-ve-dec0       0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-ve-enc0       0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-eink          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-g2d           0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-di            0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-de0           0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-timer         0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   bus-msgbox0       1       1        0        200000000   0          0     50000      Y                     mailbox@3004000                 no_connection_id         
+                                                                                                                             deviceless                      no_connection_id         
+                   bus-spinlock      0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dma1          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   bus-dma0          0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   ahb-cpus          1       1        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-store         1       1        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                      bus-spi4       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-spi3       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-spif       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-spi2       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-spi1       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-spi0       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-ufs        0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-mmc3       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-mmc2       0       0        0        200000000   0          0     50000      Y                        deviceless                      no_connection_id         
+                      bus-mmc1       0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      bus-mmc0       1       1        0        200000000   0          0     50000      Y                        4020000.mmc                     ahb                      
+                                                                                                                                deviceless                      no_connection_id         
+                      bus-nand0      0       0        0        200000000   0          0     50000      N                        deviceless                      no_connection_id         
+                   ahb-msi-lite0     0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-usb-sys       0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-serdes        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-gpu0          0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-npu           0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-de            0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-vid-cout1     0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-vid-cout0     0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-vid-in        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-ve-enc        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-ve-dec        0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-iommu1-sys    0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                   ahb-iommu0-sys    0       0        0        200000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                pll-periph0-300M     1       1        0        300000000   0          0     50000      Y                  deviceless                      no_connection_id         
+                   usb2-u3-utmi      1       1        0        60000000    0          0     50000      Y                     6a00000.usb                     utmi                     
+                                                                                                                             deviceless                      no_connection_id         
+                   hdcp-esm          0       0        0        300000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   ufs-axi           0       0        0        300000000   0          0     50000      N                     deviceless                      no_connection_id         
+                   pll-periph0-150M  0       0        0        150000000   0          0     50000      Y                     deviceless                      no_connection_id         
+                      gmac1-phy      0       0        0        150000000   0          0     50000      N                        deviceless                      no_connection_id         
+                      gmac0-phy      0       0        0        25000000    0          0     50000      Y                        deviceless                      no_connection_id         
+       pll-ddr                       2       2        2        2400000000  0          0     50000      Y         deviceless                      no_connection_id         
+          dram0                      1       1        0        600000000   0          0     50000      Y            deviceless                      no_connection_id         
+       sys-24M                       9       9        0        24000000    0          0     50000      Y         deviceless                      no_connection_id         
+          usb2-suspend               1       1        0        24000000    0          0     50000      Y            6a00000.usb                     suspend                  
+                                                                                                                    deviceless                      no_connection_id         
+          fanout-12M                 0       0        0        12000000    0          0     50000      N            deviceless                      no_connection_id         
+          fanout-24M                 0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          apb2jtag                   0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          csi_master2                0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          csi_master1                0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          csi_master0                0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          ledc                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          hdmi-sfr                   0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          dsi1                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          dsi0                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          gmac-ptp                   1       1        0        24000000    0          0     50000      Y            4500000.ethernet                ptp_ref                  
+                                                                                                                    deviceless                      no_connection_id         
+          serdes-phy                 0       0        0        24000000    0          0     50000      Y            deviceless                      no_connection_id         
+          pcie-aux                   0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          usb2-u2-pipe               1       1        0        24000000    0          0     50000      Y            6a00000.usb                     pipe                     
+                                                                                                                    deviceless                      no_connection_id         
+          usb2-mf                    1       1        0        24000000    0          0     50000      Y            6a00000.usb                     bus_clk                  
+                                                                                                                    deviceless                      no_connection_id         
+          usb2-u2-ref                1       1        0        24000000    0          0     50000      Y            6a00000.usb                     ref                      
+                                                                                                                    deviceless                      no_connection_id         
+          usb01-ref                  2       2        0        24000000    0          0     50000      Y            4100400.phy                     usb1_phy                 
+                                                                                                                    4100400.phy                     usb0_phy                 
+                                                                                                                    deviceless                      no_connection_id         
+          gpadc0-24m                 1       1        0        24000000    0          0     50000      Y            2522000.thermal-sensor          mod                      
+                                                                                                                    deviceless                      no_connection_id         
+          spi4                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          spi3                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          spif                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          spi2                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          spi1                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          spi0                       0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          mmc3                       0       0        0        12000000    0          0     50000      N            deviceless                      no_connection_id         
+          mmc2                       0       0        0        12000000    0          0     50000      Y            deviceless                      no_connection_id         
+          mmc1                       0       0        0        12000000    0          0     50000      N            deviceless                      no_connection_id         
+          nand0-clk1                 0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          nand0-clk0                 0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          avs-clk                    0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer9                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer8                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer7                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer6                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer5                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer4                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer3                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer2                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer1                     0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          timer0                     0       0        0        6000000     0          0     50000      Y            deviceless                      no_connection_id         
+          bus-dbg                    0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          trace                      0       0        0        24000000    0          0     50000      N            deviceless                      no_connection_id         
+          apb-uart                   1       1        0        24000000    0          0     50000      Y            deviceless                      no_connection_id         
+             bus-uart6               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart5               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart4               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart3               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart2               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart1               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-uart0               1       1        0        24000000    0          0     50000      Y               2500000.serial                  no_connection_id         
+                                                                                                                       deviceless                      no_connection_id         
+          apb1                       1       1        0        24000000    0          0     50000      Y            2000000.pinctrl                 apb                      
+                                                                                                                    deviceless                      no_connection_id         
+             bus-dmic                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-spdif               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c12               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c11               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c10               0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c9                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c8                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c7                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c6                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c5                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c4                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c3                0       0        0        24000000    0          0     50000      N               2513000.i2c                     no_connection_id         
+                                                                                                                       deviceless                      no_connection_id         
+             bus-i2c2                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c1                0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+             bus-i2c0                0       0        0        24000000    0          0     50000      Y               deviceless                      no_connection_id         
+             bus-sysdap              0       0        0        24000000    0          0     50000      N               deviceless                      no_connection_id         
+ camera-clk                          0       0        0        25000000    0          0     50000      Y   3-0036                          no_connection_id         
+                                                                                                           deviceless                      no_connection_id         

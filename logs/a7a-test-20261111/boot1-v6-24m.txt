@@ -1,0 +1,47 @@
+console=ttyS0,115200 root=/dev/mmcblk0p2 rootwait rw panic=10 loglevel=8 clk_ignore_unused fw_devlink=permissive
+Linux cubie-a7a-flight 7.1.0 #23 SMP PREEMPT_RT Wed Nov 11 18:30:32 CST 2026 aarch64 GNU/Linux
+0xF8675F00
+ hosc                                5       5        1        24000000    0          0     50000      Y   deviceless                      no_connection_id         
+    pll-ref                          4       4        7        22153846    0          0     50000      Y      deviceless                      no_connection_id         
+       pll-periph0-4x                3       3        3        2215384600  0          0     50000      Y         deviceless                      no_connection_id         
+          pll-periph0-480M           0       0        0        443076920   0          0     50000      Y            deviceless                      no_connection_id         
+          pll-periph0-800M           0       0        0        738461534   0          0     50000      Y            deviceless                      no_connection_id         
+          pll-periph0-2x             2       2        0        1107692300  0          0     50000      Y            deviceless                      no_connection_id         
+             pll-periph0-400M        2       2        0        369230766   0          0     50000      Y               deviceless                      no_connection_id         
+                mmc0                 0       0        0        30769230    0          0     50000      N                  4020000.mmc                     mmc                      
+             pll-periph0-600M        3       3        0        553846150   0          0     50000      Y               deviceless                      no_connection_id         
+                csi                  0       0        0        553846150   0          0     50000      N                  5800800.csi                     top                      
+                apb0                 1       1        0        92307692    0          0     50000      Y                  deviceless                      no_connection_id         
+                ahb                  8       8        0        184615384   0          0     50000      Y                  deviceless                      no_connection_id         
+                      bus-mmc0       0       0        0        184615384   0          0     50000      N                        4020000.mmc                     ahb                      
+                pll-periph0-300M     1       1        0        276923075   0          0     50000      Y                  deviceless                      no_connection_id         
+                      gmac0-phy      0       0        0        23076923    0          0     50000      Y                        deviceless                      no_connection_id         
+       sys-24M                       7       7        0        22153846    0          0     50000      Y         deviceless                      no_connection_id         
+          apb-uart                   1       1        0        22153846    0          0     50000      Y            deviceless                      no_connection_id         
+             bus-uart0               1       1        0        22153846    0          0     50000      Y               2500000.serial                  no_connection_id         
+          apb1                       1       1        0        22153846    0          0     50000      Y            2000000.pinctrl                 apb                      
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.087898] kvm [1]: vgic interrupt IRQ9
+[    0.094425] sun4i-usb-phy 4100400.phy: failed to get reset usb0_reset
+[    0.140260] dwc3 6a00000.usb: DWC3 core power domain pending, deferring probe
+[    0.148029] sun6i-mipi-csi2 5811400.csi: failed to get MIPI D-PHY
+[    0.156288] remoteproc remoteproc0: Direct firmware load for e902-firmware.elf failed with error -2
+[    0.156343] remoteproc remoteproc0: Direct firmware load for e902-firmware.elf failed with error -2
+[    0.156402] remoteproc remoteproc0: request_firmware failed: -2
+[    0.220650] sun4i-usb-phy 4100400.phy: Couldn't get regulator usb0_vbus... Deferring probe
+[    0.428343] dwc3 6a00000.usb: DWC3 core power domain pending, deferring probe
+[    0.465246] sun6i-mipi-csi2 5811400.csi: failed to get MIPI D-PHY
+[    1.178376] usb 1-1: device not accepting address 2, error -71
+[    3.370399] usb 1-1.4: device not accepting address 5, error -71
+[    3.370575] usb 1-1.4: WARN: invalid context state for evaluate context command.
+[    3.962398] usb 1-1.4: device not accepting address 6, error -71
+[    3.962544] usb 1-1.4: WARN: invalid context state for evaluate context command.
+[    4.882416] usb 1-1.4: device descriptor read/64, error -71
+[    5.626415] usb 1-1.4: device descriptor read/64, error -71
+[   21.650416] usb 1-1.4: device descriptor read/64, error -110
+[   37.522428] usb 1-1.4: device descriptor read/64, error -110
+45260
+45942
+45260
+45384
+44330
