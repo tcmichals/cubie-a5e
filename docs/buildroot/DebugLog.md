@@ -900,3 +900,36 @@ read interrupt, and Linux's doorbells went into the gated bank.
 2. In bidirectional RPMsg, replenishment of empty buffers on the RX ring (`vrp->rvq`) kicks just as frequently as sending on the TX ring (`vrp->svq`); both virtqueues must implement kick suppression.
 3. Polling coprocessor engines should keep `VRING_USED_F_NO_NOTIFY = 1` active continuously, whereas interrupt-driven RTOS tasks should explicitly unsuppress kicks prior to blocking on an ISR notification.
 
+
+---
+
+## Case Study 16 — A5E Resets Under Load (open, 2026-11-11 to 2026-11-12)
+
+### 🔍 Context & Problem Statement
+With the E906 running timer/bench firmware and `stress-ng` on the A55 cores, the A5E resets within seconds: no oops, panic, lockup or shutdown on the console, straight to U-Boot SPL. Flight-critical. Kernel `7.1.0` (768 MHz, U-Boot clock) and `7.1.0-cpufreq` (792 MHz). Evidence: `logs/a5e-test-20261111/RESULTS.md`, `logs/a5e-reset-20261112/RESULTS.md`.
+
+### 🔬 What has been ruled out
+| Suspect | Evidence | Verdict |
+|---|---|---|
+| SoC watchdogs (CPUX/CPUS/DSP/RISCV) | `WDT_MODE` = 0 and `WDT_IRQ_STAT` = 0 on all four up to the last heartbeat; `sunxi_wdt_probe()` stops the CPUX WDT | ruled out |
+| RT starvation / `watchdogd` | FIFO 99 heartbeat on time to ≤ 2 s before the reset; lockup detectors, RCU stall 5 s, hung task: silent | ruled out |
+| AXP717 watchdog | REG 19H bit 0 = 0 (disabled), REG 1AH IRQ-only | ruled out |
+| Thermal | 46-51 °C at the resets (fan on) | ruled out |
+| Overclock | 792 MHz at 0.90 V is a vendor OPP for bin vf0300 (`sun55iw3p1.dtsi`; 936 MHz is also 0.90 V) | not overclocked |
+
+### 📈 What points at power
+- 2/2 resets at 792 MHz, 0/3 with the CPUs capped at 408 MHz (same 0.90 V): the reset follows CPU current.
+- AXP717 input limit 1500 mA (REG 17H = 0x1c), VINDPM 4.44 V (REG 16H = 0x07). VBUS **4.66 V idle, 4.53 V under `stress-ng --cpu 4 --vm 2`** (ADC, 1 mV/LSB, `in_voltage2_raw`). The heavier E906 bench load was not measured yet. If VBUS reaches VINDPM the PMIC throttles input and VSYS drops; DCDC1-3 85 % undervoltage power-off is enabled (REG 23H = 0x17).
+- REG 21H (power-off source) read 0 after a boot that may have been a power cycle, which clears it: not conclusive.
+
+### 🛠️ Method for the next reset
+Marker in a POR-type register that does nothing while the PMIC watchdog is off: `i2cset -f -y 2 0x34 0x1a 0x05` before the load; after the reset, before any power cycle, read 1A/20/21:
+- 1A = 0x05 → PMIC not reset: SoC-side reset.
+- 1A = 0x06 and REG 21 bit set → PMIC fault power-off (bit 5 DCDC UV, bit 3 VSYS UV, bit 7 over-temperature).
+- 1A = 0x06 and REG 21 = 0 → power-on reset: input supply collapse.
+Stream VBUS/VSYS over ssh to the PC (~40 samples/s) and log the serial console during the run. Meter/scope on the 5 V input. Ramoops does not help with this kernel (`PSTORE_CONSOLE`/`PSTORE_PMSG` off, and no oops is produced).
+
+### 📚 Lessons (so far)
+1. An abrupt reset with a live FIFO 99 heartbeat until the end is not a scheduler problem; look below the kernel.
+2. PMIC status registers come in two reset classes (POR vs system reset); a written marker turns "no fault latched" into a usable answer.
+3. Read the supply under load before blaming the silicon: 4.53 V on a nominal 5 V input leaves 90 mV to the PMIC's input-voltage limit.
