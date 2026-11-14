@@ -131,3 +131,26 @@ cap dqbuf: 1 seq: 0 bytesused: 1604 (P-frame)    # same for the next 3 P frames
   registers and IOMMU0 master 3 registers only with the device resumed (`power/control`=on) and
   `PWSR`=8.**
 - Next: resume, read master 3 `BYP` (`0x03900A04`); if 0, set 1 and re-encode.
+
+## Output zeros: what is ruled out (after power cycle, device held resumed)
+
+| Suspect | Readback | Verdict |
+| --- | --- | --- |
+| IOMMU0 master 3 translating | `0x03900A00/04/08/0C/14` = 1 (auto-gating, **bypass**, wbuf, ooo, tlb-en), `INT_STA`/err addr/data (`+0x38..0x44`) = 0 | not it: bypass, no fault (same as CSI master 1) |
+| Bus address offset (old sunxi MBUS `PHYS_OFFSET`) | vendor `cedar_ve.c:998` `phymem_start = 0`; A733 not in `sunxi_mbus.c` | not it: physical addresses |
+| Buffer above 4 GiB | input luma `0xA78` = `0xF3100000`, chroma `0xA7C` = `0xF31E1000`, STM `0xB80/0xB84` = `0xF3600000`/`0xF36FFFFF`, MB info `0xBC0` = `0xF3004000` | not it: all below 4 GiB, in RAM |
+| Bus gates | `0x5C0`=`0x10010306` (bit 1), `0x5E0`=`0xF1001003` (bit 12), `0x5E4`=`0xA06` (bit 1), `0xA80`=`0x81000000`, `0xA8C`=`0x10001` | not it: all on, same bits as vendor `ccu-sun60iw2.c:593-708` |
+| Engine not running | `STM_BIT_LEN` `0xB90` = `0x3220` (12832 bits), IRQ per frame | engine runs and counts bits |
+
+`STM_BIT_MAX` `0xB8C` = `0x00800000` (1 MiB × 8). `devmem` cannot read RAM (`STRICT_DEVMEM`), so
+whether bytes reach `0xF3600000` is not known from user space.
+
+Still open, in order:
+1. Do the bits reach DRAM? Kernel debug in `cedrus_enc_h264_job_finish()`: `memremap()` the coded
+   buffer's DMA address (or drop `DMA_ATTR_NO_KERNEL_MAPPING` for the CAPTURE queue) and print the
+   first 32 bytes. Zeros there = the engine's stream writer does not write to DRAM; data there = a
+   CPU-mapping/sync bug in the driver path.
+2. If zeros in DRAM: the A733 "H264 Ver2" core (plan §2.3) may need stream-writer setup the V3s-era
+   WIP does not do (VCUENC `+0x900`, ENC_TOP bits): compare with the register dumps of a vendor-image
+   encode (Radxa Debian, `libvencoder`), the one case where the vendor image is worth booting.
+3. Driver default CAPTURE `sizeimage` is 1024: raise it (for example width × height × 3 / 2 / 2).
