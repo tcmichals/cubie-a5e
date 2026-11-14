@@ -67,3 +67,30 @@ a 10 ms timeout, but on timeout only logs and returns 0, so the vendor kernel ma
   `clk_set_rate()` re-parenting).
 - Wi-Fi: the board's `/etc/wpa_supplicant.conf` has the network but no `ctrl_interface`; three
   `wpa_supplicant` instances were running (ifupdown + `S40network-wifi`); no association yet.
+
+## After the power cycle: cause found and fixed (2026-11-14)
+
+Safe order this time: `PWPR`=8 first (the boot-time failed OFF leaves `PWPR`=0), then
+`power/control`=on to resume through the driver.
+
+| Step | `MODE` +0x800 | `0x1b14` | `DISR` | Result |
+| --- | --- | --- | --- | --- |
+| resumed | `0xC7` | `0x00020001` | 1 | |
+| ENC_TOP mode → 0 | `0x00` | `0x00020001` | **1** | hypothesis "mode reg" wrong |
+| `0x1b14` bit 0 → 0 | `0x00` | `0x00020000` | **0** | DEVACTIVE released at once |
+| `power/control`=auto | | | | genpd `VE_ENC off-0`, `PWSR`=0, no `-110` |
+| resume again | `0xC7` | `0x00020000` | 0 | `PWSR`=8, `+0x8e4` still `0x00E21320` |
+| auto again | | | | `PWSR`=0, no `-110` |
+
+**Cause:** our CCU probe set `CM_VE_ENC_CFG_REG` bit 0 ("module mode", from `c9d1a8f3fb9c`); the
+vendor kernel never writes it (reset value `0x2`). Set, it holds the VE_ENC PPU DEVACTIVE input.
+**Fix:** `linux-cubie` `01e37bcf6fa7` drops the write.
+
+Kernel `#3` (Image sha256 `d426eed2…eaa8`) copied to `/boot/Image` over Wi-Fi (old kernel kept as
+`/boot/Image.bak-20261114`), `reboot` worked: readback `0x1b14 00020000`, no `-110` line, genpd
+`VE_ENC off-0` with the device suspended, `PWSR` 0.
+
+Board notes: login `root` with no password on the serial console after a cold boot. Wi-Fi: the SSID is
+`TP-Link_4EA4_5G` (case matters); with that and a `ctrl_interface` line in `/etc/wpa_supplicant.conf`
+the board joins 5 GHz and gets `192.168.0.194` by DHCP, also after `reboot`. Ethernet `eth0` is on a
+different router (`192.168.3.4`). SSH from this PC needs a key on the board (not installed).
