@@ -1,0 +1,69 @@
+# A7A VE encoder, step (a) board test, 2026-11-14
+
+Image: `bld.a7a/images/sdcard.img` (kernel `7.1.0 #2 SMP PREEMPT_RT Sat Nov 14 01:48:51 CST 2026`),
+`linux-cubie` `a7a_remoteproc_camera_usb` `7452c982f912`, 26 MHz `osc24M` DTB. Serial `ttyUSB0` 115200.
+Plan: `docs/common/A733_VE_H264_ENCODER_PLAN.md` §4 (a).
+
+## Probe (cedrus auto-loaded at boot)
+
+```
+[    0.107296] sunxi-pck-600 7060000.power-controller: domain "VE_ENC" (id 3) pstate=0x8, on
+[    2.897487] cedrus 1c10000.video-codec: readback: mod 400000000 Hz, top+0x0 000000c7 top+0x4 00000300 +0x8e4 00e21320 +0x8f0 00000000
+[    2.897504] cedrus 1c10000.video-codec: readback: CCU 0x1b14 00020001 (PD status 2), sys 0x0 00000000 0x4 00000000
+[    6.799689] sunxi-pck-600 7060000.power-controller: failed to turn domain "VE_ENC" off: -110
+```
+
+- **Pass:** version register `+0x8e4` = `0x00e21320` (non-zero; `libve` only rejects "both 0xf0 and
+  0xe4 is 0"); `+0x8f0` = 0. PD status 2 (on), `0x1b14` bit 0 set. `0x03000000`/`0x03000004` both 0:
+  not a "never started" candidate (plan §1.3).
+- `v4l2-ctl --list-devices`: `cedrus-enc (platform:cedrus)` → `/dev/video1`, `/dev/media1`.
+
+## Clocks (`clk_summary`, device suspended)
+
+All five consumers named correctly (`ahb`, `mod`, `ram`, `ahb-master`, `mbus-master`).
+**`ve-enc0` is on `pll-ve0` (400 MHz), not `pll-ve1` (696 MHz):** `assigned-clock-parents` is applied,
+then cedrus `clk_set_rate(mod, 400 MHz)` re-parents (mux has `CLK_SET_RATE_PARENT`, no
+`CLK_SET_RATE_NO_REPARENT`; pll-ve0 gives 400 MHz exactly). Works; the DT parent line is ineffective.
+PLL regs: VE0 `0x02002220` = `0xF1203100`, VE1 `0x02002240` = `0xF1205600` (both enabled, locked).
+
+## `VE_ENC` power-off `-110` (open; was already seen 2026-11-11)
+
+genpd: `VE_ENC on`, device `suspended`. PPU VE_ENC at `0x07063000` (PCK-600 base `0x07060000`, domain 3):
+
+| Reg | VE_ENC | VE_DEC (off OK) | Arm PPU meaning |
+| --- | --- | --- | --- |
+| `PWPR` +0x0 | `0x0` (OFF requested) | | power policy |
+| `PWSR` +0x8 | `0x8` (ON) | `0x0` | power status |
+| `DISR` +0x10 | **`0x1`** | `0x0` | device DEVACTIVE[0] asserted |
+| `MISR` +0x14 | `0x100` | `0x0` | DEVACCEPT[0], no DEVDENY |
+| `PWCR` +0x20 | `0x101` | | DEVREQEN[0], DEVACTIVEEN[0] |
+| `IMR`/`AIMR`/`ISR` | `0x2`/`0x6`/`0x1` | ISR `0x1` | |
+| `DCDR0/1` | `0x1F1F1F`/`0x1F1F` | | match vendor |
+| `IDR0` +0xFB0 | `0x10130101` | | |
+
+Register layout assumed from the Arm PPU architecture, not yet checked against the A733 UM.
+
+Manual OFF requests (`PWPR` 8 → 0, read `PWSR` after 1 s), each still `0x8`:
+1. clocks/reset as left by runtime suspend (`0xA80`=0, `0xA8C`=0, `0x5C0` bit 1 = 0, `0x5E0` bit 12 = 0, `0x5E4` bit 1 = 0);
+2. + bus/MBUS/master gates on, reset released (`0x5C0`=`0x10010306`, `0x5E0`=`0xF1001003`, `0x5E4`=`0xA06`, `0xA8C`=`0x10001`);
+3. + module clock on (`0xA80`=`0x80000000`, pll-ve0).
+
+So clocks and reset are not the cause. Hypothesis: the encoder holds DEVACTIVE because ENC_TOP mode
+(`+0x800`) is left at `0xc7` (encoder enable, set in `cedrus_resume()`, never cleared in suspend).
+
+Test 4 (clear `0x01C10800`, retry OFF) **hung the board**: the read of `0x01C10800` was issued with
+`PWPR` still at OFF from test 3; no console after that (needs a power cycle). Lesson: set `PWPR`
+back to ON (`0x8`) and wait for `PWSR`=8 before touching the device after a manual OFF request.
+
+Vendor: `bsp/drivers/pm_domain/pck600_domains.c` uses the same delays and the same command/poll with
+a 10 ms timeout, but on timeout only logs and returns 0, so the vendor kernel may hit the same and hide it.
+
+## Next
+
+- After power cycle: test 4 done safely (`PWPR`=8 first), i.e. with the device resumed, write ENC_TOP
+  mode 0 (and/or set global reset), then request OFF; watch `DISR`.
+- If that is it: `cedrus_suspend()` clears ENC_TOP mode (A733 only) before gating clocks.
+- Decide the `pll-ve0` vs `pll-ve1` question (drop the DT parent, or add `assigned-clock-rates` and stop
+  `clk_set_rate()` re-parenting).
+- Wi-Fi: the board's `/etc/wpa_supplicant.conf` has the network but no `ctrl_interface`; three
+  `wpa_supplicant` instances were running (ifupdown + `S40network-wifi`); no association yet.
