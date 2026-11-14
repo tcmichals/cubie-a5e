@@ -370,3 +370,15 @@ clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM" (linux-sunxi 2026-09
 https://ratatoskr.run/linux-sunxi/2026/09/17515754/t), fetched locally on `a7a_remoteproc_camera_usb`
 (nothing sent). Our additions (THS, CSI master, VE, ISP/ISP-MBUS, E902 R-CCU) go on top as separate
 commits; problems found in v3 become review comments only with the owner's go-ahead.
+
+### A733 VE encoder: extend the cedrus binding (2026-11-13)
+
+The A733 encoder (`allwinner,sun60i-a733-video-engine-enc`, `0x01C10000`) goes into the existing
+`Documentation/devicetree/bindings/media/allwinner,sun4i-a10-video-engine.yaml`, not a new
+binding: add the A733 decoder and encoder compatibles and `power-domains`, and an `allOf: - if:`
+block for the encoder that allows two more clocks (AHB and MBUS master gates, CCU `0x5C0` bit 1 and
+`0x5E0` bit 12) after `ahb`, `mod`, `ram`. Other SoCs keep exactly `ahb`, `mod`, `ram`; the driver
+gets the extra clocks with `devm_clk_get_optional()`. Same pattern as
+`sound/allwinner,sun4i-a10-spdif.yaml` (per-compatible `if:` blocks). The extra clock names used on
+`a7a_remoteproc_camera_usb` (`ahb-master`, `mbus-master`) are bring-up names, open until the binding
+patch is written. Plan: `docs/common/A733_VE_H264_ENCODER_PLAN.md` §5.
