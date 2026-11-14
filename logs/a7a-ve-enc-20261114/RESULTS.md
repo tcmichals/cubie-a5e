@@ -154,3 +154,29 @@ Still open, in order:
    WIP does not do (VCUENC `+0x900`, ENC_TOP bits): compare with the register dumps of a vendor-image
    encode (Radxa Debian, `libvencoder`), the one case where the vendor image is worth booting.
 3. Driver default CAPTURE `sizeimage` is 1024: raise it (for example width × height × 3 / 2 / 2).
+
+## The bits never reach DRAM (kernel-side dump), and the VCU
+
+Debug module parameter `dump_coded` (`cedrus_enc_h264.c`, bring-up only), module only replaced on
+the board (old one kept as `sunxi-cedrus.ko.bak-20261114`):
+
+```
+coded: dma 0x00000000f3500000 stm f3500000-f35fffff len 1280 vaddr yes
+coded: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+STM start/end registers equal the buffer's DMA address; the kernel mapping reads zeros, including the
+SPS/PPS that the CPU writes through put-bits. **The AVC stream writer does not write to DRAM.**
+
+Vendor `ve_plat_sun60iw2.c:23-34,153-170` knows a VCU (`VCUENC` at `+0x900`, `VCU_CFG` = ENC_TOP
+`+0x5c`; with `VCU_CFG` bit 0 set, the encoder completion comes from `VCUENC +0x28`). The WIP has no
+VCU code. Readback with the device resumed: ENC_TOP `+0x800` `0xC7`, `+0x804` `0x300`, `+0x81C`
+`0x00010000`, **`+0x85C` (VCU_CFG) `0`**, `+0x8E4` `0x00E21320`.
+
+**Reading `0x01C10900` (VCUENC) hung the board even with the device resumed and `PWSR`=8** (third
+hang today). The VCU is likely clock-gated while `VCU_CFG`=0. Rule: on the board, read only registers
+the driver already programs; find the rest offline first.
+
+Next (offline): disassemble the vendor `libvencoder`/`libve` objects
+(`bsp/drivers/ve/cedar-ve/codec/lib/`, `ar` archives with symbols, e.g. `h264encVersion2.o`,
+`vcu.o`) for writes to ENC_TOP `+0x5c` and `+0x9xx`, i.e. the setup the V3s-era WIP misses.
