@@ -105,3 +105,29 @@ suspended); `pll-ve0` 546 MHz unused; `VE_ENC off-0`, no `-110`. `ve-dec0` also 
 The `reboot` into #4 gave no console output at all (not even SPL) and no ping until a power cycle;
 the earlier `reboot` into #3 worked. Cause not known (USB-serial node was re-created at 09:47); watch
 the next `reboot`.
+
+## Step (b)/(c) first run (IRQ path, no poll mode needed yet), kernel #4
+
+`/tmp/grey720.nv12` = 1280×720 NV12, all bytes `0x80`. CAVLC, Main, QP 26/28 (defaults).
+
+```
+v4l2-ctl -d /dev/video1 --set-fmt-video-out=width=1280,height=720,pixelformat=NV12 \
+  --set-fmt-video=pixelformat=H264,sizeimage=1048576 --stream-out-mmap --stream-mmap \
+  --stream-count=5 --stream-loop --stream-from=grey720.nv12 --stream-to=out720.h264 --verbose
+cap dqbuf: 0 seq: 0 bytesused: 1280 (keyframe)   # 10240 bits
+cap dqbuf: 1 seq: 0 bytesused: 1604 (P-frame)    # same for the next 3 P frames
+```
+
+- **IRQ works:** `/proc/interrupts` `GICv3 80 Level cedrus` goes up by one per frame (0 → 1 → 6 → 11).
+  So step (c) passes, and triage #8 (vendor A7Z: IRQ never fires) does not happen on mainline.
+- **Engine runs:** `STM_BIT_LEN` (`+0xB90`) gives plausible sizes, constant for identical frames.
+- **Output is all zeros:** `out720.h264` 7696 bytes of `0x00`, not even the SPS/PPS start codes.
+  The bitstream DMA does not land in the buffer. Default `sizeimage` is 1024 (too small for a
+  frame): pass `sizeimage=` until the driver sets a sane default.
+- IOMMU0 gates on (`0x58C` = `0x00010007`). Master 1 (CSI): `MIC_AUTO_GATING`/`BYP`/`WBUF`/`TLB_EN`
+  (`0x03900600/04/08/14`) all 1; bypass on, which is why CSI DMA works without an IOMMU driver.
+- **Reading master 3 (`0x03900A00`…) hung the board** with VE_ENC suspended: master 3's micro-TLB is
+  most likely in the VE_ENC power domain, which now turns off when idle. **Rule: touch VE_ENC
+  registers and IOMMU0 master 3 registers only with the device resumed (`power/control`=on) and
+  `PWSR`=8.**
+- Next: resume, read master 3 `BYP` (`0x03900A04`); if 0, set 1 and re-encode.
