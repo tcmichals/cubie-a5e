@@ -382,3 +382,14 @@ gets the extra clocks with `devm_clk_get_optional()`. Same pattern as
 `sound/allwinner,sun4i-a10-spdif.yaml` (per-compatible `if:` blocks). The extra clock names used on
 `a7a_remoteproc_camera_usb` (`ahb-master`, `mbus-master`) are bring-up names, open until the binding
 patch is written. Plan: `docs/common/A733_VE_H264_ENCODER_PLAN.md` §5.
+
+### A733 VE clocks: one PLL per engine, as the vendor does (2026-11-14)
+
+Owner: "do what the vendor does". The encoder `ve-enc0` runs from PLL_VE1 and the decoder from
+PLL_VE0 (vendor `sun60iw2p1.dtsi` `ve2` / `ve` nodes), each engine retuning only its own PLL.
+Implemented the mainline way: `assigned-clock-parents` in the DT plus `CLK_SET_RATE_NO_REPARENT` on
+the mux in the CCU (vendor `ccu-sun60iw2.c` has it on `ve-enc0` and `ve-dec`; mainline precedent
+sun8i-v3s `de`/`tcon`, sun50i-a64 `tcon0`). The CCU flag is a change to Junhui Liu's v6 driver:
+carried as our own commit (`linux-cubie` `a7a_remoteproc_camera_usb`) and to be raised on his series
+with the owner's go-ahead. When the decoder node is added, pin `ve-dec0` to PLL_VE0 the same way
+(today it defaults to PLL_VE1, mux 0).

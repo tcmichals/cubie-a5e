@@ -94,3 +94,14 @@ Board notes: login `root` with no password on the serial console after a cold bo
 `TP-Link_4EA4_5G` (case matters); with that and a `ctrl_interface` line in `/etc/wpa_supplicant.conf`
 the board joins 5 GHz and gets `192.168.0.194` by DHCP, also after `reboot`. Ethernet `eth0` is on a
 different router (`192.168.3.4`). SSH from this PC needs a key on the board (not installed).
+
+## Encoder clock on PLL_VE1 (vendor way), kernel #4
+
+`CLK_SET_RATE_NO_REPARENT` on `ve-enc0` (`linux-cubie`, see the commit after `01e37bcf6fa7`). Board:
+`ve-enc0` on `pll-ve1`, both 400 MHz; `0xA80` = `0x01000000` (mux 1 = PLL_VE1, gated while
+suspended); `pll-ve0` 546 MHz unused; `VE_ENC off-0`, no `-110`. `ve-dec0` also sits on `pll-ve1`
+(mux reset default) and moved to 400 MHz with it: pin it to PLL_VE0 when the decoder gets a node.
+
+The `reboot` into #4 gave no console output at all (not even SPL) and no ping until a power cycle;
+the earlier `reboot` into #3 worked. Cause not known (USB-serial node was re-created at 09:47); watch
+the next `reboot`.
