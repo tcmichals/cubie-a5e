@@ -180,3 +180,30 @@ the driver already programs; find the rest offline first.
 Next (offline): disassemble the vendor `libvencoder`/`libve` objects
 (`bsp/drivers/ve/cedar-ve/codec/lib/`, `ar` archives with symbols, e.g. `h264encVersion2.o`,
 `vcu.o`) for writes to ENC_TOP `+0x5c` and `+0x9xx`, i.e. the setup the V3s-era WIP misses.
+
+## Reads work, writes do not (after the 3rd power cycle)
+
+`ddr_mode` (VE_MODE bits 17:16) = 3, 2, 1: no change, buffers still zero, same lengths. Not it.
+
+Input content test (720p, 2 frames: I then P of the same picture, `dump_coded=1`):
+
+| Input | I | P |
+| --- | --- | --- |
+| grey `0x80` | 1280 B | 1604 B |
+| black `0x00` | 1297 B | 1621 B |
+| `/dev/urandom` | 228961 B | 211470 B |
+
+- Sizes follow the content: **input DMA reads work**, the core encodes.
+- A P frame of an identical picture should be small; the noise P is 211 KB, so the reference
+  (reconstruction, written then read back by the engine) is wrong too: **all encoder DMA writes are
+  lost** (bitstream and reconstruction), reads are fine.
+- Rules out everything that would break reads as well (clocks, PD, IOMMU translation, address offset,
+  DDR mode). Left: write-side only, e.g. a write high-address/extension register of the A733 "Ver2"
+  core (6 GiB DRAM; a non-zero default would send writes outside RAM, or into it), or a write-side
+  bus/security setting for this master outside the VE block.
+
+Offline so far: vendor `libvencoder`/`libve` objects are RISC-V (rt-media build) with symbols;
+`/opt/riscv/bin/riscv32-unknown-elf-objdump` works on them. `h264ConfigEncoderRegs` /
+`h264InitRegInfo` fill a shadow register image through nested structs (hours to map fully).
+Cheaper next: list every `+0xBxx`/`+0xAxx`/`+0x8xx` offset the vendor shadow image covers and diff
+against `cedrus_regs.h` for registers the WIP never writes (high-address / write-control candidates).
