@@ -1,15 +1,19 @@
-# Turning an 8-Core Desktop Processor into a Hard Real-Time Robotics Supercomputer: An Industrial Hacker's Guide to Unlocking XuanTie RISC-V Cores
+# Turning an 8-Core Desktop Processor into a Hard Real-Time Robotics & Industrial Engine: An Industrial Hacker's Guide to Unlocking XuanTie RISC-V Cores
 
 **By Tim Michals**  
-*Featured for Hackaday & Industrial Robotics Hackers*
+*Featured for Hackaday & Open-Source Industrial Automation Hackers*
 
 ---
 
 ## 🚀 The Hack: Why Bolt an STM32 to a Desktop SBC When There's a 200 MHz RISC-V Core Already on the Die?
 
-Every robotics builder, drone designer, and industrial hacker knows the classic architecture compromise: you want desktop-class application compute (quad Cortex-A76 cores, 6 GB LPDDR5, MIPI CSI cameras, hardware video encoding, and ROS 2 navigation stacks), but your hardware I/O (DShot motor commutation, 1 kHz IMU sampling loops, and microsecond-accurate PWM) demands **hard real-time determinism with zero jitter**.
+Every builder of robotics, autonomous agricultural machinery, CNC machine controls, and flight systems knows the classic architecture compromise: you want desktop-class application compute (quad Cortex-A76 cores, 6 GB LPDDR5, MIPI CSI cameras, hardware video encoding, and ROS 2 / Linux networking), but your physical hardware I/O demands **hard real-time determinism with zero jitter**:
+- **Industrial Robotics & AMRs**: ROS 2 Nav2 and 3D SLAM on the host $\leftrightarrow$ Sub-microsecond Field Oriented Control (FOC) motor commutation, wheel encoder tracking, and safety interlocks on the micro.
+- **Precision Agriculture**: High-framerate camera vision and edge NPU weed-detection inference $\leftrightarrow$ Microsecond-accurate solenoid spray valve actuation synced to GPS and ground speed as the tractor sweeps across the field.
+- **Factory Automation & Machine Control**: G-code parsing, EtherCAT master communication, and web HMIs $\leftrightarrow$ Microsecond-exact multi-axis step/direction pulse trains without a single missed cycle.
+- **Autonomous Drones & Flight Controllers**: Optical flow, companion vision, and trajectory generation $\leftrightarrow$ 1 kHz flight stabilization loops and DShot ESC telemetry.
 
-So what does the industry do? We bolt a secondary microcontroller—an STM32, RP2040, or Teensy—next to our single-board computer. We wire up an umbilical cord over UART, SPI, or USB, and spend the next six months debugging level shifters, baud-rate bottlenecks, packet framing errors, and ground loops.
+So what does the industry do? We bolt a secondary microcontroller—an STM32, RP2040, or Teensy—next to our single-board computer. We wire up an umbilical cord over UART, SPI, or USB, and spend the next six months debugging level shifters, baud-rate bottlenecks, packet framing errors, and ground loops that fail under harsh vibration.
 
 Here is the dirty secret hiding inside modern application processors: **the companion microcontroller is already on the silicon.**
 
@@ -17,9 +21,9 @@ On the **Allwinner A733** (an octa-core 4× Cortex-A76 + 4× Cortex-A55 SoC powe
 
 So why isn't everyone using it? Because in vendor land, this capable 200 MHz RISC-V core is trapped in a glorified sleep-switch role: the **System Control Processor (SCP / ARISC)**. Its sole vendor job is to wait for the Linux kernel to go into deep sleep, toggle PMIC voltage rails, and wake the board back up. When the host Linux OS runs actively, the RISC-V core sits completely idle.
 
-As industrial hackers building flight controllers and real-time robotic systems, we refused to let 200 MHz of bare-metal RISC-V silicon go to waste. 
+As industrial hackers building hard real-time systems, we refused to let 200 MHz of bare-metal RISC-V silicon go to waste. 
 
-This is the unfiltered engineering story of how we hacked the Allwinner bootchain, freed the XuanTie core from vendor sleep jail, avoided all the landmines, and built a mainline Linux `remoteproc` / `rpmsg` pipeline that transforms an 8-core desktop SBC into a self-contained, dual-personality robotics powerhouse:
+This is the unfiltered engineering story of how we hacked the Allwinner bootchain, freed the XuanTie core from vendor sleep jail, avoided all the landmines, and built a mainline Linux `remoteproc` / `rpmsg` pipeline that transforms an 8-core desktop SBC into a self-contained, dual-personality industrial supercomputer:
 1. **The Silicon Architecture**: How an octa-core 64-bit Arm cluster shares fabric with a 32-bit RISC-V engine.
 2. **The Autopsy of Mistakes**: Chasing the Arm TrustZone (EL3) phantom, reverse-engineering BL31 binaries, and finding the real clock/reset vector latching race.
 3. **The 16 KB Reserved SRAM Trap**: The chapter 3 footnote that silently ate our instruction fetches.
@@ -46,7 +50,7 @@ We tested this architecture across both members of Allwinner's modern heterogene
 | **On-Chip Real-Time Memory** | System SRAM A2 (208 KB Total, **192 KB Usable Coprocessor Pool**) | SRAM A3 (32 KB) + Cadence HiFi4 DSP RAM (64 KB) + Dedicated TCM |
 | **Hardware Signaling** | Hardware Mailbox (`msgbox0` / `0x07090000`, 8 bidirectional FIFOs) | Hardware Mailbox (`msgbox0` / `0x03004000`, 8 bidirectional FIFOs) |
 | **Vision & Hardware Media** | 4K MIPI CSI-2 + **Cedrus Hardware VPU (1080p78 H.264 / H.265)** | MIPI CSI-2 + Hardware Video Engine |
-| **Target Robotics Role** | High-level computer vision, SLAM, ROS 2, and neural network inference on Arm64 $\leftrightarrow$ Sub-microsecond motor commutation & DShot on RISC-V | Real-time telemetry, sensor aggregation, and digital signal processing |
+| **Target Application Roles** | **Linux**: Computer vision, SLAM, ROS 2, smart ag weed detection, web HMIs $\leftrightarrow$ **RISC-V**: Sub-microsecond motor FOC, DShot, multi-axis CNC pulse generation, precision spray valve timing, fail-safe e-stops | **Linux**: Fleet telemetry, supervisory control, cloud sync $\leftrightarrow$ **RISC-V**: Sensor fusion, fast ADC sampling, fieldbus gateway (CAN/Modbus), DSP filtering |
 
 Both chips share the same fundamental paradigm: the host runs mainline Linux 7.1 `PREEMPT_RT` on the Arm cores, while the auxiliary XuanTie RISC-V core takes direct ownership of real-time peripherals without touching the host OS.
 
@@ -210,9 +214,9 @@ If you need seamless integration into standard Linux software frameworks (like R
 
 ## 🎓 The Industrial Hacker's Takeaway: Stop Bolting Companion MCUs to SBCs
 
-By looking past vendor BSPs and treating modern application processors as heterogeneous playgrounds, we eliminated an entire physical subsystem from our robotics architecture:
-- **Zero Companion Microcontrollers**: No external STM32, RP2040, or Teensy board taking up space, weight, and payload capacity.
-- **Zero Umbilical Cable Failures**: No UART, SPI, or USB wiring harness to vibrate loose, pick up motor EMI, or drop packets mid-flight.
+By looking past vendor BSPs and treating modern application processors as heterogeneous playgrounds, we eliminated an entire physical subsystem across robotics, smart agriculture, and industrial machine control:
+- **Zero Companion Microcontrollers**: No external STM32, RP2040, or Teensy board taking up enclosure volume, BOM cost, and payload weight.
+- **Zero Umbilical Cable Failures**: No UART, SPI, or USB wiring harness to vibrate loose on an autonomous tractor, pick up motor EMI on an industrial robot, or drop packets in a high-vibration machine.
 - **Microsecond IPC Speed**: Sub-15 µs communication round-trips over on-chip shared SRAM, faster than any external SPI bus could ever dream of.
 - **Clean Linux Upstreaming**: All of this runs on standard mainline Linux 7.1 with standard `remoteproc` and `rpmsg` interfaces, with zero binary blobs and zero hacks to Arm Trusted Firmware.
 
