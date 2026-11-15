@@ -283,3 +283,29 @@ brightness 1 (blue heartbeat blinks). Not checked whether it was on with the pat
 
 Next: (1) try `a733_quirks=7` and `15` (constants, VE_MODE bits) and re-decode; (2) software SPS/PPS
 with EPB; (3) work through the diff table, starting with `+0xB04`, `+0xB10`, `+0xB14`, `+0xA08`.
+
+### Kernel #5 follow-up: which fix matters, and where decoding fails
+
+Picture: 1280×720 grey with a 256×256 noise square at (400,200), 2 frames, `a733_quirks` varied at
+runtime:
+
+| `a733_quirks` | Output | Note |
+| :--- | :--- | :--- |
+| 3, 7, 15, 1 | 47,402 B, identical md5 | bits 1 (aux buffers), 2 (constants), 3 (VE_MODE 31:30) change nothing |
+| 2 (16-pixel size units) | 27,037 B | different: only part of the picture is coded |
+
+- So the **`>> 8` address fix alone made the writes land**, and the **8-pixel size units (bit 0) are
+  needed** for the full picture (vendor: 10 frames of the same picture = 54,543 B). Bits 1-3 have no
+  visible effect on this test; keep them switchable until the stream decodes.
+- Slice data has **no** `00 00 0x` sequences needing emulation prevention (47,355-byte IDR NAL), so
+  the missing EPB matters only in the SPS/headers.
+- With the SPS patched on the PC, ffmpeg (via GStreamer `avdec_h264`, `GST_DEBUG=libav:3`) decodes the
+  flat macroblocks and fails at the **first textured macroblock**: `mb_type 7171 in I slice too large
+  at 26 12` (MB x 26 = pixel 416, row 12 = line 192: where the noise square starts). So the header
+  syntax cedrus writes (SPS/PPS/slice header: Main, CAVLC, QP) does not match what the A733 engine
+  emits for coded macroblocks. Suspects, from the register diff: `+0xB04` PARA0 (vendor `0x100`),
+  `+0xB10` ME_PARA (`0x00010004` vs `0x08001200`), `+0xB08` PARA1 QP fields, i.e. entropy mode,
+  8×8 transform or QP differing from the headers.
+
+Next: make cedrus program PARA0/PARA1/ME_PARA as the vendor does for one fixed setting and write
+matching headers (replay approach, guide Part 1), or find which single field fixes MB (26,12).
