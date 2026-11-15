@@ -423,6 +423,20 @@ Anecdotal; check each against the vendor source before relying on it.
 - VE (not camera, for the encoder work): vendor Cedar H.264 encoder IRQ never fires (`cedar_dev_ve2`, "wait interrupt overtime"), decode works: https://github.com/radxa-build/radxa-a733/issues/35
 - Armbian A7Z community support (no camera found): https://github.com/armbian/build/pull/10036 ; forum: https://forum.armbian.com/topic/56130-radxa-cubie-a7aa7z-allwinner-a733/page/2/
 
+### 5.6 Vendor sensor and ISP tuning data we can reuse (2026-11-14)
+
+Found on the Radxa r6 image (`radxa-a733_bullseye_kde_r6`) and in the vendor BSP. Not yet extracted.
+
+| Data | Where | Form | Use |
+| :--- | :--- | :--- | :--- |
+| Sensor I²C init tables (modes, timing) | `oldkernels/linux-a733/bsp/drivers/vin/modules/sensor/imx415_mipi.c` (1879 lines, ~986 `{reg, val}` entries), `imx219.c`, `imx214.c` | GPL source | Cross-check the mainline `imx415`/`imx219` drivers (both in `linux-cubie` `drivers/media/i2c/`) for the vendor-tested modes; no port. **No OV5647** in the vendor tree or image. |
+| ISP tuning per sensor and mode | `libisp_ini.so` in `libawispapi-isp-602-arm64` (closed, arm64): exported data objects, e.g. `imx415_mipi_1080p_isp_tuning_settings` (0x18470 B), `_iso_settings` (0x36ac B), `_3a_settings` (0xaa4 B), `_test_settings` (0x7c B), `_cfg` (0x20 B); same set for `imx219_1080p`, `imx219_3280_2464`, `imx415_mipi_3840_2160`, `imx214_*` | binary blobs with symbol and size | Decode with the GPL struct definitions in `vin-isp/isp_tuning_priv.h` (`struct isp_param_config` at `:388`: `isp_test_param`, `isp_3a_param`, `isp_tunning_param`, `isp_dynamic_param`); check `sizeof` against the blob sizes first. Gives black level, WB, CCM, gamma, NR, sharpness, LSC tables for Phase 1-2 defaults. |
+| Vendor ISP output as a quality reference | run `v4l2src ... en-awisp=1` on the vendor image with an IMX415/IMX219 module | NV12 frames + H.264 (`omxh264videoenc`, needs `io-mode=2`) | Same-scene comparison with our ISP. Needs a vendor-supported sensor (not OV5647). |
+| ISP registers and load buffer while streaming | `/dev/mem` on the vendor image (`STRICT_DEVMEM` off), ISP `0x05900000`, only while streaming (`PD_VI` on) | snapshot | Programmed register image to compare with `isp_default_reg[]` and our Phase 1 values. |
+
+Steps (add to Phase 1/2 when started): extract the blobs with `objdump -T` offsets → `dd`; write a
+decoder from `isp_tuning_priv.h`; dump to readable text per sensor; record in §5.4.
+
 ## 6. T527 (A5E) vs A733 (A7A) Camera Differences
 
 Write-up of what differs between the two chips for the camera path, kept up to date as the work moves forward (rule §5.1.6). Each row cites its source; a T527 value is "not checked" until it is. Vendor trees: A733 `linux-a733/bsp/`, T527 `linux-aw2501/bsp/`.
