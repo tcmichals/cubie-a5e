@@ -19,24 +19,28 @@ if [ -f "${BOARD_DIR}/../../dts-overlay/allwinner/cubie-a7a-rproc.dtbo" ]; then
     cp -f "${BOARD_DIR}/../../dts-overlay/allwinner/cubie-a7a-rproc.dtbo" "${BINARIES_DIR}/cubie-a7a-rproc.dtbo"
 fi
 
-# 3. Stage verified Radxa A733 16MB bootloader blob into BINARIES_DIR
+# 3. Stage the Radxa A733 16MB bootloader blob into BINARIES_DIR.
+#    The FIT edit below changes the blob in place, so every build starts from a pristine copy
+#    (radxa_a733_bootloader.orig.bin); a blob left by an older build may carry the dropped BL31 patch.
+BL_ORIG="${BINARIES_DIR}/radxa_a733_bootloader.orig.bin"
 if [ -f "${BOARD_DIR}/radxa_a733_bootloader.bin" ]; then
-    cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
-elif [ -f "${BINARIES_DIR}/radxa_a733_bootloader.bin" ]; then
-    :
-else
+    cp -f "${BOARD_DIR}/radxa_a733_bootloader.bin" "${BL_ORIG}"
+elif [ ! -s "${BL_ORIG}" ]; then
     echo ">>> Fetching Radxa A733 bootloader blob..."
-    curl -sL "https://github.com/radxa-build/radxa-a733/releases/download/rsdk-t5/radxa-a733_trixie_cli_t5.output_512.img.xz" | xz -dc 2>/dev/null | head -c 16777216 > "${BINARIES_DIR}/radxa_a733_bootloader.bin"
+    curl -sL "https://github.com/radxa-build/radxa-a733/releases/download/rsdk-t5/radxa-a733_trixie_cli_t5.output_512.img.xz" | xz -dc 2>/dev/null | head -c 16777216 > "${BL_ORIG}"
 fi
+if [ "$(stat -c %s "${BL_ORIG}" 2>/dev/null)" != "16777216" ]; then
+    echo "ERROR: ${BL_ORIG} missing or not 16 MiB" >&2
+    rm -f "${BL_ORIG}"
+    exit 1
+fi
+cp -f "${BL_ORIG}" "${BINARIES_DIR}/radxa_a733_bootloader.bin"
 
 # 3a. Keep BL31 from starting the E902 as arisc/SCP: drop "scp" from the FIT loadables
-#     (lost in 4a276a2, SCP-1). Edits in place so the BL31 offsets below do not move.
+#     (lost in 4a276a2, SCP-1). Edits in place; nothing else in the vendor boot package changes.
+#     The BL31 binary patch (patch_bl31_security.py, R_SPC port 3) is dropped: stock vendor BL31
+#     (owner, 2026-11-14, DESIGN_DECISIONS.md "A7A: drop the BL31 binary patch").
 python3 "${BOARD_DIR}/patch_fit_no_scp.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
-
-# 3b. WORKAROUND (not the solution): binary-patch the closed vendor BL31 to un-gate R_SPC Port 3
-#     (E902_CFG @ 0x07032000) for XuanTie E902 remoteproc. To be replaced by a BL31 built from
-#     tracked source; see DESIGN_DECISIONS.md "A7A BL31: source code in git" and TODO.md.
-python3 "${BOARD_DIR}/patch_bl31_security.py" "${BINARIES_DIR}/radxa_a733_bootloader.bin" || exit 1
 
 # 4. Run genimage packaging pipeline
 rm -rf "${GENIMAGE_TMP}"
