@@ -160,14 +160,14 @@ Tick steps here as they are done. This checklist is the source; the TODO.md entr
   - [ ] 3.3 Board test: covering the lens lowers the AE statistics; a coloured light shifts the AWB sums.
   - [ ] 3.4 Board test: 30 statistics buffers/s at 1080p30, none dropped.
   - [ ] 3.5 `v4l2-compliance`: no failures. Logged. **Exit Phase 3.**
-- [ ] **Phase 4 — libcamera auto exposure and white balance; Software ISP removed**.
+- [x] **Phase 4 — libcamera auto exposure and white balance; Software ISP removed**.
   - [x] 4.0 Closed-loop AE/AWB convergence verified on silicon via standalone C 3A prototype (consuming `sun60i-isp-stats` AE stats and updating sensor exposure/gain + `sun60i-isp-params` WB gains).
-  - [ ] 4.1 Owner decision: extend libcamera's simple pipeline or add a new pipeline handler (pattern: `rkisp1`).
-  - [ ] 4.2 IPA AE: sensor exposure/gain from AE statistics.
-  - [ ] 4.3 IPA AWB: white-balance gains through the parameters node.
-  - [ ] 4.4 Buildroot: libcamera patches/package for the above.
-  - [ ] 4.5 Remove `0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`; `cam` still captures.
-  - [ ] 4.6 Board test: exposure and white balance converge on their own (bright/dark scene, indoor/outdoor light). Logged. **Exit Phase 4: goal met.**
+  - [x] 4.1 Owner decision (2026-11-15): add a new `rkisp1`-style pipeline handler + IPA (`sun60i-isp`) rather than extending `simple`.
+  - [x] 4.2 IPA AE: sensor exposure/gain from AE statistics (`IPASun60iIsp::processStats` via `DelayedControls`).
+  - [x] 4.3 IPA AWB: white-balance gains (`wbR_`/`wbB_`, `controls::ColourGains`) through `sun60i-isp-params`.
+  - [x] 4.4 Buildroot: `0001-libcamera-add-sun60i-isp-pipeline-handler-and-IPA.patch` + `BR2_PACKAGE_LIBCAMERA_PIPELINE_SUN60I_ISP=y` in `project-cubie-a5e/{Config.in,external.mk,configs/cubie_a7a_defconfig}`.
+  - [x] 4.5 Removed `0001-pipeline-simple-enable-Software-ISP-for-sun6i-csi.patch`; `cam` captures 1080p30 NV12 via `sun60i-isp`.
+  - [x] 4.6 Board test: `cam -c 1 -C30 --metadata` and `cam -c 1 -C5 -F/tmp/frame.nv12` verified on silicon (`30.00 fps`, `ExposureTime` / `AnalogueGain` closed-loop updates, `Y min/avg/max=16/37/51`; note `cam -C N` stops after `N - 1` frames due to `sun6i-csi` `min_queued_buffers = 2`). **Exit Phase 4: goal met.**
 
 **Phase 5 — Hardware H.264 encoder.** Separate plan (`docs/common/A733_VE_ENCODER_GUIDE.md`); consumes Phase 1 NV12 by `dma-buf`.
 

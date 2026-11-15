@@ -1,0 +1,1272 @@
+From 04f0f0f8465827ea48785ee25155b4c8d9883d12 Mon Sep 17 00:00:00 2001
+From: Tim Michals <tcmichals@gmail.com>
+Date: Sun, 15 Nov 2026 17:45:13 -0600
+Subject: [PATCH] libcamera: add sun60i-isp pipeline handler and IPA
+
+---
+ include/libcamera/ipa/meson.build             |   1 +
+ include/libcamera/ipa/sun60i_isp.mojom        |  34 +
+ include/linux/sun60i-isp-config.h             | 116 +++
+ include/linux/videodev2.h                     |   2 +
+ meson_options.txt                             |   3 +-
+ src/ipa/sun60i-isp/meson.build                |  27 +
+ src/ipa/sun60i-isp/sun60i_isp.cpp             | 287 +++++++
+ src/libcamera/pipeline/sun60i-isp/meson.build |   5 +
+ .../pipeline/sun60i-isp/sun60i_isp.cpp        | 701 ++++++++++++++++++
+ 9 files changed, 1175 insertions(+), 1 deletion(-)
+
+diff --git a/include/libcamera/ipa/meson.build b/include/libcamera/ipa/meson.build
+index 3ee3ada..ab09b98 100644
+--- a/include/libcamera/ipa/meson.build
++++ b/include/libcamera/ipa/meson.build
+@@ -69,6 +69,7 @@ pipeline_ipa_mojom_mapping = {
+     'rpi/pisp': 'raspberrypi.mojom',
+     'rpi/vc4': 'raspberrypi.mojom',
+     'simple': 'soft.mojom',
++    'sun60i-isp': 'sun60i_isp.mojom',
+     'vimc': 'vimc.mojom',
+ }
+ 
+diff --git a/include/libcamera/ipa/sun60i_isp.mojom b/include/libcamera/ipa/sun60i_isp.mojom
+new file mode 100644
+index 0000000..97a293b
+--- /dev/null
++++ b/include/libcamera/ipa/sun60i_isp.mojom
+@@ -0,0 +1,34 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++
++module ipa.sun60i_isp;
++
++import "include/libcamera/ipa/core.mojom";
++
++struct IPAConfigInfo {
++	libcamera.IPACameraSensorInfo sensorInfo;
++	libcamera.ControlInfoMap sensorControls;
++};
++
++interface IPASun60iIspInterface {
++	init(libcamera.IPASettings settings, IPAConfigInfo configInfo)
++		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
++	start() => (int32 ret);
++	stop();
++
++	configure(IPAConfigInfo configInfo)
++		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
++
++	mapBuffers(array<libcamera.IPABuffer> buffers, bool readOnly);
++	unmapBuffers(array<libcamera.IPABuffer> buffers);
++
++	[async] queueRequest(uint32 request, libcamera.ControlList reqControls);
++	[async] fillParams(uint32 request, uint32 bufferId);
++	[async] processStats(uint32 request, uint32 bufferId,
++			     libcamera.ControlList sensorControls);
++};
++
++interface IPASun60iIspEventInterface {
++	paramsComputed(uint32 request, uint32 bytesused);
++	statsProcessed(uint32 request, libcamera.ControlList metadata);
++	setSensorControls(libcamera.ControlList sensorControls);
++};
+diff --git a/include/linux/sun60i-isp-config.h b/include/linux/sun60i-isp-config.h
+new file mode 100644
+index 0000000..cf7bed5
+--- /dev/null
++++ b/include/linux/sun60i-isp-config.h
+@@ -0,0 +1,116 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later WITH Linux-syscall-note */
++/*
++ * Allwinner A733 / T527 Hardware ISP 602 Userspace API
++ *
++ * Copyright (c) 2026 Tim Michals <tcmichals@gmail.com>
++ */
++
++#ifndef _UAPI_SUN60I_ISP_CONFIG_H
++#define _UAPI_SUN60I_ISP_CONFIG_H
++
++#include <linux/types.h>
++
++#define SUN60I_ISP_PARAM_API_V1		1
++#define SUN60I_ISP_STAT_API_V1		1
++
++/* Module enable / config update bitmasks */
++#define SUN60I_ISP_MOD_BLC		(1U << 0)
++#define SUN60I_ISP_MOD_WB		(1U << 1)
++#define SUN60I_ISP_MOD_CCM		(1U << 2)
++#define SUN60I_ISP_MOD_GAMMA		(1U << 3)
++
++#define SUN60I_ISP_GAMMA_LUT_SIZE	1024
++
++/**
++ * struct sun60i_isp_blc_config - Black Level Correction (13-bit signed)
++ * @r: Red channel offset (13-bit two's complement, e.g. -64)
++ * @gr: Green-Red channel offset
++ * @gb: Green-Blue channel offset
++ * @b: Blue channel offset
++ */
++struct sun60i_isp_blc_config {
++	__s16 r;
++	__s16 gr;
++	__s16 gb;
++	__s16 b;
++};
++
++/**
++ * struct sun60i_isp_wb_config - White Balance Gains (Q8, 256 = 1.0x, max 4095)
++ * @r: Red channel gain
++ * @gr: Green-Red channel gain
++ * @gb: Green-Blue channel gain
++ * @b: Blue channel gain
++ */
++struct sun60i_isp_wb_config {
++	__u16 r;
++	__u16 gr;
++	__u16 gb;
++	__u16 b;
++};
++
++/**
++ * struct sun60i_isp_ccm_config - 3x3 Color Correction Matrix (Q8, 256 = 1.0)
++ * @coeff: Row-major 3x3 matrix coefficients (12-bit signed)
++ * @offset: Post-matrix R, G, B offsets (13-bit signed)
++ */
++struct sun60i_isp_ccm_config {
++	__s16 coeff[9];
++	__s16 offset[3];
++};
++
++/**
++ * struct sun60i_isp_gamma_config - 1024-entry 10-bit RGB Gamma LUT
++ * @lut_r: Red channel LUT entries (0..1023)
++ * @lut_g: Green channel LUT entries (0..1023)
++ * @lut_b: Blue channel LUT entries (0..1023)
++ */
++struct sun60i_isp_gamma_config {
++	__u16 lut_r[SUN60I_ISP_GAMMA_LUT_SIZE];
++	__u16 lut_g[SUN60I_ISP_GAMMA_LUT_SIZE];
++	__u16 lut_b[SUN60I_ISP_GAMMA_LUT_SIZE];
++};
++
++/**
++ * struct sun60i_isp_params_cfg - ISP 602 per-frame userspace parameters
++ * @version: API version (must be SUN60I_ISP_PARAM_API_V1)
++ * @module_en_update: Bitmask of SUN60I_ISP_MOD_* to enable/disable
++ * @module_ens: Target enable state for bits in @module_en_update
++ * @module_cfg_update: Bitmask of SUN60I_ISP_MOD_* whose config struct is valid
++ * @blc: Black Level Correction config
++ * @wb: White Balance gain config
++ * @ccm: Color Correction Matrix config
++ * @gamma: Gamma LUT config
++ */
++struct sun60i_isp_params_cfg {
++	__u32 version;
++	__u32 module_en_update;
++	__u32 module_ens;
++	__u32 module_cfg_update;
++	struct sun60i_isp_blc_config blc;
++	struct sun60i_isp_wb_config wb;
++	struct sun60i_isp_ccm_config ccm;
++	struct sun60i_isp_gamma_config gamma;
++};
++
++#define SUN60I_ISP_STAT_AE_SIZE		0x0360
++#define SUN60I_ISP_STAT_AWB_SIZE	0x1800
++#define SUN60I_ISP_STAT_HIST0_SIZE	0x0400
++
++/**
++ * struct sun60i_isp_stat_buffer - ISP 602 per-frame 3A statistics
++ * @version: API version (SUN60I_ISP_STAT_API_V1)
++ * @frame_id: Monotonic ISP frame counter
++ * @ae: Raw hardware AE statistics block (save_buf + 0x0100, 864 bytes)
++ * @awb: Raw hardware AWB RGB statistics block (save_buf + 0x4080, 6144 bytes)
++ * @hist0: Raw hardware Histogram 0 block (save_buf + 0x5a80, 1024 bytes)
++ */
++struct sun60i_isp_stat_buffer {
++	__u32 version;
++	__u32 frame_id;
++	__u8 ae[SUN60I_ISP_STAT_AE_SIZE];
++	__u8 awb[SUN60I_ISP_STAT_AWB_SIZE];
++	__u8 hist0[SUN60I_ISP_STAT_HIST0_SIZE];
++};
++
++#endif /* _UAPI_SUN60I_ISP_CONFIG_H */
+diff --git a/include/linux/videodev2.h b/include/linux/videodev2.h
+index b40b43d..231fc02 100644
+--- a/include/linux/videodev2.h
++++ b/include/linux/videodev2.h
+@@ -862,6 +862,8 @@ struct v4l2_pix_format {
+ 
+ #define V4L2_META_FMT_MALI_C55_PARAMS	v4l2_fourcc('C', '5', '5', 'P') /* ARM Mali-C55 Parameters */
+ #define V4L2_META_FMT_MALI_C55_3A_STATS        v4l2_fourcc('C', '5', '5', 'S') /* ARM Mali-C55 3A Statistics */
++#define V4L2_META_FMT_SUN60I_ISP_PARAMS	v4l2_fourcc('S', '6', '0', 'P') /* Allwinner ISP 602 Parameters */
++#define V4L2_META_FMT_SUN60I_ISP_STAT	v4l2_fourcc('S', '6', '0', 'S') /* Allwinner ISP 602 Statistics */
+ 
+ /*
+  * Line-based metadata formats. Remember to update v4l_fill_fmtdesc() when
+diff --git a/meson_options.txt b/meson_options.txt
+index 20baacc..f98f1d5 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -49,7 +49,7 @@ option('gstreamer',
+ option('ipas',
+         type : 'array',
+         choices : ['ipu3', 'mali-c55', 'rkisp1', 'rpi/pisp', 'rpi/vc4', 'simple',
+-                   'vimc'],
++                   'sun60i-isp', 'vimc'],
+         description : 'Select which IPA modules to build')
+ 
+ option('lc-compliance',
+@@ -85,6 +85,7 @@ option('pipelines',
+             'rpi/pisp',
+             'rpi/vc4',
+             'simple',
++            'sun60i-isp',
+             'uvcvideo',
+             'vimc',
+             'virtual'
+diff --git a/src/ipa/sun60i-isp/meson.build b/src/ipa/sun60i-isp/meson.build
+new file mode 100644
+index 0000000..64ab5c7
+--- /dev/null
++++ b/src/ipa/sun60i-isp/meson.build
+@@ -0,0 +1,27 @@
++# SPDX-License-Identifier: CC0-1.0
++
++ipa_name = 'ipa_sun60i_isp'
++
++sun60i_isp_ipa_sources = files([
++    'sun60i_isp.cpp',
++])
++
++mod = shared_module(ipa_name,
++                    sun60i_isp_ipa_sources,
++                    name_prefix : '',
++                    include_directories : [ipa_includes, libipa_includes],
++                    dependencies : libcamera_private,
++                    link_with : libipa,
++                    install : true,
++                    install_dir : ipa_install_dir)
++
++if ipa_sign_module
++    custom_target(ipa_name + '.so.sign',
++                  input : mod,
++                  output : ipa_name + '.so.sign',
++                  command : [ipa_sign, ipa_priv_key, '@INPUT@', '@OUTPUT@'],
++                  install : false,
++                  build_by_default : true)
++endif
++
++ipa_names += ipa_name
+diff --git a/src/ipa/sun60i-isp/sun60i_isp.cpp b/src/ipa/sun60i-isp/sun60i_isp.cpp
+new file mode 100644
+index 0000000..4ceeabc
+--- /dev/null
++++ b/src/ipa/sun60i-isp/sun60i_isp.cpp
+@@ -0,0 +1,287 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Allwinner A733 / T527 Hardware ISP 602 IPA Module
++ */
++
++#include <algorithm>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <map>
++#include <vector>
++
++#include <linux/sun60i-isp-config.h>
++#include <linux/v4l2-controls.h>
++
++#include <libcamera/base/log.h>
++#include <libcamera/base/span.h>
++
++#include <libcamera/control_ids.h>
++#include <libcamera/ipa/ipa_interface.h>
++#include <libcamera/ipa/ipa_module_info.h>
++#include <libcamera/ipa/sun60i_isp_ipa_interface.h>
++
++#include "libcamera/internal/mapped_framebuffer.h"
++
++namespace libcamera {
++
++LOG_DEFINE_CATEGORY(IPASun60iIsp)
++
++namespace ipa::sun60i_isp {
++
++class IPASun60iIsp : public IPASun60iIspInterface
++{
++public:
++	IPASun60iIsp() = default;
++
++	int init(const IPASettings &settings, const IPAConfigInfo &configInfo,
++		 ControlInfoMap *ipaControls) override;
++	int start() override;
++	void stop() override;
++	int configure(const IPAConfigInfo &configInfo,
++		      ControlInfoMap *ipaControls) override;
++
++	void mapBuffers(const std::vector<IPABuffer> &buffers, bool readOnly) override;
++	void unmapBuffers(const std::vector<IPABuffer> &buffers) override;
++
++	void queueRequest(uint32_t request, const ControlList &reqControls) override;
++	void fillParams(uint32_t request, uint32_t bufferId) override;
++	void processStats(uint32_t request, uint32_t bufferId,
++			  const ControlList &sensorControls) override;
++
++private:
++	void updateControls(const IPAConfigInfo &configInfo,
++			    ControlInfoMap *ipaControls);
++
++	std::map<unsigned int, MappedFrameBuffer> buffers_;
++	ControlInfoMap sensorControls_;
++
++	int32_t minExposure_ = 4;
++	int32_t maxExposure_ = 1155;
++	int32_t exposure_ = 400;
++
++	int32_t minGain_ = 16;
++	int32_t maxGain_ = 256;
++	int32_t gain_ = 32;
++
++	bool aeEnable_ = true;
++	uint16_t wbR_ = 256;
++	uint16_t wbB_ = 256;
++
++	uint32_t frameCount_ = 0;
++	uint32_t aeBaseline_ = 0;
++};
++
++int IPASun60iIsp::init([[maybe_unused]] const IPASettings &settings,
++		       const IPAConfigInfo &configInfo,
++		       ControlInfoMap *ipaControls)
++{
++	updateControls(configInfo, ipaControls);
++	return 0;
++}
++
++int IPASun60iIsp::start()
++{
++	frameCount_ = 0;
++	return 0;
++}
++
++void IPASun60iIsp::stop()
++{
++}
++
++int IPASun60iIsp::configure(const IPAConfigInfo &configInfo,
++			    ControlInfoMap *ipaControls)
++{
++	updateControls(configInfo, ipaControls);
++	return 0;
++}
++
++void IPASun60iIsp::updateControls(const IPAConfigInfo &configInfo,
++				  ControlInfoMap *ipaControls)
++{
++	sensorControls_ = configInfo.sensorControls;
++	const auto &expIt = configInfo.sensorControls.find(V4L2_CID_EXPOSURE);
++	if (expIt != configInfo.sensorControls.end()) {
++		minExposure_ = expIt->second.min().get<int32_t>();
++		maxExposure_ = expIt->second.max().get<int32_t>();
++		exposure_ = std::clamp(expIt->second.def().get<int32_t>(),
++				       minExposure_, maxExposure_);
++	}
++
++	const auto &gainIt = configInfo.sensorControls.find(V4L2_CID_ANALOGUE_GAIN);
++	if (gainIt != configInfo.sensorControls.end()) {
++		minGain_ = gainIt->second.min().get<int32_t>();
++		maxGain_ = gainIt->second.max().get<int32_t>();
++		gain_ = std::clamp(gainIt->second.def().get<int32_t>(),
++				   minGain_, maxGain_);
++	}
++
++	ControlInfoMap::Map ctrlMap;
++	ctrlMap[&controls::AeEnable] = ControlInfo(false, true, true);
++	ctrlMap[&controls::ExposureTime] =
++		ControlInfo(minExposure_, maxExposure_, exposure_);
++	ctrlMap[&controls::AnalogueGain] =
++		ControlInfo(static_cast<float>(minGain_),
++			    static_cast<float>(maxGain_),
++			    static_cast<float>(gain_));
++	ctrlMap[&controls::ColourGains] = ControlInfo(0.5f, 4.0f, 1.0f);
++
++	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
++}
++
++void IPASun60iIsp::mapBuffers(const std::vector<IPABuffer> &buffers,
++			      [[maybe_unused]] bool readOnly)
++{
++	for (const IPABuffer &buffer : buffers) {
++		const FrameBuffer fb(buffer.planes);
++		buffers_.emplace(buffer.id,
++				 MappedFrameBuffer(&fb, MappedFrameBuffer::MapFlag::ReadWrite));
++	}
++}
++
++void IPASun60iIsp::unmapBuffers(const std::vector<IPABuffer> &buffers)
++{
++	for (const IPABuffer &buffer : buffers)
++		buffers_.erase(buffer.id);
++}
++
++void IPASun60iIsp::queueRequest([[maybe_unused]] uint32_t request,
++				const ControlList &reqControls)
++{
++	const auto &aeCtrl = reqControls.get(controls::AeEnable);
++	if (aeCtrl)
++		aeEnable_ = *aeCtrl;
++
++	if (!aeEnable_) {
++		const auto &expCtrl = reqControls.get(controls::ExposureTime);
++		if (expCtrl)
++			exposure_ = std::clamp(*expCtrl, minExposure_, maxExposure_);
++
++		const auto &gainCtrl = reqControls.get(controls::AnalogueGain);
++		if (gainCtrl)
++			gain_ = std::clamp(static_cast<int32_t>(*gainCtrl),
++					   minGain_, maxGain_);
++	}
++
++	const auto &cgCtrl = reqControls.get(controls::ColourGains);
++	if (cgCtrl) {
++		wbR_ = static_cast<uint16_t>(std::clamp((*cgCtrl)[0] * 256.0f, 128.0f, 1024.0f));
++		wbB_ = static_cast<uint16_t>(std::clamp((*cgCtrl)[1] * 256.0f, 128.0f, 1024.0f));
++	}
++}
++
++void IPASun60iIsp::fillParams(uint32_t request, uint32_t bufferId)
++{
++	auto it = buffers_.find(bufferId);
++	if (it == buffers_.end()) {
++		paramsComputed.emit(request, 0);
++		return;
++	}
++
++	auto *params = reinterpret_cast<struct sun60i_isp_params_cfg *>(
++		it->second.planes()[0].data());
++	std::memset(params, 0, sizeof(*params));
++
++	params->version = SUN60I_ISP_PARAM_API_V1;
++	params->module_en_update = SUN60I_ISP_MOD_WB;
++	params->module_ens = SUN60I_ISP_MOD_WB;
++	params->module_cfg_update = SUN60I_ISP_MOD_WB;
++	params->wb.r = wbR_;
++	params->wb.gr = 256;
++	params->wb.gb = 256;
++	params->wb.b = wbB_;
++
++	paramsComputed.emit(request, sizeof(*params));
++}
++
++void IPASun60iIsp::processStats(uint32_t request, uint32_t bufferId,
++				const ControlList &sensorControls)
++{
++	auto it = buffers_.find(bufferId);
++	if (it == buffers_.end()) {
++		ControlList empty(controls::controls);
++		statsProcessed.emit(request, empty);
++		return;
++	}
++
++	const auto *stats = reinterpret_cast<const struct sun60i_isp_stat_buffer *>(
++		it->second.planes()[0].data());
++
++	int32_t activeExp = (sensorControls.contains(V4L2_CID_EXPOSURE) &&
++			     !sensorControls.get(V4L2_CID_EXPOSURE).isNone())
++				    ? sensorControls.get(V4L2_CID_EXPOSURE).get<int32_t>()
++				    : exposure_;
++	int32_t activeGain = (sensorControls.contains(V4L2_CID_ANALOGUE_GAIN) &&
++			      !sensorControls.get(V4L2_CID_ANALOGUE_GAIN).isNone())
++				     ? sensorControls.get(V4L2_CID_ANALOGUE_GAIN).get<int32_t>()
++				     : gain_;
++
++	/* Compute mean AE luma from 432 u16 zones (SUN60I_ISP_STAT_AE_SIZE / 2) */
++	const auto *aeZones = reinterpret_cast<const uint16_t *>(stats->ae);
++	constexpr size_t kNumZones = SUN60I_ISP_STAT_AE_SIZE / sizeof(uint16_t);
++	uint64_t aeSum = 0;
++	for (size_t i = 0; i < kNumZones; i++)
++		aeSum += aeZones[i];
++	uint32_t aeMean = static_cast<uint32_t>(aeSum / kNumZones);
++
++	frameCount_++;
++	if (aeEnable_ && frameCount_ >= 3 && (frameCount_ % 3) == 0 && aeMean > 0) {
++		/* Target mid-scale luma (2048 in 12-bit ISP AE units) */
++		constexpr double kTargetAe = 2048.0;
++		double ratio = kTargetAe / static_cast<double>(aeMean);
++		ratio = std::clamp(ratio, 0.7, 1.4);
++		if (std::abs(ratio - 1.0) > 0.08) {
++			double totalExp = static_cast<double>(activeExp) *
++					  static_cast<double>(activeGain) *
++					  (1.0 + 0.5 * (ratio - 1.0));
++			int32_t newExp = static_cast<int32_t>(totalExp / minGain_);
++			int32_t newGain = minGain_;
++			if (newExp > maxExposure_) {
++				newGain = static_cast<int32_t>(
++					totalExp / static_cast<double>(maxExposure_));
++				newGain = std::clamp(newGain, minGain_, maxGain_);
++				newExp = maxExposure_;
++			}
++			newExp = std::clamp(newExp, minExposure_, maxExposure_);
++
++			if (newExp != exposure_ || newGain != gain_) {
++				exposure_ = newExp;
++				gain_ = newGain;
++				ControlList ctrls(sensorControls_);
++				ctrls.set(V4L2_CID_EXPOSURE, exposure_);
++				ctrls.set(V4L2_CID_ANALOGUE_GAIN, gain_);
++				setSensorControls.emit(ctrls);
++			}
++		}
++	}
++
++	aeBaseline_ = aeMean;
++
++	ControlList metadata(controls::controls);
++	metadata.set(controls::ExposureTime, activeExp);
++	metadata.set(controls::AnalogueGain, static_cast<float>(activeGain));
++	std::array<float, 2> cg = { wbR_ / 256.0f, wbB_ / 256.0f };
++	metadata.set(controls::ColourGains, cg);
++
++	statsProcessed.emit(request, metadata);
++}
++
++} /* namespace ipa::sun60i_isp */
++
++extern "C" {
++const struct IPAModuleInfo ipaModuleInfo = {
++	IPA_MODULE_API_VERSION,
++	1,
++	"sun60i-isp",
++	"sun60i-isp",
++};
++
++IPAInterface *ipaCreate()
++{
++	return new ipa::sun60i_isp::IPASun60iIsp();
++}
++
++} /* extern "C" */
++
++} /* namespace libcamera */
+diff --git a/src/libcamera/pipeline/sun60i-isp/meson.build b/src/libcamera/pipeline/sun60i-isp/meson.build
+new file mode 100644
+index 0000000..378f820
+--- /dev/null
++++ b/src/libcamera/pipeline/sun60i-isp/meson.build
+@@ -0,0 +1,5 @@
++# SPDX-License-Identifier: CC0-1.0
++
++libcamera_internal_sources += files([
++    'sun60i_isp.cpp',
++])
+diff --git a/src/libcamera/pipeline/sun60i-isp/sun60i_isp.cpp b/src/libcamera/pipeline/sun60i-isp/sun60i_isp.cpp
+new file mode 100644
+index 0000000..4a86277
+--- /dev/null
++++ b/src/libcamera/pipeline/sun60i-isp/sun60i_isp.cpp
+@@ -0,0 +1,701 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Pipeline handler for Allwinner A733 / T527 Hardware ISP 602 (sun60i-isp)
++ */
++
++#include <algorithm>
++#include <array>
++#include <map>
++#include <memory>
++#include <queue>
++#include <set>
++#include <string>
++#include <vector>
++
++#include <linux/media-bus-format.h>
++#include <linux/sun60i-isp-config.h>
++#include <linux/videodev2.h>
++
++#include <libcamera/base/log.h>
++#include <libcamera/base/utils.h>
++
++#include <libcamera/camera.h>
++#include <libcamera/formats.h>
++#include <libcamera/geometry.h>
++#include <libcamera/property_ids.h>
++#include <libcamera/stream.h>
++
++#include <libcamera/ipa/ipa_interface.h>
++#include <libcamera/ipa/sun60i_isp_ipa_interface.h>
++#include <libcamera/ipa/sun60i_isp_ipa_proxy.h>
++
++#include "libcamera/internal/camera.h"
++#include "libcamera/internal/camera_sensor.h"
++#include "libcamera/internal/delayed_controls.h"
++#include "libcamera/internal/device_enumerator.h"
++#include "libcamera/internal/framebuffer.h"
++#include "libcamera/internal/ipa_manager.h"
++#include "libcamera/internal/media_device.h"
++#include "libcamera/internal/pipeline_handler.h"
++#include "libcamera/internal/request.h"
++#include "libcamera/internal/v4l2_subdevice.h"
++#include "libcamera/internal/v4l2_videodevice.h"
++
++namespace libcamera {
++
++LOG_DEFINE_CATEGORY(Sun60iIsp)
++
++namespace {
++
++const std::map<PixelFormat, V4L2PixelFormat> kCaptureFormats = {
++	{ formats::NV12, V4L2PixelFormat(V4L2_PIX_FMT_NV12) },
++	{ formats::NV21, V4L2PixelFormat(V4L2_PIX_FMT_NV21) },
++	{ formats::YUYV, V4L2PixelFormat(V4L2_PIX_FMT_YUYV) },
++	{ formats::UYVY, V4L2PixelFormat(V4L2_PIX_FMT_UYVY) },
++};
++
++struct Sun60iIspFrameInfo {
++	uint32_t frame;
++	Request *request;
++	FrameBuffer *paramBuffer;
++	FrameBuffer *statBuffer;
++	bool paramDequeued;
++	bool metadataProcessed;
++};
++
++} /* namespace */
++
++class PipelineHandlerSun60iIsp;
++
++class Sun60iIspCameraData : public Camera::Private
++{
++public:
++	Sun60iIspCameraData(PipelineHandler *pipe,
++			    std::unique_ptr<CameraSensor> sensor)
++		: Camera::Private(pipe), sensor_(std::move(sensor))
++	{
++	}
++
++	int loadIPA();
++
++	Stream stream_;
++	std::unique_ptr<CameraSensor> sensor_;
++	std::unique_ptr<DelayedControls> delayedCtrls_;
++	std::unique_ptr<ipa::sun60i_isp::IPAProxySun60iIsp> ipa_;
++
++	std::vector<IPABuffer> ipaParamBuffers_;
++	std::vector<IPABuffer> ipaStatBuffers_;
++	std::map<uint32_t, Sun60iIspFrameInfo> frameInfo_;
++
++private:
++	void paramsComputed(uint32_t request, uint32_t bytesused);
++	void statsProcessed(uint32_t request, const ControlList &metadata);
++	void setSensorControls(const ControlList &sensorControls);
++};
++
++class Sun60iIspCameraConfiguration : public CameraConfiguration
++{
++public:
++	Sun60iIspCameraConfiguration(Sun60iIspCameraData *data)
++		: CameraConfiguration(), data_(data)
++	{
++	}
++
++	Status validate() override;
++
++	V4L2SubdeviceFormat sensorFormat_;
++
++private:
++	Sun60iIspCameraData *data_;
++};
++
++class PipelineHandlerSun60iIsp : public PipelineHandler
++{
++public:
++	PipelineHandlerSun60iIsp(CameraManager *manager);
++
++	std::unique_ptr<CameraConfiguration>
++	generateConfiguration(Camera *camera, Span<const StreamRole> roles) override;
++	int configure(Camera *camera, CameraConfiguration *config) override;
++
++	int exportFrameBuffers(Camera *camera, Stream *stream,
++			       std::vector<std::unique_ptr<FrameBuffer>> *buffers) override;
++
++	int start(Camera *camera, const ControlList *controls) override;
++	void stopDevice(Camera *camera) override;
++
++	int queueRequestDevice(Camera *camera, Request *request) override;
++
++	bool match(DeviceEnumerator *enumerator) override;
++
++	V4L2VideoDevice *params() { return params_.get(); }
++	V4L2VideoDevice *stats() { return stats_.get(); }
++	V4L2VideoDevice *capture() { return capture_.get(); }
++
++	void tryCompleteRequest(Sun60iIspFrameInfo *info);
++
++	std::queue<FrameBuffer *> availableParamsBuffers_;
++
++private:
++	Sun60iIspCameraData *cameraData(Camera *camera)
++	{
++		return static_cast<Sun60iIspCameraData *>(camera->_d());
++	}
++
++	void captureBufferReady(FrameBuffer *buffer);
++	void paramBufferReady(FrameBuffer *buffer);
++	void statBufferReady(FrameBuffer *buffer);
++
++	int allocateBuffers(Camera *camera);
++	void freeBuffers(Camera *camera);
++
++	std::shared_ptr<MediaDevice> media_;
++	std::unique_ptr<V4L2Subdevice> csi2_;
++	std::unique_ptr<V4L2Subdevice> bridge_;
++	std::unique_ptr<V4L2Subdevice> isp_;
++	std::unique_ptr<V4L2VideoDevice> capture_;
++	std::unique_ptr<V4L2VideoDevice> params_;
++	std::unique_ptr<V4L2VideoDevice> stats_;
++
++	std::vector<std::unique_ptr<FrameBuffer>> paramBuffers_;
++	std::vector<std::unique_ptr<FrameBuffer>> statBuffers_;
++	std::queue<FrameBuffer *> availableStatsBuffers_;
++
++	Camera *activeCamera_ = nullptr;
++};
++
++int Sun60iIspCameraData::loadIPA()
++{
++	ipa_ = pipe()->createIPA<ipa::sun60i_isp::IPAProxySun60iIsp>(1, 1);
++	if (!ipa_)
++		return -ENOENT;
++
++	ipa_->paramsComputed.connect(this, &Sun60iIspCameraData::paramsComputed);
++	ipa_->statsProcessed.connect(this, &Sun60iIspCameraData::statsProcessed);
++	ipa_->setSensorControls.connect(this, &Sun60iIspCameraData::setSensorControls);
++
++	IPACameraSensorInfo sensorInfo;
++	int ret = sensor_->sensorInfo(&sensorInfo);
++	if (ret)
++		return ret;
++
++	ipa::sun60i_isp::IPAConfigInfo configInfo{ sensorInfo, sensor_->controls() };
++	ControlInfoMap ipaControls;
++	std::string ipaTuningFile = ipa_->configurationFile(sensor_->model() + ".yaml",
++							    "uncalibrated.yaml");
++	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor_->model() },
++			 configInfo, &ipaControls);
++	if (ret)
++		return ret;
++
++	controlInfo_ = ipaControls;
++	return 0;
++}
++
++void Sun60iIspCameraData::paramsComputed(uint32_t request, uint32_t bytesused)
++{
++	auto it = frameInfo_.find(request);
++	if (it == frameInfo_.end())
++		return;
++
++	Sun60iIspFrameInfo &info = it->second;
++	auto *ph = static_cast<PipelineHandlerSun60iIsp *>(pipe());
++
++	info.paramBuffer->_d()->metadata().planes()[0].bytesused = bytesused;
++	if (bytesused > 0)
++		ph->params()->queueBuffer(info.paramBuffer);
++	else {
++		info.paramDequeued = true;
++		ph->availableParamsBuffers_.push(info.paramBuffer);
++	}
++
++	ph->capture()->queueBuffer(info.request->findBuffer(&stream_));
++}
++
++void Sun60iIspCameraData::statsProcessed(uint32_t request, const ControlList &metadata)
++{
++	auto it = frameInfo_.find(request);
++	if (it == frameInfo_.end())
++		return;
++
++	Sun60iIspFrameInfo &info = it->second;
++	info.request->_d()->metadata().merge(metadata);
++	info.metadataProcessed = true;
++
++	auto *ph = static_cast<PipelineHandlerSun60iIsp *>(pipe());
++	if (info.statBuffer) {
++		ph->stats()->queueBuffer(info.statBuffer);
++		info.statBuffer = nullptr;
++	}
++
++	ph->tryCompleteRequest(&info);
++}
++
++void Sun60iIspCameraData::setSensorControls(const ControlList &sensorControls)
++{
++	delayedCtrls_->push(sensorControls);
++}
++
++CameraConfiguration::Status Sun60iIspCameraConfiguration::validate()
++{
++	Status status = Valid;
++
++	if (config_.empty())
++		return Invalid;
++
++	if (config_.size() > 1) {
++		config_.resize(1);
++		status = Adjusted;
++	}
++
++	StreamConfiguration &cfg = config_[0];
++
++	if (kCaptureFormats.find(cfg.pixelFormat) == kCaptureFormats.end()) {
++		cfg.pixelFormat = formats::NV12;
++		status = Adjusted;
++	}
++
++	if (cfg.size.width == 0 || cfg.size.height == 0) {
++		cfg.size = { 1920, 1080 };
++		status = Adjusted;
++	}
++
++	cfg.bufferCount = 4;
++
++	V4L2DeviceFormat format;
++	format.fourcc = kCaptureFormats.at(cfg.pixelFormat);
++	format.size = cfg.size;
++
++	auto *ph = static_cast<PipelineHandlerSun60iIsp *>(data_->pipe());
++	int ret = ph->capture()->tryFormat(&format);
++	if (ret)
++		return Invalid;
++
++	if (cfg.size != format.size) {
++		cfg.size = format.size;
++		status = Adjusted;
++	}
++
++	cfg.stride = format.planes[0].bpl;
++	cfg.frameSize = format.planes[0].size;
++
++	std::vector<unsigned int> mbusCodes = data_->sensor_->mbusCodes();
++	sensorFormat_ = data_->sensor_->getFormat(mbusCodes, cfg.size);
++
++	return status;
++}
++
++PipelineHandlerSun60iIsp::PipelineHandlerSun60iIsp(CameraManager *manager)
++	: PipelineHandler(manager)
++{
++}
++
++std::unique_ptr<CameraConfiguration>
++PipelineHandlerSun60iIsp::generateConfiguration(Camera *camera,
++						Span<const StreamRole> roles)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++	auto config = std::make_unique<Sun60iIspCameraConfiguration>(data);
++
++	if (roles.empty())
++		return config;
++
++	StreamConfiguration cfg;
++	cfg.pixelFormat = formats::NV12;
++	cfg.size = { 1920, 1080 };
++	cfg.bufferCount = 4;
++
++	config->addConfiguration(cfg);
++	config->validate();
++	return config;
++}
++
++int PipelineHandlerSun60iIsp::configure(Camera *camera, CameraConfiguration *c)
++{
++	auto *config = static_cast<Sun60iIspCameraConfiguration *>(c);
++	Sun60iIspCameraData *data = cameraData(camera);
++	StreamConfiguration &cfg = config->at(0);
++
++	int ret = data->sensor_->setFormat(&config->sensorFormat_);
++	if (ret)
++		return ret;
++
++	V4L2SubdeviceFormat subdevFmt = config->sensorFormat_;
++	ret = csi2_->setFormat(0, &subdevFmt);
++	if (ret)
++		return ret;
++	ret = csi2_->setFormat(1, &subdevFmt);
++	if (ret)
++		return ret;
++
++	ret = bridge_->setFormat(0, &subdevFmt);
++	if (ret)
++		return ret;
++	ret = bridge_->setFormat(1, &subdevFmt);
++	if (ret)
++		return ret;
++
++	ret = isp_->setFormat(0, &subdevFmt);
++	if (ret)
++		return ret;
++
++	V4L2SubdeviceFormat ispSrcFmt = subdevFmt;
++	ispSrcFmt.code = MEDIA_BUS_FMT_UYVY8_1X16;
++	ret = isp_->setFormat(1, &ispSrcFmt);
++	if (ret)
++		return ret;
++
++	V4L2DeviceFormat capFmt;
++	capFmt.fourcc = kCaptureFormats.at(cfg.pixelFormat);
++	capFmt.size = cfg.size;
++	ret = capture_->setFormat(&capFmt);
++	if (ret)
++		return ret;
++
++	cfg.setStream(&data->stream_);
++
++	V4L2DeviceFormat paramFmt;
++	paramFmt.fourcc = V4L2PixelFormat(V4L2_META_FMT_SUN60I_ISP_PARAMS);
++	ret = params_->setFormat(&paramFmt);
++	if (ret)
++		return ret;
++
++	V4L2DeviceFormat statFmt;
++	statFmt.fourcc = V4L2PixelFormat(V4L2_META_FMT_SUN60I_ISP_STAT);
++	ret = stats_->setFormat(&statFmt);
++	if (ret)
++		return ret;
++
++	IPACameraSensorInfo sensorInfo;
++	ret = data->sensor_->sensorInfo(&sensorInfo);
++	if (ret)
++		return ret;
++
++	ipa::sun60i_isp::IPAConfigInfo ipaConfig{ sensorInfo, data->sensor_->controls() };
++	ControlInfoMap ipaControls;
++	ret = data->ipa_->configure(ipaConfig, &ipaControls);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++int PipelineHandlerSun60iIsp::exportFrameBuffers([[maybe_unused]] Camera *camera,
++						 Stream *stream,
++						 std::vector<std::unique_ptr<FrameBuffer>> *buffers)
++{
++	unsigned int count = stream->configuration().bufferCount;
++	return capture_->exportBuffers(count, buffers);
++}
++
++int PipelineHandlerSun60iIsp::allocateBuffers(Camera *camera)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++	constexpr unsigned int kMetaBufferCount = 4;
++
++	int ret = params_->allocateBuffers(kMetaBufferCount, &paramBuffers_);
++	if (ret < 0)
++		return ret;
++
++	ret = stats_->allocateBuffers(kMetaBufferCount, &statBuffers_);
++	if (ret < 0) {
++		freeBuffers(camera);
++		return ret;
++	}
++
++	unsigned int ipaBufferId = 1;
++	for (const std::unique_ptr<FrameBuffer> &buf : paramBuffers_) {
++		Span<const FrameBuffer::Plane> planes = buf->planes();
++		buf->setCookie(ipaBufferId++);
++		data->ipaParamBuffers_.emplace_back(buf->cookie(),
++						    std::vector<FrameBuffer::Plane>{ planes.begin(),
++										     planes.end() });
++		availableParamsBuffers_.push(buf.get());
++	}
++
++	for (const std::unique_ptr<FrameBuffer> &buf : statBuffers_) {
++		Span<const FrameBuffer::Plane> planes = buf->planes();
++		buf->setCookie(ipaBufferId++);
++		data->ipaStatBuffers_.emplace_back(buf->cookie(),
++						   std::vector<FrameBuffer::Plane>{ planes.begin(),
++										    planes.end() });
++		availableStatsBuffers_.push(buf.get());
++	}
++
++	data->ipa_->mapBuffers(data->ipaParamBuffers_, false);
++	data->ipa_->mapBuffers(data->ipaStatBuffers_, true);
++
++	return 0;
++}
++
++void PipelineHandlerSun60iIsp::freeBuffers(Camera *camera)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++
++	while (!availableParamsBuffers_.empty())
++		availableParamsBuffers_.pop();
++	while (!availableStatsBuffers_.empty())
++		availableStatsBuffers_.pop();
++
++	data->ipa_->unmapBuffers(data->ipaParamBuffers_);
++	data->ipa_->unmapBuffers(data->ipaStatBuffers_);
++	data->ipaParamBuffers_.clear();
++	data->ipaStatBuffers_.clear();
++
++	paramBuffers_.clear();
++	statBuffers_.clear();
++
++	params_->releaseBuffers();
++	stats_->releaseBuffers();
++}
++
++int PipelineHandlerSun60iIsp::start(Camera *camera,
++				     [[maybe_unused]] const ControlList *controls)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++	int ret;
++
++	ret = allocateBuffers(camera);
++	if (ret)
++		return ret;
++
++	ret = data->ipa_->start();
++	if (ret) {
++		freeBuffers(camera);
++		return ret;
++	}
++
++	data->delayedCtrls_->reset();
++
++	ret = params_->streamOn();
++	if (ret) {
++		data->ipa_->stop();
++		freeBuffers(camera);
++		return ret;
++	}
++
++	ret = stats_->streamOn();
++	if (ret) {
++		params_->streamOff();
++		data->ipa_->stop();
++		freeBuffers(camera);
++		return ret;
++	}
++
++	while (!availableStatsBuffers_.empty()) {
++		stats_->queueBuffer(availableStatsBuffers_.front());
++		availableStatsBuffers_.pop();
++	}
++
++	ret = capture_->importBuffers(data->stream_.configuration().bufferCount);
++	if (ret) {
++		stats_->streamOff();
++		params_->streamOff();
++		data->ipa_->stop();
++		freeBuffers(camera);
++		return ret;
++	}
++
++	ret = capture_->streamOn();
++	if (ret) {
++		capture_->releaseBuffers();
++		stats_->streamOff();
++		params_->streamOff();
++		data->ipa_->stop();
++		freeBuffers(camera);
++		return ret;
++	}
++
++	activeCamera_ = camera;
++	return 0;
++}
++
++void PipelineHandlerSun60iIsp::stopDevice(Camera *camera)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++
++	activeCamera_ = nullptr;
++
++	capture_->streamOff();
++	capture_->releaseBuffers();
++	stats_->streamOff();
++	params_->streamOff();
++
++	data->ipa_->stop();
++	freeBuffers(camera);
++	data->frameInfo_.clear();
++}
++
++int PipelineHandlerSun60iIsp::queueRequestDevice(Camera *camera, Request *request)
++{
++	Sun60iIspCameraData *data = cameraData(camera);
++
++	if (availableParamsBuffers_.empty())
++		return -ENOBUFS;
++
++	FrameBuffer *paramBuf = availableParamsBuffers_.front();
++	availableParamsBuffers_.pop();
++
++	Sun60iIspFrameInfo info{
++		.frame = request->sequence(),
++		.request = request,
++		.paramBuffer = paramBuf,
++		.statBuffer = nullptr,
++		.paramDequeued = false,
++		.metadataProcessed = false,
++	};
++	data->frameInfo_[request->sequence()] = info;
++
++	data->ipa_->queueRequest(request->sequence(), request->controls());
++	data->ipa_->fillParams(request->sequence(), paramBuf->cookie());
++
++	return 0;
++}
++
++void PipelineHandlerSun60iIsp::tryCompleteRequest(Sun60iIspFrameInfo *info)
++{
++	if (!activeCamera_)
++		return;
++
++	if (info->request->hasPendingBuffers())
++		return;
++
++	if (!info->metadataProcessed || !info->paramDequeued)
++		return;
++
++	Sun60iIspCameraData *data = cameraData(activeCamera_);
++	Request *req = info->request;
++	data->frameInfo_.erase(req->sequence());
++	completeRequest(req);
++}
++
++void PipelineHandlerSun60iIsp::captureBufferReady(FrameBuffer *buffer)
++{
++	if (!activeCamera_)
++		return;
++
++	Sun60iIspCameraData *data = cameraData(activeCamera_);
++	Request *request = buffer->request();
++
++	completeBuffer(request, buffer);
++
++	auto it = data->frameInfo_.find(request->sequence());
++	if (it != data->frameInfo_.end())
++		tryCompleteRequest(&it->second);
++}
++
++void PipelineHandlerSun60iIsp::paramBufferReady(FrameBuffer *buffer)
++{
++	availableParamsBuffers_.push(buffer);
++
++	if (!activeCamera_)
++		return;
++
++	Sun60iIspCameraData *data = cameraData(activeCamera_);
++	for (auto &[seq, info] : data->frameInfo_) {
++		if (info.paramBuffer == buffer) {
++			info.paramDequeued = true;
++			tryCompleteRequest(&info);
++			break;
++		}
++	}
++}
++
++void PipelineHandlerSun60iIsp::statBufferReady(FrameBuffer *buffer)
++{
++	if (!activeCamera_)
++		return;
++
++	if (buffer->metadata().status == FrameMetadata::FrameCancelled)
++		return;
++
++	Sun60iIspCameraData *data = cameraData(activeCamera_);
++
++	/* Match oldest frame awaiting stats */
++	Sun60iIspFrameInfo *target = nullptr;
++	for (auto &[seq, info] : data->frameInfo_) {
++		if (!info.metadataProcessed && !info.statBuffer) {
++			target = &info;
++			break;
++		}
++	}
++
++	if (!target) {
++		stats_->queueBuffer(buffer);
++		return;
++	}
++
++	target->statBuffer = buffer;
++	data->ipa_->processStats(target->frame, buffer->cookie(),
++				 data->delayedCtrls_->get(buffer->metadata().sequence));
++}
++
++bool PipelineHandlerSun60iIsp::match(DeviceEnumerator *enumerator)
++{
++	DeviceMatch dm("sun6i-csi");
++	dm.add("sun6i-csi-capture");
++	dm.add("sun60i-isp");
++	dm.add("sun60i-isp-params");
++	dm.add("sun60i-isp-stats");
++
++	media_ = acquireMediaDevice(enumerator, dm);
++	if (!media_)
++		return false;
++
++	csi2_ = V4L2Subdevice::fromEntityName(media_.get(), "sun6i-mipi-csi2");
++	bridge_ = V4L2Subdevice::fromEntityName(media_.get(), "sun6i-csi-bridge");
++	isp_ = V4L2Subdevice::fromEntityName(media_.get(), "sun60i-isp");
++	capture_ = V4L2VideoDevice::fromEntityName(media_.get(), "sun6i-csi-capture");
++	params_ = V4L2VideoDevice::fromEntityName(media_.get(), "sun60i-isp-params");
++	stats_ = V4L2VideoDevice::fromEntityName(media_.get(), "sun60i-isp-stats");
++
++	if (!csi2_ || !bridge_ || !isp_ || !capture_ || !params_ || !stats_)
++		return false;
++
++	if (csi2_->open() || bridge_->open() || isp_->open() ||
++	    capture_->open() || params_->open() || stats_->open())
++		return false;
++
++	capture_->bufferReady.connect(this, &PipelineHandlerSun60iIsp::captureBufferReady);
++	params_->bufferReady.connect(this, &PipelineHandlerSun60iIsp::paramBufferReady);
++	stats_->bufferReady.connect(this, &PipelineHandlerSun60iIsp::statBufferReady);
++
++	bool registered = false;
++	for (MediaEntity *entity : media_->entities()) {
++		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
++			continue;
++
++		std::unique_ptr<CameraSensor> sensor = CameraSensorFactoryBase::create(entity);
++		if (!sensor)
++			continue;
++
++		auto data = std::make_unique<Sun60iIspCameraData>(this, std::move(sensor));
++		if (data->loadIPA())
++			continue;
++
++		const CameraSensorProperties::SensorDelays &delays =
++			data->sensor_->sensorDelays();
++		std::unordered_map<uint32_t, DelayedControls::ControlParams> params = {
++			{ V4L2_CID_ANALOGUE_GAIN, { delays.gainDelay, false } },
++			{ V4L2_CID_EXPOSURE, { delays.exposureDelay, false } },
++		};
++		data->delayedCtrls_ =
++			std::make_unique<DelayedControls>(data->sensor_->device(), params);
++		isp_->frameStart.connect(data->delayedCtrls_.get(),
++					 &DelayedControls::applyControls);
++
++		data->properties_ = data->sensor_->properties();
++		std::string name = data->sensor_->id();
++		std::set<Stream *> streams{ &data->stream_ };
++		std::shared_ptr<Camera> camera =
++			Camera::create(std::move(data), name, streams);
++		registerCamera(std::move(camera));
++		registered = true;
++	}
++
++	return registered;
++}
++
++REGISTER_PIPELINE_HANDLER(PipelineHandlerSun60iIsp, "sun60i-isp")
++
++} /* namespace libcamera */
+-- 
+2.53.0
+
