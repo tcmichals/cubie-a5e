@@ -393,3 +393,18 @@ sun8i-v3s `de`/`tcon`, sun50i-a64 `tcon0`). The CCU flag is a change to Junhui L
 carried as our own commit (`linux-cubie` `a7a_remoteproc_camera_usb`) and to be raised on his series
 with the owner's go-ahead. When the decoder node is added, pin `ve-dec0` to PLL_VE0 the same way
 (today it defaults to PLL_VE1, mux 0).
+
+## A7A: drop the BL31 binary patch (2026-11-14)
+
+Owner: the BL31 patch (`project-cubie-a5e/board/radxa/cubie_a7a/patch_bl31_security.py`, un-gates
+R_SPC port 3 for `E902_CFG` `0x07032000`) was a mistake and is to be dropped; the A7A image uses the
+stock vendor BL31 with only `scp.fex` removed from the FIT (`patch_fit_no_scp.py`). This replaces
+"A7A BL31: source code in git" as the direction: no BL31 change at all. No TF-A mailing-list
+question (the code was read and the analysis tested). Suspend/resume (the vendor SCP's job) is out
+of scope: the E902 is used for I/O offload and real-time control.
+
+State when recorded: every image since `99fc419` carried the patch, and TODO.md has no board result
+for stock BL31 + no SCP. Implementation: `post-image.sh` must build the boot package from a pristine
+copy of the vendor blob each time (the cached `radxa_a733_bootloader.bin` in the images directory is
+already patched in place), then apply only `patch_fit_no_scp.py`. Board test: boot, `reboot`, E902
+remoteproc start/stop, RPMsg ping. This is also the central claim of the E902 article (TODO.md).
