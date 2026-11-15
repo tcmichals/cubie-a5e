@@ -25,8 +25,8 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
 
 ## 📖 Case Studies & Deep Dives
 
-* **[Repurposing the XuanTie E902 / Allwinner A733: From Sleep Coprocessor to Real-Time Engine (Hackster.io)](hackster_a733_e902_remoteproc.md)**
-  * **Topics**: Autopsy of false assumptions (TrustZone SError myth vs reset vector race), the first 16 KB reserved SRAM trap, unlocking the stock Arm Trusted Firmware (BL31) by removing `scp.fex` from the TOC1 bootstream, mainline Linux `remoteproc`/`rpmsg` driver architecture, and sub-15 µs IPC benchmarks.
+* **[Turning an 8-Core Desktop Processor into a Hard Real-Time Robotics Supercomputer: An Industrial Hacker's Guide (Hackaday / Hackster)](hackster_a733_e902_remoteproc.md)**
+  * **Topics**: Unlocking the on-die 200 MHz XuanTie RISC-V coprocessors (E902 / E906) on Allwinner A733 & T527; eliminating external companion MCUs (STM32/RP2040) from robotics builds; autopsy of false assumptions (TrustZone SError myth vs reset vector race); the 16 KB reserved SRAM trap; unlocking stock Arm Trusted Firmware (BL31) by stripping `scp.fex` from the TOC1 bootstream; mainline Linux `remoteproc`/`rpmsg` driver architecture; and sub-15 µs shared-SRAM IPC benchmarks.
 
 * **[Mainline Flightstack Bring-Up Case Study](../buildroot/Mainline_Flightstack_Bringup_Article.md)**
   * **Topics**: Tri-domain real-time architecture across Linux PREEMPT_RT, XuanTie RISC-V, and FPGA domains.
