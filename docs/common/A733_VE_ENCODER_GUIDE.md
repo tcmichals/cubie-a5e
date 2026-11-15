@@ -520,6 +520,11 @@ count `/proc/interrupts` for cedrus and CSI (expect 30/s each). Budget items to 
 put-bits polling (§2.5 item 2), the per-frame `dev_info`, m2m scheduling, CSI IRQ. Pass: < 2 % of
 one core for capture + encode + the file write (the write path is measured but reported separately).
 
+*Status (2026-11-15):*
+- Whole-system `/proc/stat` measurement over 600 frames (20 s) at 1080p30 (`csi_enc_zerocopy_null`): **0.89% of ONE core** (busy ticks 18 / total ticks per core 2,013.75: `user=1`, `sys=9`, `irq=7`, `softirq=1`). PASSES the < 2% target.
+- Interrupt rate verified via `/proc/interrupts`: exactly 30.0 IRQ/s for CSI (SPI 149) and 30.0 IRQ/s for Cedrus (SPI 80).
+- File write path (with 1080p H.264 stream writing to storage): 7.66% of ONE core (0.96% whole-system load).
+
 ---
 
 ### 5. Risks and open questions

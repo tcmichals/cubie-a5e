@@ -428,4 +428,20 @@ Implemented zero-copy test harness `project-cubie-a5e/board/radxa/cubie_a7a/src/
   - `gst-launch-1.0 filesrc location=csi_test_head.h264 ! h264parse ! avdec_h264 ! fakesink` -> caps `video/x-h264, width=1920, height=1080, profile=high, level=3.1` -> decoded `video/x-raw, format=I420, width=1920, height=1080` with **0 errors**.
   - Decoded PNG (`dec_csi_raw_0.png`) verified at 1920×1080. Artifacts archived in `logs/a7a-ve-enc-20261114/`.
 
+## Step (f) Verification: CPU Load < 2 % of one core for 1080p30 pipeline (2026-11-15)
+
+Tested on live A7A board with 600 frames (20 seconds) continuous 1080p30 streaming (`csi_enc_zerocopy_null`):
+- **Whole-system tick analysis (`/proc/stat` delta):**
+  - Total ticks across 8 cores: 16,110 ticks
+  - Busy ticks: 18 ticks (`user=1`, `system=9`, `irq=7`, `softirq=1`)
+  - Overall system load: **0.11%**
+  - **Load as percentage of ONE core: 0.89%** (well below the < 2.0% target).
+- **Interrupt cadence (`/proc/interrupts` delta over 900 frames):**
+  - CSI (`5800800.csi`, SPI 149): 30.0 interrupts/sec
+  - Cedrus (`cedrus`, SPI 80): 30.0 interrupts/sec
+- **With SD card bitstream write included (`/tmp/csi_enc_raw.h264`):**
+  - Total load across 8 cores: 0.96%
+  - Load as percentage of ONE core: **7.66%** (storage I/O dominated; pure pipeline remains < 1%).
+
+
 
