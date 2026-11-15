@@ -46,7 +46,7 @@ vendor boot; keep `radxa-r6/r6.img` and `bld.a7a/images/sdcard.img`. Vendor cons
 - [ ] 1080p30 synthetic H.264 (plan step d). Exit: the shared base (power, clocks, ENCPP input,
   addresses, IRQ) is proven.
 
-### Step 1 — vendor register sweep (one vendor boot, offline analysis)
+### Step 1 — vendor register sweep (DONE 2026-11-14: `logs/a7a-ve-enc-20261114/vendor-r6/sweep/`, tables in `A733_VE_ENCODER_VENDOR_REGISTER_MAP.md`; H.265 QP options had no effect, QP dependence still open)
 Extend `vedump.c`: snapshot every frame (not only the first 4), add ENC_TOP `+0x000`-`+0x7FF` only
 after checking which ranges are safe (the VCU `+0x900` read hung our kernel; keep it excluded), and
 record the bitstream bit length after each frame.

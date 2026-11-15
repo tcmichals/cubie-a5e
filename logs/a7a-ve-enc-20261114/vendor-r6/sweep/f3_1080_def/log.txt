@@ -1,0 +1,73 @@
+DEBUG  : cedarc <main:3856>: nEncoderNum = 1
+***************************************************************
+*******test begin time[1417s] *******
+***************************************************************
+
+*************[0] cycle demo start time[1417s]**************
+******************************
+get input file: /root/sweep/in1080.yuv
+encode:8 frames
+encode_format:3 0:h264,1:jpeg,3:h265
+get output file: out.bin
+get src_size: 1920x1080
+get dst_size: 1920x1080
+******************************
+DEBUG  : cedarc <ChannelThread:2907>: pEncContext->nChannel 0
+DEBUG  : cedarc <ChannelThread:2941>: open log_file fail
+
+DEBUG  : ionAlloc <__GetIonMemOpsS:866>: *** get __GetIonMemOpsS ***
+DEBUG  : cedarc <VeInitialize:1652>: ve init
+DEBUG  : cedarc <veEnvInit:111>: VeContext 0xffff8c0011b0, encoder 0, decodec 1
+INFO   : cedarc <veEnvInit:139>: open /dev/cedar_dev fd = 5
+DEBUG  : cedarc <veEnvInit:150>: get ve_reg_addr = 0xffff91bba000
+DEBUG  : cedarc <veEnvGetIcVersion:278>: ** address_macc 0xffff91bba000 ve_top_offset = 0x0
+DEBUG  : cedarc <veEnvGetIcVersion:359>: *** ic_version = 0x3331000021320
+DEBUG  : cedarc <checkFeatureSupport:1450>: bEnableVcuFuncFlag = 0, nEncoderFlag = 0
+DEBUG  : cedarc <VeInitialize:1705>: address_macc = 0xffff91bba000, address_vetop = 0xffff91bba000
+DEBUG  : cedarc <getSocInfo:1252>: not exist SocInfo plugin, use SocInfo node
+DEBUG  : cedarc <getSocInfo:1340>: ve_default_freq = 624
+INFO   : cedarc <VeInitialize:1708>: *** ic_version = 0x3331000021320,
+DEBUG  : cedarc <VeInitialize:1748>: *** nPhyOffset = 0x0
+DEBUG  : ionAlloc <ion_create_context:172>: pid: 2258, g_context = 0xffff8c001340
+DEBUG  : cedarc <CdcIonOpen:302>: open ion, file_name = /dev/dma_heap/system
+DEBUG  : cedarc <ChannelThread:2983>: bVcuAutoMode = 0, nFrameNumInGroup = 1, nEncoderChannalNum = 1
+DEBUG  : cedarc <ChannelThread:2991>: baseConfig.eInputFormat = 0
+DEBUG  : cedarc <ChannelThread:3098>: encode_param.encode_format:3
+
+DEBUG  : cedarc <LogVersionInfo:32>: 
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Cedar Codec <<<<<<<<<<<<<<<<<<<<<<<<<<<<
+tag   : none
+branch: stable_v1.3.0_common
+commit: 02914e209e53ceb48b8aae62d83da54d3655b2f8
+date  : Mon Aug 22 15:46:29 2022 +0800
+author: jenkins8080
+patch : 
+----------------------------------------------------------------------
+
+DEBUG  : ionAlloc <__GetIonMemOpsS:866>: *** get __GetIonMemOpsS ***
+DEBUG  : cedarc <CdcIonOpen:302>: open ion, file_name = /dev/dma_heap/system
+DEBUG  : cedarc <VeInitialize:1652>: ve init
+DEBUG  : cedarc <ve2_env_init:36>: VeContext 0xffff8c001660, encoder 1, decodec 0
+INFO   : cedarc <ve2_env_init:65>: open /dev/cedar_dev_ve2 fd = 8
+DEBUG  : cedarc <ve2_env_init:75>: get ve2_reg_addr = 0xffff91bb9000
+DEBUG  : cedarc <veEnvGetIcVersion:278>: ** address_macc 0xffff91bb9000 ve_top_offset = 0x800
+DEBUG  : cedarc <veEnvGetIcVersion:359>: *** ic_version = 0x3331000021320
+DEBUG  : cedarc <checkFeatureSupport:1450>: bEnableVcuFuncFlag = 0, nEncoderFlag = 1
+DEBUG  : cedarc <VeInitialize:1705>: address_macc = 0xffff91bb9000, address_vetop = 0xffff91bb9800
+DEBUG  : cedarc <getSocInfo:1252>: not exist SocInfo plugin, use SocInfo node
+DEBUG  : cedarc <getSocInfo:1340>: ve_default_freq = 624
+INFO   : cedarc <VeInitialize:1708>: *** ic_version = 0x3331000021320,
+DEBUG  : cedarc <VeInitialize:1748>: *** nPhyOffset = 0x0
+DEBUG  : cedarc <VeSetSpeed:2218>: *** set ve freq to 624 Mhz ***
+DEBUG  : ionAlloc <ion_alloc_open:233>: ion context already create, ref_count:2
+DEBUG  : cedarc <H265EncOpen:7213>: init mutex_overlay
+DEBUG  : cedarc <CdcIniParserInit:41>: load conf file /etc/cedarc.conf ok!
+
+INFO   : cedarc <log_setlevel:73>: Set log level to 5 from /vendor/etc/cedarc.conf
+output file is saved:out.bin
+*******[0]cycle demo end time[1417s] cur_cycle_time[0s]*******
+
+
+***************************************************************
+*******test end time[1417s] test_total_time[0s]*******
+***************************************************************
