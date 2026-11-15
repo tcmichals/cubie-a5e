@@ -188,12 +188,18 @@ This is the **single centralized source of truth** for all tasks, hardware bring
 - [ ] **A7A RPMsg hang (found 2026-11-10, sweep FAIL)**: starting `testPingRpmsg.elf` hits `WARNING: sun6i-msgbox.c:106` (channel direction not set for TX); `ping_rpmsg` then spins in the kernel holding the endpoint mutex, and `remoteproc stop` and `reboot -f` block behind it (only `sysrq b` recovers). Mainline `sun6i-msgbox` expects the coprocessor firmware to set channel directions, and on the A733 nothing does. Check what the E902 firmware writes to the msgbox `CTRL` registers. Separate bug: the userspace hang should not block `stop`/`reboot`. Also: the A7A image has no KUnit modules (sweep KUnit 0/60 `MISSING`). Details: CUBIE_A7A_DEBUG_LOG.md Milestone 21.
 - [ ] **A733 Hardware ISP (no Software ISP)**: summary of [`docs/common/CAMERA_V4L2_GUIDE.md` §5](docs/common/CAMERA_V4L2_GUIDE.md), which is the source. Update this from the guide's checklist whenever camera work stops or a phase passes. (2026-11-09)
   - **Done:** raw 1080p30 capture through mainline CSI (Milestone 19); plan written; Phase 0 steps 0.1-0.9 complete (guide §5.4). **Silicon readbacks verified (2026-11-15):** ISP version register `0x05900010` reads `0x00602100` (ISP 602 rev 1.0 with `isp_ver_rd_en = 1`); IOMMU master 2 bypass (`0x03900804`) reads `0x00000001` (bypass active, confirming direct physical memory DMA via `videobuf2-dma-contig`). Key facts: load buffer `0x7700` on the A733 (ISP 602); the ISP has no output DMA (ISP0 → VIPP0 → CSI DMA0, so the CSI capture node stays the video node); VIPP must be programmed for NV12; TDM idle in online mode; only `PARA_LOAD`/`PARA_SAVE` IRQs per frame.
-  - **Now:** Phase 0 step 0.10 (owner: new driver vs extending `sun6i-isp`, options in §5.4) and 0.11 (owner review of §5.4). Proceeding to Phase 1: DT nodes, binding YAML, and driver skeleton in `linux-cubie`.
+  - **Phase 1 Skeleton & CSI NV12 Implemented (2026-11-15, `linux-cubie` commit `42c659de003f`):**
+    - [x] DT node `isp: isp@5900000` with clocks (`CLK_ISP`, `CLK_MBUS_ISP`), interrupts (`GIC_SPI 129`), power domain (`PD_VI`), and graph endpoints added to `sun60i-a733-cubie-a7a.dts`. DTB compiled cleanly.
+    - [x] Binding documentation drafted in `Documentation/devicetree/bindings/media/allwinner,sun60i-a733-isp.yaml`.
+    - [x] New mainline driver `drivers/media/platform/sunxi/sun60i-isp/` (`sun60i_isp.c`, `sun60i_isp.h`, `sun60i_isp_reg.h`, `sun60i_isp_tbl.h` with full ISP 602 register table and variant override support for A523/T527) created and compiled cleanly.
+    - [x] CSI DMA0 NV12 support implemented in `sun55i_a523_csi.c` (`FIELD_UV_CB_YUV420` in `0x204`, UV buffer in `0x228`, stride in `0x238`) and VIPP bypass enabled.
+    - [x] Capture format validation updated in `sun6i_csi_capture.c` for raw-to-YUV hardware ISP pipelines.
+  - **Now:** Phase 1 live target verification on board (deploy kernel Image/DTB, stream 300 frames of 1080p30 NV12).
   - **Next, in order:** Phase 0 → 1 → 2 → 3 → 4 (goal met at Phase 4).
   - **Not now:** Phase 5 H.264 encoder (after Phase 1); Phase 6 backport to the A5E (after Phase 4).
   - **Not now (upstream cleanup of the working capture path, camera guide §7 "Still to fix"):** OV5647 `hblank` fix sent upstream on its own; 24 vs 25 MHz sensor clock; parser 1 routing from DT instead of code; real cause behind the CSI bridge NULL-state guard; 600 MHz CSI/ISP clocks from DT; bindings for the new compatibles; drop board-only default formats; split WIP commit `928a9c657b3f` (contains a watchdog change).
-  - [ ] Phase 0: hardware map (docs only)
-  - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings
+  - [x] Phase 0: hardware map (docs only)
+  - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings (driver committed, ready for board deployment)
   - [ ] Phase 2: parameters from userspace
   - [ ] Phase 3: statistics to userspace
   - [ ] Phase 4: libcamera AE/AWB; Software ISP removed
