@@ -195,14 +195,14 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - [x] New mainline driver `drivers/media/platform/sunxi/sun60i-isp/` (`sun60i_isp.c`, `sun60i_isp.h`, `sun60i_isp_reg.h`, `sun60i_isp_tbl.h` with full ISP 602 register table and variant override support for A523/T527) created and compiled cleanly.
     - [x] CSI DMA0 NV12 support implemented in `sun55i_a523_csi.c` (`FIELD_UV_CB_YUV420` in `0x204`, UV buffer in `0x228`, stride in `0x238`) and VIPP bypass enabled.
     - [x] Capture format validation updated in `sun6i_csi_capture.c` for raw-to-YUV hardware ISP pipelines.
-  - **Now:** Phase 1 complete and verified on silicon (`linux-cubie` `b5c1797908d7`). 1080p30 NV12 capture (`Y=46..235`) and zero-copy `DMABUF` ISP NV12 -> Cedrus H.264 encode (60 frames in 2.003s, 29.96 fps, 2.42 MB Annex-B bitstream) verified on A7A (`192.168.0.194`). Next: Phase 2 (userspace tuning/3A parameters) or H.265 Stage A.
+  - **Now:** Phases 1, 2, and 3 complete and verified on silicon (`linux-cubie` `07b0b485e79b`). Phase 2 (`sun60i-isp-params` `/dev/video1`, BLC/WB/CCM/Gamma) & Phase 3 (`sun60i-isp-stats` `/dev/video2`, AE live stats) pass `v4l2-compliance` (49/49, 0 failures) and live frame-boundary WB + AE stat readback. Next: Phase 4 (AE/AWB convergence / libcamera) or H.265 Stage A.
   - **Next, in order:** Phase 0 → 1 → 2 → 3 → 4 (goal met at Phase 4).
   - **Not now:** Phase 5 H.264 encoder (done/verified); Phase 6 backport to the A5E (after Phase 4).
   - **Not now (upstream cleanup of the working capture path, camera guide §7 "Still to fix"):** OV5647 `hblank` fix sent upstream on its own; 24 vs 25 MHz sensor clock; parser 1 routing from DT instead of code; real cause behind the CSI bridge NULL-state guard; 600 MHz CSI/ISP clocks from DT; bindings for the new compatibles; drop board-only default formats; split WIP commit `928a9c657b3f` (contains a watchdog change).
   - [x] Phase 0: hardware map (docs only)
   - [x] Phase 1: ISP outputs 1080p30 NV12 with fixed settings (verified on silicon 2026-11-15 + zero-copy Cedrus H.264 @ 29.96 fps)
-  - [ ] Phase 2: parameters from userspace
-  - [ ] Phase 3: statistics to userspace
+  - [x] Phase 2: parameters from userspace (`sun60i-isp-params` `/dev/video1`, `V4L2_META_FMT_SUN60I_ISP_PARAMS`, `v4l2-compliance` 49/49)
+  - [x] Phase 3: statistics to userspace (`sun60i-isp-stats` `/dev/video2`, `V4L2_META_FMT_SUN60I_ISP_STAT`, live AE stats, `v4l2-compliance` 49/49; note `AWB_EN` needs AWB window/grid tuning before enabling in `0x0134`)
   - [ ] Phase 4: libcamera AE/AWB; Software ISP removed
 - [ ] **Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)**:
   - [x] **H.264 Step (d) completed 2026-11-15 (`linux-cubie` `e0e6d51ddab1`):** Dynamic CAPTURE `sizeimage` (scaled to picture resolution, default ~1 MB for 1080p), 1920×1080 NV12 support (`step_height = 8` and automatic macroblock-aligned SPS frame cropping down to 1080), and `VIDIOC_ENCODER_CMD` / `VIDIOC_TRY_ENCODER_CMD` + `V4L2_EVENT_EOS` implemented and board-verified. 300-frame 1080p benchmark encodes in **3.83 s** (**78.3 fps**, **12.7 ms/frame** at 400 MHz). Decodes on PC with GStreamer `h264parse ! avdec_h264` with **0 errors**. Artifacts archived in `logs/a7a-ve-enc-20261114/`.
