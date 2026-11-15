@@ -192,6 +192,57 @@ The driver integrates with the standard Linux RemoteProc framework:
 
 ---
 
+## 🔌 Direct Hardware Ownership: Bypassing the Kernel for Microsecond I/O
+
+The real superpower of freeing the XuanTie core isn't just running code off the Arm cluster—it's **handing physical silicon peripherals directly to RISC-V**. 
+
+On a standard Linux single-board computer, even with `PREEMPT_RT`, hardware I/O suffers from kernel locks, interrupt sharing, thread context switching, and cache thrashing when the GPU or VPU saturates the memory bus. A motor control loop or emergency stop cannot tolerate a 200 µs latency spike because the kernel was servicing a USB transfer.
+
+By partitioning peripheral base addresses in the Device Tree, the XuanTie RISC-V core owns dedicated hardware blocks without Linux ever touching them:
+
+```
++-------------------------------------------------------------------------------+
+|                      Dual-World Hardware Partitioning                         |
++-------------------------------------------------------------------------------+
+|   Linux 7.1 (Quad A76 + Quad A55)     |    Bare-Metal XuanTie E902 / E906     |
+|   Non-deterministic / High Compute    |    Hard Real-Time / Zero-Jitter       |
++---------------------------------------+---------------------------------------+
+| • ROS 2 Navigation & 3D SLAM          | • Direct I2C/TWI Sensor Polling       |
+| • MIPI CSI Camera & Hardware Video    |   - 1-8 kHz IMU read loops            |
+| • Open-Source NPU Computer Vision     |   - Zero mutex contention or sleep    |
+| • Ethernet, Wi-Fi & Web HMIs          | • Sub-Microsecond Interrupts (CLIC)   |
+| • High-level Task Planning            |   - ~100 ns hardware vector dispatch  |
+|                                       |   - Immune to Linux scheduler jitter  |
+|                                       | • Direct GPIO Actuation               |
+|                                       |   - Deterministic DShot / PWM         |
+|                                       |   - CNC step/dir pulse generation     |
+|                                       |   - Hardware emergency fail-safe      |
++---------------------------------------+---------------------------------------+
+```
+
+### 1. Direct I2C/TWI Sensor Polling
+In Linux, reading an IMU (like an ICM-42688-P or BMI088) or a high-precision current monitor over I2C requires `i2c-core`, mutex acquisitions, bus wait-queues, and user/kernel context switches. Attempting to run a 4 kHz or 8 kHz control loop over Linux `/dev/i2c-X` quickly exhausts CPU cycles and introduces severe phase lag.
+
+With the XuanTie core assigned the SoC's `s_twi0` (Always-On Two-Wire Interface) or dedicated standard `TWI` controller, the firmware speaks directly to the hardware FIFO registers:
+- Continuous, deterministic sensor polling at native sensor sample rates (1 kHz to 8 kHz).
+- Single-cycle register access over the low-latency internal bus.
+- Raw sensor samples are filtered in SRAM and shared with the Arm cores via ring buffers.
+
+### 2. Sub-Microsecond Interrupt Processing (CLIC / PLIC)
+The XuanTie core features an integrated **Core-Local Interrupt Controller (CLIC)** and Platform-Level Interrupt Controller (PLIC). 
+- **Direct Hardware Vectoring**: Critical interrupt lines (such as sensor Data Ready `DRDY`, optical encoder index pulses, or external safety trip lines) are wired directly to dedicated RISC-V interrupt vector inputs.
+- **~100 ns ISR Dispatch**: When a hardware edge triggers, the XuanTie core vectors directly to the handler in bare-metal assembly. There are no kernel interrupt threads, no softirqs, and zero context switching.
+- **Jitter Immunity**: Even if the Cortex-A76 cores are pinning 100% CPU on 4K video transcoding or edge neural network inference, the RISC-V interrupt response time remains flat and perfectly predictable.
+
+### 3. Deterministic GPIO & Actuator Control
+Generating high-frequency pulse trains or reading high-speed inputs from Linux userspace (`gpiod`) is notoriously prone to dropped pulses. The XuanTie core interacts directly with the GPIO port registers (`R_PIO` and `PIO`):
+- **Motor Control & ESCs**: Direct generation of DShot300/DShot600 frames, high-frequency motor PWM, and multi-channel Field Oriented Control (FOC) timing.
+- **CNC Multi-Axis Step/Direction**: Microsecond-exact step pulse timing for stepper and servo drives without missing a single step across millions of cycles.
+- **Precision Solenoids**: Direct microsecond pulse width modulation for ultra-fast agricultural spray nozzles or pneumatic actuators.
+- **Fail-Safe Hardware Emergency Stops**: If host Linux crashes, kernel panics, or hangs in an out-of-memory condition, the XuanTie watchdog and safety loop instantly detects the heartbeat loss and drives actuator GPIOs to a safe state in microseconds.
+
+---
+
 ## ⚡ Real-Time Benchmarks: Linux Host to RISC-V IPC
 
 To test performance, we built a standardized, apples-to-apples ping-pong round-trip benchmark:
