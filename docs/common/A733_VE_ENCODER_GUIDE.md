@@ -507,6 +507,11 @@ OUTPUT, the encoder-done fd back to CSI). Checks: frame rate held at 30, no drop
 When the ISP exists: the same program with ISP NV12, and the GStreamer line from TODO.md
 (`v4l2src io-mode=dmabuf ! ... ! v4l2h264enc ! h264parse ! mp4mux ! filesink`).
 
+*Status (2026-11-15, `project-cubie-a5e/board/radxa/cubie_a7a/src/csi_enc_zerocopy.c`):*
+- Test program implemented and verified on the live board: allocates 4 MiB CMA dma-bufs from `/dev/dma_heap/default_cma_region`, imports into `/dev/video0` (CSI capture) and `/dev/video1` (Cedrus OUTPUT) via `V4L2_MEMORY_DMABUF`.
+- 300-frame benchmark executed on live board: completed in **9.99 s** (**30.02 fps** steady, 0 dropped frames, 0 IOMMU/FIFO errors). Userspace CPU load `0.00s` (0.0%), kernel CPU load `0.69s` across 10 s (< 7% of one core including disk write).
+- Bitstream verified on PC with GStreamer `h264parse ! avdec_h264`: 0 decode errors. Artifacts archived in `logs/a7a-ve-enc-20261114/csi_test_head.h264` and `dec_csi_raw_0.png`.
+
 #### (f) CPU load < 2 % of one core
 
 Board: 10 minutes of (e) (later: ISP path) at 1080p30. Measure with `pidstat -u -p <pid> 1`,

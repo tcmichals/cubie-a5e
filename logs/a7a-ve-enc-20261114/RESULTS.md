@@ -411,3 +411,21 @@ Implemented in `linux-cubie` commit `e0e6d51ddab1` (`a7a_remoteproc_camera_usb`)
    - Total time: `3.83s` (`real 0m 3.83s`, `user 0m 0.15s`, `sys 0m 0.47s`).
    - Throughput: **78.3 fps** (average per-frame encode time **12.7 ms** at 400 MHz), well within the < 33 ms requirement for 1080p30.
 
+## Step (e) Verification: CSI → Cedrus zero-copy DMA-buf pipeline (2026-11-15)
+
+Implemented zero-copy test harness `project-cubie-a5e/board/radxa/cubie_a7a/src/csi_enc_zerocopy.c`:
+- Allocates 4 MiB CMA dma-bufs from `/dev/dma_heap/default_cma_region` (matching A733 32-bit coherent DMA region below 4 GiB).
+- Initializes chroma plane (`width * height` offset) to `0x80` once at startup as specified in §3.3.
+- Imports the dma-bufs via `V4L2_MEMORY_DMABUF` into both `/dev/video0` (sun6i-csi capture) and `/dev/video1` (cedrus encoder OUTPUT).
+- Operates entirely with zero CPU mapping / zero memcpy during streaming: CSI writes RAW Bayer via DMA, Cedrus reads via DMA, encoded H.264 stream dequeued via MMAP from Cedrus CAPTURE.
+
+### Live A7A board test results:
+- **300-frame continuous streaming benchmark (`/tmp/csi_enc_zerocopy 300`):**
+  - Time elapsed: **9.99 s** for 300 frames (**30.02 fps** steady, perfectly pacing with OV5647 30 fps sensor output).
+  - CPU usage: `real 0m 10.15s`, `user 0m 0.00s` (0% CPU time in userspace!), `sys 0m 0.69s` (< 7% of one core for kernel IRQ / m2m handling and file write).
+  - Dmesg audit: **0 dropped frames**, **0 IOMMU faults**, **0 FIFO errors**, zero warnings.
+- **Bitstream verification on PC:**
+  - `gst-launch-1.0 filesrc location=csi_test_head.h264 ! h264parse ! avdec_h264 ! fakesink` -> caps `video/x-h264, width=1920, height=1080, profile=high, level=3.1` -> decoded `video/x-raw, format=I420, width=1920, height=1080` with **0 errors**.
+  - Decoded PNG (`dec_csi_raw_0.png`) verified at 1920×1080. Artifacts archived in `logs/a7a-ve-enc-20261114/`.
+
+
