@@ -434,6 +434,17 @@ Found on the Radxa r6 image (`radxa-a733_bullseye_kde_r6`) and in the vendor BSP
 | Vendor ISP output as a quality reference | run `v4l2src ... en-awisp=1` on the vendor image with an IMX415/IMX219 module | NV12 frames + H.264 (`omxh264videoenc`, needs `io-mode=2`) | Same-scene comparison with our ISP. Needs a vendor-supported sensor (not OV5647). |
 | ISP registers and load buffer while streaming | `/dev/mem` on the vendor image (`STRICT_DEVMEM` off), ISP `0x05900000`, only while streaming (`PD_VI` on) | snapshot | Programmed register image to compare with `isp_default_reg[]` and our Phase 1 values. |
 
+**Size check 2026-11-14** (struct sizes from `isp_tuning_priv.h` compiled natively, x86-64, with or without `USE_ENCPP`; vs blob sizes from `objdump -T libisp_ini.so`):
+
+| Struct | Header `sizeof` | Blob size | Result |
+| :--- | :--- | :--- | :--- |
+| `isp_test_param` | `0x7c` | `0x7c` | **matches**: decodable now |
+| `isp_tunning_param` | `0x18438` | `0x18470` | blob 56 bytes larger |
+| `isp_dynamic_param` (iso) | `0x3670` | `0x36ac` | blob 60 bytes larger |
+| `isp_3a_param` | `0x1680` | `0xaa4` | blob much smaller: different layout |
+
+So the BSP kernel header (ISP 600) is close to, but not the same as, the library's layout (ISP 602). Next: find the added fields (compare the T527 `isp-601` headers in tina-source `rtos-hal/.../vin_isp/isp_server/`, which are newer; use known table contents such as gamma ramps and LSC tables as anchors inside the blobs), then decode. The 3A struct needs the userspace header, not the kernel one. Blob offsets in `libisp_ini.so`: `imx415_mipi_1080p_isp_tuning_settings` `0x22108`, `_iso_settings` `0x3a578`, `_3a_settings` `0x3dc28`, `_test_settings` `0x3e6d0` (symbol values; map to file offsets through the section headers).
+
 Steps (add to Phase 1/2 when started): extract the blobs with `objdump -T` offsets → `dd`; write a
 decoder from `isp_tuning_priv.h`; dump to readable text per sensor; record in §5.4.
 
