@@ -245,3 +245,41 @@ Image `radxa-a733_bullseye_kde_r6.output_512.img.xz`, kernel `5.15.147-21-a733`,
 
 Next: cedrus A733 variant writes `addr >> 8` to the AVC output-side address registers, then board
 test on our image (reflash `bld.a7a/images/sdcard.img`).
+
+## Kernel #5, stock BL31 (2026-11-14 late): E902 works without the BL31 patch; encoder writes a bitstream
+
+Image `bld.a7a/images/sdcard.img` 22:48: stock vendor BL31, only `scp` removed from the FIT
+(`cubie-a5e` `19c203c`); `linux-cubie` `45cdd082f84b`. Kernel `7.1.0 #5 PREEMPT_RT`.
+
+**E902 on stock BL31 + no SCP: PASS.** `echo testPingRpmsg.elf > firmware; echo start > state`:
+`running`, `creating channel rpmsg-ping-channel addr 0x400` (sent by the firmware), `ping_rpmsg -n 1000`:
+p50 107.8 µs, p90 112.3 µs, p99 133.2 µs, p99.9 53 ms (one slow round trip, same class as the open
+stall item). So the BL31 binary patch was never needed; removing `scp.fex` is enough.
+Open: the green power LED is off although `/sys/class/leds/radxa:green:power` reads `default-on`,
+brightness 1 (blue heartbeat blinks). Not checked whether it was on with the patched BL31.
+
+**Encoder, `a733_quirks=3` (8-pixel size units + real MV/deblock/+0x9C buffers) on top of the
+`>> 8` address fix:**
+- **Encoder DMA writes now land.** `noise.h264` 629,189 B, `grey.h264` 2,924 B, starting
+  `00 00 00 01 67 4d 40 1f …` (SPS), PPS, IDR slice; noise P-frames of the identical picture are 12 B
+  (skip), so reconstruction/reference work too. Which of the three changes was required is not
+  separated yet (`a733_quirks` is writable at runtime: test 0, 1, 2).
+- **Bug 1: no emulation-prevention bytes in the headers.** SPS is
+  `67 4d 40 1f 96 54 02 80 2d 90 80 00 00 0c 80 00 00 01 42`: the `00 00 01` inside it is read as a
+  start code, so decoders reject the stream. Cedrus toggles `VE_ENC_AVC_PARA0_EPTB_DIS` (bit 31,
+  `cedrus_enc_h264.c:319`) around header writes; on the A733 that does not insert the `03`. The
+  vendor library has software bit-writer functions (`put_bit_sw`, `SliceHeader_sw`, `PutVlcSE_sw`
+  in `libvenc_h264.so`), so it probably writes headers in software on this core. Fix options: write
+  SPS/PPS (and the slice header?) in software with EPB, or find the A733 EPTB control.
+- **Bug 2: slice data not valid yet.** With the SPS patched by hand on the PC both streams decode
+  (GStreamer `avdec_h264`), but the noise frame decodes as flat grey.
+- Register diff against the vendor (`cedrus_vs_vendor_k5.md`, raw dump `cedrus_regdump_k5.txt`):
+  26 non-address words differ per frame. Largest: `+0xB04` PARA0 `0` vs `0x100` (IDR) / `0x10` vs
+  `0x510` (P); `+0xB10` ME_PARA `0x00010004` vs `0x08001200`; `+0xB08` PARA1; `+0xB14` `3` vs
+  `0x1B020007`; `+0xB2C`-`+0xB38` rate-control words zero in cedrus; `+0xB40`/`+0xB44`/`+0xB48`/`+0xB4C`
+  zero in cedrus; `+0xB74`; `+0xB8C` bit max; `+0xA08` `0` vs `0x00020001`; `+0xA90`, `+0xA98`,
+  `+0xAD4`; `+0x800` bits 31:30. Note the vendor run is High profile/CABAC and cedrus is Main/CAVLC,
+  so some PARA0/PARA1 differences are the profile, not bugs.
+
+Next: (1) try `a733_quirks=7` and `15` (constants, VE_MODE bits) and re-decode; (2) software SPS/PPS
+with EPB; (3) work through the diff table, starting with `+0xB04`, `+0xB10`, `+0xB14`, `+0xA08`.
