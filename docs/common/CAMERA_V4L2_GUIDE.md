@@ -161,6 +161,7 @@ Tick steps here as they are done. This checklist is the source; the TODO.md entr
   - [ ] 3.4 Board test: 30 statistics buffers/s at 1080p30, none dropped.
   - [ ] 3.5 `v4l2-compliance`: no failures. Logged. **Exit Phase 3.**
 - [ ] **Phase 4 — libcamera auto exposure and white balance; Software ISP removed**.
+  - [x] 4.0 Closed-loop AE/AWB convergence verified on silicon via standalone C 3A prototype (consuming `sun60i-isp-stats` AE stats and updating sensor exposure/gain + `sun60i-isp-params` WB gains).
   - [ ] 4.1 Owner decision: extend libcamera's simple pipeline or add a new pipeline handler (pattern: `rkisp1`).
   - [ ] 4.2 IPA AE: sensor exposure/gain from AE statistics.
   - [ ] 4.3 IPA AWB: white-balance gains through the parameters node.
