@@ -309,3 +309,73 @@ runtime:
 
 Next: make cedrus program PARA0/PARA1/ME_PARA as the vendor does for one fixed setting and write
 matching headers (replay approach, guide Part 1), or find which single field fixes MB (26,12).
+
+## Both bitstream bugs fixed and verified on A7A silicon (2026-11-15)
+
+### Root causes (from offline header test + `libvenc_h264.so` disassembly)
+
+1. **Why textured macroblocks failed with `mb_type 7171 in I slice too large at 26 12`:**
+   - Rewriting the SPS/PPS headers offline on the PC with High Profile (`profile_idc = 100`) and
+     `transform_8x8_mode_flag = 1` made the existing kernel #5 bitstream decode cleanly with zero
+     errors (`avdec_h264`), revealing the sharp 256×256 noise square on the 720p grey background.
+   - Disassembly of `h264InitRegInfo` (`0x1b808`–`0x1ba58`) in `radxa-r6/x/libvenc_h264.so` confirmed
+     that on Allwinner Ver2 H.264 encoders (A733), **bit 27 of `VE_ENC_AVC_PARA1_REG` (`+0xB08`) is
+     `VE_ENC_AVC_PARA1_8X8_TRANS_DIS`** (active-low: `0` = enable 8×8 transform, `1` = disable 8×8
+     transform):
+     ```
+     1ba3c: ldrb w0, [x0, #1260]      // transform_8x8_mode_flag
+     1ba40: cmp  w0, #0x0
+     1ba44: cset w0, eq               // 1 if transform_8x8_mode_flag == 0
+     1ba54: bfi  w0, w2, #27, #1      // PARA1 (+0xB08) bit 27
+     ```
+   - `cedrus_enc_h264.c` left bit 27 = `0` in `VE_ENC_AVC_PARA1_REG` (so the A733 engine always used
+     High-Profile 8×8 transforms) while writing Main-Profile headers (`profile_idc = 77`) and
+     omitting the High-Profile syntax block (`transform_8x8_mode_flag = 1`,
+     `pic_scaling_matrix_present_flag = 0`, `second_chroma_qp_index_offset`) in
+     `cedrus_enc_h264_job_configure_pps()`.
+   - **Fix:** Define `VE_ENC_AVC_PARA1_8X8_TRANS_DIS BIT(27)` in `cedrus_regs.h`; set it in
+     `VE_ENC_AVC_PARA1_REG` when `!cedrus_enc_h264_is_high_profile(job->profile_idc)`, and write the
+     3 High-Profile PPS syntax elements in `cedrus_enc_h264_job_configure_pps()` when High Profile is
+     selected.
+2. **Why `0x03` emulation-prevention bytes were missing in the SPS:**
+   - Disassembly of `SliceHeader` (`0x6e58`–`0x6f7c`) in `libvenc_h264.so` confirmed that
+     `VE_ENC_AVC_PARA0_EPTB_DIS` (`BIT(31)` of `+0xB04`) must only be set while writing the 4-byte
+     Annex-B start code (`0x00000001`) and cleared immediately before writing the NALU header and
+     RBSP body.
+   - `cedrus_enc_h264_job_configure_headers()` had disabled hardware EPTB across the entire
+     `SPS`/`PPS`/`Slice Header` loop instead of only around each start code.
+   - **Fix:** Added `cedrus_enc_h264_coded_start_code(dev)` which sets `EPTB_DIS = 1`, writes the
+     32-bit start code `0x00000001`, and immediately sets `EPTB_DIS = 0` so hardware inserts `0x03`
+     emulation-prevention bytes throughout the SPS, PPS, and slice header RBSPs.
+
+### Live A7A board verification (updated `sunxi-cedrus.ko` installed in `/lib/modules/7.1.0/`)
+
+Input: `/tmp/sq.nv12` (1280×720 grey `0x80` with 256×256 random noise square at `(400, 200)`), 2
+frames (`IDR` + `P`).
+
+1. **On-board SPS/PPS hexdump (`xxd -g 1 -l 48`):**
+   - `main.h264` (Main Profile, CAVLC):
+     `00 00 00 01 67 4d 40 1f 96 54 02 80 2d 90 80 00 00 0c 80 00 00 03 01 42 00 00 00 01 68 ce 31 12 00 00 00 01 65 ...`
+     (`00 00 03 01 42` inserted by hardware in SPS; 4-byte start codes `00 00 00 01` intact).
+   - `high.h264` (High Profile, CAVLC, `-c h264_profile=4`):
+     `00 00 00 01 67 64 00 1f ac a8 05 00 5b 21 00 00 03 00 19 00 00 03 00 02 84 00 00 00 01 68 ce 31 12 11 00 00 00 01 65 ...`
+     (both `00 00 03 00` sequences inserted by hardware in SPS; PPS `68 ce 31 12 11` includes
+     `transform_8x8_mode_flag = 1`).
+2. **GStreamer (`h264parse ! avdec_h264`) decode on PC (no patching):**
+
+| File in `logs/a7a-ve-enc-20261114/` | Profile & Entropy | Size (2 frames) | `avdec_h264` Errors | Decoded PNG MD5 (Frame 0 & 1) |
+| :--- | :--- | :--- | :--- | :--- |
+| `main.h264` | Main (`profile_idc=77`), CAVLC, 4×4 transform (`PARA1_8X8_TRANS_DIS=1`) | 46,668 B | **0 errors** | `f9a9a336112a17daa1616ad4ca93e0e9` (`dec_main_0.png`) |
+| `high.h264` | High (`profile_idc=100`), CAVLC, 8×8 transform (`transform_8x8_mode_flag=1`) | 46,374 B | **0 errors** | `6a017601391103059f9ed12a7efcbc90` (`dec_high_0.png`) |
+| `high_cabac.h264` | High (`profile_idc=100`), CABAC, 8×8 transform (`transform_8x8_mode_flag=1`) | 39,507 B | **0 errors** | `6a017601391103059f9ed12a7efcbc90` (identical to CAVLC) |
+
+3. **`a733_quirks=1` vs `a733_quirks=3` (auxiliary buffers `+0xB60`, `+0xB9C`, `+0xBC4`):**
+   - Static 2-frame sequence (`sq.nv12`): `a733_quirks=1` and `3` produce byte-for-byte identical
+     bitstreams (`9141696d...` for Main, `68e58b58...` for High).
+   - Moving 2-frame sequence (`move.nv12`, noise square shifted in frame 1): `a733_quirks=1`
+     (`a5ac9460...`) and `a733_quirks=3` (`52fe484c...`) differ on the P-frame because the hardware
+     uses the MV/deblock/`+0xB9C` auxiliary buffers when coding inter-frame differences; both decode
+     with **0 errors**. Keep default `a733_quirks = 3`.
+4. **Green power LED (`linux-cubie` `4976300f1397`):**
+   - Confirmed on the board by the owner: setting `brightness` to `0` lights the green power LED,
+     confirming the pin (`PM2`) is `GPIO_ACTIVE_LOW`.

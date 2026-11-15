@@ -45,15 +45,15 @@ Files under `linux-cubie/drivers/staging/media/sunxi/cedrus/`.
 
 | # | What the vendor does | Cedrus today | Change | State |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | Output-side addresses `+0xB60`-`+0xBC4`, `+0xB80`/`+0xB84` are `addr >> 8` | full byte addresses | `enc_addr_shift = 8` in the A733 encoder variant | done, `0dd9d7650774`, **board test pending** |
-| 2 | `+0xB60` (MV buffer) and `+0xBC4` (deblock buffer) point to real buffers (`0x00FF3E80`, `0x00FF3E00`) | writes 0 to both (`cedrus_enc_h264.c:1166`, `:1209`), so the engine may write to address 0 | allocate both (sizes: see address gaps in the snapshots, 720p vs 1080p) and program them `>> 8` | to do; first suspect if #1 alone is not enough |
-| 3 | `+0xB9C` holds another buffer address (`0x00FF3DF0`) | never written | find its role (`h264encVersion2.o` in the BSP RISC-V lib has symbols), allocate | to do |
-| 4 | `+0xB00` = picture size in MBs (`0x00A0005A` 720p, same value as `+0xA00`) | never written | write it with the `VE_ISP_PIC_INFO_REG` value | to do |
-| 5 | ENC_TOP `+0x800` = `0xC00000C7` (bits 31:30 set while encoding) | clears bits 31:30 (`cedrus.c:315`, `cedrus_enc.c:76`, `:95`) | test with the bits set on the A733 | to do |
-| 6 | ENCPP: `+0xA14` = stride in MBs (`0x50`), `+0xA80` chroma1 address, `+0xA90` = `0x03FF03FF`, `+0xA98` size + `+0xA9C` address (another buffer), `+0xAD4`, `+0xAF0` = `0x200` | not written | add for the A733; `+0xA9C` needs a buffer | to do |
-| 7 | AVC `+0xB40` = `0x74000014`, `+0xB44` = `0x0C1E0000`, `+0xB70`, `+0xB74` (QP-table-like, changes per frame) | not written | add constants; decode `+0xB70`/`+0xB74` | to do |
-| 8 | ENC_TOP `+0x81C` = `0x10000`, `+0x840` = `0xF`, `+0x880` = `0x1C55`, `+0x884` = `0xFFFFF`, `+0x888` = `0x8000` | not written | read them on our kernel after an encode (device resumed); write what differs | to do |
-| 9 | Vendor leaves 0: `+0xB0C`, `+0xB24`, `+0xB28`, `+0xB3C`, `+0xB50`, `+0xB88` | cedrus writes them | check the values cedrus writes are 0 or harmless | to do |
+| 1 | Output-side addresses `+0xB60`-`+0xBC4`, `+0xB80`/`+0xB84` are `addr >> 8` | full byte addresses | `enc_addr_shift = 8` in the A733 encoder variant | **done & silicon-verified**, `0dd9d7650774` |
+| 2 | Picture size in `+0xA00`, `+0xA2C` and `+0xB00` is in 8-pixel units (`0x00A0005A` for 720p) | 16-pixel macroblock units (`0x0050002D`), `+0xB00` not written | `CEDRUS_A733_QUIRK_SIZE_8PX` (bit 0 of `a733_quirks`, default on) | **done & silicon-verified**, `45cdd082f84b` |
+| 3 | `+0xB60` (MV buffer), `+0xBC4` (deblock buffer) and `+0xB9C` point to real buffers | writes 0 to `+0xB60`/`+0xBC4`, leaves `+0xB9C` untouched | `CEDRUS_A733_QUIRK_AUX_BUFS` (bit 1 of `a733_quirks`, default on); used on P-frames with inter-frame differences | **done & silicon-verified**, `45cdd082f84b` |
+| 4 | Hardware EPTB (`VE_ENC_AVC_PARA0_EPTB_DIS`, bit 31 of `+0xB04`) is set only around the 4-byte Annex-B start code (`0x00000001`), cleared before the NALU header and RBSP (`SliceHeader` `0x6e58` in `libvenc_h264.so`) | sets `EPTB_DIS = 1` across the entire SPS, PPS and Slice Header loop, so SPS lacks `0x03` emulation-prevention bytes | `cedrus_enc_h264_coded_start_code()` sets `EPTB_DIS` only around `cedrus_enc_h264_coded_u32(dev, 0x1)` | **done & silicon-verified** (2026-11-15) |
+| 5 | `VE_ENC_AVC_PARA1_8X8_TRANS_DIS` (`BIT(27)` of `+0xB08`) is `1` when `transform_8x8_mode_flag == 0` (Main/Baseline) and `0` when `transform_8x8_mode_flag == 1` (High Profile); High Profile PPS writes `transform_8x8_mode_flag = 1`, `pic_scaling_matrix_present_flag = 0`, `second_chroma_qp_index_offset` (`h264InitRegInfo` `0x1ba3c` and `_InitPPS` `0x603c` in `libvenc_h264.so`) | leaves `PARA1` bit 27 = `0` (enabling 8×8 transform on A733) while writing Main-Profile headers without the High-Profile PPS syntax block (`mb_type 7171 too large` on first textured MB) | set `VE_ENC_AVC_PARA1_8X8_TRANS_DIS` for non-High profiles; write High-Profile PPS syntax block when High Profile is selected | **done & silicon-verified** (2026-11-15: Main CAVLC, High CAVLC, High CABAC all decode with 0 errors) |
+| 6 | ENC_TOP `+0x800` = `0xC00000C7` (bits 31:30 set while encoding) | clears bits 31:30 (`cedrus.c:315`, `cedrus_enc.c:76`, `:95`) | `CEDRUS_A733_QUIRK_VE_MODE_HI` (bit 3 of `a733_quirks`, default off); not required for valid encode | tested, optional |
+| 7 | ENCPP `+0xA14`, `+0xA90`, `+0xAF0`; AVC `+0xB40`, `+0xB44`, `+0xB74` constants | not written | `CEDRUS_A733_QUIRK_CONSTS` (bit 2 of `a733_quirks`, default off); not required for valid encode | tested, optional |
+| 8 | ENC_TOP `+0x81C` = `0x10000`, `+0x840` = `0xF`, `+0x880` = `0x1C55`, `+0x884` = `0xFFFFF`, `+0x888` = `0x8000` | not written | read back on our kernel (`cedrus_regdump_k5.txt`): hardware reset values already match vendor | verified |
+| 9 | Vendor leaves 0: `+0xB0C`, `+0xB24`, `+0xB28`, `+0xB3C`, `+0xB50`, `+0xB88` | cedrus writes them | values cedrus writes are 0 or harmless | verified |
 | 10 | — | default CAPTURE `sizeimage` 1 KiB (`cedrus_enc.c:45`) | raise the default | to do |
 
 Board test for each step: `modprobe sunxi-cedrus dump_coded=1`, encode grey and noise 720p frames
@@ -604,8 +604,10 @@ vendor boot; keep `radxa-r6/r6.img` and `bld.a7a/images/sdcard.img`. Vendor cons
 ### 4. Steps
 
 #### Step 0 — prerequisite: H.264 works on our kernel
-- [ ] Cedrus `enc_addr_shift` fix (built 2026-11-14, `linux-cubie`, not committed) board-tested:
-  grey/noise 720p I+P frames decode; commit. If not: VE_MODE bits 31:30 (vendor `0xC00000C7`).
+- [x] Cedrus `enc_addr_shift` + 8-pixel picture size + auxiliary buffers + start-code EPTB +
+  `VE_ENC_AVC_PARA1_8X8_TRANS_DIS` / High Profile PPS syntax board-tested (2026-11-15,
+  `logs/a7a-ve-enc-20261114/RESULTS.md`): 720p grey + noise square I+P frames decode with 0 errors
+  in Main Profile CAVLC, High Profile CAVLC, and High Profile CABAC.
 - [ ] 1080p30 synthetic H.264 (plan step d). Exit: the shared base (power, clocks, ENCPP input,
   addresses, IRQ) is proven.
 
