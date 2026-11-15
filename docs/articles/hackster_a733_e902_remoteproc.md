@@ -222,6 +222,16 @@ By looking past vendor BSPs and treating modern application processors as hetero
 
 The next time you look at a modern desktop-class SBC, don't just see an application processor. Dig into the memory map, probe the unclocked configuration registers, and see what dormant silicon is waiting to be freed.
 
+---
+
+## 🔮 What's Next: Hacking Through the Camera, H.265 & the NPU
+
+Freeing the RISC-V coprocessor was only phase one. Right now, our lab bench is active on the next frontiers:
+- **Zero-Copy Camera & H.265 Video Encoding**: We have already brought up the 2-lane MIPI CSI-2 camera receiver, authenticated the undocumented Hardware ISP 602 on silicon, and proven a zero-copy DMA-buf pipeline passing 1080p frames directly into the Cedrus hardware video engine for H.264 encoding at 78 fps with < 1% CPU utilization. Next in the crosshairs: unlocking **hardware H.265 (HEVC)** encoding!
+- **Freeing the Onboard 3 TOPS NPU**: Rather than accepting proprietary vendor binary blobs for computer vision, our upcoming milestone brings up the onboard VeriSilicon VIP9000 NPU using the mainline Linux `etnaviv` DRM driver and open-source Mesa Teflon TFLite delegate—delivering an entirely open edge AI vision stack from photon to motor pulse.
+
+---
+
 ### Source Code, Kernel Trees & Schematics
 - **Mainline Linux Kernel Tree**: [linux-cubie on GitHub](https://github.com/tcmichals/linux-cubie) (branch `a7a_remoteproc_camera_usb`)
 - **Firmware, DTBs & Tooling**: [cubie-a5e on GitHub](https://github.com/tcmichals/cubie-a5e)

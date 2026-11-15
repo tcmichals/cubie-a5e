@@ -26,7 +26,7 @@ A comprehensive 4-part series documenting the architecture, Linux driver develop
 ## 📖 Case Studies & Deep Dives
 
 * **[Turning an 8-Core Desktop Processor into a Hard Real-Time Robotics & Industrial Engine: An Industrial Hacker's Guide (Hackaday / Hackster)](hackster_a733_e902_remoteproc.md)**
-  * **Topics**: Unlocking on-die 200 MHz XuanTie RISC-V coprocessors (E902 / E906) on Allwinner A733 & T527; eliminating external companion MCUs (STM32/RP2040) across robotics, smart agriculture, machine control, and flight systems; autopsy of false assumptions (TrustZone SError myth vs reset vector race); the 16 KB reserved SRAM trap; unlocking stock Arm Trusted Firmware (BL31) by stripping `scp.fex` from the TOC1 bootstream; mainline Linux `remoteproc`/`rpmsg` driver architecture; and sub-15 µs shared-SRAM IPC benchmarks.
+  * **Topics**: Unlocking on-die 200 MHz XuanTie RISC-V coprocessors (E902 / E906) on Allwinner A733 & T527; eliminating external companion MCUs (STM32/RP2040) across robotics, smart agriculture, machine control, and flight systems; autopsy of false assumptions (TrustZone SError myth vs reset vector race); the 16 KB reserved SRAM trap; unlocking stock Arm Trusted Firmware (BL31) by stripping `scp.fex` from the TOC1 bootstream; mainline Linux `remoteproc`/`rpmsg` driver architecture; sub-15 µs shared-SRAM IPC benchmarks; and the next frontiers (hardware H.265 video encoding & open-source 3 TOPS NPU bring-up with `etnaviv` and Mesa Teflon).
 
 * **[Mainline Flightstack Bring-Up Case Study](../buildroot/Mainline_Flightstack_Bringup_Article.md)**
   * **Topics**: Tri-domain real-time architecture across Linux PREEMPT_RT, XuanTie RISC-V, and FPGA domains.
