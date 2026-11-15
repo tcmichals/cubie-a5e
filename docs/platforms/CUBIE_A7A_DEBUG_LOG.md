@@ -1905,3 +1905,42 @@ Board: Cubie A7A, stock vendor BL31 with no `scp` in the boot FIT, no BL31 chang
 - **v6 test with the 26 MHz DTB** (`logs/a7a-test-20261111/RESULTS.md`): clocks, SD, USB, Ethernet, THS, camera 30 fps at CSI 600 MHz, VE probe pass; RPMsg works but with one 0.66-0.96 s stall per 1000 pings (not seen on kernel #23; regression not proven); Wi-Fi `aic_load_fw` -1 (pre-existing). **Warm reboot with the E902 running and Cedrus loaded hung** after `Requesting system reboot` (power cycle needed); `VE_ENC` power domain off failed with -110.
 - **2026-11-12:** this U-Boot's `fatwrite` fails (`mmc write failed`, partition table lost until `mmc rescan`, card intact): never write the SD card from U-Boot. The 26 MHz DTB booted once from U-Boot (load-only); the permanent copy in `/boot` is still to do from Linux.
 - **Open:** permanent DTB copy; reboot split test (E902 offline, Cedrus not loaded); boot without `clk_ignore_unused`; `poweroff`; RPMsg stalls on #23 vs v6. The A7Z DT also says 24 MHz (crystal not checked).
+
+---
+
+## 13. Milestone 24: Zero-Copy Video Encoding Verified & Hardware ISP Phase 0 Silicon Authentication (Nov 15, 2026)
+
+Board: Radxa Cubie A7A (`cubie-a7a-flight`), Linux 7.1.0 #5 PREEMPT_RT.
+
+### 1. Cedrus Hardware Video Encoder H.264 Pipeline Completed (Steps d, e, f)
+- **Dynamic Buffer Sizing & 1080p Cropping**:
+  - Implemented dynamic CAPTURE `sizeimage` in `cedrus_enc.c` proportional to frame dimensions (~1 MB for 1080p, ~450 KB for 720p).
+  - Configured `step_height = 8` and macroblock-aligned SPS frame cropping (`frame_cropping_flag = 1`, `frame_crop_bottom_offset = 4`) for 1920×1080 NV12 in `cedrus_enc_h264.c`.
+  - Implemented stateful `VIDIOC_ENCODER_CMD` / `VIDIOC_TRY_ENCODER_CMD` and `V4L2_EVENT_EOS` event draining in `cedrus_proc.c` and `cedrus_context.c`.
+- **Standalone 1080p Encoding Benchmark**:
+  - Encoded 300 frames of 1080p NV12 on target in **3.83 s** (**78.3 fps**, **12.7 ms/frame** at 400 MHz).
+  - Bitstream decoded on host with GStreamer `h264parse ! avdec_h264`: 0 decode errors, valid 1920×1080 PNG decoded.
+- **Zero-Copy CSI → Cedrus Pipeline**:
+  - Developed `csi_enc_zerocopy.c` allocating 4 MiB contiguous CMA buffers via `/dev/dma_heap/default_cma_region` imported via `V4L2_MEMORY_DMABUF` into `/dev/video0` (CSI capture) and `/dev/video1` (Cedrus OUTPUT).
+  - Streamed 300 frames continuously: steady **30.02 fps** delivery, 0 dropped frames, 0 IOMMU faults, 0 FIFO overflows.
+  - Bitstream decoded cleanly with GStreamer `avdec_h264` with 0 errors.
+- **CPU Utilization Benchmark**:
+  - Measured whole-system `/proc/stat` deltas over 600 frames (20 s) at 1080p30 (`csi_enc_zerocopy_null`): **0.89% of ONE core** (0.11% across 8 cores), passing the < 2% target.
+  - Verified exact interrupt rates: 30.0 IRQ/s for CSI (SPI 149) and 30.0 IRQ/s for Cedrus (SPI 80).
+
+### 2. Hardware ISP (ISP 602 / `0x05900000`) Phase 0 Silicon Authentication
+- **Power Domain & Gating Safety Rules**:
+  - Held `VI` power domain active via `echo on > /sys/bus/platform/devices/5800800.csi/power/control`.
+- **Hardware Version Readback**:
+  - Asserted `isp_ver_rd_en` (bit 3 of `ISP_TOP_CFG0` at `0x05900000`).
+  - Read `ISP_VER_CFG` (`0x05900010`): **`0x00602100`** (Big version `0x602` = ISP 602, small revision `0x100` = rev 1.0). Restored `ISP_TOP_CFG0` to 0.
+- **IOMMU Master 2 Verification**:
+  - Read `IOMMU_MIC_BYP_REG` for master 2 (`0x03900804`): **`0x00000001`** (bypass active, identical to master 1 CSI and master 3 VE_ENC).
+  - Micro-TLB registers `0x03900800`, `0x03900808`, `0x0390080c`, `0x03900814` all read `0x1`.
+  - Confirms ISP DMA operates directly with physical memory (`videobuf2-dma-contig`) without requiring an IOMMU page table driver.
+- **Clocks & Fabric Routing**:
+  - CCU `ISP_CLK` (`0x02003860`): `0x83000000` (PERI0_600M / 1, enabled).
+  - CSI CCU (`0x05800008`): `0x00011011` (`MISP0_CLK_EN` and `MISP0_BRIDGE_CLK_EN` enabled).
+  - CSI CCU VIPP0 gate (`0x0580000c`): `0x00010101` (`VIPP0_CLK_EN` enabled).
+  - VIPP (`0x05910000`) verified accessible without bus fault.
+

@@ -234,7 +234,7 @@ One block at `0x05900000`, size `0x1300` (dtsi `:2668-2670`). Register offsets a
 | Abs. offset (id 0) | Register | Fields used | Source |
 | :--- | :--- | :--- | :--- |
 | `0x000` | `ISP_TOP_CFG0` | b0 `isp_enable`, b1 `isp_mode` (0 online, 1 offline), b2 `isp_top_cap_en`, b3 `isp_ver_rd_en`, b4 `sram_clear`, b8 `int_mode`, b9/b10 clock back doors, b11/b12 auto-gating | `isp600_reg.h:38,89-105`; `isp600_reg_cfg.c:224-258` |
-| `0x010` | `ISP_VER_CFG` | [11:0] small, [23:12] big; read with `isp_ver_rd_en = 1` | `isp600_reg.h:39,107-114`; `sunxi_isp.c:1265-1267`. **Expected value: not found** (vendor prints it, `vin-video/vin_core.c:857-863`: read it on a vendor image) |
+| `0x010` | `ISP_VER_CFG` | [11:0] small, [23:12] big; read with `isp_ver_rd_en = 1` | `isp600_reg.h:39,107-114`; `sunxi_isp.c:1265-1267`. **Silicon readback (2026-11-15): `0x00602100`** (Big `0x602` = ISP 602, small `0x100` = rev 1.0) |
 | `0x014` | `ISP_MAX_SIZE` | [15:0] width, [31:16] height | `isp600_reg.h:40,116-122` |
 | `0x018` | `ISP_MODULE_FET` | d3d/wdr/d2d/pltm feature bits | `isp600_reg.h:41,124-138` |
 | `0x020` | `ISP_AHB_CFG0` | b0 `cap_en`, b1 `para_ready`, b8 rsc, b9 gamma, b10 drc, b13 d3d, b14 pltm, b15 cem, b16 msc, b17-b20 fe/nr msc `*_update`, b31 `dma_error_mode` | `isp600_reg.h:44,140-161`; `isp600_reg_cfg.h:114-126` |
@@ -342,7 +342,7 @@ Addition (2026-11-14): the ISP also needs the CSI-internal gates in the CSI CCU 
 - Vendor: `vin_iommu_en(master, true)` → `sunxi_enable_device_iommu()` (`utility/vin_os.c:282-288`, only with `CONFIG_AW_IOMMU` + `CONFIG_VIN_IOMMU`, both `y` in the vendor config lines 178/310). It clears the master's bypass bit: register `0x03900000 + 0x400 + 0x200*master + 0x4` (`IOMMU_MIC_BYP_REG`), write 1 = bypass, 0 = translate (`bsp/drivers/iommu/sunxi-iommu-v2.c:96-102,482-499`; IOMMU node `iommu@3900000`, `allwinner,iommu-v20`, dtsi `:418-420`). Driver default mask `0x3ff` = all bypassed until a master is enabled (`sunxi-iommu-v2.c:181,667-672,1907`).
 - Who enables what: **ISP master 2** at `isp_probe` (`sunxi_isp.c:3332-3334`) and `tdm_probe` (`vin-tdm/vin_tdm.c:2528`); **CSI master 1** at `vin_core` probe/open (`vin-video/vin_core.c:1679,1784,2239`). VIPP and DMA nodes are master 1, ISP and TDM nodes master 2 (dtsi `:2665-2720`, `:2728`, `:3055`).
 - Why our CSI DMA works: silicon readback, master 1 `BYP` (`0x03900604`) = 1, bypass on (`logs/a7a-ve-enc-20261114/RESULTS.md:127-128`), so DMA uses physical addresses; `videobuf2-dma-contig` without an IOMMU gives exactly that.
-- ISP: register `0x03900804` (master 2 `BYP`, address inferred from the macro). **Not read on silicon yet.** Expected to be 1 like masters 1 and 3 (RESULTS.md:139); if so, the ISP's DMA (load image read, save/stats write, D3D) works the same way. The ISP does not write image data: pixels leave through VIPP/DMA (master 1). Board rule from the VE work: reading a master's micro-TLB registers with its power domain off hung the board (RESULTS.md:129-132): read `0x03900804` only with `PD_VI` on.
+- ISP: register `0x03900804` (master 2 `BYP`). **Silicon readback (2026-11-15): `0x00000001`** (bypass active, identical to master 1 CSI and master 3 VE_ENC; `0x03900800/08/0c/14` all read `0x1`). This confirms ISP DMA operates directly with physical memory (`videobuf2-dma-contig`) without requiring an IOMMU page table driver.
 
 #### 0.8 Interrupt `GIC_SPI 129` (P1)
 
@@ -407,7 +407,12 @@ Assumes our RAW pipeline (Milestone 19) as the base; "done" = already in `linux-
 15. Per frame: ISP `PARA_LOAD` → `para_ready = 1` (and optional image swap); `PARA_SAVE` → count; DMA frame-done (SPI 117) → return the vb2 buffer (done).
 16. Stop: `cap_en = 0`, IRQs off/clear, `isp_top_cap_en = 0`, `isp_enable = 0` (`sunxi_isp.c:1004-1006,657-660`), then VIPP/DMA/parser as today.
 
-Open questions for the board: ISP version value; master 2 `BYP`; whether a frame comes out with zero tables (gamma/CEM disabled) and `VIN_CFG0 = 0`; VIPP needed or bypassable for YUV; colour order check with `GBRG` (ov5647 at our mode).
+Open questions for the board:
+- [x] **ISP version value**: Solved on silicon (2026-11-15): `0x00602100` (`ISP_VER_CFG` at `0x05900010` with `isp_ver_rd_en = 1`). Big version `0x602` (ISP 602), small revision `0x100`.
+- [x] **Master 2 BYP**: Solved on silicon (2026-11-15): `0x03900804` = `0x00000001` (bypass active).
+- [ ] Whether a frame comes out with zero tables (gamma/CEM disabled) and `VIN_CFG0 = 0`.
+- [ ] VIPP needed or bypassable for YUV.
+- [ ] Colour order check with `GBRG` (ov5647 at our mode).
 
 ### 5.5 Vendor and community reports (inputs for Phase 0, 2026-11-11)
 
