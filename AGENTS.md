@@ -43,3 +43,5 @@ RISC-V firmware C++, testing, git identity, USB bring-up.
   question, answer yes or no first, then explain. Once the owner decides, record it in
   DESIGN_DECISIONS.md and implement it.
 - Commits never carry `Co-Authored-By` (or other) AI trailers, and an AI never adds a `Signed-off-by`: the owner adds his own after reviewing. All commits use `Tim Michals <tcmichals@gmail.com>`. Upstream kernel series disclose AI assistance in a short "Tools" section of the cover letter, as `Documentation/process/generated-content.rst` asks (decided 2026-10-15).
+- One guide per subsystem (owner, 2026-11-14): camera/CSI/ISP in `docs/common/CAMERA_V4L2_GUIDE.md`, video encoder in `docs/common/A733_VE_ENCODER_GUIDE.md`. New findings go into the existing guide, TODO.md or a dated `logs/` folder. Do not create a new top-level document without asking the owner.
+- A733 board register reads (`devmem`, debug code): only with that block's power domain on and clocks running (device resumed); never read VE_ENC `+0x900` (VCU). Breaking this hung the board three times (2026-11-14).

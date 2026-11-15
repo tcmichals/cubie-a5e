@@ -2,7 +2,7 @@
 
 Image: `bld.a7a/images/sdcard.img` (kernel `7.1.0 #2 SMP PREEMPT_RT Sat Nov 14 01:48:51 CST 2026`),
 `linux-cubie` `a7a_remoteproc_camera_usb` `7452c982f912`, 26 MHz `osc24M` DTB. Serial `ttyUSB0` 115200.
-Plan: `docs/common/A733_VE_H264_ENCODER_PLAN.md` §4 (a).
+Plan: `docs/common/A733_VE_ENCODER_GUIDE.md` §4 (a).
 
 ## Probe (cedrus auto-loaded at boot)
 

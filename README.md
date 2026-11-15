@@ -64,7 +64,7 @@ The reasoning and the record are in [`DESIGN_DECISIONS.md`](upstream-remoteproc/
 
 ### 📷 A7A camera (2026-11-11)
 
-OV5647 RAW 1080p30: 300 frames, steady 30.00 fps on mainline `sun6i-mipi-csi2` → `sun6i-csi`. IMX415 (Radxa Camera 4K) overlay ready, untested: `cubie-a7a-imx415.dtso`. What the A733 can do (datasheet, the reference): [CAMERA_V4L2_GUIDE.md §5.3a](docs/common/CAMERA_V4L2_GUIDE.md); Radxa camera/VE reports triaged: [A733_CAMERA_VE_ISSUES_TRIAGE.md](docs/common/A733_CAMERA_VE_ISSUES_TRIAGE.md).
+OV5647 RAW 1080p30: 300 frames, steady 30.00 fps on mainline `sun6i-mipi-csi2` → `sun6i-csi`. IMX415 (Radxa Camera 4K) overlay ready, untested: `cubie-a7a-imx415.dtso`. What the A733 can do (datasheet, the reference): [CAMERA_V4L2_GUIDE.md §5.3a](docs/common/CAMERA_V4L2_GUIDE.md); Radxa camera/VE reports triaged: [CAMERA_V4L2_GUIDE.md](docs/common/CAMERA_V4L2_GUIDE.md).
 
 > [!NOTE]
 > Not yet enabled on either board: display / HDMI output and hardware video codec. For full task tracking, see [TODO.md](TODO.md).

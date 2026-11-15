@@ -381,7 +381,7 @@ block for the encoder that allows two more clocks (AHB and MBUS master gates, CC
 gets the extra clocks with `devm_clk_get_optional()`. Same pattern as
 `sound/allwinner,sun4i-a10-spdif.yaml` (per-compatible `if:` blocks). The extra clock names used on
 `a7a_remoteproc_camera_usb` (`ahb-master`, `mbus-master`) are bring-up names, open until the binding
-patch is written. Plan: `docs/common/A733_VE_H264_ENCODER_PLAN.md` §5.
+patch is written. Plan: `docs/common/A733_VE_ENCODER_GUIDE.md` §5.
 
 ### A733 VE clocks: one PLL per engine, as the vendor does (2026-11-14)
 

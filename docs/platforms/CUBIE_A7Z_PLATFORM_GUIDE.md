@@ -16,7 +16,7 @@ are not on that page and still need the v2.00 schematic or a silicon readback.
 | **Form Factor** | **Ultra-Compact Zero (65 mm × 30 mm)** | Space and weight optimized for micro-drones and compact gimbals |
 | **RAM** | **LPDDR4/4x (1 / 2 / 4 / 8 / 16 GiB)** | Radxa page. Auto-trained by `boot0` |
 | **NPU AI Core** | **3.0 TOPs (INT8)** / **1.5 TOPs (FP16)** | VeriSilicon Vivante VIP9000 at MMIO `0x03600000` (IRQ 65) |
-| **Video Engine (VPU)** | **Encode H.264/H.265 4K@30; decode H.265/VP9/AVS2 4K@60, H.264 4K@30** | Two VE instances: decoder `0x01C0E000` (SPI 49), encoder `0x01C10000` (SPI 48, PD 3); see `docs/common/A733_VE_H264_ENCODER_PLAN.md` |
+| **Video Engine (VPU)** | **Encode H.264/H.265 4K@30; decode H.265/VP9/AVS2 4K@60, H.264 4K@30** | Two VE instances: decoder `0x01C0E000` (SPI 49), encoder `0x01C10000` (SPI 48, PD 3); see `docs/common/A733_VE_ENCODER_GUIDE.md` |
 | **Camera Interface** | **2× MIPI CSI-2, 4-lane each (v2.00)** | v1.10/v1.11 has 1× 4-lane. Connector type and pinout not on the Radxa page: check the v2.00 schematic |
 | **Wireless Interface** | **Wi-Fi 6 + Bluetooth 5.4**, external antenna connector | Radxa page gives no chip vendor; AIC8800 on SDIO MMC2 (`0x04022000`) *unverified* for v2.00 |
 | **Display Output** | **Micro-HDMI (4K@60), USB-C DisplayPort Alt Mode, 4-lane MIPI DSI (v2.00 only)** | Controller at `0x05520000` |

@@ -1,4 +1,80 @@
-# A733 VE H.264 encoder: bring-up plan (Cubie A7A)
+# A733 VE Encoder Guide (H.264 and H.265)
+
+The one document for the A733 video encoder (NV12 frame → bitstream). Camera, CSI and ISP are in
+`CAMERA_V4L2_GUIDE.md`. Test logs and raw data: `logs/a7a-ve-enc-20261114/` (`RESULTS.md`; vendor
+register snapshots in `vendor-r6/sweep/`, generated tables in `vendor-r6/sweep/TABLES.md`).
+Merged 2026-11-14 from the former register map, H.264 plan, H.265 plan and VPU guide.
+
+Contents: Part 1 vendor stack and cedrus fix list (start here) · Part 2 H.264 bring-up plan ·
+Part 3 H.265 plan · Part 4 reference material · Appendix: older VPU overview.
+
+# Part 1 — Vendor register map and cedrus fix list
+
+Status 2026-11-14. **Start here to continue the encoder work.** Data: vendor Radxa r6 image on the
+A7A, `demoVencoder` under an `LD_PRELOAD` shim that snapshots the registers at every
+`IOCTL_WAIT_VE_EN` (all registers programmed, engine about to run).
+
+- Raw data: `logs/a7a-ve-enc-20261114/vendor-r6/sweep/<run>/regs_NN.bin` (12 runs × 8 frames;
+  `f0` = H.264, `f3` = H.265; 720p/1080p, fixed QP 20/40, key period 3, 500 kbit/s), plus `out.bin`
+  (the stream) and `log.txt`. Layout of a snapshot: 8 KiB, `[0x000-0xFFF]` = `0x01C10000` window,
+  `[0x1000-0x1FFF]` = `0x03900000` (IOMMU) window, `0xdeadbeef` = not read (VCU `+0x900` and
+  `+0x000-0x7FF` never read: reading `+0x900` hung our kernel).
+- Regenerate the tables below: `logs/a7a-ve-enc-20261114/vendor-r6/sweep/analyze.py <sweep dir>
+  <linux-cubie>/drivers/staging/media/sunxi/cedrus`.
+- Test log: `logs/a7a-ve-enc-20261114/RESULTS.md`. H.265 plan: `A733_VE_ENCODER_GUIDE.md`.
+  H.264 plan: `A733_VE_ENCODER_GUIDE.md`.
+- Note: the H.265 fixed-QP options of `demoVencoder` had no effect (same 43,743-byte stream for
+  default, QP 20, QP 40); use `-b` (bitrate) or find the right option for H.265 QP sweeps.
+
+## 1. How the vendor stack works
+
+1. Kernel `sunxi-ve.ko` (GPL, `oldkernels/linux-a733/bsp/drivers/ve/cedar-ve/cedar_ve.c`): maps
+   `0x01C10000`, enables clocks/reset/power, pulses ENC_TOP `+0x804` bits 0 and 4 after every clock
+   enable and reset (`set_vcu_en_regmode_to1_to0`, `:380`), sleeps in `IOCTL_WAIT_VE_EN` until the
+   IRQ. It programs no codec register.
+2. Userspace `libvenc_*.so` (closed) mmaps the registers and programs everything: ENC_TOP mode,
+   ENCPP ("ISP", `+0xA00`) for the input picture, AVC block (`+0xB00`) for the codec. Buffers come
+   from `/dev/dma_heap/system` through the IOMMU (master 3 not in bypass).
+3. Per frame (H.264 `SetH264RegVer2`, H.265 `h265WriteReg` + `h265WriteAddr`): write parameters and
+   addresses, write headers through the hardware bit writer, start, `IOCTL_WAIT_VE_EN`, read the bit
+   length (`+0xB90`).
+
+## 2. Cedrus fix list for H.264 (in order; test after each on our kernel)
+
+Files under `linux-cubie/drivers/staging/media/sunxi/cedrus/`.
+
+| # | What the vendor does | Cedrus today | Change | State |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Output-side addresses `+0xB60`-`+0xBC4`, `+0xB80`/`+0xB84` are `addr >> 8` | full byte addresses | `enc_addr_shift = 8` in the A733 encoder variant | done, `0dd9d7650774`, **board test pending** |
+| 2 | `+0xB60` (MV buffer) and `+0xBC4` (deblock buffer) point to real buffers (`0x00FF3E80`, `0x00FF3E00`) | writes 0 to both (`cedrus_enc_h264.c:1166`, `:1209`), so the engine may write to address 0 | allocate both (sizes: see address gaps in the snapshots, 720p vs 1080p) and program them `>> 8` | to do; first suspect if #1 alone is not enough |
+| 3 | `+0xB9C` holds another buffer address (`0x00FF3DF0`) | never written | find its role (`h264encVersion2.o` in the BSP RISC-V lib has symbols), allocate | to do |
+| 4 | `+0xB00` = picture size in MBs (`0x00A0005A` 720p, same value as `+0xA00`) | never written | write it with the `VE_ISP_PIC_INFO_REG` value | to do |
+| 5 | ENC_TOP `+0x800` = `0xC00000C7` (bits 31:30 set while encoding) | clears bits 31:30 (`cedrus.c:315`, `cedrus_enc.c:76`, `:95`) | test with the bits set on the A733 | to do |
+| 6 | ENCPP: `+0xA14` = stride in MBs (`0x50`), `+0xA80` chroma1 address, `+0xA90` = `0x03FF03FF`, `+0xA98` size + `+0xA9C` address (another buffer), `+0xAD4`, `+0xAF0` = `0x200` | not written | add for the A733; `+0xA9C` needs a buffer | to do |
+| 7 | AVC `+0xB40` = `0x74000014`, `+0xB44` = `0x0C1E0000`, `+0xB70`, `+0xB74` (QP-table-like, changes per frame) | not written | add constants; decode `+0xB70`/`+0xB74` | to do |
+| 8 | ENC_TOP `+0x81C` = `0x10000`, `+0x840` = `0xF`, `+0x880` = `0x1C55`, `+0x884` = `0xFFFFF`, `+0x888` = `0x8000` | not written | read them on our kernel after an encode (device resumed); write what differs | to do |
+| 9 | Vendor leaves 0: `+0xB0C`, `+0xB24`, `+0xB28`, `+0xB3C`, `+0xB50`, `+0xB88` | cedrus writes them | check the values cedrus writes are 0 or harmless | to do |
+| 10 | — | default CAPTURE `sizeimage` 1 KiB (`cedrus_enc.c:45`) | raise the default | to do |
+
+Board test for each step: `modprobe sunxi-cedrus dump_coded=1`, encode grey and noise 720p frames
+with `sizeimage=1048576` (commands in RESULTS.md), decode the output. Rules: read VE_ENC registers
+only with the device resumed; never read `+0x900`.
+
+For a direct comparison, add a debug dump of `+0x800-0x8FF` and `+0xA00-0xBFF` in
+`cedrus_enc_h264_job_finish()` (same layout as the vendor snapshots) and diff against
+`sweep/f0_720_def/regs_00.bin` (IDR) and `regs_01.bin` (P).
+
+## 3. H.265
+
+Same engine, same address form. Differences from H.264 are in the table below (ENC_TOP `+0x804`
+`0x100`, AVC `+0xB08`-`+0xB70`). Steps: Part 3 (step 1, the sweep, is done:
+this data).
+
+
+Generated tables: `logs/a7a-ve-enc-20261114/vendor-r6/sweep/TABLES.md`.
+
+# Part 2 — H.264 bring-up plan
+
 
 Status: plan only, written 2026-11-11. Nothing here has been run on the board yet. Tracked in TODO.md
 §2, "Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)".
@@ -15,11 +91,11 @@ Citation conventions:
 - `vendor:` = `old-kernels/linux-a733/bsp/` (A733 BSP, Linux 5.15).
 - `UM` = `tina-source/manuals-text/A733_User_Manual_V1.00.txt`; `DS` =
   `vendor-a733-reference/A733_Datasheet_V0.93.txt`.
-- `triage #8` = `docs/common/A733_CAMERA_VE_ISSUES_TRIAGE.md` §8 (radxa-a733#35).
+- `triage #8` = `docs/common/CAMERA_V4L2_GUIDE.md` §8 (radxa-a733#35).
 
 ---
 
-## 0. Summary
+### 0. Summary
 
 - The encoder is a separate VE instance ("VE2", "VE_ENC") at `0x01C10000`, 4 KiB, GIC SPI 48,
   power domain VE_ENC (3), IOMMU0 master 3. Its top-level registers are at `+0x800`, the encoder
@@ -54,9 +130,9 @@ Citation conventions:
 
 ---
 
-## 1. Hardware
+### 1. Hardware
 
-### 1.1 Address, interrupt, power domain
+#### 1.1 Address, interrupt, power domain
 
 | Item | Value | Source |
 | --- | --- | --- |
@@ -73,7 +149,7 @@ The vendor interrupt handler reads ENC_TOP `+0x0` bits 7:6 to see whether the AV
 pre-processor ran, then the AVC status at `+0xB00+0x1C` and its enable at `+0xB00+0x14`
 (`ve_plat_sun60iw2.c:219-260`). The WIP uses the same offsets (`branch:drivers/staging/media/sunxi/cedrus/cedrus_regs.h:40-41, 824-849`).
 
-### 1.2 Clocks and resets (current v6 CCU IDs on the branch)
+#### 1.2 Clocks and resets (current v6 CCU IDs on the branch)
 
 IDs from `branch:include/dt-bindings/clock/allwinner,sun60i-a733-ccu.h` and
 `.../reset/allwinner,sun60i-a733-ccu.h`; definitions in `branch:drivers/clk/sunxi-ng/ccu-sun60i-a733.c`.
@@ -117,7 +193,7 @@ Notes:
   formats, used as a guide) asks 200 MHz up to 1080p30, 360 MHz up to 1080p60, 624 MHz above
   (`ve_plat_sun60iw2.c:66-101`). 400 MHz is enough for 1080p30.
 
-### 1.3 System-control bits (vendor writes, Linux does not)
+#### 1.3 System-control bits (vendor writes, Linux does not)
 
 The vendor maps a second region `0x03000000` (16 bytes) and at probe clears bit 0 of `0x03000000`
 ("remapping SRAM to MACC") and bit 24 of `0x03000004` ("clear bootmode bit for give sram to ve")
@@ -130,7 +206,7 @@ in the UM. Read both registers in step (a); if bit 0 or bit 24 is set, that is a
 candidate. Fix path: an SRAM section in the system-control binding, the same way the A64 SRAM C is
 described (`drivers/soc/sunxi/sunxi_sram.c:99`).
 
-### 1.4 IOMMU
+#### 1.4 IOMMU
 
 - The A733 IOMMU at `0x03900000` (UM:1385) is a different design from the H6 one: per-master
   "MIC" registers at `0x400 + 0x200 * master` with a per-master bypass register
@@ -151,7 +227,7 @@ described (`drivers/soc/sunxi/sunxi_sram.c:99`).
 - The vendor library 1.0.1 gave VE_ENC IOMMU faults (id 0x8) on the A7Z, gone with 1.0.7
   (triage #8). That is a vendor IOMMU-mode issue; with the IOMMU in bypass it does not apply.
 
-### 1.5 Memory and alignment
+#### 1.5 Memory and alignment
 
 | Buffer | WIP size / alignment | Source |
 | --- | --- | --- |
@@ -166,7 +242,7 @@ All allocations are `dma_alloc_attrs(..., DMA_ATTR_NO_KERNEL_MAPPING)` and the q
 roughly 3 MiB per NV12 frame plus about 3.3 MiB reconstruction per coded buffer; 128 MiB CMA is
 enough for 1080p, 4K needs about 256 MiB (check against the CSI buffer count).
 
-### 1.6 Performance limits
+#### 1.6 Performance limits
 
 DS:1352-1356: H.265 MP@L5.0 and H.264 BP/MP/HP@L4.2 up to 4K@30fps; MJPEG/JPEG baseline up to
 4K@15fps; "supports encoder pre-processing". DS:13-16 has the same in the feature list. The vendor
@@ -176,9 +252,9 @@ stream would have to signal level 5.1 although the DS says L4.2: open question, 
 
 ---
 
-## 2. WIP vs vendor vs what is missing
+### 2. WIP vs vendor vs what is missing
 
-### 2.1 Where the WIP comes from
+#### 2.1 Where the WIP comes from
 
 The file headers say "Copyright 2023 Bootlin, Paul Kocialkowski" (`cedrus_enc_h264.c:1-7`,
 `cedrus_enc.c:1-7`). This is Bootlin's `cedrus/h264-encoding` branch (GitHub `bootlin/linux`, test
@@ -195,7 +271,7 @@ A733-specific additions in `27f04580fa76`: compatible `allwinner,sun60i-a733-vid
 `top_reg_offset = 0x800` (`cedrus.c:601-606, 661-663`); top-level reset/mode programming at
 resume (`cedrus.c:287-301`); DT node; CCU writes (since replaced by v6 + `c9d1a8f3fb9c`).
 
-### 2.2 Register programming compared
+#### 2.2 Register programming compared
 
 The vendor kernel driver is only a register-access shim: the encode sequence lives in the closed
 `libvencoder` (user space on the vendor image; the in-kernel copy under
@@ -219,7 +295,7 @@ library: not possible without disassembly; not done.
 | Watchdog | delayed work resets the block and fails the job (`cedrus.c:152-168`) | `wait_event_timeout` → "wait interrupt overtime" | the WIP has the right tool to tell "no IRQ" from "no finish" |
 | VCU mode | not used | `+0x900` VCU (register lists, "online" mode) handled in the IRQ path (`ve_plat_sun60iw2.c:153-173, 209-212`); CSI online mode reported unsupported on sun60iw2 (`ve_plat_sun60iw2.c:591-598`) | not needed: input comes from DRAM |
 
-### 2.3 Unknown: is the A733 AVC encoder the same core?
+#### 2.3 Unknown: is the A733 AVC encoder the same core?
 
 The WIP register map was written for the V3s-era encoder. The A733 vendor library carries a
 second encoder generation ("H264 Ver2": `H264EncOpenVer2`, `H264EncEncodeVer2_new`,
@@ -229,7 +305,7 @@ changes the `+0xB00` layout, is not found. The interrupt/status offsets match (�
 sign but not proof. Step (b) answers it: if the put-bits path produces the expected header bytes and
 FINISH comes with a sane bit length, the map is compatible enough to continue.
 
-### 2.4 API choice
+#### 2.4 API choice
 
 - Mainline has no stateless encoder uAPI: `Documentation/userspace-api/media/v4l/` has
   `dev-encoder.rst` (stateful) and `dev-stateless-decoder.rst` only (branch tree). The hantro driver
@@ -262,7 +338,7 @@ FINISH comes with a sane bit length, the map is compatible enough to continue.
   - `gst-launch-1.0 ... ! v4l2h264enc ! h264parse ! ...` once ENCODER_CMD is in (step d/e);
   - a small C test for dma-buf sharing (step e), in the repo, not `/tmp`.
 
-### 2.5 Other WIP issues found while reading
+#### 2.5 Other WIP issues found while reading
 
 1. `dev_info()` on every frame in `cedrus_enc_h264_job_configure()` (`cedrus_enc_h264.c:1124-1125`):
    debug only; costs CPU and floods the log at 30 fps. Make it `dev_dbg()` or drop it.
@@ -279,7 +355,7 @@ FINISH comes with a sane bit length, the map is compatible enough to continue.
    (`cedrus_enc.c:56-92`) but not the `+0x804` pulse. Check after a forced timeout.
 5. The A733 compatibles are not in the binding (`branch:Documentation/devicetree/bindings/media/allwinner,sun4i-a10-video-engine.yaml`
    has no a733/a523 entries).
-6. `docs/common/VIDEO_ENCODING_VPU_GUIDE.md` §1 gives `0x01C0E000` / SPI 49 as the A7A encoder;
+6. `docs/common/A733_VE_ENCODER_GUIDE.md` §1 gives `0x01C0E000` / SPI 49 as the A7A encoder;
    that is the decoder. The encoder is `0x01C10000` / SPI 48.
 7. TODO.md's status matrix (row "Radxa Cubie A7A", added in `554e1f7`) says "Sunxi-Cedrus V4L2 M2M
    hardware H.264 encoder verified (runs at 27.22 FPS)". No log in the repo backs this; the capture
@@ -288,9 +364,9 @@ FINISH comes with a sane bit length, the map is compatible enough to continue.
 
 ---
 
-## 3. Zero-copy path
+### 3. Zero-copy path
 
-### 3.1 Export and import
+#### 3.1 Export and import
 
 - `sun6i-csi` (used for the A733 CSI through the `allwinner,sun55i-a523-csi` compatible,
   `sun60i-a733-cubie-a7a.dts:812-813`) supports `VB2_MMAP | VB2_DMABUF` and `VIDIOC_EXPBUF`
@@ -309,7 +385,7 @@ FINISH comes with a sane bit length, the map is compatible enough to continue.
 - Cache: CSI writes by DMA and the encoder reads by DMA; no CPU access, so no cache maintenance is
   needed as long as nobody maps the frames. vb2 does the `dma_buf_map_attachment()` syncs.
 
-### 3.2 NV12 layout compatibility
+#### 3.2 NV12 layout compatibility
 
 | Property | CSI (`sun6i_csi_capture.c`) | Encoder (WIP) | Compatible? |
 | --- | --- | --- | --- |
@@ -329,7 +405,7 @@ not found, check with a guard pattern in step (d).
 The ISP output (future) will have its own stride and padding; the vendor ISP600 alignment is not
 yet looked up (CAMERA_V4L2_GUIDE.md §5 owns that). The same check applies when it exists.
 
-### 3.3 Test-only input before the ISP exists
+#### 3.3 Test-only input before the ISP exists
 
 - **Synthetic NV12 (test-only):** generated once into a file or a dma-heap buffer before streaming
   (no per-frame CPU work), e.g. `gst-launch-1.0 videotestsrc num-buffers=300 ! video/x-raw,format=NV12,width=1920,height=1080
@@ -346,14 +422,14 @@ yet looked up (CAMERA_V4L2_GUIDE.md §5 owns that). The same check applies when 
 
 ---
 
-## 4. Bring-up steps (smallest first)
+### 4. Bring-up steps (smallest first)
 
 Common rules: board A7A, `root@192.168.1.12` over `wlan0` (pass `--ip`), one serial reader at a
 time (ttyUSB1). Kernel version must match `/lib/modules`; keep the backup Image. Build in
 `linux-cubie` only, never in `bld.a7a/`. Each step records commands and output under
 `logs/a7a-ve-enc-<date>/`. A step passes only on the stated readback.
 
-### (a) Probe, clocks, power domain, reset, version register
+#### (a) Probe, clocks, power domain, reset, version register
 
 Code: the first code step from §0 (master gates in DT, assigned parent PLL_VE1, probe-time readback
 of `0x1B14`, `+0x800`, `+0x804`, `+0x8E4`, `+0x8F0`, `dev_dbg` per frame).
@@ -375,7 +451,7 @@ Board:
    on points at §1.3 or the power domain.
 5. `v4l2-ctl --list-devices`; `v4l2-ctl -d /dev/videoN --all` (H264 on CAPTURE, NV12 on OUTPUT).
 
-### (b) One synthetic NV12 frame, interrupt masked (poll mode)
+#### (b) One synthetic NV12 frame, interrupt masked (poll mode)
 
 Goal (triage #8): tell "engine never started" from "IRQ not routed".
 
@@ -397,14 +473,14 @@ Outcomes:
   §1.3 bits. Go back to (a).
 - STALL: bitstream buffer too small or wrong end address.
 
-### (c) Interrupt path
+#### (c) Interrupt path
 
 Board: same frame with `poll=0`. `grep -e cedrus /proc/interrupts` before and after; the count must
 go up by one per frame. If (b) passed and the count stays 0 here: the GIC route (SPI 48 level) or
 `INT_EN` writes do not take; read `+0xB14` after trigger, and `/proc/irq/<n>/` affinity. This is
 the vendor A7Z failure mode (triage #8), now testable with a known-good engine.
 
-### (d) 1080p30 stream from a synthetic source
+#### (d) 1080p30 stream from a synthetic source
 
 Board: 300 frames 1920×1080 (after the §3.2 crop fix; before it, 1920×1088), GOP 30, CABAC, High
 profile, QP I/P 26/28. Checks: all 300 frames out, `ffprobe` frame count and resolution 1920×1080,
@@ -415,7 +491,7 @@ zero-size bitstream buffer; the watchdog must recover and the next stream must w
 Then add `VIDIOC_ENCODER_CMD` and run the same through `v4l2h264enc` with `filesrc` /
 `videotestsrc` (test-only source).
 
-### (e) CSI → encoder zero-copy (test-only until the ISP exists)
+#### (e) CSI → encoder zero-copy (test-only until the ISP exists)
 
 Board, RAW plumbing test from §3.3: CMA dma-heap buffers imported by CSI and the encoder; a small C
 program in `project-cubie-a5e/board/radxa/cubie_a7a/src/` (QBUF the CSI-done fd to the encoder
@@ -425,7 +501,7 @@ OUTPUT, the encoder-done fd back to CSI). Checks: frame rate held at 30, no drop
 When the ISP exists: the same program with ISP NV12, and the GStreamer line from TODO.md
 (`v4l2src io-mode=dmabuf ! ... ! v4l2h264enc ! h264parse ! mp4mux ! filesink`).
 
-### (f) CPU load < 2 % of one core
+#### (f) CPU load < 2 % of one core
 
 Board: 10 minutes of (e) (later: ISP path) at 1080p30. Measure with `pidstat -u -p <pid> 1`,
 `/proc/stat` deltas for the whole system (softirq/irq included), and `perf top` for the hot spots;
@@ -435,7 +511,7 @@ one core for capture + encode + the file write (the write path is measured but r
 
 ---
 
-## 5. Risks and open questions
+### 5. Risks and open questions
 
 1. **Encoder generation (§2.3).** If the A733 AVC encoder is the "Ver2" core with a different
    register layout, the WIP codec file needs real work and the only reference is the closed
@@ -473,7 +549,7 @@ one core for capture + encode + the file write (the write path is measured but r
 
 ---
 
-## 6. Sources not found or not read
+### 6. Sources not found or not read
 
 - A733 encoder register description: UM chapter 14.1 (UM:35504 on) not read for registers in this
   pass.
@@ -483,3 +559,230 @@ one core for capture + encode + the file write (the write path is measured but r
 - Who sets `CM_VE_ENC_CFG_REG` bit 0 on the vendor image: not found.
 - IOMMU0 bypass reset value: not in the UM text; inferred from CSI behaviour only.
 - Any upstream A733 VE (decoder or encoder) patches: none found.
+
+# Part 3 — H.265 (HEVC) plan
+
+
+Status 2026-11-14: plan only. Depends on the H.264 encoder working on our kernel (address-shift fix,
+Part 2, `logs/a7a-ve-enc-20261114/RESULTS.md`). Owner goal: H.265 recording
+for the flight stack (A7Z v2.00), 1080p30 first.
+
+### 1. Facts (from the vendor r6 image, 2026-11-14)
+
+| Fact | Source |
+| :--- | :--- |
+| H.265 encode works on the A7A with the vendor stack: `demoVencoder -f 3`, 3 frames 1280×720 → valid stream (decodes with GStreamer `libde265dec`) | `logs/a7a-ve-enc-20261114/vendor-r6/out3.h265`, `venc3_h265.log` |
+| Same engine and register window as H.264 (`0x01C10000`, ENC_TOP `+0x800`, AVC block `+0xB00`); same `addr >> 8` output address registers (`+0xB60`-`+0xBC4`) | snapshots `vendor-r6/h264/regs_0.bin` vs `vendor-r6/h265/regs_0.bin` |
+| H.264 → H.265 register differences (frame 0): ENC_TOP `+0x804` `0x300`→`0x100`, `+0x81C` `0`→`0x10000`; ENCPP `+0xA08`, `+0xA90`-`+0xA9C` cleared, `+0xAD4` `2`→`1`; AVC `+0xB08`, `+0xB10`-`+0xB20`, `+0xB2C`, `+0xB40`-`+0xB5C`, `+0xB64`-`+0xB70`, `+0xB90`, `+0xB94`, `+0xBA8` (about 35 words) | same, diff table in §4 step 1 |
+| Stream layout: VPS (25 B), SPS (60 B), PPS (10 B), then one slice NAL per frame: IDR_W_RADL (type 19), then TRAIL_R (type 1) P-frames | NAL scan of `out3.h265` |
+| Vendor library: `libvenc_h265.so` (arm64, stripped, 26 exported functions, unoptimised code): `h265WriteReg` (0x66c B), `h265WriteAddr` (0x84c B), `H265InitVPS`/`SPS`/`PPS`, `H265StartSlice`, `h265EncFrame`, `H265InitRcGop`/`RcFrame`, `H265UpdateRcFrame`, `H265SetParameter` | `radxa-r6/x/libvenc_h265.so` (from `libcedarc-dev-2.0.0-arm64`) |
+| `h265WriteReg` writes AVC `+0x04`, `+0x08`, `+0x10`, `+0x28`-`+0x4C`, `+0x68`-`+0x74`, `+0x94`, `+0x98`, `+0xCC` per frame | disassembly, `scratchpad/parsewr.py` |
+| `h265WriteAddr` writes bitstream `+0x80`/`+0x84`, `+0x88` = bit offset (`lsl #3`), `+0x8C`; reference/reconstruction `+0x78`/`+0x7C`, `+0xA0`-`+0xBC`; MV/info `+0x9C`, `+0xC0`, `+0xC4`, `+0x60`/`+0x64`, `+0xC8`, `+0xFC`, `+0x3C`, `+0x14`, `+0x1C`. Addresses come pre-shifted from the context | disassembly |
+| No H.265 code in the unstripped BSP RISC-V `libvencoder` (H.264, JPEG only) | `ar t` of `bsp/drivers/ve/cedar-ve/codec/lib/libvencoder` |
+| Mainline cedrus encoder (Bootlin WIP) is H.264 only; mainline has no stateless encoder uAPI; HEVC encoder controls exist for stateful encoders (`V4L2_CID_MPEG_VIDEO_HEVC_*`) | `linux-cubie` |
+
+### 2. Approach
+
+Two stages, the first good enough to fly:
+
+- **Stage A, fixed setting (recording):** 1920×1080 (and 1280×720 for tests), 30 fps, fixed QP,
+  GOP = IDR + P-frames, one slice per frame. Registers replayed from vendor snapshots of exactly this
+  setting, with only addresses and per-frame fields (frame type, POC, reference) computed. VPS/SPS/PPS
+  copied as constant bytes from the vendor stream of the same setting.
+- **Stage B, general:** every written field understood (width/height, QP, GOP, bitrate control),
+  headers generated from parameters. Needed for upstream and for a bitrate-controlled downlink.
+
+Method for both: the vendor r6 image is the oracle. Snapshot registers per frame with the
+`LD_PRELOAD` shim (`vendor-r6/vedump.c`), change one encoder parameter per run, diff.
+
+### 3. Board logistics
+
+One SD card: the vendor image and ours alternate (`dd`, ~5 min). Batch all vendor runs in one
+vendor boot; keep `radxa-r6/r6.img` and `bld.a7a/images/sdcard.img`. Vendor console: `ttyAS0`
+115200, `radxa`/`radxa`, `sudo -i`. Files move over serial (base64, checked by md5).
+
+### 4. Steps
+
+#### Step 0 — prerequisite: H.264 works on our kernel
+- [ ] Cedrus `enc_addr_shift` fix (built 2026-11-14, `linux-cubie`, not committed) board-tested:
+  grey/noise 720p I+P frames decode; commit. If not: VE_MODE bits 31:30 (vendor `0xC00000C7`).
+- [ ] 1080p30 synthetic H.264 (plan step d). Exit: the shared base (power, clocks, ENCPP input,
+  addresses, IRQ) is proven.
+
+#### Step 1 — vendor register sweep (DONE 2026-11-14: `logs/a7a-ve-enc-20261114/vendor-r6/sweep/`, tables in Part 1 and `vendor-r6/sweep/TABLES.md`; H.265 QP options had no effect, QP dependence still open)
+Extend `vedump.c`: snapshot every frame (not only the first 4), add ENC_TOP `+0x000`-`+0x7FF` only
+after checking which ranges are safe (the VCU `+0x900` read hung our kernel; keep it excluded), and
+record the bitstream bit length after each frame.
+- [ ] Runs (`-f 3`, 10 frames each): 1280×720 and 1920×1080; QP 20/30/40 (`--i qp min` and fixed-QP
+  options of `demoVencoder`, check `--help`); GOP/key-frame period 1/5/30; `--rc_mode` variants;
+  same picture content as the H.264 tests.
+- [ ] Same runs with `-f 0` (H.264) for the shared fields.
+- [ ] Pull snapshots, streams and logs into `logs/a7a-ve-h265-<date>/`.
+- [ ] Table of every AVC/ENC_TOP/ENCPP word: constant, size-dependent, QP-dependent,
+  frame-type-dependent, per-frame counter, address. Exit: every word written per frame is classified.
+
+#### Step 2 — library reading (offline, parallel to step 1)
+- [ ] `h265WriteReg`/`h265WriteAddr`: map context offsets → register offsets (finish the parser).
+- [ ] `H265InitSPS`/`PPS`/`VPS` and `H265StartSlice`: which fields come from parameters, and whether
+  the slice header is written by software (bit writer) or by the hardware (`+0x18` start-trigger
+  `PUT_BITS`-style commands as in H.264).
+- [ ] `h265EncFrame`: the per-frame sequence (reset, writes, start trigger value, wait, read bit
+  length) to mirror in the driver.
+- [ ] `H265InitRcFrame`/`UpdateRcFrame`: QP per frame (for Stage B rate control).
+
+#### Step 3 — Stage A driver (our kernel)
+In `linux-cubie`, cedrus encoder:
+- [ ] Codec abstraction: today the encoder path is H.264-specific (`cedrus_enc_h264.c`); add an
+  `cedrus_enc_h265.c` with the same ops (setup, job configure, job finish), sharing buffers, ENCPP
+  input setup and the address shift.
+- [ ] `V4L2_PIX_FMT_HEVC` on the CAPTURE queue; HEVC profile/level/QP controls
+  (`V4L2_CID_MPEG_VIDEO_HEVC_*`); capability flag `CEDRUS_CAPABILITY_H265_ENC` on the A733
+  encoder variant only.
+- [ ] Buffers: reconstruction, reference, MV/info sizes from the vendor addresses in the snapshots
+  (gaps between `+0xB60`-`+0xBC4` values give the sizes for 1280×720 and 1920×1080).
+- [ ] Headers: VPS/SPS/PPS bytes for the fixed setting at the start of the first CAPTURE buffer
+  and every IDR; slice header per step 2.
+- [ ] Per-frame fields from the step 1 table (frame type, POC, reference index).
+- [ ] Board test: 10 frames 720p grey/noise → decodes with `libde265dec`/ffmpeg, picture matches;
+  then 300 frames 1080p30, no errors, bit length per frame close to the vendor's.
+
+#### Step 4 — Stage A integration
+- [ ] GStreamer `v4l2h265enc` (or ffmpeg `hevc_v4l2m2m`) pipeline from a file/test source to MP4
+  or MKV on SD.
+- [ ] CPU load < 2 % of one core at 1080p30 (same rule as H.264).
+- [ ] Camera input after ISP Phase 1 (NV12 dma-buf), same as H.264 step (e).
+
+#### Step 5 — Stage B (general)
+- [ ] Every field from the step 1 table computed from parameters (size, QP, GOP).
+- [ ] SPS/PPS/VPS generated by a bit writer from parameters; compare byte-exact with the vendor
+  output for the swept settings.
+- [ ] Rate control: fixed QP → simple CBR/VBR (vendor RC functions as reference).
+- [ ] `v4l2-compliance` on the encoder node; decode tests at several sizes and QPs.
+- [ ] Upstream: only together with (after) the Bootlin cedrus encoder series.
+
+### 5. Estimates (after step 0)
+
+| Stage | Estimate |
+| :--- | :--- |
+| Steps 1-2 (sweep + reading) | 2-4 days |
+| Step 3-4 (Stage A) | about 1 week |
+| Step 5 (Stage B) | 2-4 more weeks |
+
+### 6. Risks / open questions
+- Whether the slice header is software- or hardware-written (step 2).
+- ENC_TOP `+0x000`-`+0x7FF` and `+0x900` were not read; if H.265 needs registers there, reading them
+  needs care (VCU read hung our kernel). The vendor run reports `bEnableVcuFuncFlag = 0`.
+- The vendor uses the IOMMU (master 3 `BYP` = 0); we run master 3 in bypass with contiguous buffers.
+  Fine for H.264 so far; keep watching.
+- Reference/MV buffer sizes at 1080p (1088 lines?) must be checked against the 1080p snapshots.
+
+# Part 4 — Reference material
+
+## Vendor reference material on this PC
+| What | Where |
+| :--- | :--- |
+| Radxa r6 image (Debian 11, kernel 5.15.147-21-a733), unpacked | `~/projects/cubie/radxa-r6/` (`r6.img`, `root.ext4`, `config`, `x/` extracted libs); download `~/Downloads/radxa-a733_bullseye_kde_r6.output_512.img.xz`; ~12 GB, deletable |
+| Vendor BSP kernel source | `~/projects/cubie/oldkernels/linux-a733/` (`bsp/drivers/{ve,vin,iommu,pcie,phy,bus,clk}`, board DTs in `device-a733/configs/cubie_a7a|a7z/`) |
+| Radxa open ISP userspace source (tuning headers, ISP server) | `~/projects/cubie/downloads/allwinner-isp6xx/src` (camera guide §5.6; licence unclear) |
+| Orange Pi 4 Pro community A733 tree (vendor BSP drivers on 6.18; decoder-only cedrus patch; DP/combo-PHY fixes) | `~/projects/cubie/downloads/jonas5-a733/repo` |
+| Vendor encoder runs and register snapshots | `logs/a7a-ve-enc-20261114/vendor-r6/` |
+
+Vendor image use: flash `r6.img` with `dd` (card ≥ 6,776,878,080 bytes), console `ttyUSB0` 115200,
+first boot ~70 s, login `radxa`/`radxa`, `sudo -i`. `STRICT_DEVMEM` is off. `demoVencoder` and the
+codec libraries are preinstalled (`libcedarc-dev-2.0.0-arm64`). `ve_printf_register` in
+`/etc/cedarc.conf` prints nothing for the encoder; use the `LD_PRELOAD` shim (`vendor-r6/vedump.c`).
+Vendor sensors: imx214, imx219, imx415 only (no OV5647); camera overlays in `/boot/dtbo/*.disabled`.
+The BSP RISC-V `libvencoder` archive is for another SoC (probably V821/sun300iw1, same VE family),
+H.264/JPEG only; the A733's own libraries are the arm64 ones in the image.
+
+
+## State of A733 support elsewhere (checked 2026-11-14)
+- Radxa forum: vendor camera/ISP problems dominate (IMX214 colour/ghosting, IMX415 4K stitched-mode
+  chroma, IMX219 missing binned mode and gain); vendor encoder times out on camera dma-bufs unless
+  `io-mode=2` (relevant to our step (e)); no image has GPU + NPU + correct CPU topology together.
+  Threads: forum.radxa.com/t/…/31256, /29717, /31414, /30598.
+- Armbian A733 builds use the vendor kernel (`sun60iw2-cubie-vendor`, 6.6.98-vendor); GPU, NPU and
+  VPU excluded (armbian/build PR #10036).
+- Mainline: clocks (Junhui Liu, v6 in review), pinctrl, DMA, PCK-600, U-Boot posted. Not posted by
+  anyone: ISP, VE encoder, IOMMU v2, PCIe, combo PHY, NPU.
+
+
+# Appendix — Older VPU overview (pre-2026-11, partly outdated)
+
+> Kept for the record. It predates the A733 bring-up: `0x01C0E000`/SPI 49 is the **decoder** instance; the A733 encoder is `0x01C10000`/SPI 48 (Part 2).
+
+
+This document details the **Video Engine (VE / VPU)** architecture, memory-mapped registers, V4L2 stateless Memory-to-Memory (M2M) drivers, and real-time H.264/H.265 video streaming pipelines for the **Radxa Cubie A7A** (Allwinner A733) and **Radxa Cubie A5E** (Allwinner A527/T527).
+
+---
+
+### 1. Hardware Architecture & Encoding Specifications
+
+| Parameter | Specification | Technical Details |
+| :--- | :--- | :--- |
+| **VPU Silicon IP** | Allwinner VE (Video Engine 5.0 / Cedrus) | Multi-format hardware video encoder & decoder core |
+| **Encoding Codecs** | **H.265 (HEVC) & H.264 (AVC) Main/High Profile** | Supports baseline, main, and high profiles up to **4K@30fps** or **1080p@120fps** |
+| **Decoding Codecs** | **H.265, VP9, AVS2 (8K@24fps / 4K@60fps)** | Multi-standard hardware entropy decoder (CABAC/CAVLC) |
+| **Physical MMIO Base** | **`0x01C0E000`** (`0x3000` bytes) & Syscon **`0x03000000`** | Base register window for macroblock engines, motion estimation & bitstream DMA |
+| **GIC Interrupt Vector** | **`GIC_SPI 49` (`0x31`)** | Level-high interrupt fired upon frame compression completion |
+| **Clocks & Resets** | `pll_ve`, `clk_bus_ve`, `reset_ve` | Clocked via PLL_VE (typically 400 MHz to 600 MHz) |
+| **Memory Architecture** | Direct Physical DMA / Contiguous Memory Allocator (CMA) | Zero-copy frame handoff from Camera (V4L2) -> VPU -> Network Socket |
+
+---
+
+### 2. Real-Time Drone Video Streaming Topology
+
+```
+┌─────────────────┐       DMA-BUF       ┌─────────────────┐       DMA-BUF       ┌─────────────────┐       RTP / UDP       ┌─────────────────┐
+│ MIPI CSI Sensor │ ──────────────────> │ Allwinner ISP   │ ──────────────────> │ Hardware VPU    │ ────────────────────> │ Ground Station  │
+│ (IMX219 / HQ)   │   (Raw Bayer)       │ (NV12 / YUV420) │    (Zero-Copy)      │ (H.265 Encoder) │    (Low Latency)      │ (QGroundControl)│
+└─────────────────┘                     └─────────────────┘                     └─────────────────┘                       └─────────────────┘
+                                                                                         │
+                                                                           MMIO: 0x01C0E000 (IRQ 49)
+                                                                           Codec: H.265 1080p @ 60 FPS
+                                                                           Bitrate: 4000 Kbps CBR
+```
+
+---
+
+### 3. GStreamer Low-Latency Hardware Pipelines
+
+#### Pipeline A: Real-Time H.265 RTSP/UDP Stream to Ground Control Station (GCS)
+```bash
+# Capture 1080p from MIPI CSI-2, encode with hardware VPU, and stream via RTP/UDP
+gst-launch-1.0 -v \
+    v4l2src device=/dev/video0 ! \
+    video/x-raw,format=NV12,width=1920,height=1080,framerate=60/1 ! \
+    v4l2h265enc bitrate=4000000 gop-size=30 ! \
+    rtph265pay config-interval=1 pt=96 ! \
+    udpsink host=192.168.1.100 port=5600 sync=false
+```
+
+#### Pipeline B: Local NV12 to H.264 Hardware File Recording
+```bash
+# Record 1080p video directly to SD card / eMMC with minimal CPU load (< 3%)
+gst-launch-1.0 -v \
+    v4l2src device=/dev/video0 num-buffers=1800 ! \
+    video/x-raw,format=NV12,width=1920,height=1080,framerate=60/1 ! \
+    v4l2h264enc bitrate=8000000 ! \
+    h264parse ! \
+    mp4mux ! \
+    filesink location=/var/flight_video.mp4
+```
+
+---
+
+### 4. Kernel Configuration Checklist (`CONFIG_` Options)
+
+To enable hardware video encoding in the mainline kernel build:
+
+```ini
+# Mainline V4L2 Stateless Cedrus VPU Driver
+CONFIG_VIDEO_SUNXI_CEDRUS=y
+CONFIG_V4L_MEM2MEM_DRIVERS=y
+CONFIG_VIDEO_MEM2MEM_DEINTERLACE=y
+
+# DMA Contiguous Memory Allocator (Minimum 128 MB for 4K video)
+CONFIG_CMA=y
+CONFIG_CMA_SIZE_MBYTES=128
+```

@@ -12,7 +12,7 @@ docs/
 │
 ├── common/                                    <-- Shared Subsystem Architectures
 │   ├── NPU_ACCELERATION_GUIDE.md              <-- 3 TOPs NPU Architecture, Mesa Teflon & TinyML Inference
-│   ├── VIDEO_ENCODING_VPU_GUIDE.md            <-- Hardware VPU Video Encoding (H.264/H.265 4K@30fps / Cedrus)
+│   ├── A733_VE_ENCODER_GUIDE.md            <-- Hardware VPU Video Encoding (H.264/H.265 4K@30fps / Cedrus)
 │   ├── CAMERA_V4L2_GUIDE.md                   <-- Camera Subsystem, Media Controller & V4L2 Pipelines
 │   ├── WIFI_AIC8800_GUIDE.md                  <-- AIC8800 Wi-Fi 6 / BT (Dual SDIO / USB Architecture)
 │   └── REALTIME_FLIGHT_ARCHITECTURE.md        <-- Real-Time Linux OS Isolation (UIO Mailbox, Ringbuffers)

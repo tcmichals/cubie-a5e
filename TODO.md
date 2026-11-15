@@ -193,12 +193,12 @@ This is the **single centralized source of truth** for all tasks, hardware bring
   - [ ] Phase 3: statistics to userspace
   - [ ] Phase 4: libcamera AE/AWB; Software ISP removed
 - [ ] **Zero-Copy Hardware Video Encoding (VE / Cedar H.264 Encoder)**:
-  - [ ] **HANDOFF 2026-11-14, start here.** Read in this order: (1) [docs/common/A733_VE_ENCODER_VENDOR_REGISTER_MAP.md](docs/common/A733_VE_ENCODER_VENDOR_REGISTER_MAP.md) (how the vendor stack works, every vendor register value, the numbered cedrus fix list); (2) [logs/a7a-ve-enc-20261114/RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md) (all board tests and commands); (3) [docs/common/A733_VE_H264_ENCODER_PLAN.md](docs/common/A733_VE_H264_ENCODER_PLAN.md) steps (a)-(f); (4) [docs/common/A733_VE_H265_ENCODER_PLAN.md](docs/common/A733_VE_H265_ENCODER_PLAN.md); (5) [docs/common/A733_DRIVER_ROADMAP_NOTES.md](docs/common/A733_DRIVER_ROADMAP_NOTES.md) (vendor material locations, driver order, PCIe, camera choice, tuning procedure, board rules); (6) ISP: [docs/common/CAMERA_V4L2_GUIDE.md](docs/common/CAMERA_V4L2_GUIDE.md) §5.4 (Phase 0 map, draft Phase 1 sequence) and §5.6 (vendor sensor tables and `libisp_ini.so` tuning blobs to decode). **State:** vendor r6 image encodes valid H.264/H.265 on the A7A; cause of our all-zero output found (output addresses are `addr >> 8`); fix `linux-cubie` `0dd9d7650774` is in `bld.a7a/images/sdcard.img` (built 18:26) but **not board-tested**. The SD card currently holds the vendor image (`~/projects/cubie/radxa-r6/r6.img`, login `radxa`/`radxa`, console 115200). **Next:** owner reflashes `sdcard.img`; run the grey/noise 720p test; if still zeros, work down the fix list (#2 MV/deblock buffers, #4 `+0xB00`, #5 VE_MODE bits 31:30). Then H.264 step (d) 1080p30, then H.265 Stage A. Owner decisions pending: ISP 0.10 (new driver vs extend `sun6i-isp`) and 0.11; next upstream driver waits for the remoteproc v4 review. **ISP tuning source found:** Radxa's open userspace ISP source `~/projects/cubie/downloads/allwinner-isp6xx/src` (github `radxa/allwinner-isp6xx`) has per-sensor tuning as C headers (`isp6xx/libisp/isp_cfg/SENSOR_H/*_a733.h`), the struct definitions and the parameter → load-buffer code; details in camera guide §5.6 (licence unclear: reference only). No vendor camera reference is possible with the OV5647 (vendor supports imx214/219/415 only).
+  - [ ] **HANDOFF 2026-11-14, start here.** Read in this order: (1) [docs/common/A733_VE_ENCODER_GUIDE.md](docs/common/A733_VE_ENCODER_GUIDE.md) Part 1 (how the vendor stack works, the numbered cedrus fix list), then Parts 2 (H.264 steps (a)-(f)) and 3 (H.265); (2) [logs/a7a-ve-enc-20261114/RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md) (all board tests and commands); (3) ISP and camera: [docs/common/CAMERA_V4L2_GUIDE.md](docs/common/CAMERA_V4L2_GUIDE.md) §5.4 (Phase 0 map, draft Phase 1 sequence), §5.6 (vendor tuning source), §8 (camera choice), §9 (tuning procedure); (4) the "A733 roadmap notes" section at the end of this file (driver order, PCIe, ways to work faster). **State:** vendor r6 image encodes valid H.264/H.265 on the A7A; cause of our all-zero output found (output addresses are `addr >> 8`); fix `linux-cubie` `0dd9d7650774` is in `bld.a7a/images/sdcard.img` (built 18:26) but **not board-tested**. The SD card currently holds the vendor image (`~/projects/cubie/radxa-r6/r6.img`, login `radxa`/`radxa`, console 115200). **Next:** owner reflashes `sdcard.img`; run the grey/noise 720p test; if still zeros, work down the fix list (#2 MV/deblock buffers, #4 `+0xB00`, #5 VE_MODE bits 31:30). Then H.264 step (d) 1080p30, then H.265 Stage A. Owner decisions pending: ISP 0.10 (new driver vs extend `sun6i-isp`) and 0.11; next upstream driver waits for the remoteproc v4 review. **ISP tuning source found:** Radxa's open userspace ISP source `~/projects/cubie/downloads/allwinner-isp6xx/src` (github `radxa/allwinner-isp6xx`) has per-sensor tuning as C headers (`isp6xx/libisp/isp_cfg/SENSOR_H/*_a733.h`), the struct definitions and the parameter → load-buffer code; details in camera guide §5.6 (licence unclear: reference only). No vendor camera reference is possible with the OV5647 (vendor supports imx214/219/415 only).
   - [ ] **Camera next step (owner 2026-11-12: "work on camera"):** A7A camera capture is done (OV5647 1080p30, v6 CCU kernel too). Next is the encoder plan below, code step (a) in `linux-cubie` `a7a_remoteproc_camera_usb`: add the AHB (`0x5C0` bit 1) and MBUS (`0x5E0` bit 12) master gates to the `ve_enc` node, per-frame `dev_info()` → `dev_dbg()`, probe-time readback (PD status, `0x1B14`, `+0x8E4`/`+0x8F0` version regs) behind `pm_runtime_resume_and_get()`; then board step (a). Board warning from 2026-11-11 to clear: `failed to turn domain "VE_ENC" off: -110`. Needs the A7A on the 26 MHz DTB (see the A7A CCU v6 item).
   - [x] **Step (a) code done 2026-11-14 (compile-only):** `linux-cubie` `a7a_remoteproc_camera_usb` `7452c982f912`: `ve_enc` DT gets `CLK_AHB_VE_ENC`/`CLK_MBUS_VE_ENC0_GATE` as `"ahb-master"`/`"mbus-master"` (bring-up names; binding decision in DESIGN_DECISIONS.md "A733 VE encoder: extend the cedrus binding") and `assigned-clock-parents` PLL_VE1; cedrus gets them optional and switches them with runtime PM; probe readback (mod rate, ENC_TOP `+0x0/+0x4`, `+0x8E4`/`+0x8F0`, CCU `0x1B14` PD status, `0x03000000`/`0x03000004`), bring-up only; per-frame message `dev_dbg()`. W=1 and checkpatch clean. Built DTB checked: 5 clocks, parent ID 34, `osc24M` 26 MHz. **Found:** the A7A fragment never set `CONFIG_VIDEO_SUNXI=y`, so `CONFIG_VIDEO_SUNXI_CEDRUS=m` was silently dropped (fixed; image now has `sunxi-cedrus.ko`).
   - [x] **Step (a) board test 2026-11-14 ([logs/a7a-ve-enc-20261114/RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md)): pass with one open item.** Version `+0x8e4` = `0x00e21320`, PD status 2, sys bits 0, `/dev/video1` cedrus-enc, 400 MHz. `ve-enc0` ends on pll-ve0 (cedrus `clk_set_rate` re-parents; DT parent ineffective). **`VE_ENC` off `-110` fixed:** cause was our CCU probe setting `0x1b14` bit 0 (module mode), which holds the PPU DEVACTIVE input; `linux-cubie` `01e37bcf6fa7` drops it; board-tested (domain off/on/off, version reg same, no `-110` after `reboot`). `ve-enc0` now on PLL_VE1 as the vendor (CCU `CLK_SET_RATE_NO_REPARENT`, board-tested; DESIGN_DECISIONS.md "one PLL per engine"); raise the flag on the A733 CCU series (owner). When the decoder gets a node, pin `ve-dec0` to PLL_VE0. Watch `reboot`: the reboot into kernel #4 went silent until a power cycle. **Step (b)/(c) 2026-11-14 (same log): IRQ path works (one interrupt per frame, triage #8 not seen), engine runs (`STM_BIT_LEN` 10240/12832 bits for 720p grey I/P), but the output is all zeros.** Ruled out: IOMMU0 master 3 (bypass, no fault), bus offset, >4 GiB, bus gates. Then (`dump_coded`, input-content test): **input reads work, all encoder DMA writes are lost** (bitstream and reconstruction; noise I/P 229/211 KB, grey 1.3/1.6 KB, buffers zero). DDR mode bits not it. Next: find write-side registers the A733 Ver2 core needs (write high-address/extension) from the vendor objects, or a vendor-image register dump. Driver CAPTURE `sizeimage` default 1024 is too small. Rule: touch VE_ENC / IOMMU0 master 3 registers only with the device resumed (two board hangs today).
   - [ ] ~~Step (a) board test~~ (done above; original plan follows): image `bld.a7a/images/sdcard.img` (2026-11-14, kernel 7.1.0, 26 MHz DTB in the image, so the console is 115200). `modprobe sunxi-cedrus`; `dmesg | grep -i -e cedrus -e readback`; plan §4 (a) items 2-5. Pass: version registers non-zero, PD status 2 (on). Also check the `VE_ENC` `-110` power-off warning.
-  - [ ] **A7A (A733) bring-up plan 2026-11-11: [docs/common/A733_VE_H264_ENCODER_PLAN.md](docs/common/A733_VE_H264_ENCODER_PLAN.md)** (plan only, nothing run). Encoder = separate VE instance `0x01C10000`/SPI 48/PD 3/IOMMU0 master 3 (the `0x01c0e000` items below are the A5E/decoder). WIP `linux-cubie` `27f04580fa76` (Bootlin cedrus encoder + A733 variant), not compiled or run. First code step: `ve_enc` DT gets `CLK_AHB_VE_ENC` + `CLK_MBUS_VE_ENC0_GATE` (only kept on today by `clk_ignore_unused`) and parent PLL_VE1; drop the per-frame `dev_info`; probe readback of `0x1B14`, `+0x8E4`/`+0x8F0`, `0x03000000`/`0x03000004`. Board steps (a) probe/version, (b) polled one-frame encode (engine vs IRQ, triage #8), (c) IRQ, (d) 1080p30 synthetic, (e) CSI→encoder dma-buf (test-only until ISP), (f) CPU < 2 %. Open: A733 "H264 Ver2" core vs V3s register map, 1080 vs 1088 chroma offset, no rate control, stateful vs stateless (owner). The status-matrix "encoder verified 27.22 FPS" claim has no log: treat as not verified.
+  - [ ] **A7A (A733) bring-up plan 2026-11-11: [docs/common/A733_VE_ENCODER_GUIDE.md](docs/common/A733_VE_ENCODER_GUIDE.md)** (plan only, nothing run). Encoder = separate VE instance `0x01C10000`/SPI 48/PD 3/IOMMU0 master 3 (the `0x01c0e000` items below are the A5E/decoder). WIP `linux-cubie` `27f04580fa76` (Bootlin cedrus encoder + A733 variant), not compiled or run. First code step: `ve_enc` DT gets `CLK_AHB_VE_ENC` + `CLK_MBUS_VE_ENC0_GATE` (only kept on today by `clk_ignore_unused`) and parent PLL_VE1; drop the per-frame `dev_info`; probe readback of `0x1B14`, `+0x8E4`/`+0x8F0`, `0x03000000`/`0x03000004`. Board steps (a) probe/version, (b) polled one-frame encode (engine vs IRQ, triage #8), (c) IRQ, (d) 1080p30 synthetic, (e) CSI→encoder dma-buf (test-only until ISP), (f) CPU < 2 %. Open: A733 "H264 Ver2" core vs V3s register map, 1080 vs 1088 chroma offset, no rate control, stateful vs stateless (owner). The status-matrix "encoder verified 27.22 FPS" claim has no log: treat as not verified.
   - [ ] Utilize verified vendor C source reference located on local disk:
     `/home/tcmichals/ssdData/projects/home/CubieA5E/A5E/linux-aw2501/bsp/drivers/ve/cedar-ve/` (`cedar_ve.c` @ `0x01c0e000`).
   - [ ] Enable Video Engine hardware clock gates (`CLK_BUS_VE`, `CLK_VE`, `CLK_MBUS_VE`) and reset (`RST_BUS_VE`) in device tree node `video-codec@1c0e000`.
@@ -1308,4 +1308,55 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
   - [ ] Verify if any additional USB hub reset timing or VBUS enable delays are specified.
 - [ ] **XuanTie E902 Co-Processor Initialization**:
   - [ ] Check if SyterKit contains early bootstrap code or linker scripts for the A733 E902 core running out of System SRAM A2 (`0x00040000`).
+
+---
+
+## A733 roadmap notes (2026-11-14; proposals, not owner decisions)
+
+### Owner statements (2026-11-14)
+- Goal: H.264 and then H.265 encode; all camera drivers including the IOMMU; ISP tuning must be
+  something we can offer (not a closed blob).
+- NPU is wanted, after first flight. GPU/desktop not needed.
+- Next upstream driver: decide after the remoteproc v4 review, not before.
+- Flight camera not chosen yet (see §5).
+
+
+### Driver order discussed (proposal, not decided)
+| Order | Driver | Notes | Estimate |
+| :--- | :--- | :--- | :--- |
+| 1 | H.264 encoder | fix list in the register map doc | days |
+| 2 | ISP Phase 1 + VIPP (NV12) | ISP has no output DMA: ISP0 → VIPP0 → CSI DMA0 | 1-2 weeks |
+| 3 | IOMMU v2 | from GPL `bsp/drivers/iommu/sunxi-iommu-v2.c`; masters: CSI 1, ISP 2, VE_ENC 3; today all in bypass with contiguous buffers | 1-2 weeks |
+| 4 | Camera → ISP → encoder dma-buf | needs 1-3 | days |
+| 5 | H.265 Stage A (fixed setting, replayed registers) | H.265 plan | ~1 week |
+| 6 | ISP parameters, statistics, libcamera AE/AWB, tuning | Phases 2-4 | several weeks |
+| later | PCIe + Cadence combo PHY | see §6 | 3-6 weeks |
+| after first flight | NPU (VIP9000) | | |
+
+Upstream candidate after remoteproc (proposal): A733 CSI/MIPI capture path (already working).
+The encoder cannot merge before Bootlin's cedrus encoder base does.
+
+
+### PCIe (A7A and A7Z both have it)
+- Vendor DT: `pcie@6000000`, `allwinner,sunxi-pcie-v300-rc`, 1 lane, Gen3, SPI 152…, PHY
+  `combo1_pcie` (`sun60iw2p1.dtsi:5002`). A7A board DT (`cubie_a7a/linux-5.15/board.dts:1031`):
+  power PE11, wake PE12, reset PE13, 1.8 V `bldo1`, 3.3 V `dcdc1`. A7Z: PD20/PD21/PD22.
+- Controller is Synopsys DesignWare (standard iATU registers in `pcie-sunxi.h`): mainline needs
+  only a glue driver on `drivers/pci/controller/dwc/`. Clocks (`pcie-aux` `0x1380`, `pcie-axi-slv`
+  `0x1384`, `serdes-phy` `0x13c0`, gates) are in our CCU; `PCIE` power domain is in the PCK-600 driver.
+- The hard part: Cadence combo PHY (`allwinner,cadence-combophy`, `0x06C00000`, vendor driver
+  4,372 lines), shared by USB3/PCIe/DP; no mainline driver. On the A7A `xhci2` uses `combo1_usb`
+  unless `TYPEC_DP`: USB3 and PCIe may be mutually exclusive on combo PHY 1 (check the schematic).
+- Nobody has posted a mainline A733 PCIe or PHY driver. Closest: A523 USB3/PCIe PHY series
+  (Mikhail Kalashnikov, 2025-08, USB3 only so far).
+
+
+### Ways to work faster
+1. A second SD card (vendor image on one, ours on the other).
+2. A cedrus debug dump of `+0x800-0x8FF` and `+0xA00-0xBFF` per frame in the vendor snapshot layout,
+   then `analyze.py`-style diff against `vendor-r6/sweep/`.
+3. Replay the vendor register image for one fixed setting first, then generalise field by field.
+4. SSH/Wi-Fi on our image instead of base64 over serial (owner has to add the key; our image also
+   needs the `/etc/wpa_supplicant.conf` fix redone after a reflash).
+5. An IMX415 or IMX219 module for a vendor ISP reference (registers while streaming + video).
 
