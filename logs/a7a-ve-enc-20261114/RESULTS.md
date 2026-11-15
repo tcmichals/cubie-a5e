@@ -207,3 +207,41 @@ Offline so far: vendor `libvencoder`/`libve` objects are RISC-V (rt-media build)
 `h264InitRegInfo` fill a shadow register image through nested structs (hours to map fully).
 Cheaper next: list every `+0xBxx`/`+0xAxx`/`+0x8xx` offset the vendor shadow image covers and diff
 against `cedrus_regs.h` for registers the WIP never writes (high-address / write-control candidates).
+
+## Vendor reference run: Radxa Debian r6 on the same A7A (2026-11-14)
+
+Image `radxa-a733_bullseye_kde_r6.output_512.img.xz`, kernel `5.15.147-21-a733`, libcedarc
+`stable_v1.3.0_common` (2022-08-22). Files in `vendor-r6/`.
+
+- **The vendor encoder works on this board.** `demoVencoder` (`-f 0`, 10 frames 1280×720 NV12,
+  same grey + 256×256 noise picture as the cedrus tests) → `out.h264` 54,543 B, High Profile,
+  decodes cleanly (checked with GStreamer `avdec_h264`). `-f 3` → `out3.h265` decodes cleanly
+  (`libde265dec`). So the hardware is fine; the bug is in cedrus.
+- Vendor setup: `/dev/cedar_dev_ve2` (`1c10000.ve2`), VE at 624 MHz, buffers from
+  `/dev/dma_heap/system` (non-contiguous) mapped through the **IOMMU** (`Adding to iommu group 0`;
+  master 3 `BYP` (+4) = 0). `bEnableVcuFuncFlag = 0` (VCU not used). `ve_printf_register = 1` in
+  `/etc/cedarc.conf` printed nothing for the encoder, even at log level 2.
+- Register capture: `LD_PRELOAD` shim `vendor-r6/vedump.c` (raw syscalls, no libc) snapshots
+  `/dev/mem` on each `IOCTL_WAIT_VE_EN` (0x103), when every register is programmed and the clock is
+  on. Read only ENC_TOP `+0x800-0x8FF`, ENCPP/AVC `+0xA00-0xBFF`, IOMMU `0x03900000-0xFF` and master 3
+  `0x03900A00-0xBFF` (VCU `+0x900` skipped). Snapshots: `vendor-r6/h264/regs_{0,1,2}.bin`,
+  `vendor-r6/h265/regs_{0,1,2}.bin` (8 KiB each: `[0x000-0xFFF]` = `0x01C10000` window,
+  `[0x1000-0x1FFF]` = `0x03900000` window, `0xdeadbeef` = not read).
+
+**Findings (H.264, frame 0):**
+
+1. **Output-side AVC address registers take `address >> 8`.** `+0xB80`/`+0xB84` (cedrus
+   `VE_ENC_AVC_STM_START/END_ADDR`) = `0x00FF8000`/`0x00FF9FFF` = `0xFF800000`-`0xFF9FFFFF`, and
+   `+0xB8C` (`STM_BIT_MAX`) = `0x01000000` bits = 2 MiB, the same range. MV buffer `+0xB60`
+   `0x00FF3B80`, reference/reconstruction `+0xBA0`-`+0xBC4` (`0x00FF6000`, `0x00FF6F00`,
+   `0x00FF3C80`, `0x00FF3B40`, ...) and `+0xB9C` use the same form. The ENCPP **input** addresses
+   (`+0xA78`-`+0xA80`, `0xFF200000`, `0xFF180000`, `0xFF1B8400`) are full addresses. Cedrus writes
+   full addresses everywhere, so on the A733 every encoder **write** goes to `addr << 8`, outside
+   DRAM, while reads work: exactly the "input reads work, all writes lost" result above.
+2. **ENC_TOP `+0x800` (VE_MODE) = `0xC00000C7`:** bits 31 and 30 set during encode. Cedrus clears
+   them ("RAMPD"); our board read `0x000000C7`. Second suspect, test after (1).
+3. ENC_TOP `+0x804` = `0x300`, `+0x840` = `0xF`, `+0x880` = `0x1C55`, `+0x884` = `0xFFFFF`,
+   `+0x888` = `0x8000`, `+0x8E0` = `0x00D33310`, `+0x8E4` = `0x00E21320` (version, same as ours).
+
+Next: cedrus A733 variant writes `addr >> 8` to the AVC output-side address registers, then board
+test on our image (reflash `bld.a7a/images/sdcard.img`).
