@@ -240,6 +240,8 @@ cubie-a5e/
    Hardware specs, LPDDR5 training, GICv3 interrupt controller, and register maps.
 7. **[Radxa Cubie A7A Bring-Up & Known Issues](docs/buildroot/A7A_BRINGUP_AND_KNOWN_ISSUES.md)**:  
    Hardware issue registry, USB DWC3 + FE1.1S hub bring-up, and watchdog reboot resolutions.
+8. **[Allwinner A733 Video Encoding Guide](docs/common/A733_VE_ENCODER_GUIDE.md)**:  
+   Cedrus hardware video encoder (`0x01c10000`) architecture, zero-copy MIPI CSI-2 → Cedrus DMA-buf pipeline, stateful V4L2 encoder commands, and 1080p performance benchmarks.
 
 ---
 
@@ -255,6 +257,7 @@ A 6-part series on the silicon bring-up, Linux `remoteproc` driver development, 
 | **4** | **C++20 Coroutines vs. FreeRTOS on Bare-Metal RISC-V**<br>• *Stackless coroutine HALO optimization, 19× context switch speedup, sub-microsecond latency.* | Cubie A5E<br>(T527 / E906) | [Article](docs/articles/part4_deep_dive_baremetal_cpp_coroutines.md) |
 | **5** | **MicroPython on Both Processors: Experiment First, Compile Later**<br>• *Live interactive MicroPython on E906 co-processor, dynamic pin muxing, sub-microsecond binary telemetry.* | Cubie A5E<br>(T527 / E906) | [Blog Post](https://allthingsembedded.blogspot.com/2026/10/micropython-on-e906.html) • [AbstractX Tree](https://github.com/tcmichals/AbstractX/tree/main/docs/articles/micropython-on-e906) |
 | **6** | **Heterogeneous RemoteProc Across Silicon: Cubie A7A (E902) vs. Cubie A5E (E906)**<br>• *Comparative silicon bring-up, D-cache coherency hazards in SRAM, TF-A BL31 security un-gating, unified FreeRTOS port.* | Cubie A7A vs A5E<br>(A733 vs T527) | [Blog Post](https://allthingsembedded.blogspot.com/2026/10/heterogeneous-risc-v-remoteproc-across.html) • [Local](docs/articles/part5_a733_e902_remoteproc_and_heterogeneous_comparison.md) |
+| **Feature** | **Repurposing the XuanTie E902: From Sleep Coprocessor to Real-Time Engine**<br>• *Autopsy of false assumptions (TrustZone SError myth vs reset vector race), the first 16 KB reserved SRAM trap, unlocking stock Arm TF-A BL31 by removing `scp.fex` from TOC1, mainline `remoteproc` driver, and sub-15 µs IPC benchmarks.* | Cubie A7A<br>(A733 / E902) | [Hackster.io](docs/articles/hackster_a733_e902_remoteproc.md) |
 
 ---
 
