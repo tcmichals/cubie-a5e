@@ -491,6 +491,12 @@ zero-size bitstream buffer; the watchdog must recover and the next stream must w
 Then add `VIDIOC_ENCODER_CMD` and run the same through `v4l2h264enc` with `filesrc` /
 `videotestsrc` (test-only source).
 
+*Status (2026-11-15, `linux-cubie` commit `e0e6d51ddab1`):*
+- Dynamic default CAPTURE buffer sizing implemented in `cedrus_enc.c` (resolution-proportional: ~1 MB for 1080p, ~450 KB for 720p). Manual `sizeimage=` override no longer needed.
+- 1920×1080 NV12 support: `step_height = 8` in `cedrus_enc_h264_frmsize` allows 1080 directly; SPS frame cropping automatically crops 8 bottom lines down to 1080 (`frame_cropping_flag = 1`, `frame_crop_bottom_offset = 4`). Decodes on PC with GStreamer `h264parse ! avdec_h264` with **0 errors**.
+- `VIDIOC_ENCODER_CMD` / `VIDIOC_TRY_ENCODER_CMD` and `V4L2_EVENT_EOS` event handling implemented for stateful encoder streaming and draining.
+- 300-frame 1080p benchmark on live A7A board completed in **3.83 s** (**78.3 fps**, **12.7 ms/frame** at 400 MHz), well under the 33 ms limit. Tested bitstream `test1080.h264` and decoded frame `dec_1080_0.png` archived in `logs/a7a-ve-enc-20261114/`.
+
 #### (e) CSI → encoder zero-copy (test-only until the ISP exists)
 
 Board, RAW plumbing test from §3.3: CMA dma-heap buffers imported by CSI and the encoder; a small C

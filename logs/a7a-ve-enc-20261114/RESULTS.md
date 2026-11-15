@@ -379,3 +379,35 @@ frames (`IDR` + `P`).
 4. **Green power LED (`linux-cubie` `4976300f1397`):**
    - Confirmed on the board by the owner: setting `brightness` to `0` lights the green power LED,
      confirming the pin (`PM2`) is `GPIO_ACTIVE_LOW`.
+
+## Step (d) Verification: 1080p30 stream, dynamic sizeimage & encoder draining (2026-11-15)
+
+Implemented in `linux-cubie` commit `e0e6d51ddab1` (`a7a_remoteproc_camera_usb`):
+- Dynamic CAPTURE buffer sizing in `cedrus_enc.c` proportional to picture resolution (`width * height / 2`, clamped between 64 KB and 4 MB, ~1 MB for 1080p and ~450 KB for 720p). Manual `sizeimage=` override no longer required on `v4l2-ctl`.
+- 1920×1080 NV12 support: `step_height = 8` in `cedrus_enc_h264_frmsize` allows `1080` height directly without rounding up to `1088`. In `cedrus_enc_h264_job_configure_sps()`, frame cropping is calculated against macroblock-aligned dimensions (`coded_height = 1088`), emitting `frame_cropping_flag = 1`, `frame_crop_bottom_offset = 4` (8 cropped luma lines).
+- `VIDIOC_ENCODER_CMD` / `VIDIOC_TRY_ENCODER_CMD` and `V4L2_EVENT_EOS` event handling implemented for stateful encoder streaming and draining (`v4l2-ctl` and GStreamer `v4l2h264enc`).
+
+### Live A7A board test results:
+1. **Dynamic negotiation & format:**
+   ```
+   # v4l2-ctl -d /dev/video1 --set-fmt-video-out=width=1920,height=1080,pixelformat=NV12 --get-fmt-video-out --get-fmt-video
+   Format Video Capture:
+       Width/Height      : 1920/1080
+       Pixel Format      : 'H264' (H.264)
+       Size Image        : 1040384
+   Format Video Output:
+       Width/Height      : 1920/1080
+       Pixel Format      : 'NV12' (Y/UV 4:2:0)
+       Bytes per Line    : 1920
+       Size Image        : 3110400
+   ```
+2. **Stream encoding & draining:**
+   - 2-frame test (`/tmp/test1080.h264`): Encoded without `sizeimage=` flag, cleanly received `STOP ENCODER` and `EOS EVENT`.
+   - GStreamer decode on PC:
+     `gst-launch-1.0 filesrc location=test1080.h264 ! h264parse ! avdec_h264 ! fakesink`
+     Reports caps: `video/x-h264, width=1920, height=1080, profile=high, level=3.1` -> decoded `video/x-raw, format=I420, width=1920, height=1080` with **0 errors**.
+   - Decoded PNG (`dec_1080_0.png`): Verified 1920×1080 resolution, background `(128, 128, 128)`, and noise square texture in rows 400..656, cols 600..856.
+3. **Performance benchmark (300 frames 1080p, GOP 30, CABAC, High Profile):**
+   - Total time: `3.83s` (`real 0m 3.83s`, `user 0m 0.15s`, `sys 0m 0.47s`).
+   - Throughput: **78.3 fps** (average per-frame encode time **12.7 ms** at 400 MHz), well within the < 33 ms requirement for 1080p30.
+
