@@ -195,12 +195,12 @@ This is the **single centralized source of truth** for all tasks, hardware bring
     - [x] New mainline driver `drivers/media/platform/sunxi/sun60i-isp/` (`sun60i_isp.c`, `sun60i_isp.h`, `sun60i_isp_reg.h`, `sun60i_isp_tbl.h` with full ISP 602 register table and variant override support for A523/T527) created and compiled cleanly.
     - [x] CSI DMA0 NV12 support implemented in `sun55i_a523_csi.c` (`FIELD_UV_CB_YUV420` in `0x204`, UV buffer in `0x228`, stride in `0x238`) and VIPP bypass enabled.
     - [x] Capture format validation updated in `sun6i_csi_capture.c` for raw-to-YUV hardware ISP pipelines.
-  - **Now:** Phase 1 live target verification on board (deploy kernel Image/DTB, stream 300 frames of 1080p30 NV12).
+  - **Now:** Phase 1 complete and verified on silicon (`linux-cubie` `b5c1797908d7`). 1080p30 NV12 capture (`Y=46..235`) and zero-copy `DMABUF` ISP NV12 -> Cedrus H.264 encode (60 frames in 2.003s, 29.96 fps, 2.42 MB Annex-B bitstream) verified on A7A (`192.168.0.194`). Next: Phase 2 (userspace tuning/3A parameters) or H.265 Stage A.
   - **Next, in order:** Phase 0 → 1 → 2 → 3 → 4 (goal met at Phase 4).
-  - **Not now:** Phase 5 H.264 encoder (after Phase 1); Phase 6 backport to the A5E (after Phase 4).
+  - **Not now:** Phase 5 H.264 encoder (done/verified); Phase 6 backport to the A5E (after Phase 4).
   - **Not now (upstream cleanup of the working capture path, camera guide §7 "Still to fix"):** OV5647 `hblank` fix sent upstream on its own; 24 vs 25 MHz sensor clock; parser 1 routing from DT instead of code; real cause behind the CSI bridge NULL-state guard; 600 MHz CSI/ISP clocks from DT; bindings for the new compatibles; drop board-only default formats; split WIP commit `928a9c657b3f` (contains a watchdog change).
   - [x] Phase 0: hardware map (docs only)
-  - [ ] Phase 1: ISP outputs 1080p30 NV12 with fixed settings (driver committed, ready for board deployment)
+  - [x] Phase 1: ISP outputs 1080p30 NV12 with fixed settings (verified on silicon 2026-11-15 + zero-copy Cedrus H.264 @ 29.96 fps)
   - [ ] Phase 2: parameters from userspace
   - [ ] Phase 3: statistics to userspace
   - [ ] Phase 4: libcamera AE/AWB; Software ISP removed

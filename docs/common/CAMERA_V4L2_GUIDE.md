@@ -787,6 +787,14 @@ The Phase 1 driver implements an in-line V4L2 subdevice (`v4l2_subdev`) particip
 3. **CSI DMA0 NV12 Format**:
    - Configures CSI DMA0 channel for planar/semi-planar YUV420 (`FIELD_UV_CB_YUV420` in `0x204`, Y frame buffer in `0x220`, UV frame buffer in `0x228`, stride in `0x238`), allowing direct hardware demosaicing from raw sensor Bayer input straight to standard NV12 frames ready for Cedrus zero-copy encoding.
 
+#### 9.3 Phase 1 Silicon Verification (2026-11-15, `linux-cubie` `b5c1797908d7`)
+- **NV12 Capture**: `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=NV12 --stream-mmap --stream-count=15` -> 15 frames at 30.00 fps, debayered scene (`Y=46..235, mean=158.50, std=43.23`, `UV=122..161, mean=139.07`). Uncalibrated WB gains (`0x0400` = 1.0x) show expected slight magenta cast on OV5647 until Phase 2 AWB.
+- **Zero-Copy ISP → Cedrus H.264**: `VIDIOC_EXPBUF` on `/dev/video0` (`NV12`) imported via `V4L2_MEMORY_DMABUF` into `/dev/video1` (`cedrus-enc` `OUTPUT`) -> 60 frames encoded to 2,417,906 bytes Annex-B H.264 Main Profile (`67 4d 40 1f` SPS, `68 ce 31 12` PPS, `45 b8` IDR) in 2.003s (**29.96 fps**) with 0 `dmesg` errors.
+- **Key Phase 1 Fixes**:
+  - `ISP_LOAD_CH0_EXPAND_CFG0` (`+0x198`): must be `0x000c00a0` (`input_bit=10` at `[8:4]`, `output_bit=12` at `[20:16]`); writing `10` zeroed both bit-width fields and produced uniform BT.601 black (`Y=16, UV=128`).
+  - Gamma LUT (`+0x5000`, 1024 `u32` entries packed `R[9:0] | G[19:10] | B[29:20]`): populated with `int_sqrt(i * 1023)` (~gamma 2.0) and enabled via `BIT(17)` in `ISP_LOAD_MODULE_BYPASS1` (`+0x134`).
+  - Open follow-up: `GB10` RAW10 capture after ISP/VIPP wiring needs `CSI_TOP` routing review (0 CSI IRQs when VIPP/ISP are idle).
+
 ---
 
 ### Open items (to be checked by readback or the UM, not taken from vendor or forum)
