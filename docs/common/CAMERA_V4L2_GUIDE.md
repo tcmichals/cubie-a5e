@@ -756,6 +756,39 @@ left/right split used above the 3264 online width, not 2F-WDR". (Not edited here
   should read the encoder interrupt status register after one frame with the IRQ masked (polling), so that "never
   started" can be told apart from "IRQ not routed".
 
+### 9. Mainline Hardware ISP 602 Architecture & Phase 1 Implementation (2026-11-15)
+
+The Allwinner A733 includes a dedicated in-line hardware Image Signal Processor (ISP 602 / `0x05900000`, 4 KiB MMIO window), paired with the Video Input Post-Processor (VIPP / `0x05910000`).
+
+#### 9.1 Register Map & Topology
+- **ISP Base**: `0x05900000` (`0x1300` bytes MMIO).
+- **VIPP Base**: `0x05910000` (`0x100` bytes MMIO).
+- **Clocks**: `CLK_ISP_MOD` (`0x0A00`), `CLK_ISP_RAM` (`0x0A04`), `CLK_BUS_ISP` (`0x0A0C`).
+- **Resets**: `RST_BUS_ISP` (`0x0A0C` bit 16).
+- **Power Domain**: `PD_VI` (Index 11).
+- **Interrupt Vector**: `GIC_SPI 129` (IRQ 161).
+- **IOMMU**: `iommus = <&mmu_aw 2 0>` (shared VI IOMMU domain).
+
+```
+┌──────────────┐     MIPI CSI-2     ┌──────────────┐      In-Line      ┌──────────────┐     DMA-BUF     ┌────────────────────────┐
+│ OV5647 /     │ ─────────────────> │ sun6i-csi    │ ────────────────> │ sun60i-isp   │ ──────────────> │ Cedrus H.264 / H.265   │
+│ IMX219 / 477 │    2-Lane D-PHY    │ (0x05800800) │   (Bayer Link)    │ (0x05900000) │   (NV12 / YUV)  │ Hardware Video Encoder │
+└──────────────┘                    └──────────────┘                   └──────────────┘                 └────────────────────────┘
+```
+
+#### 9.2 Mainline Driver Design (`drivers/media/platform/sunxi/sun60i-isp/`)
+The Phase 1 driver implements an in-line V4L2 subdevice (`v4l2_subdev`) participating in the Media Controller graph between the CSI receiver and the capture video device:
+1. **DMA Parameter Buffers**:
+   - `load_buf[0]` & `load_buf[1]`: `0x7700` bytes coherent DMA ping-pong buffers for hardware configuration tables (gamma, DPC, demosaicing matrices, lens shading).
+   - `save_buf`: `0x6a00` bytes coherent DMA buffer for 3A statistics readback (AE histograms, AWB color sums, AF sharpness).
+   - `save_load_buf`: `0x3400` bytes coherent DMA buffer for intermediate ISP engine state.
+2. **Default Register Configuration Table**:
+   - `isp602_default_reg[]`: 1024 32-bit words (`0x1000` bytes) setting initial baseline bypass/straight-through filters, gamma curves, and demosaic coefficients for instant clean capture.
+3. **CSI DMA0 NV12 Format**:
+   - Configures CSI DMA0 channel for planar/semi-planar YUV420 (`FIELD_UV_CB_YUV420` in `0x204`, Y frame buffer in `0x220`, UV frame buffer in `0x228`, stride in `0x238`), allowing direct hardware demosaicing from raw sensor Bayer input straight to standard NV12 frames ready for Cedrus zero-copy encoding.
+
+---
+
 ### Open items (to be checked by readback or the UM, not taken from vendor or forum)
 
 1. Real CSI/ISP clock maximum: not in DS or UM. Try rates on silicon (frame error counters at 300 / 400 / 540 / 600 MHz).
