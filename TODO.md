@@ -1325,6 +1325,11 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
   - [ ] Verify if any additional USB hub reset timing or VBUS enable delays are specified.
 - [ ] **XuanTie E902 Co-Processor Initialization**:
   - [ ] Check if SyterKit contains early bootstrap code or linker scripts for the A733 E902 core running out of System SRAM A2 (`0x00040000`).
+- [ ] **A733 NPU (`npu@3600000` / Vivante Etnaviv + Mesa Teflon)**:
+  - [x] Verify `CONFIG_DRM_ETNAVIV=y` and `CONFIG_DRM_ETNAVIV_THERMAL=y` in `linux-cubie/.config` (checked 2026-11-15).
+  - [ ] Add `npu@3600000` DT node in `sun60i-a733-cubie-a7a.dts` (`GIC_SPI 65`, `PD_NPU`, `CLK_NPU`, `CLK_PLL_NPU`, `CLK_BUS_NPU`, `CLK_MBUS_NPU_GATE`, `CLK_NPU_AHB_GATE`, resets `RST_BUS_NPU_CORE`/`AXI`/`AHB` from `sun60iw2p1.dtsi:2347`).
+  - [ ] Verify `etnaviv` probe & `/dev/dri/renderD128` on A7A silicon.
+  - [ ] Enable Mesa Etnaviv + Teflon (`BR2_PACKAGE_MESA3D_TEFLON=y`) and benchmark INT8 TFLite inference.
 
 ---
 
