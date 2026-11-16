@@ -55,8 +55,8 @@ Wrong order (address written while `cfg` is held): the write is lost and the E90
 | :--- | :--- | :--- | :--- |
 | `0x40000000`–`0x40003FFF` | `0x00040000`–`0x00043FFF` | 16 KB | CPUS-only part of SRAM A2: **the E902 does not run code here** |
 | `0x40004000`–`0x40033FFF` | `0x00044000`–`0x00073FFF` | 192 KB | Firmware (`e902_sram.ld`), driver ATT |
-| `0x40034000`–`0x7FFFFFFF` | same | DRAM | Carveouts, vrings (`0x4e000000`, 16 MB, `shared-dma-pool`) |
-| `0x80000000`–`0xBFFFFFFF` | — | 1 GB | DRAM window via `e902_remap` (not used) |
+| `0x40034000`–`0x7FFFFFFF` | same | DRAM | **N/A** (unreliable under concurrent Linux+E902 access / DDR code execution; see §8. Use SRAM A2 `rproc@54000`) |
+| `0x80000000`–`0xBFFFFFFF` | — | 1 GB | **N/A** (`e902_remap` DRAM window not used) |
 | peripherals | same | — | msgbox banks `0x03004000` (host), `0x07094000` (E902) |
 
 ## 6. Message box

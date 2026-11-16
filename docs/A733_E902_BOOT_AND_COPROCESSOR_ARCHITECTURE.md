@@ -332,7 +332,7 @@ Run 2026-11-10 on the camera-work image. Results: `docs/platforms/CUBIE_A7A_DEBU
 | **E902 Boot Time** | Starts at power-on (`boot0`) | **Starts dynamically from Linux (`remoteproc`)** |
 | **PMIC Control** | Handled by `scp.fex` over `s_twi0` (I2C) | **Handled directly by U-Boot / Linux I2C driver** |
 | **BL31 Security** | R_SPC port 3 secure (E902 owned by the arisc) | **R_SPC port 3 opened by binary patch; R_TZMA and ports 0–2 are already open in stock BL31** |
-| **DRAM Map** | `0x40014000` reserved (`no-map`) | **`0x4E000000` DMA pool / SRAM A2 (`0x00040000`)** |
+| **DRAM Map** | `0x40014000` reserved (`no-map`) | **N/A for shared DDR (`rproc@54000` in SRAM A2 `0x00054000`, firmware at `0x00044000`; see `A733_E902_REMOTEPROC_CLOCKS_RESETS.md` §8)** |
 | **Linux RemoteProc** | Disabled (`status = "disabled"`) | **Enabled (`sunxi_rproc.c`)** |
 | **Firmware Toolchain**| Vendor binary | **Bare-metal C++ (`-march=rv32emc_zicsr -mabi=ilp32e`)** |
 
