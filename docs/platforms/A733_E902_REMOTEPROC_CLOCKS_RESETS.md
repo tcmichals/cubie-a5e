@@ -69,3 +69,19 @@ Wrong order (address written while `cfg` is held): the write is lost and the E90
 
 - Stock vendor BL31, no `scp` in the FIT (`patch_fit_no_scp.py`). The BL31 port-3 binary patch is **not** needed (tested 2026-11-10); BL31-from-source work continues for other reasons (TODO).
 - Without the SCP, nothing else starts the E902: the U-Boot 2026.04 blob never starts the arisc (debug log Milestone 21).
+
+## 8. E902 DRAM (`0x4E00xxxx`) Concurrent Read Glitch (2026-11-15)
+
+Live silicon tests on `cubie-a7a` (`192.168.0.194`) with `rproc@4e000000` (`no-map` `shared-dma-pool`) proved that concurrent Linux + E902 access to DDR DRAM exhibits an intermittent E902 read-ordering / stale-read glitch that does **not** occur in SRAM A2:
+
+- **E902 CSRs on silicon**: `misa = 0x40101014` (`RV32EMC`), `mvendorid = 0x000005B7` (T-Head), `mhcr (0x7C1) = 0x00000000` (no D-cache on E902; `mxstatus 0x7C0` and `mhint 0x7C5` trap with `mcause = 2`).
+- **SRAM A2 baseline (`0x40030000` / `0x00070000`)**: lockstep Linux (`O_SYNC` `/dev/mem` + `dsb sy`) + E902 (`dram_probe.elf`) passed **100,000 / 100,000** iterations (`mismatch_cnt=0`, `backwards_cnt=0`, `timeouts=0`).
+- **E902-only DRAM (`0x4E008000`)**: E902 self-write/read loop (`100,000` iterations) passed with **`self_err=0`**.
+- **Concurrent Linux + E902 DRAM (`0x4E008000`)**: even with Linux using `O_SYNC` (`MT_DEVICE_nGnRnE`) + `dsb sy` and E902 using `fence`, E902 observed monotonic `req` values **go backwards** (`backwards_cnt=7`, `mismatch_cnt=16` in ~100k iterations, and `backwards_cnt=7`, `mismatch_cnt=13` in 50k iterations even when `req`/`ack`/`buf` were separated by 4 KB pages at `0x4E008000`/`0x4E009000`/`0x4E00A000`). That reproduces the ~1 Hz `ping_rpmsg` timeout (`seq=3061, 5360, 7213, 7373`) when `rproc_carveout` is in DRAM.
+- **E902 code execution from DDR (`0x4E010000`)**: E902 booted at `0x4E010000` (`E902_STA_ADD_REG = 0x4E010000`), ran `52,737` (`0xCE01`) iterations of the self-write/read loop, and hung.
+- **BSP (`oldkernels/linux-a733`) & clock/NSI checks**:
+  - Enabling `CLK_R_RISCV` (`0x07010210 = 0x80000000`, `riscv-24m` in `ccu-sun60iw2-r.c`) did not fix the stall (`ping_rpmsg` still timed out at `seq=1236, 1393, 2687`).
+  - Enabling `ahbs-auto-clk` (`0x0701033c = 0x01000000`) did not fix it (`mismatch_cnt=33`, `backwards_cnt=17`).
+  - `E902_CFG +0x200` (`0x07032200`) is read-only `0x00000000`.
+  - In `oldkernels/linux-a733/bsp/drivers/bus/sunxi-nsi.h`, E902 is NSI Port 11 (`MBUS_PMU_RISCV = 11`, `0x02021600`, currently in default bypass mode `IAG_MODE=0`), while `sun60iw2p1.dtsi` has `allwinner,sunxi-nsi-v2` (not present in mainline).
+- **Operational conclusion**: keep `rproc_carveout` and E902 firmware in on-chip **System SRAM A2** (`cubie-a7a-rproc.dtso` `rproc@54000`, 128 KB; firmware at `0x40004000`, 192 KB total); do **not** place E902 code or shared VirtIO/SPSC rings in DDR DRAM unless an A733 NSI/CPUS-bridge fix is found.
