@@ -62,9 +62,9 @@ The reasoning and the record are in [`DESIGN_DECISIONS.md`](upstream-remoteproc/
 | **Cubie A7A** | 36 °C idle, 61.4 °C after 3 min on all 8 cores (fan fitted) | Safe on the bench; trips 90 °C hot, 110 °C critical |
 | Both | A7A: frequency-only cpufreq (`416/780/1014 MHz`) + passive cooling (70/90 °C) active; A5E: no cpufreq / no cpuidle yet | Plan: [CPUFREQ_DVFS_PLAN.md](docs/common/CPUFREQ_DVFS_PLAN.md) (A7A AXP8191 voltage scaling + speed-binning, and T527 backport next) |
 
-### 📷 A7A camera & Zero-Copy Hardware Encoding (2026-11-15)
+### 📷 A7A Camera, Hardware ISP & Zero-Copy Video Encoding (2026-11-15)
 
-OV5647 1080p30 runs on mainline `sun6i-mipi-csi2` → `sun6i-csi` → hardware ISP `sun60i-isp` with a dedicated `libcamera` `sun60i-isp` pipeline handler & IPA (Software ISP removed). Zero-copy pipelines passing CMA `dma-buf`s directly from CSI capture into the Cedrus hardware encoder operate at steady **30.00–30.02 fps** with **0.89% CPU** (H.264) and **1.55% CPU** (H.265 CBR/VBR) of one core, and 0 decode errors. Standalone 1080p H.264 encoding benchmarks at **78.3 fps** (12.7 ms/frame). Detailed bring-up logs: [RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md), [A733_VE_ENCODER_GUIDE.md](docs/common/A733_VE_ENCODER_GUIDE.md), and [CAMERA_V4L2_GUIDE.md](docs/common/CAMERA_V4L2_GUIDE.md).
+OV5647 1080p30 runs on mainline `sun6i-mipi-csi2` → `sun6i-csi` → hardware ISP 602 (`sun60i-isp`, in-line ISP + CSI DMA0 NV12 + `params`/`stats` metadata nodes) with a dedicated `rkisp1`-style `libcamera` `sun60i-isp` pipeline handler & IPA (Software ISP removed). Zero-copy pipelines passing CMA `dma-buf`s directly from CSI/ISP capture into the Cedrus hardware encoder (`sunxi_cedrus`) operate at steady **30.00–30.02 fps** with **0.89% CPU** (H.264) and **1.55% CPU** (H.265 CBR/VBR) of one core, and 0 decode errors (`v4l2-compliance` 49/49). Standalone 1080p H.264 encoding benchmarks at **78.3 fps** (12.7 ms/frame). Detailed bring-up logs: [RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md), [A733_VE_ENCODER_GUIDE.md](docs/common/A733_VE_ENCODER_GUIDE.md), and [CAMERA_V4L2_GUIDE.md](docs/common/CAMERA_V4L2_GUIDE.md).
 
 > [!NOTE]
 > Display / HDMI output is still pending mainline bring-up. For full task tracking, see [TODO.md](TODO.md).
@@ -96,7 +96,7 @@ Material removed from this repo when it was refocused on 2026-11-07 is kept on t
 | **Co-Proc Memory** | SRAM A3 (32 KB) + DSP RAM (64 KB) | System SRAM A2 (208 KB shared) |
 | **System RAM** | 2 GiB / 4 GiB LPDDR4X | 4 GiB / 6 GiB LPDDR5 |
 | **Wi-Fi / BT** | AIC8800D80 (SDIO) | AIC8800D80 (USB) |
-| **Thermal sensor (THS)** | `sun8i_thermal` A523 support: `ths0` + `ths1`, zones `cpu0`, `cpu4`, `gpu`, `ddr`; ~41-42 °C idle (2026-11-10) | `sun8i_thermal` A733 support (this repo): 5 sensors at `0x02522000`, zones `cpu-big`, `ddr`, `npu`, `cpu-little`, `gpu`; SID calibration; hot 90 °C / critical 110 °C, no cooling device yet |
+| **Thermal sensor (THS) & CPUFreq** | `sun8i_thermal` A523 support: `ths0` + `ths1`, zones `cpu0`, `cpu4`, `gpu`, `ddr`; ~41-42 °C idle; no cpufreq yet | `sun8i_thermal` A733 support: 5 sensors at `0x02522000` (`cpu-big`, `ddr`, `npu`, `cpu-little`, `gpu`), SID calibration; `ccu-sun60i-a733-cpu` + frequency-only `cpufreq-dt` (`416/780/1014 MHz`) + `cpufreq-cpu0`/`cpufreq-cpu6` passive cooling (70/90 °C trips, 110 °C critical) |
 | **Base DTB** | `sun55i-a527-cubie-a5e.dtb` | `sun60i-a733-cubie-a7a.dtb` |
 
 The tree also has configuration for the Yuzuki Avaota A1 and the Radxa Cubie A7Z, which are not part of the test goal.
@@ -114,8 +114,8 @@ Both boards report CPU, GPU and DRAM temperatures through mainline `sun8i_therma
 | Clocks, IRQ | A523 CCU `bus-ths`, `gpadc0/1` | CCU `THS0_BGR` `0x0fe4` (gate + reset), `GPADC0_24M` `0x0fc0`; IRQ 71 (GIC SPI 39) |
 | Conversion | A523 two-segment formula | Vendor `sun60iw2`: code > 1769: `62 × (2822 − code)` m°C, else `59 × (2835 − code)` m°C |
 | Calibration | SID cells `0x38` and `0x44` | SID `0x44`, 72 bits: factory temperature (0.1 °C) + one 12-bit reading per sensor → per-sensor offset in `THSn_CDATA` |
-| Trips | A523 DT | hot 90 °C, critical 110 °C (shutdown); no cooling device yet (no fan or cpufreq in the DT) |
-| Measured | ~41-42 °C idle | ~35-39 °C idle; 30 s on all 8 cores: ~49-51 °C, back to ~42 °C 10 s after |
+| Trips & cooling | A523 DT; no cpufreq cooling yet | Passive 70 °C (`cpu-little`) / 90 °C (`cpu-big`/`gpu`/`npu`/`ddr`) via `cpufreq-cpu0` & `cpufreq-cpu6` (`416/780/1014 MHz` @ 800 mV via `ccu-sun60i-a733-cpu` + `cpufreq-dt`), critical 110 °C (shutdown) |
+| Measured | ~41-42 °C idle | ~36-40 °C idle; 61.4 °C after 3 min on all 8 cores (fan fitted) |
 
 The A733 values come from the A733 User Manual (7.1, 4.1.6.170-172) and the vendor `sunxi_thermal.c` / `sun60iw2p1.dtsi`; details in [CUBIE_A7A_DEBUG_LOG.md](docs/platforms/CUBIE_A7A_DEBUG_LOG.md) Milestone 22.
 
