@@ -9,9 +9,10 @@
  * running under Linux RemoteProc (Mode 2: Real-Time Coprocessor).
  *
  * Memory Regions:
- *   - System SRAM A2: 0x00044000 (192 KB) firmware window; host 0x00040000-0x00043FFF is the
+ *   - System SRAM A2: 0x00044000 (64 KB) firmware window; host 0x00040000-0x00043FFF is the
  *     16 KB CPUS-only part (A733 User Manual memory map), not used
- *   - DMA Carveout:   0x4E000000 (16 MB) shared DRAM vdev/virtio buffer pool
+ *   - SRAM A2 Pool:   0x00054000 (128 KB) shared SRAM A2 vdev/virtio buffer pool
+ *                     (avoids E902->DRAM bus read glitch returning stale bus data)
  *
  * Hardware Lifecycle Controls:
  *   - CFG & Vector:   0x07032000 (E902_CFG, entry vector @ +0x204)
@@ -35,9 +36,9 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 
-			rproc_carveout: rproc@4e000000 {
+			rproc_carveout: rproc@54000 {
 				compatible = "shared-dma-pool";
-				reg = <0x00 0x4e000000 0x00 0x01000000>; /* 16 MB pool */
+				reg = <0x00 0x00054000 0x00 0x00020000>; /* 128 KB pool in SRAM A2 */
 				no-map;
 			};
 		};
