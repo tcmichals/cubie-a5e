@@ -12,14 +12,14 @@ config BR2_PACKAGE_AIC8800_DRIVER_SDIO
 	bool "Enable SDIO bus transport (Cubie A5E)"
 	default y
 	help
-	  Enable SDIO transport for AIC8800 on Cubie A5E. Without the
-	  USB option this builds the RFC v3 tree (aic8800-rfcv3).
+	  Enable SDIO transport for AIC8800 on Cubie A5E (aic8800-rfcv3).
 
 config BR2_PACKAGE_AIC8800_DRIVER_USB
 	bool "Enable USB bus transport (Cubie A7A)"
 	default y
 	help
-	  Enable USB transport for AIC8800 on Cubie A7A. This builds the
-	  unified tree (aic8800-upstream): RFC v3 has no USB transport yet.
+	  Enable USB transport for AIC8800 on Cubie A7A (aic8800-rfcv3).
+	  BootROM firmware loading for a69c:8d80 is provided by
+	  BR2_PACKAGE_AIC8800_FIRMWARE (aic_load_fw.ko).
 
 endif

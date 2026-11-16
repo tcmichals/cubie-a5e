@@ -17,7 +17,7 @@ The AIC8800D80 wireless chipset is integrated across both boards in the family, 
 
 ## 2. Unified Driver Design (`aic8800-upstream`)
 
-> **Two driver trees (2026-11-06).** `aic8800-rfcv3/` is the RFC v3 port and has SDIO only; the Cubie A5E builds it. `aic8800-upstream/` below still has SDIO and USB; the Cubie A7A and any board with both buses build it. The package picks by bus (`aic8800-driver.mk`). Drop `aic8800-upstream/` once USB is ported to RFC v3.
+> **Driver trees (updated 2026-11-15).** `aic8800-rfcv3/` is now used by `aic8800-driver.mk` for both Cubie A5E (SDIO) and Cubie A7A (USB, silicon-verified 2026-11-15; BootROM `a69c:8d80` firmware loading uses `aic_load_fw.ko` from `aic8800-firmware`). `aic8800-upstream/` is retained temporarily until dual-bus / Avaota A1 retirement is confirmed.
 
 Rather than maintaining separate, fragmented vendor driver repositories, the workspace maintains a single, unified codebase in [`aic8800-upstream/`](/aic8800-upstream/):
 

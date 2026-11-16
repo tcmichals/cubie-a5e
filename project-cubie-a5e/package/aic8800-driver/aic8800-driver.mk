@@ -2,9 +2,9 @@
 #
 # aic8800-driver
 #
-# Two driver trees until USB is ported to RFC v3:
-#   aic8800-rfcv3    - RFC v3 port, SDIO only (Cubie A5E)
-#   aic8800-upstream - RFC v2 unified SDIO + USB (Cubie A7A, boards with both buses)
+# Driver tree:
+#   aic8800-rfcv3 - RFC v3 port, SDIO (Cubie A5E) and USB (Cubie A7A; BootROM
+#                   firmware upload for a69c:8d80 is handled by aic8800-firmware)
 #
 # Two-module architecture:
 #   aic8800_bsp.ko  - SDIO bus, chip init, firmware upload, start_app
@@ -12,11 +12,7 @@
 #
 ################################################################################
 
-ifeq ($(BR2_PACKAGE_AIC8800_DRIVER_SDIO):$(BR2_PACKAGE_AIC8800_DRIVER_USB),y:)
 AIC8800_DRIVER_SITE = $(BR2_EXTERNAL_CUBIE_A5E_PATH)/../aic8800-rfcv3
-else
-AIC8800_DRIVER_SITE = $(BR2_EXTERNAL_CUBIE_A5E_PATH)/../aic8800-upstream
-endif
 AIC8800_DRIVER_SITE_METHOD = local
 AIC8800_DRIVER_LICENSE = GPL-2.0
 
