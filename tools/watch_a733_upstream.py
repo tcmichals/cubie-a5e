@@ -35,14 +35,20 @@ KNOWN_PATCH_BASELINES = {
     "ccu": {
         "title": "clk: sunxi-ng: Add support for Allwinner A733 CCU and PRCM",
         "author": "Junhui Liu",
-        "current_version": "v2",
-        "status": "In Review (linux-clk / linux-sunxi)"
+        "current_version": "v7",
+        "status": "Applied to sunxi/clk-for-7.5 (2026-11-15)"
+    },
+    "dts": {
+        "title": "arm64: dts: allwinner: add A733/Cubie A7S support",
+        "author": "Enzo Adriano",
+        "current_version": "v4",
+        "status": "In Review (linux-sunxi)"
     },
     "pinctrl": {
-        "title": "pinctrl: sunxi: a733: add initial support",
-        "author": "Yixun Lan",
-        "current_version": "v2",
-        "status": "In Review (linux-sunxi / u-boot)"
+        "title": "pinctrl: sunxi: a733: add initial support (+ IRQ mux fix)",
+        "author": "Yixun Lan / Vinicius Pedrosa",
+        "current_version": "v2 + fix",
+        "status": "Merged / Fix in Review (linux-sunxi)"
     },
     "uboot_soc": {
         "title": "sunxi: Add support for A733 SoC",

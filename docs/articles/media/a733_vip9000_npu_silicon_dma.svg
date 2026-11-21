@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#bc8cff"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="560" y="36" fill="#f0f6fc" font-size="21" font-weight="700" text-anchor="middle">Allwinner A733 3.0 TOPS NPU Silicon &amp; DMA Architecture (VeriSilicon VIP9000UL-DI+)</text>
+  <text x="560" y="58" fill="#8b949e" font-size="13" text-anchor="middle">MMIO Base: 0x03600000 (4 KB) • Model 0x9000 Rev 0x9113 (CID 0x10000021) • 12 NN Cores • 512 KB On-Chip VIP SRAM • GIC_SPI 65</text>
+
+  <!-- Outer Frame -->
+  <rect x="20" y="74" width="1080" height="606" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- ==================== TOP LEFT: CLOCKS, RESETS & POWER ==================== -->
+  <g transform="translate(40, 92)" filter="url(#shadow)">
+    <rect width="330" height="150" rx="8" fill="#1c2128" stroke="#f0883e" stroke-width="1.5"/>
+    <rect width="330" height="30" rx="8" fill="#3b2300"/>
+    <rect y="20" width="330" height="10" fill="#3b2300"/>
+    <text x="165" y="20" fill="#ffa657" font-size="13" font-weight="700" text-anchor="middle">CCU Clocks, Resets &amp; Power Domain</text>
+
+    <text x="16" y="48" fill="#f0f6fc" font-size="11" font-weight="600">• Core Clock: CLK_NPU (0x0b00) ← PLL_NPU (840–1008 MHz)</text>
+    <text x="16" y="68" fill="#f0f6fc" font-size="11" font-weight="600">• Bus Master: CLK_MBUS_NPU (0x05e0 bit 18) ← MBUS 600 MHz</text>
+    <text x="16" y="88" fill="#f0f6fc" font-size="11" font-weight="600">• AHB Slave: CLK_AHB_NPU (0x05c0 b6) → CLK_BUS_NPU (0x0b04 b0)</text>
+    <text x="16" y="108" fill="#ffab70" font-size="11" font-weight="600">• 3 Resets (0x0b04): RST_CORE (b16), RST_AXI (b17), RST_AHB (b18)</text>
+    <text x="16" y="128" fill="#79c0ff" font-size="11" font-weight="600">• Power: PCK-600 PD_NPU (Domain 4) + AXP8191 DCDC2 (800 mV)</text>
+  </g>
+
+  <!-- ==================== TOP CENTER: AHB SLAVE & FE COMMAND PARSER ==================== -->
+  <g transform="translate(395, 92)" filter="url(#shadow)">
+    <rect width="340" height="150" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="340" height="30" rx="8" fill="#162c4e"/>
+    <rect y="20" width="340" height="10" fill="#162c4e"/>
+    <text x="170" y="20" fill="#58a6ff" font-size="13" font-weight="700" text-anchor="middle">Front-End (FE) Command Parser &amp; HI</text>
+
+    <rect x="14" y="40" width="312" height="46" rx="5" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+    <text x="170" y="58" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">AHB Host Interface &amp; Security Control</text>
+    <text x="170" y="75" fill="#8b949e" font-size="10" text-anchor="middle">0x003A8 AHB_CONTROL (NONSEC_ACCESS) • 0x00010 INTR_ACK (SPI 65)</text>
+
+    <rect x="14" y="94" width="312" height="46" rx="5" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+    <text x="170" y="112" fill="#79c0ff" font-size="11" font-weight="600" text-anchor="middle">Wait-Link FE Ring &amp; State Loader</text>
+    <text x="170" y="129" fill="#8b949e" font-size="10" text-anchor="middle">0x00654 FE_CMD_ADDR • 0x003A4 SEC_CMD_CTRL • Wait/Link Loop</text>
+  </g>
+
+  <!-- ==================== TOP RIGHT: MMUv2 & PAGE DESCRIPTOR ==================== -->
+  <g transform="translate(760, 92)" filter="url(#shadow)">
+    <rect width="320" height="150" rx="8" fill="#231438" stroke="#bc8cff" stroke-width="1.5"/>
+    <rect width="320" height="30" rx="8" fill="#371f57"/>
+    <rect y="20" width="320" height="10" fill="#371f57"/>
+    <text x="160" y="20" fill="#d2a8ff" font-size="13" font-weight="700" text-anchor="middle">Vivante MMUv2 (Secure AHB + PD)</text>
+
+    <rect x="14" y="40" width="292" height="46" rx="5" fill="#161b22" stroke="#bc8cff" stroke-width="1"/>
+    <text x="160" y="58" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Page Table Array (PTA) &amp; Safe Page</text>
+    <text x="160" y="75" fill="#8b949e" font-size="10" text-anchor="middle">0x0038C/390 PTA_ADDR • 0x00388 SEC_CTRL • 0x003B4 PD_MODE</text>
+
+    <rect x="14" y="94" width="292" height="46" rx="5" fill="#161b22" stroke="#bc8cff" stroke-width="1"/>
+    <text x="160" y="112" fill="#d2a8ff" font-size="11" font-weight="600" text-anchor="middle">2-Level MTLB (10-bit) → STLB (10-bit, 4K)</text>
+    <text x="160" y="129" fill="#8b949e" font-size="10" text-anchor="middle">Maps 32-bit NPU Virtual IOVA → 40-bit LPDDR5 Physical</text>
+  </g>
+
+  <!-- Arrows from FE to Engines -->
+  <line x1="500" y1="242" x2="320" y2="278" stroke="#3fb950" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="355" y="258" fill="#3fb950" font-size="11" font-weight="600">VIVS_PS_NN_INST_ADDR</text>
+
+  <line x1="630" y1="242" x2="810" y2="278" stroke="#58a6ff" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <text x="755" y="258" fill="#58a6ff" font-size="11" font-weight="600">VIVS_PS_TP_INST_ADDR</text>
+
+  <!-- ==================== MIDDLE LEFT: 12x NN ENGINE CORES ==================== -->
+  <g transform="translate(40, 280)" filter="url(#shadow)">
+    <rect width="635" height="200" rx="8" fill="#09261a" stroke="#238636" stroke-width="1.5"/>
+    <rect width="635" height="32" rx="8" fill="#113e2b"/>
+    <rect y="22" width="635" height="10" fill="#113e2b"/>
+    <text x="317" y="22" fill="#3fb950" font-size="14" font-weight="700" text-anchor="middle">Neural Network (NN) Engine Cluster — 12 Cores × 64 MADs = 3.0 TOPS (INT8)</text>
+
+    <!-- 12 NN core grid (2 rows x 6 cols) -->
+    <g transform="translate(15, 42)">
+      <rect x="0"   y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="47" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 0</text>
+      <rect x="102" y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="149" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 1</text>
+      <rect x="204" y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="251" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 2</text>
+      <rect x="306" y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="353" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 3</text>
+      <rect x="408" y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="455" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 4</text>
+      <rect x="510" y="0" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="557" y="22" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 5</text>
+
+      <rect x="0"   y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="47" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 6</text>
+      <rect x="102" y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="149" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 7</text>
+      <rect x="204" y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="251" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 8</text>
+      <rect x="306" y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="353" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 9</text>
+      <rect x="408" y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="455" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 10</text>
+      <rect x="510" y="44" width="94" height="36" rx="4" fill="#161b22" stroke="#2ea043"/><text x="557" y="66" fill="#56d364" font-size="11" font-weight="700" text-anchor="middle">NN Core 11</text>
+    </g>
+
+    <!-- Sub-blocks inside NN cluster -->
+    <rect x="15" y="132" width="295" height="54" rx="5" fill="#0d1117" stroke="#238636"/>
+    <text x="162" y="152" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">V8.3 Huffman + 8-bit ZRL Weight Decoder</text>
+    <text x="162" y="170" fill="#8b949e" font-size="10" text-anchor="middle">3-Stage Pipelined Bitstream Decompressor (2× Perf)</text>
+
+    <rect x="325" y="132" width="295" height="54" rx="5" fill="#0d1117" stroke="#238636"/>
+    <text x="472" y="152" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Post-Multiplier, Pooling &amp; In-Line ALU</text>
+    <text x="472" y="170" fill="#8b949e" font-size="10" text-anchor="middle">Conv2D • Depthwise • Add • ReLU/PReLU • Transpose v2</text>
+  </g>
+
+  <!-- ==================== MIDDLE RIGHT: TP & SHADER ENGINE ==================== -->
+  <g transform="translate(695, 280)" filter="url(#shadow)">
+    <rect width="385" height="200" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="385" height="32" rx="8" fill="#162c4e"/>
+    <rect y="22" width="385" height="10" fill="#162c4e"/>
+    <text x="192" y="22" fill="#58a6ff" font-size="14" font-weight="700" text-anchor="middle">Tensor Processor (TP) &amp; 2× Shader Cores</text>
+
+    <rect x="16" y="44" width="353" height="64" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="192" y="66" fill="#79c0ff" font-size="12" font-weight="600" text-anchor="middle">TP Tensor Manipulation &amp; PWL Activation</text>
+    <text x="192" y="84" fill="#c9d1d9" font-size="10" text-anchor="middle">• NHWC ↔ NCHW Transpose &amp; Stride-2 Reshuffle</text>
+    <text x="192" y="99" fill="#8b949e" font-size="10" text-anchor="middle">• 1024-Entry × 16-bit Piecewise-Linear (PWL) LUT (Logistic/Abs)</text>
+
+    <rect x="16" y="120" width="353" height="66" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="192" y="142" fill="#79c0ff" font-size="12" font-weight="600" text-anchor="middle">2× Programmable USC / PPU Shader Cores</text>
+    <text x="192" y="160" fill="#c9d1d9" font-size="10" text-anchor="middle">• 256 Threads • 64 Temp Regs • 16 KB L1 Cache</text>
+    <text x="192" y="175" fill="#8b949e" font-size="10" text-anchor="middle">• Custom OpenCL / Compute Kernels &amp; EVIS VX2 Instructions</text>
+  </g>
+
+  <!-- ==================== BOTTOM: 512 KB VIP SRAM & 128-BIT AXI DMA ==================== -->
+  <line x1="350" y1="480" x2="350" y2="518" stroke="#3fb950" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <line x1="885" y1="480" x2="885" y2="518" stroke="#58a6ff" stroke-width="3" marker-end="url(#arrow-blue)"/>
+
+  <g transform="translate(40, 520)" filter="url(#shadow)">
+    <rect width="500" height="140" rx="8" fill="#1c2128" stroke="#3fb950" stroke-width="1.5"/>
+    <rect width="500" height="30" rx="8" fill="#113e2b"/>
+    <rect y="20" width="500" height="10" fill="#113e2b"/>
+    <text x="250" y="20" fill="#56d364" font-size="13" font-weight="700" text-anchor="middle">On-Chip VIP_SRAM (512 KB @ 128-Byte Physical Width)</text>
+
+    <rect x="16" y="42" width="226" height="84" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="129" y="64" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Kernel Streaming Cache</text>
+    <text x="129" y="82" fill="#8b949e" font-size="10" text-anchor="middle">Stores compressed CNN weights</text>
+    <text x="129" y="98" fill="#8b949e" font-size="10" text-anchor="middle">on-die to avoid DRAM round-trips</text>
+
+    <rect x="258" y="42" width="226" height="84" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="371" y="64" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Tile Interleave Buffers</text>
+    <text x="371" y="82" fill="#8b949e" font-size="10" text-anchor="middle">64 lanes/cycle output bandwidth</text>
+    <text x="371" y="98" fill="#8b949e" font-size="10" text-anchor="middle">Input Depth: 9 • Accum Depth: 32</text>
+  </g>
+
+  <!-- Bidirectional DMA link between VIP SRAM / Engines and LPDDR5 -->
+  <line x1="540" y1="590" x2="580" y2="590" stroke="#bc8cff" stroke-width="3" marker-end="url(#arrow-purple)"/>
+
+  <g transform="translate(580, 520)" filter="url(#shadow)">
+    <rect width="500" height="140" rx="8" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+    <rect width="500" height="30" rx="8" fill="#371f57"/>
+    <rect y="20" width="500" height="10" fill="#371f57"/>
+    <text x="250" y="20" fill="#d2a8ff" font-size="13" font-weight="700" text-anchor="middle">128-Bit AXI / MBUS DMA Master → 6 GB LPDDR5 DRAM</text>
+
+    <rect x="16" y="42" width="226" height="84" rx="5" fill="#161b22" stroke="#bc8cff"/>
+    <text x="129" y="64" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Write-Combine GEM BOs</text>
+    <text x="129" y="82" fill="#8b949e" font-size="10" text-anchor="middle">Command Streams • NN/TP Configs</text>
+    <text x="129" y="98" fill="#8b949e" font-size="10" text-anchor="middle">Compressed Weight Bitstreams</text>
+
+    <rect x="258" y="42" width="226" height="84" rx="5" fill="#161b22" stroke="#bc8cff"/>
+    <text x="371" y="64" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Zero-Copy Tensor Buffers</text>
+    <text x="371" y="82" fill="#8b949e" font-size="10" text-anchor="middle">256-Byte Burst • 64 Outstanding Reqs</text>
+    <text x="371" y="98" fill="#8b949e" font-size="10" text-anchor="middle">Shared via PRIME / dma-buf</text>
+  </g>
+</svg>

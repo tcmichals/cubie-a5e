@@ -275,11 +275,10 @@ The next time you look at a modern desktop-class SBC, don't just see an applicat
 
 ---
 
-## 🔮 What's Next: Hacking Through the Camera, H.265 & the NPU
+## 🔮 Companion Hackster.io Deep-Dive: The 3.0 TOPS NPU & Zero-Copy H.264/H.265 Vision Pipeline
 
-Freeing the RISC-V coprocessor was only phase one. Right now, our lab bench is active on the next frontiers:
-- **Zero-Copy Camera & H.265 Video Encoding**: We have already brought up the 2-lane MIPI CSI-2 camera receiver, authenticated the undocumented Hardware ISP 602 on silicon, and proven a zero-copy DMA-buf pipeline passing 1080p frames directly into the Cedrus hardware video engine for H.264 encoding at 78 fps with < 1% CPU utilization. Next in the crosshairs: unlocking **hardware H.265 (HEVC)** encoding!
-- **Freeing the Onboard 3 TOPS NPU**: Rather than accepting proprietary vendor binary blobs for computer vision, our upcoming milestone brings up the onboard VeriSilicon VIP9000 NPU using the mainline Linux `etnaviv` DRM driver and open-source Mesa Teflon TFLite delegate—delivering an entirely open edge AI vision stack from photon to motor pulse.
+Freeing the RISC-V coprocessor was phase one. In our companion Hackster.io engineering article, we bring up the onboard **3.0 TOPS VeriSilicon Vivante VIP9000UL-DI+ NPU** (`npu@3600000`) using the mainline Linux `etnaviv` DRM driver and Mesa 26.1.8 Teflon (`libteflon.so`), and connect it to the 2-lane MIPI CSI-2 camera, Hardware ISP 602, and Hardware H.264/H.265 Video Encoder (`ve@1c10000`) over shared LPDDR5 `dma-buf` descriptors:
+- **[Freeing the 3.0 TOPS NPU on the Allwinner A733: How an On-Die Neural Accelerator Works, Mainline Linux `etnaviv` + Mesa Teflon Bring-Up, and Zero-Copy Video Processing](hackster_a733_vip9000_npu_etnaviv_teflon.md)**
 
 ---
 

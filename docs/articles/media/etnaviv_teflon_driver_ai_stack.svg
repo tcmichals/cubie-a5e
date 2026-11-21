@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 660" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#bc8cff"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="560" y="36" fill="#f0f6fc" font-size="21" font-weight="700" text-anchor="middle">Mainline Open-Source NPU Software &amp; Driver Stack (Mesa Teflon + Linux Etnaviv DRM)</text>
+  <text x="560" y="58" fill="#8b949e" font-size="13" text-anchor="middle">Zero Proprietary Blobs: TensorFlow Lite C API → libteflon.so → Gallium Etnaviv ML → /dev/dri/renderD128 → VIP9000 Silicon</text>
+
+  <!-- Outer Frame -->
+  <rect x="20" y="74" width="1080" height="566" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- ==================== LAYER 1: APPLICATION & TFLITE RUNTIME ==================== -->
+  <g transform="translate(45, 92)" filter="url(#shadow)">
+    <rect width="1030" height="96" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="230" height="96" rx="8" fill="#162c4e"/>
+    <text x="115" y="42" fill="#58a6ff" font-size="14" font-weight="700" text-anchor="middle">1. AI Application &amp;</text>
+    <text x="115" y="62" fill="#58a6ff" font-size="14" font-weight="700" text-anchor="middle">TFLite Runtime</text>
+    <text x="115" y="80" fill="#8b949e" font-size="10" text-anchor="middle">libtensorflow-lite.so (v2.11)</text>
+
+    <rect x="250" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="370" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">INT8 / UINT8 .tflite Model</text>
+    <text x="370" y="56" fill="#8b949e" font-size="10" text-anchor="middle">TfLiteModelCreateFromFile()</text>
+    <text x="370" y="72" fill="#8b949e" font-size="10" text-anchor="middle">Per-Tensor Affine Quantization</text>
+
+    <rect x="510" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="630" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">External Delegate Loader</text>
+    <text x="630" y="56" fill="#79c0ff" font-size="10" text-anchor="middle">tflite_plugin_create_delegate()</text>
+    <text x="630" y="72" fill="#8b949e" font-size="10" text-anchor="middle">TfLiteInterpreterOptionsAddDelegate()</text>
+
+    <rect x="770" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="890" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Graph Partitioning</text>
+    <text x="890" y="56" fill="#8b949e" font-size="10" text-anchor="middle">Supported Ops → Teflon Subgraph</text>
+    <text x="890" y="72" fill="#8b949e" font-size="10" text-anchor="middle">Unsupported Ops → Arm NEON CPU</text>
+  </g>
+
+  <line x1="560" y1="188" x2="560" y2="216" stroke="#58a6ff" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- ==================== LAYER 2: MESA TEFLON FRONTEND ==================== -->
+  <g transform="translate(45, 218)" filter="url(#shadow)">
+    <rect width="1030" height="96" rx="8" fill="#231438" stroke="#bc8cff" stroke-width="1.5"/>
+    <rect width="230" height="96" rx="8" fill="#371f57"/>
+    <text x="115" y="42" fill="#d2a8ff" font-size="14" font-weight="700" text-anchor="middle">2. Mesa Teflon</text>
+    <text x="115" y="62" fill="#d2a8ff" font-size="14" font-weight="700" text-anchor="middle">Gallium Frontend</text>
+    <text x="115" y="80" fill="#8b949e" font-size="10" text-anchor="middle">/usr/lib/libteflon.so (Mesa 26.1.8)</text>
+
+    <rect x="250" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#bc8cff"/>
+    <text x="370" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">DRM Render Node Probe</text>
+    <text x="370" y="56" fill="#d2a8ff" font-size="10" text-anchor="middle">pipe_loader_probe() → renderD128</text>
+    <text x="370" y="72" fill="#8b949e" font-size="10" text-anchor="middle">Opens Etnaviv pipe_screen &amp; context</text>
+
+    <rect x="510" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#bc8cff"/>
+    <text x="630" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Operator Lowering (tfl_device.c)</text>
+    <text x="630" y="56" fill="#8b949e" font-size="10" text-anchor="middle">Conv2D, Depthwise, Add, Sub, FC,</text>
+    <text x="630" y="72" fill="#8b949e" font-size="10" text-anchor="middle">Concat, Split, Pad, ReLU, Logistic</text>
+
+    <rect x="770" y="14" width="240" height="68" rx="5" fill="#161b22" stroke="#bc8cff"/>
+    <text x="890" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Gallium ML Interface</text>
+    <text x="890" y="56" fill="#d2a8ff" font-size="10" text-anchor="middle">ml_operation_supported()</text>
+    <text x="890" y="72" fill="#d2a8ff" font-size="10" text-anchor="middle">ml_subgraph_create() / invoke()</text>
+  </g>
+
+  <line x1="560" y1="314" x2="560" y2="342" stroke="#bc8cff" stroke-width="2.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- ==================== LAYER 3: MESA ETNAVIV GALLIUM ML DRIVER ==================== -->
+  <g transform="translate(45, 344)" filter="url(#shadow)">
+    <rect width="1030" height="110" rx="8" fill="#09261a" stroke="#238636" stroke-width="1.5"/>
+    <rect width="230" height="110" rx="8" fill="#113e2b"/>
+    <text x="115" y="48" fill="#3fb950" font-size="14" font-weight="700" text-anchor="middle">3. Etnaviv Gallium</text>
+    <text x="115" y="68" fill="#3fb950" font-size="14" font-weight="700" text-anchor="middle">NPU Compiler</text>
+    <text x="115" y="88" fill="#8b949e" font-size="10" text-anchor="middle">src/gallium/drivers/etnaviv/</text>
+
+    <rect x="250" y="14" width="240" height="82" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="370" y="36" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Allwinner HWDB Lookup</text>
+    <text x="370" y="54" fill="#56d364" font-size="10" text-anchor="middle">allwinner/gc_feature_database.h</text>
+    <text x="370" y="70" fill="#8b949e" font-size="10" text-anchor="middle">A733: 0x9113 (12 NN, 512 KB SRAM)</text>
+    <text x="370" y="85" fill="#8b949e" font-size="10" text-anchor="middle">A5E: 0x9003 (6 NN, 2 TP, 512 KB)</text>
+
+    <rect x="510" y="14" width="240" height="82" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="630" y="36" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">V8 Tiling &amp; Weight Bitstream</text>
+    <text x="630" y="54" fill="#56d364" font-size="10" text-anchor="middle">etnaviv_ml_nn_v8.c</text>
+    <text x="630" y="70" fill="#8b949e" font-size="10" text-anchor="middle">Superblock SRAM Tile Partitioning</text>
+    <text x="630" y="85" fill="#8b949e" font-size="10" text-anchor="middle">Huffman + 8-bit ZRL + Bias Correction</text>
+
+    <rect x="770" y="14" width="240" height="82" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="890" y="36" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Command Stream Emission</text>
+    <text x="890" y="54" fill="#56d364" font-size="10" text-anchor="middle">VIVS_GL_API_MODE_OPENCL</text>
+    <text x="890" y="70" fill="#8b949e" font-size="10" text-anchor="middle">Emits VIVS_PS_TP_INST_ADDR &amp;</text>
+    <text x="890" y="85" fill="#8b949e" font-size="10" text-anchor="middle">VIVS_PS_NN_INST_ADDR + Relocs</text>
+  </g>
+
+  <line x1="560" y1="454" x2="560" y2="482" stroke="#3fb950" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <text x="720" y="472" fill="#3fb950" font-size="11" font-weight="600">DRM_IOCTL_ETNAVIV_GEM_SUBMIT (/dev/dri/renderD128)</text>
+
+  <!-- ==================== LAYER 4: LINUX KERNEL ETNAVIV DRM DRIVER ==================== -->
+  <g transform="translate(45, 484)" filter="url(#shadow)">
+    <rect width="1030" height="136" rx="8" fill="#1c2128" stroke="#f0883e" stroke-width="1.5"/>
+    <rect width="230" height="136" rx="8" fill="#3b2300"/>
+    <text x="115" y="54" fill="#ffa657" font-size="14" font-weight="700" text-anchor="middle">4. Mainline Linux 7.1</text>
+    <text x="115" y="74" fill="#ffa657" font-size="14" font-weight="700" text-anchor="middle">Etnaviv DRM Driver</text>
+    <text x="115" y="96" fill="#8b949e" font-size="10" text-anchor="middle">drivers/gpu/drm/etnaviv/</text>
+    <text x="115" y="112" fill="#8b949e" font-size="10" text-anchor="middle">CONFIG_DRM_ETNAVIV=y</text>
+
+    <rect x="250" y="16" width="240" height="104" rx="5" fill="#161b22" stroke="#f0883e"/>
+    <text x="370" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Hardware Reset &amp; Identity</text>
+    <text x="370" y="58" fill="#ffa657" font-size="10" text-anchor="middle">etnaviv_gpu.c / etnaviv_hwdb.c</text>
+    <text x="370" y="76" fill="#8b949e" font-size="10" text-anchor="middle">• Deasserts 3 Resets (Core/AXI/AHB)</text>
+    <text x="370" y="92" fill="#8b949e" font-size="10" text-anchor="middle">• Enables ETNA_SEC_KERNEL Mode</text>
+    <text x="370" y="108" fill="#8b949e" font-size="10" text-anchor="middle">• Sets 0x003A8 NONSEC_ACCESS</text>
+
+    <rect x="510" y="16" width="240" height="104" rx="5" fill="#161b22" stroke="#f0883e"/>
+    <text x="630" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">MMUv2 &amp; GEM Buffer Manager</text>
+    <text x="630" y="58" fill="#ffa657" font-size="10" text-anchor="middle">etnaviv_iommu_v2.c / etnaviv_gem.c</text>
+    <text x="630" y="76" fill="#8b949e" font-size="10" text-anchor="middle">• Allocates WC BOs &amp; DMA-Bufs</text>
+    <text x="630" y="92" fill="#8b949e" font-size="10" text-anchor="middle">• Programs 0x003B4 PD Bypass</text>
+    <text x="630" y="108" fill="#8b949e" font-size="10" text-anchor="middle">• Loads PTA via FE &amp; Enables MMU</text>
+
+    <rect x="770" y="16" width="240" height="104" rx="5" fill="#161b22" stroke="#f0883e"/>
+    <text x="890" y="38" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">DRM GPU Scheduler &amp; IRQ</text>
+    <text x="890" y="58" fill="#ffa657" font-size="10" text-anchor="middle">etnaviv_sched.c / etnaviv_buffer.c</text>
+    <text x="890" y="76" fill="#8b949e" font-size="10" text-anchor="middle">• Links User Cmdbuf into FE Ring</text>
+    <text x="890" y="92" fill="#8b949e" font-size="10" text-anchor="middle">• Triggers 0x003A4 SEC_CMD_CTRL</text>
+    <text x="890" y="108" fill="#8b949e" font-size="10" text-anchor="middle">• GIC_SPI 65 Signals dma_fence</text>
+  </g>
+</svg>

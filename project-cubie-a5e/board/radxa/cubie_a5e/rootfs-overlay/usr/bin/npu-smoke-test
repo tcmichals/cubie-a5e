@@ -1,57 +1,197 @@
 #!/bin/sh
 set -eu
 
-echo "[npu-smoke-test] Cubie A5E TIM-VX delegate smoke test"
+echo "[npu-smoke-test] Mainline Etnaviv + Mesa Teflon NPU smoke test"
 
-echo "[1/4] Kernel/device checks"
-if [ -e /dev/galcore ]; then
-    echo "  OK: /dev/galcore present"
+echo "[1/3] Kernel /dev/dri/renderD128 check"
+if [ -e /dev/dri/renderD128 ]; then
+    echo "  OK: /dev/dri/renderD128 present"
 else
-    echo "  WARN: /dev/galcore missing (galcore/NPU kernel device not detected)"
+    echo "  FAIL: /dev/dri/renderD128 missing (etnaviv NPU DRM render node not detected)"
+    exit 1
 fi
 
-echo "[2/4] Delegate/runtime library checks"
-FOUND_LIB=0
-for pattern in \
-    "/usr/lib/libvx_delegate.so*" \
-    "/usr/lib/libtim-vx.so*" \
-    "/usr/lib/libovxlib.so*" \
-    "/usr/lib/libOpenVX.so*"
-do
-    set +e
-    ls $pattern >/dev/null 2>&1
-    rc=$?
-    set -e
-    if [ $rc -eq 0 ]; then
-        echo "  OK: found $pattern"
-        FOUND_LIB=1
+echo "[2/3] Userspace Teflon delegate & TFLite library checks"
+for lib in /usr/lib/libteflon.so /usr/lib/libtensorflow-lite.so; do
+    if [ -e "$lib" ]; then
+        echo "  OK: found $lib"
+    else
+        echo "  FAIL: missing $lib"
+        exit 2
     fi
 done
 
-if [ "$FOUND_LIB" -eq 0 ]; then
-    echo "  FAIL: no known TIM-VX/OpenVX delegate libs found under /usr/lib"
-    echo "        Provide BR2_PACKAGE_TIMVX_DELEGATE_PREBUILT_DIR with lib/*.so artifacts"
-    exit 2
-fi
+echo "[3/3] Running TFLite INT8/UINT8 inference (CPU vs Teflon NPU delegate)"
+python3 - "$@" <<'PY'
+import base64
+import ctypes
+import os
+import sys
+import time
 
-echo "[3/4] TensorFlow Lite runtime presence"
-if command -v benchmark_model >/dev/null 2>&1; then
-    echo "  OK: benchmark_model found at $(command -v benchmark_model)"
-else
-    echo "  WARN: benchmark_model not found (this may be fine depending on package set)"
-fi
+ADD_MODEL_B64 = (
+    "DAAAAFRGTDMAAAAApv///wMAAAAMAgAARAAAACwAAAAEAAAABAAAABwAAAAUAAAADAAAAAQAAAAQ/v//"
+    "FP7//xj+//8c/v//DQAAAHF1YW50aXplZF9hZGQAAAABAAAAFAAAAAAADgAYAAQACAAMABAAFAAOAAAA"
+    "eAAAAGgAAABcAAAAFAAAAAQAAAAEAAAAbWFpbgAAAAABAAAAFAAAAAAADgAUAAAACAAMAAcAEAAOAAAA"
+    "AAAACxgAAAAMAAAABAAAAJz+//8BAAAAAgAAAAIAAAAAAAAAAQAAAAEAAAACAAAAAgAAAAAAAAABAAAA"
+    "AwAAAMgAAABgAAAABAAAAFL///8AAAADPAAAAAMAAAAsAAAABAAAAET///8YAAAABAAAAAEAAAAAAAAA"
+    "AAAAAAAAAAABAAAAgYCAOwMAAABvdXQABAAAAAEAAAAIAAAACAAAAAMAAACq////AAAAAzgAAAACAAAA"
+    "KAAAAAQAAACc////FAAAAAQAAAABAAAAAAAAAAAAAAABAAAAgYCAOwMAAABpbjEABAAAAAEAAAAIAAAA"
+    "CAAAAAMAAAAAAA4AGAAIAAcADAAQABQADgAAAAAAAANIAAAAAQAAADgAAAAQAAAADAAMAAAAAAAEAAgA"
+    "DAAAABgAAAAEAAAAAQAAAAAAAAAAAAAAAAAAAAEAAACBgIA7AwAAAGluMAAEAAAAAQAAAAgAAAAIAAAA"
+    "AwAAAAEAAAAIAAAABAAEAAQAAAA="
+)
 
-echo "[4/4] Python import checks"
-if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY'
-import importlib.util
-mods = ["tensorflow", "tflite_runtime"]
-for m in mods:
-    print(f"  {'OK' if importlib.util.find_spec(m) else 'WARN'}: python module {m}")
+CONV_MODEL_B64 = (
+    "EAAAAFRGTDMAAAAAAAAAAOr+//8DAAAAOAMAAAABAADkAAAABAAAAAUAAADUAAAAyAAAAEAAAAAMAAAA"
+    "BAAAAET////W////BAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAgABAAGAAAA"
+    "BAAAAGwAAAB7gomQl36FjJN6gYiPln2Ei5J5gIeOlXyDipF4f4aNlHuCiZCXfoWMk3qBiI+WfYSLknmA"
+    "h46VfIOKkXh/ho2Ue4KJkJd+hYyTeoGIj5Z9hIuSeYCHjpV8g4qReH+GjZR7gomQl36FjJN6gYgAAAAA"
+    "AAAAAAAAAAD8////BAAEAAQAAAAQAAAAcXVhbnRpemVkX2NvbnYyZAAAAAABAAAAFAAAAAAADgAYAAQA"
+    "CAAMABAAFAAOAAAAjAAAAIAAAAB0AAAAFAAAAAQAAAAEAAAAbWFpbgAAAAABAAAAFAAAAAAADgAWAAAA"
+    "CAAMAAcAEAAOAAAAAAAAASwAAAAgAAAAEAAAAAAACgAMAAAABAAIAAoAAAABAAAAAQAAAAEAAAADAAAA"
+    "AwAAAAAAAAABAAAAAgAAAAEAAAADAAAAAQAAAAAAAAAEAAAAJAEAALQAAABgAAAABAAAAPr+//8AAAAD"
+    "PAAAAAQAAAAoAAAABAAAAOz+//8UAAAABAAAAAEAAACAAAAAAAAAAAEAAACBgIA7BgAAAG91dHB1dAAA"
+    "BAAAAAEAAAAIAAAACAAAAAQAAABS////AAAAAkAAAAADAAAALAAAAAQAAABE////GAAAAAQAAAABAAAA"
+    "AAAAAAAAAAAAAAAAAQAAAIMBgTcEAAAAYmlhcwAAAAABAAAABAAAAKL///8AAAADQAAAAAIAAAAsAAAA"
+    "BAAAAJT///8YAAAABAAAAAEAAACAAAAAAAAAAAAAAAABAAAAgYCAOwcAAAB3ZWlnaHRzAAQAAAAEAAAA"
+    "AwAAAAMAAAADAAAAAAAOABgACAAHAAwAEAAUAA4AAAAAAAADSAAAAAEAAAA0AAAAEAAAAAwADAAAAAAA"
+    "BAAIAAwAAAAUAAAABAAAAAEAAACAAAAAAAAAAAEAAACBgIA7BQAAAGlucHV0AAAABAAAAAEAAAAIAAAA"
+    "CAAAAAMAAAABAAAAEAAAAAwADAAHAAAAAAAIAAwAAAAAAAADAwAAAA=="
+)
+
+tflite = ctypes.CDLL("/usr/lib/libtensorflow-lite.so")
+teflon = ctypes.CDLL("/usr/lib/libteflon.so")
+
+tflite.TfLiteModelCreate.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+tflite.TfLiteModelCreate.restype = ctypes.c_void_p
+tflite.TfLiteModelDelete.argtypes = [ctypes.c_void_p]
+
+tflite.TfLiteInterpreterOptionsCreate.restype = ctypes.c_void_p
+tflite.TfLiteInterpreterOptionsDelete.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterOptionsSetNumThreads.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+tflite.TfLiteInterpreterOptionsAddDelegate.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+tflite.TfLiteInterpreterCreate.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+tflite.TfLiteInterpreterCreate.restype = ctypes.c_void_p
+tflite.TfLiteInterpreterDelete.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterAllocateTensors.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterAllocateTensors.restype = ctypes.c_int
+tflite.TfLiteInterpreterInvoke.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterInvoke.restype = ctypes.c_int
+
+tflite.TfLiteInterpreterGetInputTensorCount.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterGetInputTensorCount.restype = ctypes.c_int32
+tflite.TfLiteInterpreterGetInputTensor.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+tflite.TfLiteInterpreterGetInputTensor.restype = ctypes.c_void_p
+tflite.TfLiteInterpreterGetOutputTensorCount.argtypes = [ctypes.c_void_p]
+tflite.TfLiteInterpreterGetOutputTensorCount.restype = ctypes.c_int32
+tflite.TfLiteInterpreterGetOutputTensor.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+tflite.TfLiteInterpreterGetOutputTensor.restype = ctypes.c_void_p
+
+tflite.TfLiteTensorByteSize.argtypes = [ctypes.c_void_p]
+tflite.TfLiteTensorByteSize.restype = ctypes.c_size_t
+tflite.TfLiteTensorCopyFromBuffer.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+tflite.TfLiteTensorCopyFromBuffer.restype = ctypes.c_int
+tflite.TfLiteTensorCopyToBuffer.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+tflite.TfLiteTensorCopyToBuffer.restype = ctypes.c_int
+
+teflon.tflite_plugin_create_delegate.argtypes = [
+    ctypes.POINTER(ctypes.c_char_p),
+    ctypes.POINTER(ctypes.c_char_p),
+    ctypes.c_size_t,
+    ctypes.c_void_p,
+]
+teflon.tflite_plugin_create_delegate.restype = ctypes.c_void_p
+teflon.tflite_plugin_destroy_delegate.argtypes = [ctypes.c_void_p]
+
+
+def run_model(model_bytes, use_npu, runs=5):
+    buf = ctypes.create_string_buffer(model_bytes, len(model_bytes))
+    model = tflite.TfLiteModelCreate(buf, len(model_bytes))
+    if not model:
+        raise RuntimeError("TfLiteModelCreate failed")
+
+    opts = tflite.TfLiteInterpreterOptionsCreate()
+    tflite.TfLiteInterpreterOptionsSetNumThreads(opts, 1)
+
+    delegate = None
+    if use_npu:
+        delegate = teflon.tflite_plugin_create_delegate(None, None, 0, None)
+        if not delegate:
+            raise RuntimeError("tflite_plugin_create_delegate failed")
+        tflite.TfLiteInterpreterOptionsAddDelegate(opts, delegate)
+
+    interp = tflite.TfLiteInterpreterCreate(model, opts)
+    if not interp:
+        raise RuntimeError("TfLiteInterpreterCreate failed")
+
+    if tflite.TfLiteInterpreterAllocateTensors(interp) != 0:
+        raise RuntimeError("TfLiteInterpreterAllocateTensors failed")
+
+    in_count = tflite.TfLiteInterpreterGetInputTensorCount(interp)
+    for idx in range(in_count):
+        tensor = tflite.TfLiteInterpreterGetInputTensor(interp, idx)
+        nbytes = tflite.TfLiteTensorByteSize(tensor)
+        pattern = bytes([((i * 13 + idx * 17 + 10) % 64) + 16 for i in range(nbytes)])
+        in_buf = ctypes.create_string_buffer(pattern, nbytes)
+        if tflite.TfLiteTensorCopyFromBuffer(tensor, in_buf, nbytes) != 0:
+            raise RuntimeError("TfLiteTensorCopyFromBuffer failed")
+
+    # Warmup
+    if tflite.TfLiteInterpreterInvoke(interp) != 0:
+        raise RuntimeError("TfLiteInterpreterInvoke warmup failed")
+
+    t0 = time.monotonic()
+    for _ in range(runs):
+        if tflite.TfLiteInterpreterInvoke(interp) != 0:
+            raise RuntimeError("TfLiteInterpreterInvoke failed")
+    dt_ms = (time.monotonic() - t0) * 1000.0 / runs
+
+    outputs = []
+    out_count = tflite.TfLiteInterpreterGetOutputTensorCount(interp)
+    for idx in range(out_count):
+        tensor = tflite.TfLiteInterpreterGetOutputTensor(interp, idx)
+        nbytes = tflite.TfLiteTensorByteSize(tensor)
+        out_buf = ctypes.create_string_buffer(nbytes)
+        if tflite.TfLiteTensorCopyToBuffer(tensor, out_buf, nbytes) != 0:
+            raise RuntimeError("TfLiteTensorCopyToBuffer failed")
+        outputs.append(out_buf.raw)
+
+    tflite.TfLiteInterpreterDelete(interp)
+    tflite.TfLiteInterpreterOptionsDelete(opts)
+    if delegate:
+        teflon.tflite_plugin_destroy_delegate(delegate)
+    tflite.TfLiteModelDelete(model)
+    return outputs, dt_ms
+
+
+models = []
+if len(sys.argv) > 1:
+    for path in sys.argv[1:]:
+        with open(path, "rb") as f:
+            models.append((os.path.basename(path), f.read()))
+else:
+    models = [
+        ("quantized_add_8x8x3 (NN engine)", base64.b64decode(ADD_MODEL_B64)),
+        ("quantized_conv2d_8x8x3x4 (TP+NN engine)", base64.b64decode(CONV_MODEL_B64)),
+    ]
+
+for name, data in models:
+    cpu_out, cpu_ms = run_model(data, use_npu=False)
+    npu_out, npu_ms = run_model(data, use_npu=True)
+    diffs = [abs(a - b) for a, b in zip(cpu_out[0], npu_out[0])]
+    max_diff = max(diffs) if diffs else 0
+    exact = sum(1 for d in diffs if d == 0)
+    print(f"  Model: {name}")
+    print(f"    CPU: {cpu_ms:.3f} ms | NPU (Teflon): {npu_ms:.3f} ms")
+    print(f"    Output bytes: {len(npu_out[0])}, exact match: {exact}/{len(npu_out[0])}, max_abs_diff: {max_diff}")
+    print(f"    Sample CPU[:8]: {list(cpu_out[0][:8])}")
+    print(f"    Sample NPU[:8]: {list(npu_out[0][:8])}")
+    if max_diff > 2:
+        print(f"  FAIL: max_abs_diff {max_diff} > 2")
+        sys.exit(3)
 PY
-else
-    echo "  WARN: python3 not found"
-fi
 
-echo "[npu-smoke-test] complete"
+echo "[npu-smoke-test] PASS"
 exit 0

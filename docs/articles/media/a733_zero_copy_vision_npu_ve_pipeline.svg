@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 680" width="100%" height="100%" style="background:#0d1117; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#3fb950"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#bc8cff"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="560" y="36" fill="#f0f6fc" font-size="21" font-weight="700" text-anchor="middle">Allwinner A733 Zero-Copy Vision, 3.0 TOPS NPU &amp; H.264/H.265 Video Pipeline</text>
+  <text x="560" y="58" fill="#8b949e" font-size="13" text-anchor="middle">1080p30 MIPI CSI-2 → Hardware ISP 602 → Shared LPDDR5 dma-buf → Concurrent VPU Encoding, NPU Inference &amp; RISC-V Control</text>
+
+  <!-- Outer Frame -->
+  <rect x="20" y="74" width="1080" height="586" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- ==================== TOP ROW: CAMERA -> MIPI -> ISP 602 -> CSI DMA0 ==================== -->
+  <!-- Box 1: OV5647 Sensor -->
+  <g transform="translate(40, 96)" filter="url(#shadow)">
+    <rect width="210" height="115" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="210" height="28" rx="8" fill="#162c4e"/>
+    <rect y="18" width="210" height="10" fill="#162c4e"/>
+    <text x="105" y="19" fill="#58a6ff" font-size="12" font-weight="700" text-anchor="middle">1. MIPI Camera Sensor</text>
+    <text x="105" y="48" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">OmniVision OV5647</text>
+    <text x="105" y="68" fill="#8b949e" font-size="10" text-anchor="middle">1920×1080 @ 30.00 fps</text>
+    <text x="105" y="86" fill="#79c0ff" font-size="10" text-anchor="middle">2-Lane MIPI CSI-2 RAW10</text>
+    <text x="105" y="102" fill="#8b949e" font-size="9" text-anchor="middle">SBGGR10_1X10 • CCI I2C3</text>
+  </g>
+
+  <line x1="250" y1="153" x2="285" y2="153" stroke="#58a6ff" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Box 2: D-PHY & CSI-2 -->
+  <g transform="translate(285, 96)" filter="url(#shadow)">
+    <rect width="230" height="115" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="230" height="28" rx="8" fill="#162c4e"/>
+    <rect y="18" width="230" height="10" fill="#162c4e"/>
+    <text x="115" y="19" fill="#58a6ff" font-size="12" font-weight="700" text-anchor="middle">2. Combo D-PHY &amp; CSI-2</text>
+    <text x="115" y="48" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">dphy1 (0x05810200)</text>
+    <text x="115" y="66" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">mipi1 (0x05811400)</text>
+    <text x="115" y="86" fill="#8b949e" font-size="10" text-anchor="middle">sun6i-mipi-csi2 + Parser0</text>
+    <text x="115" y="102" fill="#79c0ff" font-size="9" text-anchor="middle">Power Domain: PCK-600 PD_VI</text>
+  </g>
+
+  <line x1="515" y1="153" x2="550" y2="153" stroke="#58a6ff" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Box 3: Hardware ISP 602 -->
+  <g transform="translate(550, 96)" filter="url(#shadow)">
+    <rect width="265" height="115" rx="8" fill="#09261a" stroke="#238636" stroke-width="1.5"/>
+    <rect width="265" height="28" rx="8" fill="#113e2b"/>
+    <rect y="18" width="265" height="10" fill="#113e2b"/>
+    <text x="132" y="19" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">3. Hardware ISP 602 (In-Line)</text>
+    <text x="132" y="48" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">sun60i-isp (0x05900000, IRQ 129)</text>
+    <text x="132" y="68" fill="#56d364" font-size="10" text-anchor="middle">Demosaic • AWB • AE • CCM • Gamma</text>
+    <text x="132" y="86" fill="#c9d1d9" font-size="10" text-anchor="middle">libcamera sun60i-isp Pipeline &amp; IPA</text>
+    <text x="132" y="102" fill="#8b949e" font-size="9" text-anchor="middle">0% CPU Pixel Processing (600 MHz)</text>
+  </g>
+
+  <line x1="815" y1="153" x2="850" y2="153" stroke="#3fb950" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Box 4: VIPP0 & CSI DMA0 -->
+  <g transform="translate(850, 96)" filter="url(#shadow)">
+    <rect width="230" height="115" rx="8" fill="#09261a" stroke="#238636" stroke-width="1.5"/>
+    <rect width="230" height="28" rx="8" fill="#113e2b"/>
+    <rect y="18" width="230" height="10" fill="#113e2b"/>
+    <text x="115" y="19" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">4. VIPP0 &amp; CSI DMA0</text>
+    <text x="115" y="48" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">sun6i-csi (0x05830000)</text>
+    <text x="115" y="68" fill="#56d364" font-size="10" text-anchor="middle">Outputs 1080p30 NV12 Planar</text>
+    <text x="115" y="86" fill="#c9d1d9" font-size="10" text-anchor="middle">Exports V4L2 dma-buf FDs</text>
+    <text x="115" y="102" fill="#8b949e" font-size="9" text-anchor="middle">Direct MBUS Write to CMA</text>
+  </g>
+
+  <!-- Arrow from CSI DMA0 down to Shared LPDDR5 DMA-Buf Hub -->
+  <line x1="965" y1="211" x2="965" y2="255" stroke="#bc8cff" stroke-width="3" marker-end="url(#arrow-purple)"/>
+
+  <!-- ==================== CENTER: SHARED LPDDR5 CMA / DMA-BUF POOL ==================== -->
+  <g transform="translate(40, 258)" filter="url(#shadow)">
+    <rect width="1040" height="74" rx="8" fill="#231438" stroke="#bc8cff" stroke-width="1.8"/>
+    <text x="520" y="28" fill="#d2a8ff" font-size="15" font-weight="700" text-anchor="middle">Shared 6 GB LPDDR5 CMA / DMA-Buf Zero-Copy Memory Fabric (MBUS 600 MHz)</text>
+    <text x="520" y="50" fill="#c9d1d9" font-size="12" text-anchor="middle">File Descriptors (dma_buf_fd) Passed Between V4L2, DRM/Etnaviv &amp; Userspace — Zero memcpy() Across Subsystems</text>
+  </g>
+
+  <!-- Three Down Arrows to Parallel Hardware Engines -->
+  <line x1="205" y1="332" x2="205" y2="376" stroke="#f0883e" stroke-width="3" marker-end="url(#arrow-orange)"/>
+  <text x="215" y="358" fill="#f0883e" font-size="11" font-weight="600">V4L2_MEMORY_DMABUF</text>
+
+  <line x1="560" y1="332" x2="560" y2="376" stroke="#3fb950" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <text x="570" y="358" fill="#3fb950" font-size="11" font-weight="600">DRM PRIME / GEM BO</text>
+
+  <line x1="915" y1="332" x2="915" y2="376" stroke="#58a6ff" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <text x="925" y="358" fill="#58a6ff" font-size="11" font-weight="600">Target Vectors (RPMsg)</text>
+
+  <!-- ==================== BOTTOM LEFT: HARDWARE VE ENCODER ==================== -->
+  <g transform="translate(40, 380)" filter="url(#shadow)">
+    <rect width="330" height="256" rx="8" fill="#1c2128" stroke="#f0883e" stroke-width="1.5"/>
+    <rect width="330" height="32" rx="8" fill="#3b2300"/>
+    <rect y="22" width="330" height="10" fill="#3b2300"/>
+    <text x="165" y="22" fill="#ffa657" font-size="13" font-weight="700" text-anchor="middle">Branch A: Hardware Video Encoder</text>
+
+    <rect x="16" y="44" width="298" height="60" rx="5" fill="#161b22" stroke="#f0883e"/>
+    <text x="165" y="64" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">Allwinner VE_ENC0 (0x01c10000)</text>
+    <text x="165" y="82" fill="#8b949e" font-size="10" text-anchor="middle">Mainline V4L2 M2M Driver (sunxi-cedrus)</text>
+    <text x="165" y="96" fill="#ffa657" font-size="10" text-anchor="middle">GIC_SPI 48 • PD_VE_ENC (Domain 3)</text>
+
+    <rect x="16" y="114" width="298" height="64" rx="5" fill="#161b22" stroke="#f0883e"/>
+    <text x="165" y="134" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Measured 1080p30 Zero-Copy Encode</text>
+    <text x="165" y="152" fill="#56d364" font-size="10" font-weight="600" text-anchor="middle">• H.264 High/Main: 30.02 fps @ 0.89% CPU</text>
+    <text x="165" y="168" fill="#56d364" font-size="10" font-weight="600" text-anchor="middle">• H.265 Main CBR/VBR: 30.00 fps @ 1.55% CPU</text>
+
+    <rect x="16" y="188" width="298" height="54" rx="5" fill="#0d1117" stroke="#f0883e"/>
+    <text x="165" y="208" fill="#c9d1d9" font-size="11" font-weight="600" text-anchor="middle">RTSP / WebRTC Telemetry &amp; MP4 Log</text>
+    <text x="165" y="226" fill="#8b949e" font-size="10" text-anchor="middle">Standalone Benchmark: 78.3 fps (12.7 ms/frame)</text>
+  </g>
+
+  <!-- ==================== BOTTOM CENTER: 3.0 TOPS VIP9000 NPU ==================== -->
+  <g transform="translate(395, 380)" filter="url(#shadow)">
+    <rect width="330" height="256" rx="8" fill="#09261a" stroke="#238636" stroke-width="1.5"/>
+    <rect width="330" height="32" rx="8" fill="#113e2b"/>
+    <rect y="22" width="330" height="10" fill="#113e2b"/>
+    <text x="165" y="22" fill="#3fb950" font-size="13" font-weight="700" text-anchor="middle">Branch B: 3.0 TOPS VIP9000 NPU</text>
+
+    <rect x="16" y="44" width="298" height="60" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="165" y="64" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">VIP9000UL-DI+ (0x03600000)</text>
+    <text x="165" y="82" fill="#8b949e" font-size="10" text-anchor="middle">Mainline Etnaviv DRM + Mesa Teflon</text>
+    <text x="165" y="96" fill="#56d364" font-size="10" text-anchor="middle">GIC_SPI 65 • PD_NPU (Domain 4) • 12 NN Cores</text>
+
+    <rect x="16" y="114" width="298" height="64" rx="5" fill="#161b22" stroke="#2ea043"/>
+    <text x="165" y="134" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">INT8 / UINT8 CNN Vision Inference</text>
+    <text x="165" y="152" fill="#c9d1d9" font-size="10" text-anchor="middle">• MobileNetV1/V2, YOLOv5n/v8n, EfficientDet</text>
+    <text x="165" y="168" fill="#c9d1d9" font-size="10" text-anchor="middle">• 512 KB On-Chip VIP SRAM Weight Streaming</text>
+
+    <rect x="16" y="188" width="298" height="54" rx="5" fill="#0d1117" stroke="#2ea043"/>
+    <text x="165" y="208" fill="#56d364" font-size="11" font-weight="600" text-anchor="middle">Object Bounding Boxes &amp; Optical Flow</text>
+    <text x="165" y="226" fill="#8b949e" font-size="10" text-anchor="middle">Frees Cortex-A76 Cores for SLAM &amp; Planning</text>
+  </g>
+
+  <!-- Arrow from NPU detections to E902 Control -->
+  <line x1="725" y1="508" x2="755" y2="508" stroke="#58a6ff" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- ==================== BOTTOM RIGHT: XUANTIE E902 REAL-TIME CONTROL ==================== -->
+  <g transform="translate(755, 380)" filter="url(#shadow)">
+    <rect width="325" height="256" rx="8" fill="#0d1f38" stroke="#1f6feb" stroke-width="1.5"/>
+    <rect width="325" height="32" rx="8" fill="#162c4e"/>
+    <rect y="22" width="325" height="10" fill="#162c4e"/>
+    <text x="162" y="22" fill="#58a6ff" font-size="13" font-weight="700" text-anchor="middle">Branch C: XuanTie E902 Real-Time</text>
+
+    <rect x="16" y="44" width="293" height="60" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="162" y="64" fill="#f0f6fc" font-size="12" font-weight="600" text-anchor="middle">RISC-V E902 @ 200 MHz (0x07032000)</text>
+    <text x="162" y="82" fill="#8b949e" font-size="10" text-anchor="middle">Mainline remoteproc + sun55i-msgbox</text>
+    <text x="162" y="96" fill="#79c0ff" font-size="10" text-anchor="middle">192 KB Shared System SRAM A2 (0x40004000)</text>
+
+    <rect x="16" y="114" width="293" height="64" rx="5" fill="#161b22" stroke="#388bfd"/>
+    <text x="162" y="134" fill="#f0f6fc" font-size="11" font-weight="600" text-anchor="middle">Deterministic Control Loop</text>
+    <text x="162" y="152" fill="#79c0ff" font-size="10" font-weight="600" text-anchor="middle">• 82.5 µs VirtIO RPMsg / &lt;15 µs Raw SRAM</text>
+    <text x="162" y="168" fill="#c9d1d9" font-size="10" text-anchor="middle">• Zero Linux Scheduling Jitter</text>
+
+    <rect x="16" y="188" width="293" height="54" rx="5" fill="#0d1117" stroke="#388bfd"/>
+    <text x="162" y="208" fill="#79c0ff" font-size="11" font-weight="600" text-anchor="middle">Physical Hardware Actuation</text>
+    <text x="162" y="226" fill="#8b949e" font-size="10" text-anchor="middle">PWM • DShot ESCs • FOC Motors • Solenoids</text>
+  </g>
+</svg>
