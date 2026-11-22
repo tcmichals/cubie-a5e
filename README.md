@@ -24,11 +24,11 @@ This platform stack powers [AbstractX](https://github.com/tcmichals/AbstractX). 
 | **Camera, ISP & VPU** | Pending (OV5647 MIPI CSI-2 + ISP 602 backport) | **OV5647 1080p30** (`sun6i-mipi-csi2` → `sun6i-csi` → **Hardware ISP 602** `sun60i-isp` + `libcamera` pipeline/IPA) → **zero-copy Cedrus H.264 & H.265** (`v4l2-compliance` 49/49) |
 | **Wi-Fi 6 (AIC8800D80)** | **SDIO**: `aic8800-rfcv3` (`aic8800_bsp` + `aic8800_fdrv`) | **USB**: `aic8800-rfcv3` + `aic_load_fw` (`a69c:8d80` → `8d81`), 5 GHz Wi-Fi 6 (`80 MHz`) + DHCP verified |
 | **USB, Ethernet & LEDs** | USB, Ethernet, standard DT peripherals | USB 2.0 High-Speed + FE1.1S hub; active-low green LED (`PJ26`); `WDT_SRST_REG` reset; GMAC210 TX DMA fix pending |
-| **Audio DSP / NPU** | Cadence HiFi4 DSP framework (`dsp-hifi4/`) | NPU (`npu@3600000` / Etnaviv) pending |
+| **Audio DSP / NPU** | Cadence HiFi4 DSP framework (`dsp-hifi4/`) | **3.0 TOPS NPU (`npu@3600000`, `VIP9000Nano-DI` `0x9202`, `HW_V83`)**: mainline `etnaviv` DRM live (`840 MHz`, `800 mV` `dcdc2`, `GIC_SPI 65`); **PPU compute shader verified** (`0.092–0.220 ms`, 5/5 bit-exact IEEE-754 float32); **MMUv2 PDMODE** + **Mesa 26.1.8 Teflon** (`TP_ENGINE=0` + `HW_V83` slice-stride & FP post-scale) built & staged for final board sweep |
 
 ### Next Priorities
 
-- **Cubie A7A**: Root-cause 1-second Linux-side RPMsg stall & `stress_rpmsg` drops ([TODO.md §2](TODO.md)); add `sun50i-cpufreq-nvmem` multi-bin (`vfXXXX`) selection; fix GMAC210 TX DMA timeout; build A733 BL31 from source; upstream `sun60i-isp` RFC to `linux-media`; bring up NPU (`etnaviv` / Teflon).
+- **Cubie A7A**: Run final post-power-cycle live verification of kernel MMUv2 PDMODE + Mesa 26.1.8 Teflon `npu-smoke-test`; root-cause 1-second Linux-side RPMsg stall & `stress_rpmsg` drops ([TODO.md §2](TODO.md)); add `sun50i-cpufreq-nvmem` multi-bin (`vfXXXX`) selection; fix GMAC210 TX DMA timeout; build A733 BL31 from source; upstream `sun60i-isp` RFC to `linux-media`.
 - **Cubie A5E**: Port v4 remoteproc/msgbox fixes to `cubie-linux-7.1`, run full v4 board sweep + KUnit, and submit v4; re-test `aic8800-rfcv3` SDIO on board; add CPU CCU/OPP/cooling; bring up OV5647 + backport ISP 602.
 
 > [!NOTE]
@@ -50,6 +50,23 @@ OV5647 1080p30 runs end-to-end on mainline `sun6i-mipi-csi2` → `sun6i-csi` →
 - **`libcamera` `sun60i-isp` Pipeline & IPA Patch**: [0001-libcamera-add-sun60i-isp-pipeline-handler-and-IPA.patch](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/libcamera/0001-libcamera-add-sun60i-isp-pipeline-handler-and-IPA.patch)
 - **Hardware Video Encoder Guide (H.264 / H.265)**: [docs/common/A733_VE_ENCODER_GUIDE.md](docs/common/A733_VE_ENCODER_GUIDE.md)
 - **Silicon Bring-Up Logs & Captures**: [logs/a7a-ve-enc-20261114/RESULTS.md](logs/a7a-ve-enc-20261114/RESULTS.md)
+
+---
+
+## 🧠 A7A 3.0 TOPS NPU (`etnaviv` DRM + PPU Compute + Mesa 26.1.8 Teflon)
+
+The Allwinner A733's **VeriSilicon `VIP9000Nano-DI`** (`GC9000 rev 0x9202`, `customer_id 0x1000003b`, `HW_V83`, **8 NN cores**, **1 PPU shader core**, **`TP_ENGINE = 0`**, **512 KB VIP SRAM**) runs on mainline Linux 7.1 `etnaviv` (`/dev/dri/renderD128`) without proprietary VIPLite blobs or vendor `.nb` toolchains.
+
+| Workload / Verification | Result | Notes |
+| :--- | :--- | :--- |
+| **Mainline Kernel Bring-Up (`3600000.npu`)** | **Live on silicon** | `PD_NPU` (domain 4), `dcdc2 = 800 mV`, `pll-npu = 840 MHz`, `mbus-npu = 600 MHz`, `bus-npu = 200 MHz`, 3 resets (`0x0b04`), `GIC_SPI 65`, NPU temp `35.9 °C` |
+| **Path B: Vivante PPU Compute Shader (`npu_ppu_compute_test.c`)** | **0.092–0.220 ms** | **5/5 bit-exact IEEE-754 float32** outputs (`fill = 1, 2, 3, 5, 7`), 0 MMU faults, 0 hangs |
+| **Path A: `HW_V83` NN Engine + Mesa 26.1.8 Teflon** | **0.11 ms** Conv2D dispatch; fixes built & staged | Live silicon sweeps proved `TP_ENGINE = 0`, `NN_CMD_SUPPORT_SLICE = 1` (`y_stride = x * y`), `FP_INIMAGE_POST_SCALE = 1` (raw IEEE-754 exponent), and `MMU_PAGE_DESCRIPTOR = 1` (PDMODE `0x003B4` + `0x00388 = 0x21`); kernel PDMODE + Mesa `0002` patch built & staged for final `npu-smoke-test` run |
+
+- **NPU Acceleration Guide & Community Q&A / Fixes**: [docs/common/NPU_ACCELERATION_GUIDE.md](docs/common/NPU_ACCELERATION_GUIDE.md)
+- **Deep-Dive Hackster.io Article (Silicon Dataflow, `HW_V83` Findings & Community Issues)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
+- **Mesa 26.1.8 Teflon Patches**: [0001-etnaviv-hwdb](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch), [0002-hw-v83-and-no-tp](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch)
+- **Standalone PPU Compute Tool**: [npu_ppu_compute_test.c](project-cubie-a5e/board/radxa/cubie_a7a/src/npu_ppu_compute_test.c)
 
 ---
 

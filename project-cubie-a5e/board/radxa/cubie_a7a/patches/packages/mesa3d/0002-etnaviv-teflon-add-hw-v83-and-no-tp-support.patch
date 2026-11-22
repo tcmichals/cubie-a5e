@@ -1,0 +1,429 @@
+From: Tim Michals <tcmichals@gmail.com>
+Subject: [PATCH 2/2] etnaviv/teflon: add HW_V83 NN and TP_ENGINE=0 fallback support
+
+Support VeriSilicon VIP9000Nano-DI (0x9202, Allwinner A733) and other
+HW_V83 NPU variants that expose:
+
+- TP_ENGINE=0 (no hardware Tensor Processor): report tp_core_count=0
+  instead of defaulting to 1, reject standalone TP ops (PAD/RELU/ABS/
+  LOGISTIC) so TFLite runs them on CPU, and execute internal layout
+  conversions (TRANSPOSE, DETRANSPOSE, RESHUFFLE) on CPU with proper
+  GPU batch synchronization.
+- NN_CMD_SUPPORT_SLICE=1: program in_image_y_stride and
+  out_image_y_stride as channel-slice byte strides (x_size * y_size)
+  rather than row counts.
+- FP_INIMAGE_POST_SCALE=1: encode post_shift (including bit 7 in
+  w15[30]) as the raw IEEE-754 biased float32 exponent alongside the
+  23-bit mantissa in post_multiplier*.
+- NN_TENSOR_ADD_FIELD_MOVE_TO_EXT_CMD=1: decline ADD/SUBTRACT on the
+  NN engine until HW_V83 extended-command addition lowering is
+  implemented.
+
+---
+diff -ruN a/src/etnaviv/common/etna_core_info.h b/src/etnaviv/common/etna_core_info.h
+--- a/src/etnaviv/common/etna_core_info.h	2026-11-21 20:09:07.566791598 -0600
++++ b/src/etnaviv/common/etna_core_info.h	2026-11-21 20:09:23.988113601 -0600
+@@ -68,6 +68,9 @@
+    ETNA_FEATURE_DEC400,
+    ETNA_FEATURE_VIP_V7,
+    ETNA_FEATURE_NN_XYDP0,
++   ETNA_FEATURE_NN_CMD_SUPPORT_SLICE,
++   ETNA_FEATURE_FP_INIMAGE_POST_SCALE,
++   ETNA_FEATURE_NN_TENSOR_ADD_EXT_CMD,
+    ETNA_FEATURE_YUV420_TILER,
+    ETNA_FEATURE_MSAA_FRAGMENT_OPERATION,
+    ETNA_FEATURE_S8,
+diff -ruN a/src/etnaviv/hwdb/etna_hwdb.c b/src/etnaviv/hwdb/etna_hwdb.c
+--- a/src/etnaviv/hwdb/etna_hwdb.c	2026-11-21 20:09:07.648795156 -0600
++++ b/src/etnaviv/hwdb/etna_hwdb.c	2026-11-21 20:09:29.048212202 -0600
+@@ -108,6 +108,9 @@
+ 
+    ETNA_FEATURE(VIP_V7, VIP_V7);
+    ETNA_FEATURE(NN_XYDP0, NN_XYDP0);
++   ETNA_FEATURE(NN_CMD_SUPPORT_SLICE, NN_CMD_SUPPORT_SLICE);
++   ETNA_FEATURE(FP_INIMAGE_POST_SCALE, FP_INIMAGE_POST_SCALE);
++   ETNA_FEATURE(NN_TENSOR_ADD_FIELD_MOVE_TO_EXT_CMD, NN_TENSOR_ADD_EXT_CMD);
+ 
+    ETNA_FEATURE(MSAA_FRAGMENT_OPERATION, MSAA_FRAGMENT_OPERATION);
+    ETNA_FEATURE(REG_RSS8, S8);
+@@ -131,7 +134,8 @@
+    if (etna_core_has_feature(info, ETNA_FEATURE_CORE_NPU)) {
+       info->npu.nn_core_count = db->NNCoreCount;
+       info->npu.nn_mad_per_core = db->NNMadPerCore;
+-      info->npu.tp_core_count = db->TPEngine_CoreCount ? db->TPEngine_CoreCount : 1;
++      info->npu.tp_core_count = db->TP_ENGINE ?
++         (db->TPEngine_CoreCount ? db->TPEngine_CoreCount : 1) : 0;
+       info->npu.on_chip_sram_size = db->VIP_SRAM_SIZE;
+       info->npu.axi_sram_size = db->AXI_SRAM_SIZE;
+       info->npu.nn_zrl_bits = db->NN_ZRL_BITS;
+diff -ruN a/src/gallium/drivers/etnaviv/etnaviv_ml.c b/src/gallium/drivers/etnaviv/etnaviv_ml.c
+--- a/src/gallium/drivers/etnaviv/etnaviv_ml.c	2026-11-21 20:09:07.803824778 -0600
++++ b/src/gallium/drivers/etnaviv/etnaviv_ml.c	2026-11-21 20:11:07.587130762 -0600
+@@ -650,6 +650,9 @@
+ etna_ml_operation_supported(struct pipe_ml_device *pdevice,
+                             const struct pipe_ml_operation *operation)
+ {
++   struct etna_screen *screen = etna_ml_device_screen(pdevice);
++   struct etna_core_info *info = etna_gpu_get_core_info(screen->npu);
++   unsigned tp_core_count = info->npu.tp_core_count;
+    bool supported = false;
+ 
+    switch (operation->type) {
+@@ -672,8 +675,11 @@
+       }
+       case PIPE_ML_OPERATION_TYPE_SUBTRACT:
+       case PIPE_ML_OPERATION_TYPE_ADD: {
+-         supported = operation->input_tensors[0]->data == NULL &&
+-                     operation->input_tensors[1]->data == NULL;
++         if (etna_core_has_feature(info, ETNA_FEATURE_NN_TENSOR_ADD_EXT_CMD))
++            supported = false;
++         else
++            supported = operation->input_tensors[0]->data == NULL &&
++                        operation->input_tensors[1]->data == NULL;
+          break;
+       }
+       case PIPE_ML_OPERATION_TYPE_CONCATENATION: {
+@@ -700,6 +706,8 @@
+          break;
+       }
+       case PIPE_ML_OPERATION_TYPE_PAD: {
++         if (tp_core_count == 0)
++            break;
+          supported = operation->pad.before_x <= 2 &&
+                      operation->pad.after_x <= 2 &&
+                      operation->pad.before_y <= 2 &&
+@@ -726,10 +734,12 @@
+          break;
+       }
+       case PIPE_ML_OPERATION_TYPE_RESHAPE:
++         supported = true;
++         break;
+       case PIPE_ML_OPERATION_TYPE_RELU:
+       case PIPE_ML_OPERATION_TYPE_ABSOLUTE:
+       case PIPE_ML_OPERATION_TYPE_LOGISTIC:
+-         supported = true;
++         supported = tp_core_count > 0;
+          break;
+       default:
+          return false;
+@@ -887,17 +897,7 @@
+       is_initialized = true;
+    }
+ 
+-   if (!DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING)) {
+-      /* These zeroes match the blob's cmdstream. They are here to make diff'ing easier.*/
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-      etna_cmd_stream_emit(stream, 0x0);
+-   }
++   bool has_gpu_cmds = false;
+ 
+    for (int i = 0; i < inputs_count; i++) {
+       struct etna_ml_tensor *tensor = etna_ml_get_tensor(subgraph, input_idxs[i]);
+@@ -942,6 +942,41 @@
+          }
+       }
+ 
++      if (operation->type == ETNA_JOB_TYPE_TP && tp_core_count == 0) {
++         if (has_gpu_cmds) {
++            if (!DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING))
++               close_batch(pctx);
++            pctx->flush(pctx, NULL, 0);
++            stream = ctx->stream;
++            has_gpu_cmds = false;
++         }
++
++         etna_ml_execute_operation_tp_cpu(pctx, operation);
++
++         if (DBG_ENABLED(ETNA_DBG_DUMP_SHADERS)) {
++            struct pipe_transfer *transfer = NULL;
++            pipe_buffer_map(pctx, operation->output, PIPE_MAP_READ, &transfer);
++            dump_bo(etna_buffer_resource(operation->output)->bo, "output", i, 0, operation->output_offset, 0);
++            pipe_buffer_unmap(pctx, transfer);
++         }
++
++         i++;
++         continue;
++      }
++
++      if (!has_gpu_cmds && !DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING)) {
++         /* These zeroes match the blob's cmdstream. They are here to make diff'ing easier.*/
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         etna_cmd_stream_emit(stream, 0x0);
++         has_gpu_cmds = true;
++      }
++
+       if (DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING)) {
+          /* These zeroes match the blob's cmdstream. They are here to make diff'ing easier.*/
+          etna_cmd_stream_emit(stream, 0x0);
+@@ -952,9 +987,10 @@
+          etna_cmd_stream_emit(stream, 0x0);
+          etna_cmd_stream_emit(stream, 0x0);
+          etna_cmd_stream_emit(stream, 0x0);
++         has_gpu_cmds = true;
+       }
+ 
+-      for (unsigned j = 0; j < tp_core_count && operation->configs[j]; j++)
++      for (unsigned j = 0; j < MAX_CONFIG_BOS && operation->configs[j]; j++)
+          etna_cmd_stream_ref_bo(stream, operation->configs[j], ETNA_RELOC_READ);
+       if (operation->coefficients)
+          etna_cmd_stream_ref_bo(stream, operation->coefficients, ETNA_RELOC_READ);
+@@ -992,15 +1028,16 @@
+          }
+ 
+          stream = ctx->stream;
++         has_gpu_cmds = false;
+       }
+ 
+       i++;
+    }
+ 
+-   if (!DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING))
++   if (has_gpu_cmds && !DBG_ENABLED(ETNA_DBG_NPU_NO_BATCHING))
+       close_batch(pctx);
+ 
+-   if (DBG_ENABLED(ETNA_DBG_FLUSH_ALL))
++   if (has_gpu_cmds && DBG_ENABLED(ETNA_DBG_FLUSH_ALL))
+       pctx->flush(pctx, NULL, 0);
+ }
+ 
+diff -ruN a/src/gallium/drivers/etnaviv/etnaviv_ml.h b/src/gallium/drivers/etnaviv/etnaviv_ml.h
+--- a/src/gallium/drivers/etnaviv/etnaviv_ml.h	2026-11-21 20:09:07.728796715 -0600
++++ b/src/gallium/drivers/etnaviv/etnaviv_ml.h	2026-11-21 20:09:31.602261967 -0600
+@@ -78,6 +78,20 @@
+    unsigned output_offset;
+ 
+    struct etna_bo *kernel;
++
++   /* Saved parameters for CPU TP fallback when hardware TP_ENGINE == 0 */
++   struct {
++      unsigned input_width;
++      unsigned input_height;
++      unsigned input_channels;
++      unsigned output_width;
++      unsigned output_height;
++      unsigned output_channels;
++      unsigned stride;
++      unsigned weight_width;
++      bool padding_same;
++      uint8_t input_zero_point;
++   } tp_cpu;
+ };
+ 
+ #define MAX_TENSORS 10
+diff -ruN a/src/gallium/drivers/etnaviv/etnaviv_ml_nn.c b/src/gallium/drivers/etnaviv/etnaviv_ml_nn.c
+--- a/src/gallium/drivers/etnaviv/etnaviv_ml_nn.c	2026-11-21 20:09:07.835501827 -0600
++++ b/src/gallium/drivers/etnaviv/etnaviv_ml_nn.c	2026-11-21 20:10:21.639236510 -0600
+@@ -119,7 +119,8 @@
+    FIELD(out_image_data_type_bit_2, 1)
+    FIELD(post_multiplier_1_to_6, 6)
+    FIELD(post_shift_bit_5_6, 2)
+-   FIELD(unused5, 2)
++   FIELD(post_shift_bit_7, 1)
++   FIELD(unused5, 1)
+ 
+    /* 16 */
+    FIELD(in_image_x_stride, 16)
+@@ -995,6 +996,9 @@
+ create_nn_config(struct etna_ml_subgraph *subgraph, const struct etna_operation *operation, struct etna_bo *coefficients, unsigned coef_cache_size)
+ {
+    struct etna_screen *screen = subgraph->screen;
++   struct etna_core_info *info = etna_gpu_get_core_info(screen->npu);
++   bool has_slice_stride = etna_core_has_feature(info, ETNA_FEATURE_NN_CMD_SUPPORT_SLICE);
++   bool has_fp_post_scale = etna_core_has_feature(info, ETNA_FEATURE_FP_INIMAGE_POST_SCALE);
+    unsigned nn_core_count = etna_ml_get_core_info(screen)->nn_core_count;
+    unsigned nn_core_version = screen->specs.nn_core_version;
+    unsigned oc_sram_size = etna_ml_get_core_info(screen)->on_chip_sram_size;
+@@ -1083,7 +1087,8 @@
+    map->in_image_x_size = input_width;
+    map->in_image_y_size = input_height;
+    map->in_image_x_stride = input_width;
+-   map->in_image_y_stride = input_height;
++   map->in_image_y_stride = has_slice_stride ?
++      input_width * input_height : input_height;
+    map->in_image_data_type = ETNA_NN_INT8;
+    map->in_image_data_type_bit_2 = ETNA_NN_INT8 >> 2;
+    map->in_image_circular_buf_size = 0x0;
+@@ -1135,7 +1140,8 @@
+    map->out_image_z_size = output_channels;
+ 
+    map->out_image_x_stride = map->out_image_x_size;
+-   map->out_image_y_stride = map->out_image_y_size;
++   map->out_image_y_stride = has_slice_stride ?
++      map->out_image_x_size * map->out_image_y_size : map->out_image_y_size;
+ 
+    map->out_image_data_type = ETNA_NN_INT8;
+    map->out_image_data_type_bit_2 = ETNA_NN_INT8 >> 2;
+@@ -1253,12 +1259,22 @@
+ 
+    float conv_scale = (operation->input_scale * operation->weight_scale) / operation->output_scale;
+    uint32_t scale_bits = fui(conv_scale);
+-   /* Taken from https://github.com/pytorch/QNNPACK/blob/master/src/qnnpack/requantization.h#L130 */
+-   unsigned shift = 127 + 31 - 32 - (scale_bits >> 23);
+-   if (nn_core_version == 8)
+-      shift += 1;
+-   else
+-      shift += 16;
++   unsigned shift;
++   if (has_fp_post_scale) {
++      /* HW_V83 cores with FP_INIMAGE_POST_SCALE take the raw IEEE-754 biased
++       * exponent directly alongside the 23-bit mantissa in post_multiplier*.
++       */
++      shift = (scale_bits >> 23) & 0xff;
++      map->post_shift_bit_7 = (shift >> 7) & 0x1;
++   } else {
++      /* Taken from https://github.com/pytorch/QNNPACK/blob/master/src/qnnpack/requantization.h#L130 */
++      shift = 127 + 31 - 32 - (scale_bits >> 23);
++      if (nn_core_version == 8)
++         shift += 1;
++      else
++         shift += 16;
++      map->post_shift_bit_7 = 0;
++   }
+ 
+    /* Divides by 2 * (post_shift - 18), rounding to nearest integer. If result doesn't fit in 8 bits, it is clamped to 255. galcore sets to 15 if INT8, to 0 if UINT8. */
+    map->post_shift = shift & 0x1f;
+diff -ruN a/src/gallium/drivers/etnaviv/etnaviv_ml_tp.c b/src/gallium/drivers/etnaviv/etnaviv_ml_tp.c
+--- a/src/gallium/drivers/etnaviv/etnaviv_ml_tp.c	2026-11-21 20:09:07.947431313 -0600
++++ b/src/gallium/drivers/etnaviv/etnaviv_ml_tp.c	2026-11-21 20:10:08.039971721 -0600
+@@ -1333,6 +1333,22 @@
+ 
+    instruction->input_offset = etna_ml_get_offset(subgraph, operation->input_tensors[0]);
+    instruction->output_offset = etna_ml_get_offset(subgraph, operation->output_tensors[0]);
++   instruction->type = ETNA_JOB_TYPE_TP;
++   instruction->tp_type = operation->tp_type;
++
++   if (etna_ml_get_core_info(subgraph->screen)->tp_core_count == 0) {
++      instruction->tp_cpu.input_width = operation->input_width;
++      instruction->tp_cpu.input_height = operation->input_height;
++      instruction->tp_cpu.input_channels = operation->input_channels;
++      instruction->tp_cpu.output_width = operation->output_width;
++      instruction->tp_cpu.output_height = operation->output_height;
++      instruction->tp_cpu.output_channels = operation->output_channels;
++      instruction->tp_cpu.stride = operation->stride;
++      instruction->tp_cpu.weight_width = operation->weight_width;
++      instruction->tp_cpu.padding_same = operation->padding_same;
++      instruction->tp_cpu.input_zero_point = operation->input_zero_point;
++      return;
++   }
+ 
+    switch (operation->tp_type) {
+    case ETNA_ML_TP_TRANSPOSE:
+@@ -1450,3 +1466,91 @@
+    }
+    etna_set_state(stream, VIVS_PS_UNK10A4, parallel ? idx + 1 : 0x0);
+ }
++
++void
++etna_ml_execute_operation_tp_cpu(struct pipe_context *pctx,
++                                 struct etna_vip_instruction *operation)
++{
++   struct pipe_transfer *src_xfer = NULL;
++   struct pipe_transfer *dst_xfer = NULL;
++   unsigned in_size = operation->tp_cpu.input_width *
++                      operation->tp_cpu.input_height *
++                      operation->tp_cpu.input_channels;
++   unsigned out_size = operation->tp_cpu.output_width *
++                       operation->tp_cpu.output_height *
++                       operation->tp_cpu.output_channels;
++   const uint8_t *src = pipe_buffer_map_range(pctx, operation->input,
++                                              operation->input_offset, in_size,
++                                              PIPE_MAP_READ, &src_xfer);
++   uint8_t *dst = pipe_buffer_map_range(pctx, operation->output,
++                                        operation->output_offset, out_size,
++                                        PIPE_MAP_WRITE, &dst_xfer);
++   assert(src && dst);
++
++   unsigned W = operation->tp_cpu.input_width;
++   unsigned H = operation->tp_cpu.input_height;
++   unsigned C = operation->tp_cpu.input_channels;
++
++   switch (operation->tp_type) {
++   case ETNA_ML_TP_TRANSPOSE:
++      /* NHWC [W][H][C] -> NCHW [C][W][H] */
++      for (unsigned c = 0; c < C; c++) {
++         for (unsigned w = 0; w < W; w++) {
++            for (unsigned h = 0; h < H; h++) {
++               dst[c * W * H + w * H + h] = src[w * H * C + h * C + c];
++            }
++         }
++      }
++      break;
++   case ETNA_ML_TP_DETRANSPOSE:
++      /* NCHW [C][W][H] -> NHWC [W][H][C] */
++      for (unsigned c = 0; c < C; c++) {
++         for (unsigned w = 0; w < W; w++) {
++            for (unsigned h = 0; h < H; h++) {
++               dst[w * H * C + h * C + c] = src[c * W * H + w * H + h];
++            }
++         }
++      }
++      break;
++   case ETNA_ML_TP_RESHUFFLE: {
++      unsigned S = operation->tp_cpu.stride;
++      unsigned out_W = operation->tp_cpu.output_width;
++      unsigned out_H = operation->tp_cpu.output_height;
++      int pad_w = 0;
++      int pad_h = 0;
++      if (operation->tp_cpu.padding_same) {
++         if (operation->tp_cpu.weight_width == 5) {
++            pad_w++;
++            pad_h++;
++         }
++         if (W % 2)
++            pad_w++;
++         if (H % 2)
++            pad_h++;
++      }
++      for (unsigned c = 0; c < C; c++) {
++         for (unsigned dw = 0; dw < S; dw++) {
++            for (unsigned dh = 0; dh < S; dh++) {
++               unsigned out_c = c * S * S + dw * S + dh;
++               for (unsigned ow = 0; ow < out_W; ow++) {
++                  for (unsigned oh = 0; oh < out_H; oh++) {
++                     int iw = (int)(ow * S + dw) - pad_w;
++                     int ih = (int)(oh * S + dh) - pad_h;
++                     uint8_t val = operation->tp_cpu.input_zero_point;
++                     if (iw >= 0 && iw < (int)W && ih >= 0 && ih < (int)H)
++                        val = src[c * W * H + (unsigned)iw * H + (unsigned)ih];
++                     dst[out_c * out_W * out_H + ow * out_H + oh] = val;
++                  }
++               }
++            }
++         }
++      }
++      break;
++   }
++   default:
++      UNREACHABLE("Unsupported CPU TP fallback operation");
++   }
++
++   pipe_buffer_unmap(pctx, dst_xfer);
++   pipe_buffer_unmap(pctx, src_xfer);
++}
+diff -ruN a/src/gallium/drivers/etnaviv/etnaviv_ml_tp.h b/src/gallium/drivers/etnaviv/etnaviv_ml_tp.h
+--- a/src/gallium/drivers/etnaviv/etnaviv_ml_tp.h	2026-11-21 20:09:07.884807063 -0600
++++ b/src/gallium/drivers/etnaviv/etnaviv_ml_tp.h	2026-11-21 20:09:34.018309041 -0600
+@@ -50,4 +50,8 @@
+ etna_ml_emit_operation_tp(struct pipe_context *pctx,
+                           struct etna_ml_subgraph *subgraph,
+                           struct etna_vip_instruction *operation,
+-                          unsigned idx);
+\ No newline at end of file
++                          unsigned idx);
++
++void
++etna_ml_execute_operation_tp_cpu(struct pipe_context *pctx,
++                                 struct etna_vip_instruction *operation);
+\ No newline at end of file
