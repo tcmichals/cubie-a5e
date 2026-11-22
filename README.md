@@ -64,7 +64,8 @@ The Allwinner A733's **VeriSilicon `VIP9000Nano-DI`** (`GC9000 rev 0x9202`, `cus
 | **Path A: `HW_V83` NN Engine + Mesa 26.1.8 Teflon** | **0.11 ms** Conv2D dispatch; fixes built & staged | Live silicon sweeps proved `TP_ENGINE = 0`, `NN_CMD_SUPPORT_SLICE = 1` (`y_stride = x * y`), `FP_INIMAGE_POST_SCALE = 1` (raw IEEE-754 exponent), and `MMU_PAGE_DESCRIPTOR = 1` (PDMODE `0x003B4` + `0x00388 = 0x21`); kernel PDMODE + Mesa `0002` patch built & staged for final `npu-smoke-test` run |
 
 - **NPU Acceleration Guide & Community Q&A / Fixes**: [docs/common/NPU_ACCELERATION_GUIDE.md](docs/common/NPU_ACCELERATION_GUIDE.md)
-- **Deep-Dive Hackster.io Article (Silicon Dataflow, `HW_V83` Findings & Community Issues)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
+- **Deep-Dive Hackster.io Article (Silicon Dataflow, Shaders vs. NN Cores, `HW_V83` Findings & Community Issues)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
+- **Blog Posts**: [NN Cores, Shaders & Best Uses on the A733](docs/articles/part6_a733_npu_nn_vs_shaders_best_uses.md) • [The 8 Real-World A733 NPU Problems We Solved on Live Silicon](docs/articles/part7_a733_npu_silicon_debugging_problems_solved.md)
 - **Mesa 26.1.8 Teflon Patches**: [0001-etnaviv-hwdb](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch), [0002-hw-v83-and-no-tp](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch)
 - **Standalone PPU Compute Tool**: [npu_ppu_compute_test.c](project-cubie-a5e/board/radxa/cubie_a7a/src/npu_ppu_compute_test.c)
 
@@ -199,6 +200,7 @@ cubie-a5e/
 - **[Linux RemoteProc and Mailbox Driver Guide](docs/architecture/LINUX_REMOTEPROC_AND_MAILBOX_DRIVER_GUIDE.md)** — Lifecycle state machines, SMP concurrency, and MMIO mapping.
 - **[Allwinner A733 Camera & Hardware ISP Guide](docs/common/CAMERA_V4L2_GUIDE.md)** — MIPI CSI-2, V4L2 Media Controller, zero-copy CMA, and ISP 602 (`sun60i-isp`) + `libcamera`.
 - **[Allwinner A733 Video Encoding Guide](docs/common/A733_VE_ENCODER_GUIDE.md)** — Cedrus H.264/H.265 encoder (`0x01c10000`) and zero-copy CSI → VE `dma-buf` pipelines.
+- **[Allwinner A733 / T527 3.0 TOPS NPU Guide](docs/common/NPU_ACCELERATION_GUIDE.md)** — Mainline `etnaviv` DRM, Mesa 26.1.8 Teflon (`HW_V83` / `TP_ENGINE=0`), Vivante PPU compute shaders, and community troubleshooting.
 - **[AIC8800 Wi-Fi 6 Subsystem Guide](docs/common/WIFI_AIC8800_GUIDE.md)** — `aic8800-rfcv3` SDIO/USB architecture and `aic_load_fw` firmware lifecycle.
 - **[CPUFreq / DVFS Plan](docs/common/CPUFREQ_DVFS_PLAN.md)** — A733 AXP8191 & A527 OPP/speed-binning roadmap.
 
@@ -221,6 +223,9 @@ cubie-a5e/
 | **5** | **MicroPython on Both Processors** — *Interactive MicroPython on E906, dynamic pin muxing, binary telemetry.* | Cubie A5E | [Blog Post](https://allthingsembedded.blogspot.com/2026/10/micropython-on-e906.html) • [AbstractX](https://github.com/tcmichals/AbstractX/tree/main/docs/articles/micropython-on-e906) |
 | **6** | **Heterogeneous RemoteProc: Cubie A7A (E902) vs. A5E (E906)** — *Cache hazards, BL31 un-gating, unified FreeRTOS port.* | A7A vs A5E | [Blog Post](https://allthingsembedded.blogspot.com/2026/10/heterogeneous-risc-v-remoteproc-across.html) • [Local](docs/articles/part5_a733_e902_remoteproc_and_heterogeneous_comparison.md) |
 | **Feature** | **Turning an 8-Core Desktop Processor into a Real-Time Robotics & Industrial Engine** — *E902/E906 unlock, `scp.fex` discovery, 16 KB SRAM trap, sub-15 µs IPC, H.265 & NPU roadmap.* | A7A & A5E | [Local](docs/articles/hackster_a733_e902_remoteproc.md) |
+| **Feature (NPU)** | **Freeing the 3.0 TOPS NPU on the Allwinner A733 (`etnaviv` + Mesa Teflon + Zero-Copy Video)** — *8× NN cores vs. PPU shaders vs. `TP_ENGINE=0`, MMUv2 PDMODE, `HW_V83` silicon findings, community Q&A & 3 SVG diagrams.* | Cubie A7A | [Local](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md) |
+| **Blog 7** | **Inside an Edge AI Chip: NN Cores, Shaders, and Why You Need Both** — *Plain-English guide to NN MAC arrays, 256-thread PPU shaders, and best-use workload mapping across NPU, ISP, VE, CPU & RISC-V.* | Cubie A7A | [Local](docs/articles/part6_a733_npu_nn_vs_shaders_best_uses.md) |
+| **Blog 8** | **Freeing the Allwinner A733 NPU on Mainline Linux 7.1: The 8 Real-World Problems We Solved** — *T527 vs. A733 `.nb` breaks, VIPLite drift, `0x03600000` clocks/resets, PDMODE `MODE4_K` + `0xffffff7f` flush, Frigate/YOLO `TP_ENGINE=0`, `HW_V83` scales & strides.* | Cubie A7A | [Local](docs/articles/part7_a733_npu_silicon_debugging_problems_solved.md) |
 
 ---
 
