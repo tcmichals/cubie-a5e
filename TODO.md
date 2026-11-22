@@ -1328,9 +1328,10 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
 - [ ] **A733 NPU (`npu@3600000` / Vivante Etnaviv + Mesa Teflon)**:
   - [x] Verify `CONFIG_DRM_ETNAVIV=y` and `CONFIG_DRM_ETNAVIV_THERMAL=y` in `linux-cubie/.config` (checked 2026-11-15).
   - [x] Add `npu@3600000` DT node in `sun60i-a733-cubie-a7a.dts` (`GIC_SPI 65`, `PD_NPU`, `CLK_MBUS_NPU`, `CLK_NPU`, `CLK_BUS_NPU` parented to `CLK_AHB_NPU`, resets `RST_BUS_NPU_CORE`/`AXI`/`AHB`, and AXP8191 `dcdc2` `vdd-gpu-npu`; synced `ccu-sun60i-a733.c` with upstream v7, 2026-11-21).
-  - [x] Add Allwinner VIP9000 (`0x9000` revs `0x8303`, `0x9003`, `0x9113` 3-TOPS 12-core VIP9000UL-DI+, `0x9202`) HWDB entries, 3-reset array support, and `0x003b4` MMU PD flat-fetch bypass to kernel `etnaviv` and Mesa 26.1.8 (`0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch`).
+  - [x] Add Allwinner VIP9000 (`0x9000` revs `0x8303`, `0x9003`, `0x9113`, `0x9202`) HWDB entries, 3-reset array support, and `0x003b4` MMU PD flat-fetch bypass to kernel `etnaviv` and Mesa 26.1.8 (`0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch`).
   - [x] Enable Mesa Etnaviv + Teflon (`BR2_PACKAGE_MESA3D_TEFLON=y`, `libteflon.so`) and update `/usr/bin/npu-smoke-test` with self-contained TFLite C API + Teflon delegate INT8/UINT8 verification.
-  - [ ] Verify `etnaviv` probe, `/dev/dri/renderD128`, and `npu-smoke-test` on A7A silicon.
+  - [x] **Kernel `etnaviv` probe, MMUv2, IRQ 65 & NN DMA verified on A7A silicon (2026-11-21)**: `PD_NPU` (domain 4) on, `vdd-gpu-npu` `800 mV`, `pll-npu`/`npu` `840 MHz`, `mbus-npu` `600 MHz`, `bus-npu` `200 MHz`, `/dev/dri/renderD128` live; real silicon readback is **`GC9000 rev 0x9202`** (`product_id 0x05090009`, `customer_id 0x1000003b`, `eco_id 0x08000000`, date `2023-05-18`, **VIP9000Nano-DI**, 8 NN cores, 1 shader core, **`TP_ENGINE = 0`**, **`HW_V83 = 1`**, `VIP_VERSION = 0x398`). `quantized_conv2d` executed on NN in `0.11 ms` with zero MMU faults/hangs and fired `GIC_SPI 65` (hwirq 97).
+  - [ ] **Mesa 26.1.8 Teflon `0x9202` (`HW_V83` / `TP_ENGINE = 0`) userspace gaps**: (1) add CPU/PPU shader transpose fallback when `TP_ENGINE == 0` (`etna_hwdb.c` currently forces `tp_core_count = 1`, making TP ops silent no-ops that zero intermediate/output buffers); (2) add `HW_V83` (`VIP_VERSION = 0x398`, `ZRL_8BIT = 0`, `NN_TENSOR_ADD_FIELD_MOVE_TO_EXT_CMD = 1`, `NN_SMALL_BATCH_PHASE2 = 1`) NN descriptor & coefficient encoding to `etnaviv_ml_nn*.c` so `npu-smoke-test` matches CPU output byte-for-byte.
 
 ---
 

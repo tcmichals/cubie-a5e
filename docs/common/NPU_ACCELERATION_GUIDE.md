@@ -2,19 +2,19 @@
 
 This document details the **Neural Processing Unit (NPU)** architecture, memory-mapped registers, driver stacks, and inference pipelines for the **Radxa Cubie A7A** (Allwinner A733) and **Radxa Cubie A5E** (Allwinner A527/T527).
 
-> **Deep-Dive Hackster.io Article & SVG Diagrams**: For a complete visual walkthrough of the internal VIP9000UL-DI+ silicon dataflow, MMUv2 & DMA architecture, the 4-layer `etnaviv` + Mesa Teflon software stack, and zero-copy `dma-buf` video processing with MIPI CSI-2, Hardware ISP 602, Cedrus H.264/H.265 Video Encoder, and the E902 RISC-V coprocessor, see **[Freeing the 3.0 TOPS NPU on the Allwinner A733: How an On-Die Neural Accelerator Works, Mainline Linux `etnaviv` + Mesa Teflon Bring-Up, and Zero-Copy Video Processing](../articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)**.
+> **Deep-Dive Hackster.io Article & SVG Diagrams**: For a complete visual walkthrough of the live-verified `VIP9000Nano-DI` (`0x9202`) silicon dataflow, MMUv2 & DMA architecture, the 4-layer `etnaviv` + Mesa Teflon software stack, live silicon verification findings, and zero-copy `dma-buf` video processing with MIPI CSI-2, Hardware ISP 602, Cedrus H.264/H.265 Video Encoder, and the E902 RISC-V coprocessor, see **[Freeing the 3.0 TOPS NPU on the Allwinner A733: How an On-Die Neural Accelerator Works, Mainline Linux `etnaviv` + Mesa Teflon Bring-Up, and Zero-Copy Video Processing](../articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)**.
 
 ---
 
 ## 1. Hardware Architecture & Specifications
 
-| Parameter | Radxa Cubie A7A (Allwinner A733) | Radxa Cubie A5E (Allwinner A527 / T527) |
+| Parameter | Radxa Cubie A7A (Allwinner A733 — Live Silicon Verified) | Radxa Cubie A5E (Allwinner A527 / T527) |
 | :--- | :--- | :--- |
-| **NPU Silicon IP** | VeriSilicon Vivante **VIP9000UL-DI+** | VeriSilicon Vivante **VIP9000Nano-SI+** |
-| **Chip ID / Revision** | Model `0x9000`, Rev **`0x9113`** | Model `0x9000`, Rev **`0x9003`** |
-| **Product / Customer / ECO ID** | `0x0509000b` / **`0x10000021`** / `0x0c000000` | `0x05090009` / **`0x10000016`** / `0x06000000` |
-| **Peak Performance** | **3.0 TOPS (INT8)** | **2.0 TOPS (INT8)** |
-| **NN / TP / Shader Cores** | **12 NN cores** (64 MAD/core), 2 shader cores | **6 NN cores** (64 MAD/core), **2 TP cores**, 1 shader core |
+| **NPU Silicon IP** | VeriSilicon Vivante **VIP9000Nano-DI (`HW_V83`)** | VeriSilicon Vivante **VIP9000Nano-SI+** |
+| **Chip ID / Revision** | Model `0x9000`, Rev **`0x9202`** (date `2023-05-18`) | Model `0x9000`, Rev **`0x9003`** |
+| **Product / Customer / ECO ID** | `0x05090009` / **`0x1000003b`** / `0x08000000` | `0x05090009` / **`0x10000016`** / `0x06000000` |
+| **Peak Performance** | **3.0 TOPS class (INT8)** (`492–1120 MHz` OPP) | **2.0 TOPS (INT8)** |
+| **NN / TP / Shader Cores** | **8 NN cores** (64 MAD/core), **0 TP cores (`TP_ENGINE = 0`)**, **1 shader core** | **6 NN cores** (64 MAD/core), **2 TP cores**, 1 shader core |
 | **On-Chip VIP SRAM** | **512 KB** (`0x80000`, 128-byte physical width) | **512 KB** (`0x80000`, 64-byte physical width) |
 | **MMU Architecture** | MMUv2 Secure AHB + **Page Descriptor (`0x003b4`)** | MMUv2 Secure AHB (`0x00388..0x003a8`) |
 | **Physical MMIO Base** | **`0x03600000`** (`0x1000` byte window) | **`0x07122000`** (`0x2000` byte window) |

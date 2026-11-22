@@ -277,7 +277,7 @@ The next time you look at a modern desktop-class SBC, don't just see an applicat
 
 ## 🔮 Companion Hackster.io Deep-Dive: The 3.0 TOPS NPU & Zero-Copy H.264/H.265 Vision Pipeline
 
-Freeing the RISC-V coprocessor was phase one. In our companion Hackster.io engineering article, we bring up the onboard **3.0 TOPS VeriSilicon Vivante VIP9000UL-DI+ NPU** (`npu@3600000`) using the mainline Linux `etnaviv` DRM driver and Mesa 26.1.8 Teflon (`libteflon.so`), and connect it to the 2-lane MIPI CSI-2 camera, Hardware ISP 602, and Hardware H.264/H.265 Video Encoder (`ve@1c10000`) over shared LPDDR5 `dma-buf` descriptors:
+Freeing the RISC-V coprocessor was phase one. In our companion Hackster.io engineering article, we bring up the onboard **3.0 TOPS-class VeriSilicon Vivante VIP9000Nano-DI NPU** (`npu@3600000`, verified live as `GC9000 rev 0x9202`) using the mainline Linux `etnaviv` DRM driver and Mesa 26.1.8 Teflon (`libteflon.so`), and connect it to the 2-lane MIPI CSI-2 camera, Hardware ISP 602, and Hardware H.264/H.265 Video Encoder (`ve@1c10000`) over shared LPDDR5 `dma-buf` descriptors:
 - **[Freeing the 3.0 TOPS NPU on the Allwinner A733: How an On-Die Neural Accelerator Works, Mainline Linux `etnaviv` + Mesa Teflon Bring-Up, and Zero-Copy Video Processing](hackster_a733_vip9000_npu_etnaviv_teflon.md)**
 
 ---
