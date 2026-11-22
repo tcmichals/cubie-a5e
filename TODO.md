@@ -1340,6 +1340,7 @@ bit 0 = DSP sharing (reset 1); `STA_ADD` resets to `0x3FFC0000`; ARM msgbox bank
   - [ ] **Fix `etnaviv.ko` `rmmod`/`insmod` `PD_NPU` re-probe + `etnaviv_open` NULL guard**: Resolve `GC0, revision: 0` when `etnaviv.ko` is reloaded after `PD_NPU` (`PCK-600`) power-off, guard `priv->mmu_global == NULL` in `etnaviv_open()`, and restore `CONFIG_DRM_ETNAVIV=y` once Path A passes.
   - [ ] **Live `ov5647` `VIDIOC_STREAMON` → `npu-v4l2-dmabuf-test` & optional `python3-tflite-runtime` rootfs package**: Test live camera streaming frames into the NPU PPU shader and optionally package Python `tflite_runtime` for the A7A rootfs.
   - [ ] **Cubie A5E (T527, `0x9003`) live `etnaviv` + Mesa Teflon verification**: Run `/usr/bin/npu-smoke-test` and `/usr/bin/npu-ppu-test` on live A5E hardware.
+  - [ ] **Upstream NPU patches once all working (owner decision 2026-11-22)**: After Path A (`HW_V83` NN `conv2d`), `PD_NPU` `rmmod`/`insmod` fix, and clean-room audit pass on silicon, split and submit (1) kernel `etnaviv` PDMODE/`0x9202`/DTS patches to `etnaviv`/`dri-devel`/`linux-sunxi`, and (2) Mesa `etnaviv`/`teflon` `HW_V83` + `TP_ENGINE=0` patches to Mesa (`mesa3d`).
 
 ---
 
