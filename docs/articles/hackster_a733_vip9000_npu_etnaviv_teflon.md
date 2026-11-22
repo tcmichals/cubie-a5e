@@ -135,6 +135,16 @@ To run on **mainline Linux 7.1** with zero binary blobs, we replaced the entire 
 | **Model Format** | Proprietary offline-compiled `.nb` binary | **Standard quantized `.tflite` models** compiled on the fly at load time |
 | **Multi-Process Safety** | Shared global address space | Per-process **MMUv2 virtual page tables** + **`drm_gpu_scheduler`** hang recovery |
 
+### Proprietary `ACUITY` / `libVIPlite` / `awnn` vs. Mainline `etnaviv` + Teflon: Honest Trade-Offs
+
+To be fair to the vendor stack, Allwinner and VeriSilicon's proprietary tools (**`ACUITY` + `.nb` + `libVIPlite.so` / `libNBGlinker.so` + Allwinner `awnn`**) exist for a reason and **do offer real advantages today** when running on the vendor 5.15 BSP:
+* **Ahead-of-Time Whole-Graph Optimization (`.nb`)**: `ACUITY` compiles ONNX, PyTorch, or TFLite models offline on an x86 PC into a pre-scheduled `.nb` binary—eliminating runtime graph compilation overhead and fusing `Conv + Bias + ReLU + Pool` aggressively.
+* **Hardware Weight Compression & VIP SRAM Tiling**: `ACUITY` emits **Huffman + Zero-Run-Length (ZRL)** compressed weights (2–4× less LPDDR5 traffic) and statically tiles intermediate feature maps inside the **512 KB on-chip VIP SRAM** across consecutive layers so tensors stay on-die instead of bouncing through external DRAM.
+* **Broader Operator & Precision Coverage**: Supports `INT8`, `UINT8`, and `INT16`, custom OpenVX/PPU kernels, and turnkey Allwinner `awnn` / `vpm_run` demos (`YOLOv5`, `YOLOv8`, face/pose) out of the box.
+
+**Can we use `libVIPlite.so`, `ACUITY`, or `awnn` inside our open-source mainline stack?**
+**No — not directly.** `libVIPlite.so`, `libNBGlinker.so`, `awnn`, and the `ACUITY` compiler are closed-source proprietary binaries tied to the out-of-tree `/dev/vipcore` ioctl ABI (not Linux DRM `/dev/dri/renderD128`), and `vipcore.ko` cannot be upstreamed into mainline Linux. However, **all of the underlying silicon capabilities** (Huffman/ZRL weight compression, VIP SRAM tiling, multi-layer scheduling, and PPU shaders) are hardware features of the VIP9000 die—meaning they can be implemented **clean-room in MIT-licensed Mesa `etnaviv` / Teflon** over time, without binary blobs or kernel lock-in.
+
 ---
 
 ## 🔬 3. Inside the Chip: How the A733 NPU Works (Clocks, MMUv2, DMA & 8 NN Cores)
