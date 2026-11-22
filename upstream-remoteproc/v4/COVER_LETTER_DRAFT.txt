@@ -25,7 +25,10 @@ Changes in v4 (details in each patch):
     regions are optional (they depend on the firmware, not on the SoC)
     and which layouts are valid: none, or the vring and buffer pool
     first (in DRAM or in an E906 SRAM), then dram and trace, in that
-    order. v2 and v3 did not say it (Krzysztof).
+    order. v2 and v3 did not say it (Krzysztof). Note that when the
+    vring and buffer pool sit in an E906 SRAM, the DT memory-region
+    addresses are host physical addresses (translated to E906 device
+    addresses by the driver's da_to_va()).
   - Both drivers: <linux/mod_devicetable.h> dropped (Uwe).
   - Remoteproc KUnit: depends on PM (Sashiko; the kernel test robot
     reported the same build error on v3); __force on the __iomem casts
