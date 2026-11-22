@@ -24,11 +24,11 @@ This platform stack powers [AbstractX](https://github.com/tcmichals/AbstractX). 
 | **Camera, ISP & VPU** | Pending (OV5647 MIPI CSI-2 + ISP 602 backport) | **OV5647 1080p30** (`sun6i-mipi-csi2` → `sun6i-csi` → **Hardware ISP 602** `sun60i-isp` + `libcamera` pipeline/IPA) → **zero-copy Cedrus H.264 & H.265** (`v4l2-compliance` 49/49) |
 | **Wi-Fi 6 (AIC8800D80)** | **SDIO**: `aic8800-rfcv3` (`aic8800_bsp` + `aic8800_fdrv`) | **USB**: `aic8800-rfcv3` + `aic_load_fw` (`a69c:8d80` → `8d81`), 5 GHz Wi-Fi 6 (`80 MHz`) + DHCP verified |
 | **USB, Ethernet & LEDs** | USB, Ethernet, standard DT peripherals | USB 2.0 High-Speed + FE1.1S hub; active-low green LED (`PJ26`); `WDT_SRST_REG` reset; GMAC210 TX DMA fix pending |
-| **Audio DSP / NPU** | Cadence HiFi4 DSP framework (`dsp-hifi4/`) | **3.0 TOPS NPU (`npu@3600000`, `VIP9000Nano-DI` `0x9202`, `HW_V83`)**: mainline `etnaviv` DRM live (`840 MHz`, `800 mV` `dcdc2`, `GIC_SPI 65`); **PPU compute shader verified** (`0.092–0.220 ms`, 5/5 bit-exact IEEE-754 float32); **MMUv2 PDMODE** + **Mesa 26.1.8 Teflon** (`TP_ENGINE=0` + `HW_V83` slice-stride & FP post-scale) built & staged for final board sweep |
+| **Audio DSP / NPU** | Cadence HiFi4 DSP (`dsp-hifi4/`) + **2.0 TOPS NPU (`VIP9000Nano-SI+` `0x9003`, 6 NN + 2 TP + 1 PPU)** on shared mainline `etnaviv` + Mesa Teflon stack | **3.0 TOPS NPU (`npu@3600000`, `VIP9000Nano-DI` `0x9202`, `HW_V83`, 8 NN + 0 TP + 1 PPU)**: mainline `etnaviv` DRM live (`GIC_SPI 65`); **Path B PPU shader verified** (`0.052–0.950 ms`, 10/10 cold-boot deterministic PASS); **V4L2/CMA `dma-buf` PRIME → NPU verified** (`0.206 ms` / `0.220 ms` PASS); **Path A (`HW_V83` NN + Mesa Teflon)** WIP (`quantized_add` 192/192 exact; `quantized_conv2d` 0.105 ms dispatch, NN DRAM-read bug open) |
 
 ### Next Priorities
 
-- **Cubie A7A**: Run final post-power-cycle live verification of kernel MMUv2 PDMODE + Mesa 26.1.8 Teflon `npu-smoke-test`; root-cause 1-second Linux-side RPMsg stall & `stress_rpmsg` drops ([TODO.md §2](TODO.md)); add `sun50i-cpufreq-nvmem` multi-bin (`vfXXXX`) selection; fix GMAC210 TX DMA timeout; build A733 BL31 from source; upstream `sun60i-isp` RFC to `linux-media`.
+- **Cubie A7A**: Resolve remaining Path A `HW_V83` NN engine DRAM-read bug (`quantized_conv2d` / `lenet_v3.nb`); root-cause 1-second Linux-side RPMsg stall & `stress_rpmsg` drops ([TODO.md §2](TODO.md)); add `sun50i-cpufreq-nvmem` multi-bin (`vfXXXX`) selection; fix GMAC210 TX DMA timeout; build A733 BL31 from source; upstream `sun60i-isp` RFC to `linux-media`.
 - **Cubie A5E**: Port v4 remoteproc/msgbox fixes to `cubie-linux-7.1`, run full v4 board sweep + KUnit, and submit v4; re-test `aic8800-rfcv3` SDIO on board; add CPU CCU/OPP/cooling; bring up OV5647 + backport ISP 602.
 
 > [!NOTE]
@@ -53,21 +53,23 @@ OV5647 1080p30 runs end-to-end on mainline `sun6i-mipi-csi2` → `sun6i-csi` →
 
 ---
 
-## 🧠 A7A 3.0 TOPS NPU (`etnaviv` DRM + PPU Compute + Mesa 26.1.8 Teflon)
+## 🧠 Mainline Open-Source NPU Stack: Allwinner T527 (A5E) & A733 (A7A)
 
-The Allwinner A733's **VeriSilicon `VIP9000Nano-DI`** (`GC9000 rev 0x9202`, `customer_id 0x1000003b`, `HW_V83`, **8 NN cores**, **1 PPU shader core**, **`TP_ENGINE = 0`**, **512 KB VIP SRAM**) runs on mainline Linux 7.1 `etnaviv` (`/dev/dri/renderD128`) without proprietary VIPLite blobs or vendor `.nb` toolchains.
+A single flexible, **100% open-source mainline Linux 7.1 `etnaviv` DRM + Mesa 26.1.8 Teflon + PPU Shader** stack replaces proprietary vendor `galcore`/VIPLite/ACUITY blobs across **both** Allwinner VIP9000 platforms — letting you run standard `.tflite` models directly, swap kernels freely, share zero-copy `dma-buf` frames with V4L2/ISP/Cedrus H.264/H.265, and dispatch custom PPU compute shaders via `/dev/dri/renderD128`:
 
-| Workload / Verification | Result | Notes |
+| Platform / Silicon | Compute Engines | Key Mainline Bring-Up Milestones |
 | :--- | :--- | :--- |
-| **Mainline Kernel Bring-Up (`3600000.npu`)** | **Live on silicon** | `PD_NPU` (domain 4), `dcdc2 = 800 mV`, `pll-npu = 840 MHz`, `mbus-npu = 600 MHz`, `bus-npu = 200 MHz`, 3 resets (`0x0b04`), `GIC_SPI 65`, NPU temp `35.9 °C` |
-| **Path B: Vivante PPU Compute Shader (`npu_ppu_compute_test.c`)** | **0.092–0.220 ms** | **5/5 bit-exact IEEE-754 float32** outputs (`fill = 1, 2, 3, 5, 7`), 0 MMU faults, 0 hangs |
-| **Path A: `HW_V83` NN Engine + Mesa 26.1.8 Teflon** | **0.11 ms** Conv2D dispatch; fixes built & staged | Live silicon sweeps proved `TP_ENGINE = 0`, `NN_CMD_SUPPORT_SLICE = 1` (`y_stride = x * y`), `FP_INIMAGE_POST_SCALE = 1` (raw IEEE-754 exponent), and `MMU_PAGE_DESCRIPTOR = 1` (PDMODE `0x003B4` + `0x00388 = 0x21`); kernel PDMODE + Mesa `0002` patch built & staged for final `npu-smoke-test` run |
+| **Cubie A5E — Allwinner T527 / A527**<br>`VIP9000Nano-SI+` (`0x9000` rev `0x9003`, `0x10000016`, **2.0 TOPS**) | **6 NN cores**, **2 TP cores**, **1 PPU shader**, 512 KB VIP SRAM | Standard MMUv2 PTA (`0x00388..0x003a8`); shares mainline `etnaviv` + Mesa Teflon stack with feature-gated A733 patches |
+| **Cubie A7A — Allwinner A733**<br>`VIP9000Nano-DI` (`0x9000` rev `0x9202`, `0x1000003b`, `HW_V83`, **3.0 TOPS**) | **8 NN cores**, **`TP_ENGINE = 0`**, **1 PPU shader**, 512 KB VIP SRAM | Live on Linux 7.1 `PREEMPT_RT` (`GIC_SPI 65`, `35.9 °C`): **Path B (PPU shaders)** verified (`0.052–0.950 ms`, 10/10 cold-boot deterministic PASS); **V4L2/CMA `dma-buf` PRIME → NPU** verified (`0.206 ms` / `0.220 ms` PASS); **Path A (`HW_V83` NN + Mesa Teflon)** WIP (`quantized_add` 192/192 exact in `0.002 ms`; `quantized_conv2d` `0.105 ms` dispatch, `max_abs_diff = 31` due to open NN DRAM-read bug) |
 
-- **NPU Acceleration Guide & Community Q&A / Fixes**: [docs/common/NPU_ACCELERATION_GUIDE.md](docs/common/NPU_ACCELERATION_GUIDE.md)
-- **Deep-Dive Hackster.io Article (Silicon Dataflow, Shaders vs. NN Cores, `HW_V83` Findings & Community Issues)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
-- **Blog Posts**: [NN Cores, Shaders & Best Uses on the A733](docs/articles/part6_a733_npu_nn_vs_shaders_best_uses.md) • [The 8 Real-World A733 NPU Problems We Solved on Live Silicon](docs/articles/part7_a733_npu_silicon_debugging_problems_solved.md)
-- **Mesa 26.1.8 Teflon Patches**: [0001-etnaviv-hwdb](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch), [0002-hw-v83-and-no-tp](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch)
+### NPU Documentation & Storyline
+- **General NPU Subsystem Guide (T527 & A733 — Architecture, Build/Test & Radxa Forum Fixes)**: [docs/common/NPU_ACCELERATION_GUIDE.md](docs/common/NPU_ACCELERATION_GUIDE.md)
+- **Hackster.io Flagship (Flexible Linux 7.1 + Mesa Teflon + Zero-Copy Vision Pipeline How-To)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
+- **Blog Part 6 (Use Cases — NN Cores vs. PPU Shaders vs. ARM NEON vs. RISC-V E902)**: [docs/articles/part6_a733_npu_nn_vs_shaders_best_uses.md](docs/articles/part6_a733_npu_nn_vs_shaders_best_uses.md)
+- **Blog Part 7 (Silicon Debugging War Stories & Community Issues Solved)**: [docs/articles/part7_a733_npu_silicon_debugging_problems_solved.md](docs/articles/part7_a733_npu_silicon_debugging_problems_solved.md)
+- **Mesa 26.1.8 Teflon Patches**: [0001-etnaviv-hwdb](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch) • [0002-hw-v83-and-no-tp](project-cubie-a5e/board/radxa/cubie_a7a/patches/packages/mesa3d/0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch)
 - **Standalone PPU Compute Tool**: [npu_ppu_compute_test.c](project-cubie-a5e/board/radxa/cubie_a7a/src/npu_ppu_compute_test.c)
+- **Zero-Copy V4L2/CMA `dma-buf` PRIME → NPU Tool**: [npu_v4l2_dmabuf_test.c](project-cubie-a5e/board/radxa/cubie_a7a/src/npu_v4l2_dmabuf_test.c)
 
 ---
 

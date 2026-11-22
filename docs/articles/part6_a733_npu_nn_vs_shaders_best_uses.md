@@ -31,7 +31,7 @@ Right next to the 8 NN cores sits a **Programmable Processing Unit (PPU)**—a 1
 If you have never written GPU or OpenCL code, a **"shader"** simply means a **small parallel program that executes the same math across hundreds of pixels or array elements simultaneously**. It is essentially a mini compute GPU bolted directly onto the NPU die:
 * It reads/writes normal Linux buffers mapped through MMUv2.
 * It natively executes IEEE-754 **float32**, **fp16**, and **integer** vector instructions.
-* On our live Cubie A7A (`840 MHz` `pll-npu`, `800 mV` `dcdc2`, `35.9 °C`), a 16-DWORD Vivante PPU compute shader dispatched via mainline `etnaviv` DRM (`npu_ppu_compute_test.c`) completes in **`0.092–0.220 ms`** with bit-exact IEEE-754 float32 outputs and zero CPU involvement.
+* On our live Cubie A7A (`0x9202`), a 28-DWORD cold-boot-deterministic Vivante PPU compute shader dispatched via mainline `etnaviv` DRM (`npu_ppu_compute_test.c`) completes in **`0.052–0.950 ms`** (10/10 runs PASS) with bit-exact IEEE-754 float32 outputs, and zero-copy V4L2/CMA `dma-buf` PRIME import (`npu_v4l2_dmabuf_test.c`) runs in **`0.206 ms` / `0.220 ms`** with zero CPU involvement.
 
 ### What’s *Missing* on the A733: `TP_ENGINE = 0`
 Older Vivante NPUs—like the Allwinner T527 (`0x9003`, Cubie A5E) or NXP i.MX8M Plus (`0x8002`)—included a third hardware block called the **TP (Tensor Processor)**. The TP engine automatically handled tensor layout transposes (`NHWC ↔ NCHW`), border padding, and piecewise-linear activation LUTs (`Sigmoid`, `Abs`).
@@ -63,8 +63,8 @@ Here is our practical engineering cheat sheet for getting the most out of the Al
 
 | Application / Stage | Best Engine on A733 | Verified Performance / Characteristic | Why Not Run It Elsewhere? |
 | :--- | :--- | :--- | :--- |
-| **Object Detection & Classification (`YOLOv8`, `MobileNet`, `PoseNet`)** | **8× NN Cores** (Mesa Teflon `.tflite` delegate) | `0.11 ms` per Conv2D layer dispatch; `512 KB` VIP SRAM weight reuse | Running CNN backbones on Arm CPU burns 3–5 W and starves control/networking |
-| **Custom Compute, Image Filtering, Optical Flow, Stereo, DSP, Custom AI Layers** | **1× PPU Shader Core** (`etnaviv` DRM compute, `npu_ppu_compute_test.c`) | **`0.092–0.220 ms`** per dispatch, exact IEEE-754 `float32` | NN cores can't run custom math; vendor VIPLite `.nb` doesn't expose shaders |
+| **Object Detection & Classification (`YOLOv8`, `MobileNet`, `PoseNet`)** | **8× NN Cores** (Mesa Teflon `.tflite` delegate — **WIP**) | `0.105 ms` Conv2D dispatch (`quantized_add` 192/192 exact; NN DRAM-read bug open on `0x9202`); `512 KB` VIP SRAM weight reuse | Running CNN backbones on Arm CPU burns 3–5 W and starves control/networking |
+| **Custom Compute, Image Filtering, Optical Flow, Stereo, DSP, Custom AI Layers** | **1× PPU Shader Core** (`etnaviv` DRM compute, `npu_ppu_compute_test.c`, `npu_v4l2_dmabuf_test.c`) | **`0.052–0.950 ms`** per dispatch (`0.206 ms` V4L2 `dma-buf` PRIME), exact IEEE-754 `float32` | NN cores can't run custom math; vendor VIPLite `.nb` doesn't expose shaders |
 | **1080p30 Camera Demosaic, 3A, NV12, H.264 & H.265 Video Encoding** | **Hardware ISP 602 (`sun60i-isp`) + Cedrus VE (`ve@1c10000`)** | **30.0 fps** H.264 at **0.89% CPU**, H.265 at **1.55% CPU** (zero-copy `dma-buf`) | Eliminates 94 MB/s of CPU frame copies and software encoding load |
 | **NMS, `TopK`, `argmax`, `Softmax`, Graph Logic, MAVLink / RTSP** | **2× Cortex-A76 + 6× Cortex-A55** (automatic TFLite delegate partitioning) | Full `float32` precision, NEON-accelerated | Quantizing NMS/TopK to INT8 on NPU destroys bounding-box coordinate accuracy |
 | **Hard Real-Time PID, Motor Control, Sensor Polling** | **On-Die 200 MHz XuanTie E902 RISC-V** (`remoteproc` + MSGBOX) | **14.5 µs** shared-SRAM doorbell, **0 drops** across 20k RPMsg stress test | Zero Linux scheduling jitter; replaces external STM32/RP2040 MCUs |

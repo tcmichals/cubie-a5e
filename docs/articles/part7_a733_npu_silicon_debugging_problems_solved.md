@@ -101,11 +101,11 @@ That forced `tp_core_count = 1` on A733 even though `db->TP_ENGINE == 0`—turni
 
 ---
 
-## Problem 8: Unlocking General-Purpose Shader Compute (`0.092–0.220 ms` Verified Live)
+## Problem 8: Unlocking General-Purpose Shader Compute (`0.052–0.950 ms` & V4L2 `dma-buf` Verified Live)
 
-**The Problem:** Proprietary VIPLite `.nb` blobs only run static neural graphs and completely hide the NPU's programmable Vivante PPU shader core.
+**The Problem:** Proprietary VIPLite `.nb` blobs only run static neural graphs and completely hide the NPU's programmable Vivante PPU shader core. Additionally, an earlier 16-DWORD `dp2x8` test shader read an uninitialized `c3_512` uniform and had overlapping X-thread writes, causing cold-boot non-determinism.
 
-**How We Solved It:** Built and verified a standalone, zero-header-dependency mainline `etnaviv` DRM compute tool—[`npu_ppu_compute_test.c`](../../project-cubie-a5e/board/radxa/cubie_a7a/src/npu_ppu_compute_test.c)—that submits a 16-DWORD Vivante PPU compute shader directly to `/dev/dri/renderD128`. On live Cubie A7A silicon, it executes in **`0.092–0.220 ms`** with **5/5 bit-exact IEEE-754 float32 outputs**, proving that general-purpose compute shaders and neural inference can coexist cleanly on the same mainline driver.
+**How We Solved It:** Built and verified a standalone, zero-header-dependency mainline `etnaviv` DRM compute tool—[`npu_ppu_compute_test.c`](../../project-cubie-a5e/board/radxa/cubie_a7a/src/npu_ppu_compute_test.c)—using a 28-DWORD shader with an explicitly loaded uniform `u2` (`VIVS_SH_HALTI5_UNIFORMS(8..11)`) and non-overlapping per-row thread writes. On live Cubie A7A silicon, it passes **10/10 consecutive runs** in **`0.052–0.950 ms`** with **5/5 bit-exact IEEE-754 float32 outputs**, and [`npu_v4l2_dmabuf_test.c`](../../project-cubie-a5e/board/radxa/cubie_a7a/src/npu_v4l2_dmabuf_test.c) proves zero-copy V4L2 (`0.206 ms`) and CMA `dma-heap` (`0.220 ms`) `dma-buf` PRIME import into the PPU shader. (Meanwhile, Path A `HW_V83` NN inference dispatches Conv2D in `0.105 ms` and passes `quantized_add` `192/192`, with the remaining NN DRAM-read bug tracked as WIP.)
 
 ---
 

@@ -3,10 +3,10 @@
  * verification tool for the Allwinner A733 VIP9000Nano-DI (GC9000 rev 0x9202)
  * via mainline Linux DRM etnaviv (/dev/dri/renderD128).
  *
- * Executes a 16-DWORD Vivante PPU compute shader (img_load.u8 x2 -> dp2x8 ->
- * img_store.u8) on the NPU shader core, measures dispatch latency, and verifies
- * bit-exact IEEE-754 float32 output against the expected normalized dot-product
- * value (fill * 257 / 4096) across both output workgroups.
+ * Executes a 28-DWORD Vivante PPU compute shader (img_load.u8 -> lshift/rshift ->
+ * i2f.s32 -> mov u2 -> mul -> img_store.u8) on the NPU shader core, measures
+ * dispatch latency, and verifies bit-exact IEEE-754 float32 output against
+ * the expected normalized value (fill * 257 / 4096) across both workgroups.
  *
  * Build (cross-compile):
  *   aarch64-buildroot-linux-gnu-gcc -O2 -Wall -Wextra -o npu-ppu-test npu_ppu_compute_test.c
@@ -164,7 +164,7 @@ static int run_ppu_test(int fd, uint8_t fill_val)
     const uint32_t in_off = 0;
     const uint32_t out_off = ALIGN(img_size, 64);
     const uint32_t sh_off = ALIGN(out_off + img_size, 64);
-    const uint32_t sh_size = 16 * 4;
+    const uint32_t sh_size = 28 * 4;
 
     struct drm_etnaviv_gem_new gem_new = { .size = 4096, .flags = ETNA_BO_WC };
     if (ioctl(fd, DRM_IOCTL_ETNAVIV_GEM_NEW, &gem_new) < 0) {
@@ -188,16 +188,22 @@ static int run_ppu_test(int fd, uint8_t fill_val)
     memset(buf + in_off, fill_val, img_size);
 
     /*
-     * 16-DWORD Vivante PPU compute shader:
-     *   img_load.u8  r1, c0, r0.xy
-     *   img_load.u8  r2, c0, r0.xy
-     *   dp2x8        r1, r1, r2, c3_512
-     *   img_store.u8 r1, c2, r0.xy, r1
+     * 28-DWORD deterministic Vivante PPU compute shader:
+     *   img_load.u8  t1, u0, t0.xy
+     *   lshift.s32   t1.x___, t1.xxxx, void, 24:u20
+     *   rshift.s32   t1.x___, t1.xxxx, void, 24:u20
+     *   i2f.s32      t1.xyzw, t1.xxxx, void, void
+     *   mov          t2.xyzw, void, void, u2.xyzw
+     *   mul          t1.xyzw, t1.xxxx, t2.xxxx, void
+     *   img_store.u8 t1, u1, t0.xy, t1
      */
-    static const uint32_t shader_inst[16] = {
+    static const uint32_t shader_inst[28] = {
         0x78011779, 0x39000804, 0x00A90050, 0x00000000,
-        0x78021779, 0x39000804, 0x00A90050, 0x00000000,
-        0xB8017145, 0x390018FC, 0x01C90140, 0x40390028,
+        0x00811019, 0x00001804, 0x40010000, 0x78000188,
+        0x0081101a, 0x00001804, 0x40010000, 0x78000188,
+        0x0781102d, 0x00001804, 0x40000000, 0x00000000,
+        0x07821009, 0x00000004, 0x00000000, 0x20390028,
+        0x07811003, 0x00001804, 0x00000140, 0x00000000,
         0x380007BA, 0x39001804, 0x00A90050, 0x00390018,
     };
     memcpy(buf + sh_off, shader_inst, sizeof(shader_inst));
@@ -217,13 +223,21 @@ static int run_ppu_test(int fd, uint8_t fill_val)
     emit(&cb, 0x444051f0);
     emit(&cb, 0xffffffff);
 
-    /* Output image descriptor in c2..c3 */
+    /* Output image descriptor in u1 */
     load_states_start(&cb, VIVS_SH_HALTI5_UNIFORMS(4), 4);
     emit_reloc(&cb, 0, out_off);
     emit(&cb, img_stride);
     emit(&cb, img_w | (img_h << 16));
     emit(&cb, 0x444051f0);
     emit(&cb, 0xffffffff);
+
+    /* Explicit scale factor in u2: 257.0f / 4096.0f (0x3d808000) */
+    load_states_start(&cb, VIVS_SH_HALTI5_UNIFORMS(8), 4);
+    emit(&cb, 0x3d808000);
+    emit(&cb, 0x3d808000);
+    emit(&cb, 0x3d808000);
+    emit(&cb, 0x3d808000);
+    emit(&cb, 0x00000000);
 
     load_state(&cb, VIVS_CL_CONFIG,
                VIVS_CL_CONFIG_DIMENSIONS(2) | VIVS_CL_CONFIG_VALUE_ORDER(3));
@@ -254,7 +268,7 @@ static int run_ppu_test(int fd, uint8_t fill_val)
     load_state(&cb, VIVS_CL_GLOBAL_WORK_OFFSET_Z, 0);
 
     load_states_start(&cb, VIVS_CL_WORKGROUP_COUNT_X, 9);
-    emit(&cb, 0xf);
+    emit(&cb, 0x0);
     emit(&cb, 0x5);
     emit(&cb, 0xffffffff);
     emit(&cb, 0x0);
@@ -321,20 +335,22 @@ static int run_ppu_test(int fd, uint8_t fill_val)
     ioctl(fd, DRM_IOCTL_ETNAVIV_GEM_CPU_PREP, &prep);
 
     /*
-     * The Vivante PPU dp2x8 shader computes a normalized float32 dot product
-     * (fill * 257 / 4096 = fill * 0.062744140625f, exact IEEE-754 float32)
-     * and stores it at byte offsets 19..22 and 275..278 of the output image.
+     * The Vivante PPU shader computes (float)fill * (257 / 4096) in IEEE-754
+     * float32 (exact) and stores it at byte offset 0 of each row (6 workgroups).
      */
     float expected = (float)fill_val * (257.0f / 4096.0f);
     uint32_t expected_bits = 0;
     memcpy(&expected_bits, &expected, sizeof(expected_bits));
 
-    static const uint32_t offsets[2] = { 19, 275 };
+    static const uint32_t offsets[2] = { 0, 256 };
     int pass = 1;
+    int exact = 0;
     for (int i = 0; i < 2; i++) {
         uint32_t got_bits = 0;
         memcpy(&got_bits, buf + out_off + offsets[i], sizeof(got_bits));
-        if (got_bits != expected_bits) {
+        if (got_bits == expected_bits) {
+            exact++;
+        } else {
             float got = 0.0f;
             memcpy(&got, &got_bits, sizeof(got));
             fprintf(stderr, "  MISMATCH off=%u: got=0x%08x (%.6f) expected=0x%08x (%.6f)\n",
@@ -343,10 +359,12 @@ static int run_ppu_test(int fd, uint8_t fill_val)
         }
     }
 
+    uint32_t sample_bits = 0;
     float sample = 0.0f;
-    memcpy(&sample, buf + out_off + offsets[0], sizeof(sample));
-    printf("  fill=%u -> %.6f (0x%08x) | 2/2 workgroups exact | %.3f ms | %s\n",
-           fill_val, sample, expected_bits, ms, pass ? "PASS" : "FAIL");
+    memcpy(&sample_bits, buf + out_off + offsets[0], sizeof(sample_bits));
+    memcpy(&sample, &sample_bits, sizeof(sample));
+    printf("  fill=%u -> %.6f (0x%08x) | %d/2 workgroups exact | %.3f ms | %s\n",
+           fill_val, sample, sample_bits, exact, ms, pass ? "PASS" : "FAIL");
 
     struct drm_etnaviv_gem_cpu_fini fini = { .handle = gem_new.handle };
     ioctl(fd, DRM_IOCTL_ETNAVIV_GEM_CPU_FINI, &fini);

@@ -5,7 +5,38 @@
 
 ---
 
-## 🚀 1. Basic Info & Introduction: What Does an On-Die NPU Actually Do?
+## Introduction: What Does It Actually Take to Accelerate AI at the Edge?
+
+Pick up almost any modern single-board computer and the headline spec jumps right off the box: *"Octa-Core CPU + 3.0 TOPS AI NPU!"* For robotics, smart cameras, and edge-vision projects, that promise sounds simple—plug in a camera, run a neural network, and detect objects in real time without needing a desktop GPU or sending video to the cloud.
+
+Before diving into Linux drivers or silicon registers, it helps to step back and ask a simpler question: **what is an AI accelerator actually doing, and why does a normal CPU struggle with it?**
+
+### 1. Why AI Needs So Much Math (and What "Convolution" Means)
+When a computer vision model looks at a camera frame—say, a `1920×1080` image—it doesn't "see" a person or a stop sign all at once. Instead, it passes the image through dozens of layers of **convolution** (`CONV_2D`).
+
+A **convolution** is surprisingly simple: imagine taking a tiny `3×3` magnifying glass (called a **kernel** or **filter**) and sliding it across every single pixel of the image. At each stop, the computer multiplies those 9 pixel values by 9 learned **weights** and adds them up into one output number. Early layers look for simple things like vertical edges or bright spots; deeper layers combine those patterns into wheels, faces, or text. A single modern vision model might perform **billions** of these tiny multiply-and-add steps on every single frame—30 times a second. A general-purpose CPU is built for complex logic and branching, not doing billions of repetitive multiplies per second, so it quickly gets hot, burns power, and drops frames.
+
+### 2. Why "8-Bit Quantization" Is the Secret Behind TOPS
+Models are usually trained on big server GPUs using 32-bit floating-point numbers (`FP32`—high-precision decimals). On a tiny embedded board, you don't need 32 bits of decimal precision just to tell a cat from a coffee mug. **Quantization** converts those `FP32` weights and pixel values into compact **8-bit whole numbers** (`INT8` or `UINT8`, from `-128..127` or `0..255`).
+
+Shrinking from 32-bit decimals to 8-bit integers makes each multiply-add circuit roughly **15–20× smaller and more power-efficient**, and cuts memory traffic by **4×**. When a chip advertises **"3.0 TOPS"** (Tera Operations Per Second), it means 3 trillion 8-bit integer operations per second—not 32-bit desktop floating point.
+
+### 3. Fixed-Function NN Cores vs. Programmable Shaders (and Why You Need Both)
+An **NPU (Neural Processing Unit)** isn't just one giant calculator. Real AI pipelines do more than convolutions: you also have to resize/normalize camera pixels before inference, or run custom math, activations, and image filters afterward. Inside modern NPUs like the Vivante VIP9000 on Allwinner's A733, the silicon is split into two complementary helpers:
+- **NN (Neural Network) Cores**: Fixed-function hardware arrays packed with hundreds of 8-bit multipliers. They are unbeatable at convolutions, but they *cannot* run arbitrary `if/else` code or general math.
+- **PPU / Shader Core**: A small programmable parallel processor (like a mini compute GPU) that runs short parallel programs (**shaders**) across hundreds of pixels or tensor elements at once—handling custom math, image pre/post-processing, and ops the fixed-function NN cores don't support.
+
+### 4. Why "Zero-Copy" Memory Matters for Live Video
+Even with a fast NPU, copying a 1080p camera frame from the camera driver into CPU memory, converting it, and copying it back to the NPU wastes huge amounts of memory bandwidth. On Linux, **`dma-buf`** lets the camera hardware, video encoder, and NPU share the **exact same physical memory buffer**—so frames move from camera to NPU with **zero CPU copies**.
+
+### Breaking Out of the Vendor BSP Trap
+Most SBCs lock this NPU hardware inside an old vendor kernel (`5.15`), closed-source userspace libraries (`libVIPlite.so`), and proprietary offline `.nb` model compilers. On the **Radxa Cubie A7A (Allwinner A733)** and **Cubie A5E (Allwinner T527)**, we set out to unlock this stack on **100% open-source mainline Linux 7.1** using the upstream **`etnaviv`** DRM driver (`/dev/dri/renderD128`), **Mesa 26.1.8 Teflon** (`libteflon.so`, which runs standard `.tflite` models directly), and **`V4L2` `dma-buf`** zero-copy camera pipelines.
+
+Real silicon bring-up is messy, and this article shares the whole journey—what already works on live Cubie A7A hardware (PPU shader compute at `0.059–0.396 ms`, zero-copy `V4L2` `/dev/video0` and CMA `dma-buf` -> NPU PRIME at `0.401–0.487 ms`, and `ov5647` CSI + `Cedrus` H.265 video), as well as the open `HW_V83` NN `conv2d` DRAM-read investigation still underway.
+
+---
+
+## 🚀 1. Silicon Architecture: How the A733 & T527 NPUs Work Under the Hood
 
 If you have ever deployed a computer vision model (like YOLOv8, MobileNetV2, or PoseNet) on an embedded Linux single-board computer, you have felt the wall that general-purpose CPU cores hit when processing real-time 1080p video.
 
@@ -332,18 +363,20 @@ cat /sys/kernel/debug/dri/0/gpu
 
 #### ✅ Verified Live on A733 Silicon
 1. **Path B — Vivante PPU Compute Shader (`npu_ppu_compute_test.c`)**:
-   Executing a 16-DWORD Vivante PPU compute shader (`img_load.u8` $\times 2 \rightarrow$ `dp2x8` $\rightarrow$ `img_store.u8`) directly on `3600000.npu` via `DRM_IOCTL_ETNAVIV_GEM_SUBMIT` completed in **`0.092–0.220 ms`** per dispatch with **0 MMU faults**, **0 hangs**, clean **`GIC_SPI 65`** interrupts, and **bit-exact IEEE-754 float32 outputs** across all tested inputs:
-   * `fill = 1` $\rightarrow$ `0x3d808000` (`0.062744`) | `0.220 ms`
-   * `fill = 2` $\rightarrow$ `0x3e008000` (`0.125488`) | `0.140 ms`
-   * `fill = 3` $\rightarrow$ `0x3e40c000` (`0.188232`) | `0.119 ms`
-   * `fill = 5` $\rightarrow$ `0x3ea0a000` (`0.313721`) | `0.092 ms`
-   * `fill = 7` $\rightarrow$ `0x3ee0e000` (`0.439209`) | `0.104 ms`
-2. **Path A — Live Silicon Reverse-Engineering of `HW_V83` (`0x9202`) NN Descriptors**:
+   Executing a 28-DWORD cold-boot-deterministic Vivante PPU compute shader (`img_load.u8` $\rightarrow$ `lshift.s32` $\rightarrow$ `rshift.s32` $\rightarrow$ `i2f.s32` $\rightarrow$ `mov t2, u2` $\rightarrow$ `mul` $\rightarrow$ `img_store.u8`) directly on `3600000.npu` via `DRM_IOCTL_ETNAVIV_GEM_SUBMIT` completed in **`0.052–0.950 ms`** per dispatch across **10/10 consecutive runs** with **0 MMU faults**, **0 hangs**, clean **`GIC_SPI 65`** interrupts, and **bit-exact IEEE-754 float32 outputs** across all tested inputs:
+   * `fill = 1` $\rightarrow$ `0x3d808000` (`0.062744`)
+   * `fill = 2` $\rightarrow$ `0x3e008000` (`0.125488`)
+   * `fill = 3` $\rightarrow$ `0x3e40c000` (`0.188232`)
+   * `fill = 5` $\rightarrow$ `0x3ea0a000` (`0.313721`)
+   * `fill = 7` $\rightarrow$ `0x3ee0e000` (`0.439209`)
+2. **Zero-Copy V4L2 / CMA `dma-buf` PRIME $\rightarrow$ NPU PPU Shader (`npu_v4l2_dmabuf_test.c`)**:
+   Exporting a V4L2 capture buffer via `VIDIOC_EXPBUF` (`/dev/video0`, **`0.206 ms`**) or allocating a CMA `dma-heap` buffer (`/dev/dma_heap/default_cma_region`, **`0.220 ms`**) and importing it into `etnaviv` via `DRM_IOCTL_PRIME_FD_TO_HANDLE` executed the PPU compute shader directly on the video buffer with **bit-exact IEEE-754 float32 output (`0x3ea0a000`)** and zero CPU `memcpy`.
+3. **Path A — Live Silicon Reverse-Engineering of `HW_V83` (`0x9202`) NN Descriptors (WIP)**:
    Comparing `0x9202` against every other NPU in Mesa's HWDB revealed that Allwinner A733 is the **first chip in Mesa** combining four new Vivante `HW_V83` features. Live register and descriptor sweeps on the Cubie A7A proved every single bitfield on silicon:
    * **`FP_INIMAGE_POST_SCALE = 1` (`NN_INT8_SCALE = 0`)**: On earlier V8 chips (e.g. Amlogic `0x8302`), Mesa wrote `shift = 127 - exp` (e.g. `8`) into `post_shift`. On `0x9202`, `HW_V83` interprets `post_shift` (`w2[31:27]` + `w15[29:28]` + `w15[30]`) as the **raw IEEE-754 biased exponent (`scale_bits >> 23`, e.g. `119`/`120`)**, paired with the 23-bit mantissa in `post_multiplier*` (`w22[25:18]`, `w17[31:24]`, `w15[27:22]`, `w2[26]`) and sign bit in `w27[28]`. Writing `8` multiplied every accumulator by $2^{8-127} \approx 0$ (producing `0 + out_zero_point = 128` everywhere); switching to the raw IEEE-754 exponent immediately produced real spatially-structured $3\times 3$ `SAME`-padded Conv2D feature maps on silicon (`0.11 ms` per dispatch).
    * **`NN_CMD_SUPPORT_SLICE = 1`**: `w8[31:16]` (`out_image_y_stride`) and `w16[31:16]` (`in_image_y_stride`) are **channel-slice byte strides (`x * y`)**, not row counts (`y`). Programming `out_image_y_stride = 64` (`8 * 8`) immediately wrote all 4 output channels cleanly (`256/256` bytes, `TotalWrites = 0x20`).
    * **`TP_ENGINE = 0` (`TPEngine_CoreCount = 0`)**: Vivante removed the hardware TP block on `0x9202` (replacing it with a Stream Processor, `SP_VECTOR_DEPTH = 0x400`). Our Mesa patch (`0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch`) reports `tp_core_count = 0` and executes internal `NHWC` $\leftrightarrow$ `NCHW` layout transposes and strided reshuffles on CPU with GPU batch synchronization.
-   * **`MMU_PAGE_DESCRIPTOR = 1` (`mmu_pd_mode = 1`)**: Controlled live probes showed that under legacy PTA mode (`0x003B4 = 0x1`, `0x00388 = 0x01`), NN descriptor and output writes hit DRAM while NN input/coefficient DMA streams read `0xFF`. Cross-checking Allwinner's vendor `vip_drv_hardware.c` and `vip_drv_mmu.c` confirmed `0x9202` requires native `MODE4_K` MMUv2 **PDMODE** (`0x003B4 = ((mtlb_dma >> 12) << 4) | 0x0`, `0x00388 = 0x21`, skipping `PTA_CONTROL`, plus `0xffffff7f` TLB flushes so `ADDRESS_MASK = 1`). Both the kernel PDMODE patch and the Mesa `0002` Teflon patch are built and staged for final end-to-end `/usr/bin/npu-smoke-test` validation on the board.
+   * **`MMU_PAGE_DESCRIPTOR = 1` (`mmu_pd_mode = 1`) & Current WIP Status**: Controlled live probes showed that under legacy PTA mode (`0x003B4 = 0x1`, `0x00388 = 0x01`), NN descriptor and output writes hit DRAM while NN input/coefficient DMA streams read `0xFF`. Cross-checking Allwinner's vendor `vip_drv_hardware.c` and `vip_drv_mmu.c` confirmed `0x9202` requires native `MODE4_K` MMUv2 **PDMODE** (`0x003B4 = ((mtlb_dma >> 12) << 4) | 0x0`, `0x00388 = 0x21`, skipping `PTA_CONTROL`, plus `0xffffff7f` TLB flushes). On live `/usr/bin/npu-smoke-test`, `quantized_add_8x8x3` matches CPU `192/192` (`0.002 ms`), and `quantized_conv2d_8x8x3x4` dispatches cleanly (`0.105 ms`), but still hits an open NN engine DRAM-read issue (`max_abs_diff = 31`, constant per-channel output `[104,104,104,104,92,92,92,92]`; `run_lenet0` on official `lenet_v3.nb` returns constant `62`). Testing vendor `#[initial states kernel]` + `0x038C0=0, 0x038C4=1, 0x03818=1` confirmed it does not yet resolve this remaining NN DRAM-read bug.
 
 ---
 
@@ -360,7 +393,7 @@ Developers on the **Radxa Forums**, **Armbian Forums**, and **GitHub** (Cubie A7
 | **5** | **Out-of-tree `aw_nna_vip` kernel driver fails to build on mainline Linux 6.6 / 6.18 / 7.1 (`sunxi-autogen.h`, include path errors).** | Vendor `aw_nna_vip` depends on Allwinner BSP 5.15/6.6 private headers and kernel APIs. | Uses mainline `drivers/gpu/drm/etnaviv` directly on Linux `7.1.0 PREEMPT_RT` with clean DT bindings, CCU clock parenting, triple-reset support, `0x9202` HWDB, and MMUv2 PDMODE. |
 | **6** | **Reading `0x03600000` hangs the board during bring-up.** | A733 gates the NPU behind PCK-600 `PD_NPU` (domain 4), **both** `CLK_AHB_NPU` (`0x05c0` bit 6) and `CLK_BUS_NPU` (`0x0b04` bit 0), and **3 separate reset bits** (`0x0b04` bits 16/17/18). Accessing MMIO while runtime-suspended hangs the bus. | Fixed `ccu-sun60i-a733.c` clock parent chain (`bus-npu` $\rightarrow$ `ahb-npu`), switched `etnaviv` to `devm_reset_control_array_get_optional_exclusive()`, and enforced runtime-PM gating (`power/control = auto`). |
 | **7** | **Unmodified Mesa 26.1.8 Teflon outputs all-`128` (`0x80`) or hangs on `0x9202`.** | `0x9202` is the first NPU in Mesa's HWDB with `TP_ENGINE = 0`, `NN_CMD_SUPPORT_SLICE = 1`, `FP_INIMAGE_POST_SCALE = 1`, and `NN_TENSOR_ADD_FIELD_MOVE_TO_EXT_CMD = 1`. | Reverse-engineered all four `HW_V83` hardware behaviors on live silicon and fixed them in `0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch` + kernel MMUv2 PDMODE. |
-| **8** | **Can I run custom non-CNN compute kernels (image filtering, DSP, custom ops) on the A733 NPU?** | Vendor VIPLite only executes pre-compiled `.nb` neural graphs and does not expose general-purpose shader compute. | **Yes (Path B)**: Mainline `etnaviv` exposes the `VIP9000Nano-DI`'s Vivante PPU shader core directly via `/dev/dri/renderD128` (`0.092–0.220 ms` verified with `npu_ppu_compute_test.c`), supporting general-purpose compute alongside TFLite inference. |
+| **8** | **Can I run custom non-CNN compute kernels (image filtering, DSP, custom ops) on the A733 NPU?** | Vendor VIPLite only executes pre-compiled `.nb` neural graphs and does not expose general-purpose shader compute. | **Yes (Path B)**: Mainline `etnaviv` exposes the `VIP9000Nano-DI`'s Vivante PPU shader core directly via `/dev/dri/renderD128` (`0.052–0.950 ms` verified with `npu_ppu_compute_test.c`, and `0.206 ms` zero-copy V4L2 `dma-buf` PRIME via `npu_v4l2_dmabuf_test.c`), supporting general-purpose compute alongside TFLite inference. |
 
 ---
 
