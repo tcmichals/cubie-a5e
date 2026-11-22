@@ -34,6 +34,21 @@ Most SBCs lock this NPU hardware inside an old vendor kernel (`5.15`), closed-so
 
 Real silicon bring-up is messy, and this article shares the whole journey—what already works on live Cubie A7A hardware (PPU shader compute at `0.059–0.396 ms`, zero-copy `V4L2` `/dev/video0` and CMA `dma-buf` -> NPU PRIME at `0.401–0.487 ms`, and `ov5647` CSI + `Cedrus` H.265 video), as well as the open `HW_V83` NN `conv2d` DRAM-read investigation still underway.
 
+### Why Edge AI Matters (and CPU vs. GPU vs. NPU at a Glance)
+Running AI locally on the board ("at the edge") instead of in the cloud delivers **sub-millisecond latency** (critical for robotics and drones), **privacy** (camera feeds never leave the device), **offline reliability**, and **high performance per watt**:
+- **CPU**: Great for operating systems, networking, and branching logic (`if/else`); poor at billions of repetitive matrix multiplies.
+- **GPU**: Built for 32-bit floating-point graphics and parallel math, but power-hungry and absent or small on many headless embedded SoCs.
+- **NPU**: Purpose-built for quantized 8-bit neural network math and on-chip SRAM dataflow at a fraction of the power.
+
+### Companion Articles, Guides & How You Can Help
+If you want to go deeper—or help crack the remaining open `HW_V83` NN bring-up items—these companion guides cover each layer of the stack:
+- **Use Cases & Workload Mapping**: [Inside an Edge AI Chip: NN Cores, Shaders, and Why You Need Both](part6_a733_npu_nn_vs_shaders_best_uses.md) — plain-English guide to matching workloads across NPU, PPU shaders, Arm NEON, ISP/VE, and the on-die XuanTie E902 RISC-V core.
+- **Silicon Debugging War Stories**: [Freeing the Allwinner A733 NPU on Mainline Linux 7.1: The 8 Real-World Problems We Solved](part7_a733_npu_silicon_debugging_problems_solved.md) — deep dive into `0x9003` vs. `0x9202`, `TP_ENGINE=0`, MMUv2 PDMODE, and the ongoing `HW_V83` NN DRAM-read investigation.
+- **Copy-Pasteable Build, C++, PPU & Video Examples**: [Allwinner T527 & A733 Mainline NPU Guide](../common/NPU_ACCELERATION_GUIDE.md) — complete build instructions and verified `npu-ppu-test` / `npu-v4l2-dmabuf-test` commands.
+- **Camera & Hardware Video Encoding**: [Camera / ISP 602 V4L2 Guide](../common/CAMERA_V4L2_GUIDE.md) and [A733 Cedrus H.264/H.265 Encoder Guide](../common/A733_VE_ENCODER_GUIDE.md).
+- **Upstream References**: [Mesa Teflon Documentation](https://docs.mesa3d.org/teflon.html) and Linux kernel `drivers/gpu/drm/etnaviv/`.
+- **Want to pitch in?** Community kernel/Mesa hackers are especially welcome to help test or trace the two remaining open items: the `HW_V83` (`0x9202`) NN `conv2d` DRAM-read bug and `etnaviv.ko` `rmmod`/`insmod` `PD_NPU` re-probe (`GC0` after power-domain cycle).
+
 ---
 
 ## 🚀 1. Silicon Architecture: How the A733 & T527 NPUs Work Under the Hood
