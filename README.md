@@ -62,6 +62,12 @@ A single flexible, **100% open-source mainline Linux 7.1 `etnaviv` DRM + Mesa 26
 | **Cubie A5E — Allwinner T527 / A527**<br>`VIP9000Nano-SI+` (`0x9000` rev `0x9003`, `0x10000016`, **2.0 TOPS**) | **6 NN cores**, **2 TP cores**, **1 PPU shader**, 512 KB VIP SRAM | Standard MMUv2 PTA (`0x00388..0x003a8`); shares mainline `etnaviv` + Mesa Teflon stack with feature-gated A733 patches |
 | **Cubie A7A — Allwinner A733**<br>`VIP9000Nano-DI` (`0x9000` rev `0x9202`, `0x1000003b`, `HW_V83`, **3.0 TOPS**) | **8 NN cores**, **`TP_ENGINE = 0`**, **1 PPU shader**, 512 KB VIP SRAM | Live on Linux 7.1 `PREEMPT_RT` (`GIC_SPI 65`, `35.9 °C`): **Path B (PPU shaders)** verified (`0.052–0.950 ms`, 10/10 cold-boot deterministic PASS); **V4L2/CMA `dma-buf` PRIME → NPU** verified (`0.206 ms` / `0.220 ms` PASS); **Path A (`HW_V83` NN + Mesa Teflon)** WIP (`quantized_add` 192/192 exact in `0.002 ms`; `quantized_conv2d` `0.105 ms` dispatch, `max_abs_diff = 31` due to open NN DRAM-read bug) |
 
+### What Is Not Working Yet (Actively In Progress)
+- **A733 Path A — `HW_V83` NN `conv2d` Engine (`/usr/bin/npu-smoke-test`)**: `quantized_add_8x8x3` passes (`192/192` exact), but **`quantized_conv2d_8x8x3x4` (`max_abs_diff = 31`) and `lenet_v3.nb` fail** because the NN core ignores input/weight-body DRAM reads (64B header reads and output writes work). Actively isolating remaining `0x00100`/`0x0010C`/`#[NNCmd]` differences against VIPLite captures.
+- **`etnaviv.ko` `rmmod` / `insmod` Reload (`PD_NPU`)**: Unloading `etnaviv` powers off `PD_NPU` (`PCK-600`), causing a subsequent `insmod` to probe `GC0, revision: 0` (and `etnaviv_open` to oops on `priv->mmu_global == NULL`). Built-in / boot-time load works cleanly; `PD_NPU` re-init and `etnaviv_open` guard are in progress.
+- **Python `tflite_runtime` in Default A7A Rootfs**: C/C++ `libtensorflow-lite.so` + `libteflon.so` are preinstalled; `python3-tflite-runtime` is not yet packaged in the default rootfs.
+- **Cubie A5E (T527) Live Teflon Run**: Shares the same mainline `etnaviv` + Mesa Teflon stack (`0x9003`), pending live A5E board verification.
+
 ### NPU Documentation & Storyline
 - **General NPU Subsystem Guide (T527 & A733 — Architecture, Build/Test & Radxa Forum Fixes)**: [docs/common/NPU_ACCELERATION_GUIDE.md](docs/common/NPU_ACCELERATION_GUIDE.md)
 - **Hackster.io Flagship (Flexible Linux 7.1 + Mesa Teflon + Zero-Copy Vision Pipeline How-To)**: [docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md](docs/articles/hackster_a733_vip9000_npu_etnaviv_teflon.md)
