@@ -143,7 +143,12 @@ To be fair to the vendor stack, Allwinner and VeriSilicon's proprietary tools (*
 * **Broader Operator & Precision Coverage**: Supports `INT8`, `UINT8`, and `INT16`, custom OpenVX/PPU kernels, and turnkey Allwinner `awnn` / `vpm_run` demos (`YOLOv5`, `YOLOv8`, face/pose) out of the box.
 
 **Can we use `libVIPlite.so`, `ACUITY`, or `awnn` inside our open-source mainline stack?**
-**No — not directly.** `libVIPlite.so`, `libNBGlinker.so`, `awnn`, and the `ACUITY` compiler are closed-source proprietary binaries tied to the out-of-tree `/dev/vipcore` ioctl ABI (not Linux DRM `/dev/dri/renderD128`), and `vipcore.ko` cannot be upstreamed into mainline Linux. However, **all of the underlying silicon capabilities** (Huffman/ZRL weight compression, VIP SRAM tiling, multi-layer scheduling, and PPU shaders) are hardware features of the VIP9000 die—meaning they can be implemented **clean-room in MIT-licensed Mesa `etnaviv` / Teflon** over time, without binary blobs or kernel lock-in.
+**No — not directly.** `libVIPlite.so`, `libNBGlinker.so`, `awnn`, and the `ACUITY` compiler are closed-source proprietary binaries tied to the out-of-tree `/dev/vipcore` ioctl ABI (not Linux DRM `/dev/dri/renderD128`), and `vipcore.ko` cannot be upstreamed into mainline Linux.
+
+**Wait—doesn't `ACUITY` need an x86 PC? Can open source actually match its speed on the board?**
+VeriSilicon ships `ACUITY` as an x86-only offline tool largely for convenience and IP protection, **not** because the Arm SoC can't do the graph compilation. Compressing quantized weights (Huffman/ZRL), planning 512 KB VIP SRAM tiles, and building the command stream take a fraction of a second once at model-load time on the A733's Cortex-A76/A55 cores (and can be cached to disk so subsequent runs load in milliseconds)—**no x86 Docker container required**.
+
+Because **all of the underlying capabilities** (Huffman/ZRL weight compression, VIP SRAM tiling, multi-layer batching, and PPU shaders) are hardware features of the VIP9000 die, we are **still resolving the `HW_V83` NN DRAM-read issue first**, and our **next steps** are to bring those exact optimizations clean-room into **MIT-licensed Mesa `etnaviv` / Teflon** so the open-source stack can match proprietary `.nb` performance without binary blobs or kernel lock-in.
 
 ---
 
