@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 648" width="1120" height="648" overflow="hidden" style="background:#0d1117; max-width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <rect width="1120" height="648" fill="#0d1117"/>
+  <text x="560" y="34" fill="#f0f6fc" font-size="19" font-weight="700" text-anchor="middle">Common Allwinner A733 NPU Issues &amp; How Mainline etnaviv + Teflon Solves Them</text>
+  <text x="560" y="55" fill="#8b949e" font-size="12" text-anchor="middle">Addressing real-world Radxa Forum, Armbian &amp; GitHub roadblocks on Cubie A7A / A7Z / A7S &amp; Orange Pi 4 Pro</text>
+  <rect x="24" y="76" width="1072" height="550" rx="10" fill="#161b22" stroke="#1f6feb" stroke-width="1.5"/>
+  <rect x="24" y="76" width="1072" height="38" rx="10" fill="#162c4e"/>
+  <rect x="24" y="104" width="1072" height="10" fill="#162c4e"/>
+  <text x="36" y="100" fill="#58a6ff" font-size="12" font-weight="700">#</text>
+  <line x1="66" y1="76" x2="66" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="100" fill="#58a6ff" font-size="12" font-weight="700">Community Issue / Question</text>
+  <line x1="346" y1="76" x2="346" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="100" fill="#58a6ff" font-size="12" font-weight="700">Root Cause in A733 Silicon / BSP</text>
+  <line x1="696" y1="76" x2="696" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="100" fill="#58a6ff" font-size="12" font-weight="700">How Mainline Stack Addresses It</text>
+  <rect x="25" y="114" width="1070" height="68" fill="#161b22"/>
+  <line x1="24" y1="114" x2="1096" y2="114" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="136" fill="#ffa657" font-size="11" font-weight="600">1</text>
+  <line x1="66" y1="114" x2="66" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="136" fill="#f0f6fc" font-size="11" font-weight="400">T527 .nb models (*_t527.nb) crash vpm_run</text>
+  <text x="78" y="152" fill="#f0f6fc" font-size="11" font-weight="400">on Cubie A7A / A7Z</text>
+  <line x1="346" y1="114" x2="346" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="136" fill="#c9d1d9" font-size="11" font-weight="400">T527 (0x9003) has 6 NN + 2 TP cores; A733 (0x9202)</text>
+  <text x="358" y="152" fill="#c9d1d9" font-size="11" font-weight="400">has 8 NN + 0 TP cores (HW_V83, SLICE=1, PDMODE=1).</text>
+  <text x="358" y="168" fill="#c9d1d9" font-size="11" font-weight="400">.nb blobs hard-code core counts.</text>
+  <line x1="696" y1="114" x2="696" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="136" fill="#56d364" font-size="11" font-weight="400">Mesa Teflon compiles standard .tflite flatbuffers at runtime</text>
+  <text x="708" y="152" fill="#56d364" font-size="11" font-weight="400">using gc_feature_database.h across T527, A733, i.MX8MP &amp;</text>
+  <text x="708" y="168" fill="#56d364" font-size="11" font-weight="400">Amlogic.</text>
+  <rect x="25" y="182" width="1070" height="68" fill="#1c2128"/>
+  <line x1="24" y1="182" x2="1096" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="204" fill="#ffa657" font-size="11" font-weight="600">2</text>
+  <line x1="66" y1="182" x2="66" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="204" fill="#f0f6fc" font-size="11" font-weight="400">vip_init / vpm_run fails on Debian Trixie</text>
+  <text x="78" y="220" fill="#f0f6fc" font-size="11" font-weight="400">(VIPLite version &amp; LD_LIBRARY_PATH</text>
+  <text x="78" y="236" fill="#f0f6fc" font-size="11" font-weight="400">errors)</text>
+  <line x1="346" y1="182" x2="346" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="204" fill="#c9d1d9" font-size="11" font-weight="400">Proprietary /dev/vipcore modules and libNBGlinker.so</text>
+  <text x="358" y="220" fill="#c9d1d9" font-size="11" font-weight="400">/ libVIPhal.so blobs are tightly version-coupled and</text>
+  <text x="358" y="236" fill="#c9d1d9" font-size="11" font-weight="400">omitted from Debian images.</text>
+  <line x1="696" y1="182" x2="696" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="204" fill="#56d364" font-size="11" font-weight="400">ABI-stable Linux DRM UAPI (/dev/dri/renderD128, etnaviv</text>
+  <text x="708" y="220" fill="#56d364" font-size="11" font-weight="400">1.4.0) + upstream Mesa libteflon.so built cleanly into</text>
+  <text x="708" y="236" fill="#56d364" font-size="11" font-weight="400">Buildroot.</text>
+  <rect x="25" y="250" width="1070" height="68" fill="#161b22"/>
+  <line x1="24" y1="250" x2="1096" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="272" fill="#ffa657" font-size="11" font-weight="600">3</text>
+  <line x1="66" y1="250" x2="66" y2="318" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="272" fill="#f0f6fc" font-size="11" font-weight="400">Frigate NVR / YOLOv8 / YOLO11 bounding</text>
+  <text x="78" y="288" fill="#f0f6fc" font-size="11" font-weight="400">boxes &amp; labels are scrambled</text>
+  <line x1="346" y1="250" x2="346" y2="318" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="272" fill="#c9d1d9" font-size="11" font-weight="400">vip_query_output reports [H,W,C,1] while NN engine</text>
+  <text x="358" y="288" fill="#c9d1d9" font-size="11" font-weight="400">outputs planar NCHW, and TP_ENGINE=0 cannot</text>
+  <text x="358" y="304" fill="#c9d1d9" font-size="11" font-weight="400">detranspose in TP hardware.</text>
+  <line x1="696" y1="250" x2="696" y2="318" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="272" fill="#56d364" font-size="11" font-weight="400">Teflon TP_ENGINE=0 fallback tracks NHWC&lt;-&gt;NCHW layouts and</text>
+  <text x="708" y="288" fill="#56d364" font-size="11" font-weight="400">runs TRANSPOSE/DETRANSPOSE on CPU with GPU sync, returning</text>
+  <text x="708" y="304" fill="#56d364" font-size="11" font-weight="400">NHWC.</text>
+  <rect x="25" y="318" width="1070" height="68" fill="#1c2128"/>
+  <line x1="24" y1="318" x2="1096" y2="318" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="340" fill="#ffa657" font-size="11" font-weight="600">4</text>
+  <line x1="66" y1="318" x2="66" y2="386" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="340" fill="#f0f6fc" font-size="11" font-weight="400">Post-processing (NMS, TopK, Softmax)</text>
+  <text x="78" y="356" fill="#f0f6fc" font-size="11" font-weight="400">degrades accuracy or fails export</text>
+  <line x1="346" y1="318" x2="346" y2="386" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="340" fill="#c9d1d9" font-size="11" font-weight="400">Quantizing box decoding, NMS, and TopK into</text>
+  <text x="358" y="356" fill="#c9d1d9" font-size="11" font-weight="400">INT8/UINT8 inside a monolithic .nb breaks coordinate</text>
+  <text x="358" y="372" fill="#c9d1d9" font-size="11" font-weight="400">precision.</text>
+  <line x1="696" y1="318" x2="696" y2="386" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="340" fill="#56d364" font-size="11" font-weight="400">TFLite delegate partitioning offloads Conv2D/Depthwise/FC to</text>
+  <text x="708" y="356" fill="#56d364" font-size="11" font-weight="400">8 NN cores while keeping NMS/TopK/Softmax on Cortex-A76/A55</text>
+  <text x="708" y="372" fill="#56d364" font-size="11" font-weight="400">CPU.</text>
+  <rect x="25" y="386" width="1070" height="68" fill="#161b22"/>
+  <line x1="24" y1="386" x2="1096" y2="386" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="408" fill="#ffa657" font-size="11" font-weight="600">5</text>
+  <line x1="66" y1="386" x2="66" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="408" fill="#f0f6fc" font-size="11" font-weight="400">Out-of-tree aw_nna_vip fails to build on</text>
+  <text x="78" y="424" fill="#f0f6fc" font-size="11" font-weight="400">Linux 6.6 / 6.18 / 7.1</text>
+  <line x1="346" y1="386" x2="346" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="408" fill="#c9d1d9" font-size="11" font-weight="400">Vendor aw_nna_vip depends on Allwinner BSP 5.15/6.6</text>
+  <text x="358" y="424" fill="#c9d1d9" font-size="11" font-weight="400">private headers (sunxi-autogen.h) and old kernel</text>
+  <text x="358" y="440" fill="#c9d1d9" font-size="11" font-weight="400">APIs.</text>
+  <line x1="696" y1="386" x2="696" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="408" fill="#56d364" font-size="11" font-weight="400">Uses mainline drivers/gpu/drm/etnaviv on Linux 7.1.0</text>
+  <text x="708" y="424" fill="#56d364" font-size="11" font-weight="400">PREEMPT_RT with clean DT bindings, CCU, triple-reset &amp; MMUv2</text>
+  <text x="708" y="440" fill="#56d364" font-size="11" font-weight="400">PDMODE.</text>
+  <rect x="25" y="454" width="1070" height="52" fill="#1c2128"/>
+  <line x1="24" y1="454" x2="1096" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="476" fill="#ffa657" font-size="11" font-weight="600">6</text>
+  <line x1="66" y1="454" x2="66" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="476" fill="#f0f6fc" font-size="11" font-weight="400">Reading 0x03600000 hangs the board during</text>
+  <text x="78" y="492" fill="#f0f6fc" font-size="11" font-weight="400">bring-up</text>
+  <line x1="346" y1="454" x2="346" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="476" fill="#c9d1d9" font-size="11" font-weight="400">A733 gates NPU behind PD_NPU (domain 4), CLK_AHB_NPU</text>
+  <text x="358" y="492" fill="#c9d1d9" font-size="11" font-weight="400">+ CLK_BUS_NPU, and 3 reset bits (0x0b04 b16/17/18).</text>
+  <line x1="696" y1="454" x2="696" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="476" fill="#56d364" font-size="11" font-weight="400">Fixed ccu-sun60i-a733.c parent chain, switched etnaviv to</text>
+  <text x="708" y="492" fill="#56d364" font-size="11" font-weight="400">reset_control_array, and enforced runtime-PM gating.</text>
+  <rect x="25" y="506" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="506" x2="1096" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="528" fill="#ffa657" font-size="11" font-weight="600">7</text>
+  <line x1="66" y1="506" x2="66" y2="558" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="528" fill="#f0f6fc" font-size="11" font-weight="400">Unmodified Mesa 26.1.8 Teflon outputs</text>
+  <text x="78" y="544" fill="#f0f6fc" font-size="11" font-weight="400">all-128 (0x80) or hangs on 0x9202</text>
+  <line x1="346" y1="506" x2="346" y2="558" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="528" fill="#c9d1d9" font-size="11" font-weight="400">0x9202 combines TP_ENGINE=0, NN_CMD_SUPPORT_SLICE=1,</text>
+  <text x="358" y="544" fill="#c9d1d9" font-size="11" font-weight="400">FP_INIMAGE_POST_SCALE=1, and EXT_CMD=1.</text>
+  <line x1="696" y1="506" x2="696" y2="558" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="528" fill="#56d364" font-size="11" font-weight="400">Reverse-engineered all four HW_V83 behaviors on silicon and</text>
+  <text x="708" y="544" fill="#56d364" font-size="11" font-weight="400">fixed them in Mesa patch 0002 + kernel MMUv2 PDMODE.</text>
+  <rect x="25" y="558" width="1070" height="67" rx="9" fill="#1c2128"/>
+  <rect x="25" y="558" width="1070" height="10" fill="#1c2128"/>
+  <line x1="24" y1="558" x2="1096" y2="558" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="580" fill="#ffa657" font-size="11" font-weight="600">8</text>
+  <line x1="66" y1="558" x2="66" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="78" y="580" fill="#f0f6fc" font-size="11" font-weight="400">Can I run custom non-CNN compute kernels</text>
+  <text x="78" y="596" fill="#f0f6fc" font-size="11" font-weight="400">(DSP, filters) on A733 NPU?</text>
+  <line x1="346" y1="558" x2="346" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="358" y="580" fill="#c9d1d9" font-size="11" font-weight="400">Vendor VIPLite only executes pre-compiled .nb neural</text>
+  <text x="358" y="596" fill="#c9d1d9" font-size="11" font-weight="400">graphs and hides general-purpose shader compute.</text>
+  <line x1="696" y1="558" x2="696" y2="626" stroke="#30363d" stroke-width="1"/>
+  <text x="708" y="580" fill="#56d364" font-size="11" font-weight="400">Yes (Path B): mainline etnaviv exposes the PPU shader core</text>
+  <text x="708" y="596" fill="#56d364" font-size="11" font-weight="400">via /dev/dri/renderD128 (0.052-0.950 ms compute; 0.206 ms</text>
+  <text x="708" y="612" fill="#56d364" font-size="11" font-weight="400">V4L2 dma-buf).</text>
+</svg>

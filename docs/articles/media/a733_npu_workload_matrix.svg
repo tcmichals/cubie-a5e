@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 396" width="1120" height="396" overflow="hidden" style="background:#0d1117; max-width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <rect width="1120" height="396" fill="#0d1117"/>
+  <text x="560" y="34" fill="#f0f6fc" font-size="19" font-weight="700" text-anchor="middle">Allwinner A733 Heterogeneous AI &amp; Vision Workload Mapping</text>
+  <text x="560" y="55" fill="#8b949e" font-size="12" text-anchor="middle">Matching each pipeline stage to the right silicon block on Radxa Cubie A7A (Linux 7.1 + Mesa Teflon)</text>
+  <rect x="24" y="76" width="1072" height="298" rx="10" fill="#161b22" stroke="#238636" stroke-width="1.5"/>
+  <rect x="24" y="76" width="1072" height="38" rx="10" fill="#113e2b"/>
+  <rect x="24" y="104" width="1072" height="10" fill="#113e2b"/>
+  <text x="36" y="100" fill="#3fb950" font-size="12" font-weight="700">Workload / Pipeline Stage</text>
+  <line x1="354" y1="76" x2="354" y2="374" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="100" fill="#3fb950" font-size="12" font-weight="700">Best Hardware Engine on A733</text>
+  <line x1="664" y1="76" x2="664" y2="374" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="100" fill="#3fb950" font-size="12" font-weight="700">Why It Fits</text>
+  <rect x="25" y="114" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="114" x2="1096" y2="114" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="136" fill="#f0f6fc" font-size="11" font-weight="600">CNN Backbone (YOLOv8, MobileNet, PoseNet,</text>
+  <text x="36" y="152" fill="#f0f6fc" font-size="11" font-weight="600">CONV_2D)</text>
+  <line x1="354" y1="114" x2="354" y2="166" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="136" fill="#56d364" font-size="11" font-weight="400">8x NN Cores (Mesa Teflon via</text>
+  <text x="366" y="152" fill="#56d364" font-size="11" font-weight="400">/dev/dri/renderD128)</text>
+  <line x1="664" y1="114" x2="664" y2="166" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="136" fill="#c9d1d9" font-size="11" font-weight="400">Massive INT8 MAC density + 512 KB VIP SRAM weight reuse; frees Arm</text>
+  <text x="676" y="152" fill="#c9d1d9" font-size="11" font-weight="400">cores.</text>
+  <rect x="25" y="166" width="1070" height="52" fill="#1c2128"/>
+  <line x1="24" y1="166" x2="1096" y2="166" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="188" fill="#f0f6fc" font-size="11" font-weight="600">Custom Compute, Image Filtering, Optical Flow,</text>
+  <text x="36" y="204" fill="#f0f6fc" font-size="11" font-weight="600">DSP, Custom AI Ops</text>
+  <line x1="354" y1="166" x2="354" y2="218" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="188" fill="#56d364" font-size="11" font-weight="400">1x PPU Shader Core (etnaviv DRM OpenCL/shader,</text>
+  <text x="366" y="204" fill="#56d364" font-size="11" font-weight="400">0.09-0.22 ms)</text>
+  <line x1="664" y1="166" x2="664" y2="218" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="188" fill="#c9d1d9" font-size="11" font-weight="400">General-purpose SIMD float32/int compute that vendor VIPLite .nb</text>
+  <text x="676" y="204" fill="#c9d1d9" font-size="11" font-weight="400">blobs hide.</text>
+  <rect x="25" y="218" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="218" x2="1096" y2="218" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="240" fill="#f0f6fc" font-size="11" font-weight="600">1080p Camera Demosaic, 3A, NV12, H.264/H.265</text>
+  <text x="36" y="256" fill="#f0f6fc" font-size="11" font-weight="600">Recording</text>
+  <line x1="354" y1="218" x2="354" y2="270" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="240" fill="#56d364" font-size="11" font-weight="400">Hardware ISP 602 + Cedrus VE (dma-buf</text>
+  <text x="366" y="256" fill="#56d364" font-size="11" font-weight="400">zero-copy)</text>
+  <line x1="664" y1="218" x2="664" y2="270" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="240" fill="#c9d1d9" font-size="11" font-weight="400">&lt; 1.6% CPU for live 1080p30 H.265 alongside NPU inference.</text>
+  <rect x="25" y="270" width="1070" height="52" fill="#1c2128"/>
+  <line x1="24" y1="270" x2="1096" y2="270" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="292" fill="#f0f6fc" font-size="11" font-weight="600">NMS, TopK, Softmax, Graph Logic, Networking</text>
+  <line x1="354" y1="270" x2="354" y2="322" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="292" fill="#56d364" font-size="11" font-weight="400">Arm Cortex-A76/A55 CPU (automatic TFLite</text>
+  <text x="366" y="308" fill="#56d364" font-size="11" font-weight="400">fallback)</text>
+  <line x1="664" y1="270" x2="664" y2="322" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="292" fill="#c9d1d9" font-size="11" font-weight="400">Branch-heavy float32 post-processing without INT8 coordinate</text>
+  <text x="676" y="308" fill="#c9d1d9" font-size="11" font-weight="400">distortion.</text>
+  <rect x="25" y="322" width="1070" height="51" rx="9" fill="#161b22"/>
+  <rect x="25" y="322" width="1070" height="10" fill="#161b22"/>
+  <line x1="24" y1="322" x2="1096" y2="322" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="344" fill="#f0f6fc" font-size="11" font-weight="600">Hard Real-Time PID / Motor / Servo Loops</text>
+  <line x1="354" y1="322" x2="354" y2="374" stroke="#30363d" stroke-width="1"/>
+  <text x="366" y="344" fill="#56d364" font-size="11" font-weight="400">On-Die 200 MHz XuanTie E902 RISC-V (14.5 us</text>
+  <text x="366" y="360" fill="#56d364" font-size="11" font-weight="400">MSGBOX)</text>
+  <line x1="664" y1="322" x2="664" y2="374" stroke="#30363d" stroke-width="1"/>
+  <text x="676" y="344" fill="#c9d1d9" font-size="11" font-weight="400">Zero Linux scheduling jitter; receives NPU target setpoints</text>
+  <text x="676" y="360" fill="#c9d1d9" font-size="11" font-weight="400">directly in SRAM A2.</text>
+</svg>

@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 512" width="1120" height="512" overflow="hidden" style="background:#0d1117; max-width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <rect width="1120" height="512" fill="#0d1117"/>
+  <text x="560" y="34" fill="#f0f6fc" font-size="19" font-weight="700" text-anchor="middle">Summary of the 6 Mainline Kernel &amp; Mesa Fixes for Allwinner A733 (0x9202)</text>
+  <text x="560" y="55" fill="#8b949e" font-size="12" text-anchor="middle">Upstream Linux 7.1 &amp; Mesa 26.1.8 patches enabling VIP9000Nano-DI on Radxa Cubie A7A</text>
+  <rect x="24" y="76" width="1072" height="414" rx="10" fill="#161b22" stroke="#f0883e" stroke-width="1.5"/>
+  <rect x="24" y="76" width="1072" height="38" rx="10" fill="#3b2300"/>
+  <rect x="24" y="104" width="1072" height="10" fill="#3b2300"/>
+  <text x="36" y="100" fill="#ffa657" font-size="12" font-weight="700">Component</text>
+  <line x1="214" y1="76" x2="214" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="100" fill="#ffa657" font-size="12" font-weight="700">File / Patch</text>
+  <line x1="434" y1="76" x2="434" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="100" fill="#ffa657" font-size="12" font-weight="700">Silicon Requirement (0x9202)</text>
+  <line x1="744" y1="76" x2="744" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="100" fill="#ffa657" font-size="12" font-weight="700">Engineering Fix Implemented</text>
+  <rect x="25" y="114" width="1070" height="68" fill="#161b22"/>
+  <line x1="24" y1="114" x2="1096" y2="114" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="136" fill="#f0f6fc" font-size="11" font-weight="600">1. A733 CCU Clock</text>
+  <text x="36" y="152" fill="#f0f6fc" font-size="11" font-weight="600">Parenting</text>
+  <line x1="214" y1="114" x2="214" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="136" fill="#79c0ff" font-size="11" font-weight="400">drivers/clk/sunxi-ng/</text>
+  <text x="226" y="152" fill="#79c0ff" font-size="11" font-weight="400">ccu-sun60i-a733.c</text>
+  <line x1="434" y1="114" x2="434" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="136" fill="#ffa657" font-size="11" font-weight="400">0x03600000 needs CLK_AHB_NPU (0x05c0 b6) +</text>
+  <text x="446" y="152" fill="#ffa657" font-size="11" font-weight="400">CLK_BUS_NPU (0x0b04 b0) + CLK_MBUS_NPU (0x05e0</text>
+  <text x="446" y="168" fill="#ffa657" font-size="11" font-weight="400">b18).</text>
+  <line x1="744" y1="114" x2="744" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="136" fill="#c9d1d9" font-size="11" font-weight="400">Parented bus_npu_clk to ahb_npu_clk, added</text>
+  <text x="756" y="152" fill="#c9d1d9" font-size="11" font-weight="400">CLK_SET_RATE_PARENT to npu_clk, synced with upstream</text>
+  <text x="756" y="168" fill="#c9d1d9" font-size="11" font-weight="400">v7.</text>
+  <rect x="25" y="182" width="1070" height="68" fill="#1c2128"/>
+  <line x1="24" y1="182" x2="1096" y2="182" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="204" fill="#f0f6fc" font-size="11" font-weight="600">2. Triple NPU Reset Lines</text>
+  <line x1="214" y1="182" x2="214" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="204" fill="#79c0ff" font-size="11" font-weight="400">etnaviv_gpu.c &amp; vivante,gc.yaml</text>
+  <line x1="434" y1="182" x2="434" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="204" fill="#ffa657" font-size="11" font-weight="400">A733 splits resets in 0x0b04 (CORE b16, AXI</text>
+  <text x="446" y="220" fill="#ffa657" font-size="11" font-weight="400">b17, AHB b18); etnaviv only fetched one reset.</text>
+  <line x1="744" y1="182" x2="744" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="204" fill="#c9d1d9" font-size="11" font-weight="400">Switched etnaviv_gpu_platform_probe() to</text>
+  <text x="756" y="220" fill="#c9d1d9" font-size="11" font-weight="400">devm_reset_control_array_get_optional_exclusive();</text>
+  <text x="756" y="236" fill="#c9d1d9" font-size="11" font-weight="400">maxItems: 3.</text>
+  <rect x="25" y="250" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="250" x2="1096" y2="250" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="272" fill="#f0f6fc" font-size="11" font-weight="600">3. Kernel etnaviv HWDB</text>
+  <line x1="214" y1="250" x2="214" y2="302" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="272" fill="#79c0ff" font-size="11" font-weight="400">drivers/gpu/drm/etnaviv/</text>
+  <text x="226" y="288" fill="#79c0ff" font-size="11" font-weight="400">etnaviv_hwdb.c</text>
+  <line x1="434" y1="250" x2="434" y2="302" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="272" fill="#ffa657" font-size="11" font-weight="400">Without 0x9000 entries, sec_mode stayed</text>
+  <text x="446" y="288" fill="#ffa657" font-size="11" font-weight="400">ETNA_SEC_NONE and 0x003A4 was never written.</text>
+  <line x1="744" y1="250" x2="744" y2="302" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="272" fill="#c9d1d9" font-size="11" font-weight="400">Added Allwinner 0x9000 revisions (0x8303, 0x9003,</text>
+  <text x="756" y="288" fill="#c9d1d9" font-size="11" font-weight="400">0x9113, 0x9202) with SECURITY + SECURITY_AHB.</text>
+  <rect x="25" y="302" width="1070" height="68" fill="#1c2128"/>
+  <line x1="24" y1="302" x2="1096" y2="302" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="324" fill="#f0f6fc" font-size="11" font-weight="600">4. MMUv2 PDMODE</text>
+  <line x1="214" y1="302" x2="214" y2="370" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="324" fill="#79c0ff" font-size="11" font-weight="400">etnaviv_iommu_v2.c,</text>
+  <text x="226" y="340" fill="#79c0ff" font-size="11" font-weight="400">etnaviv_gpu.c, etnaviv_buffer.c</text>
+  <line x1="434" y1="302" x2="434" y2="370" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="324" fill="#ffa657" font-size="11" font-weight="400">0x9202 sets MMU_PAGE_DESCRIPTOR = 1. Legacy</text>
+  <text x="446" y="340" fill="#ffa657" font-size="11" font-weight="400">PTA broke NN DMA; 0x00184=0x18 clobbered MTLB.</text>
+  <line x1="744" y1="302" x2="744" y2="370" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="324" fill="#c9d1d9" font-size="11" font-weight="400">Switched rev &gt;= 0x9100 to MODE4_K PDMODE:</text>
+  <text x="756" y="340" fill="#c9d1d9" font-size="11" font-weight="400">0x003B4=(pfn&lt;&lt;4)|0, 0x00388=0x21, 0x0055C=0xFFFFFF,</text>
+  <text x="756" y="356" fill="#c9d1d9" font-size="11" font-weight="400">flush 0xffffff7f.</text>
+  <rect x="25" y="370" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="370" x2="1096" y2="370" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="392" fill="#f0f6fc" font-size="11" font-weight="600">5. Mesa 26.1.8 HWDB</text>
+  <line x1="214" y1="370" x2="214" y2="422" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="392" fill="#79c0ff" font-size="11" font-weight="400">0001-etnaviv-hwdb-add-allwinner-npu-feature-database.patch</text>
+  <line x1="434" y1="370" x2="434" y2="422" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="392" fill="#ffa657" font-size="11" font-weight="400">Upstream Mesa 26.1.8 lacked Allwinner 0x9000</text>
+  <text x="446" y="408" fill="#ffa657" font-size="11" font-weight="400">rows (0x9003, 0x9113, 0x9202).</text>
+  <line x1="744" y1="370" x2="744" y2="422" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="392" fill="#c9d1d9" font-size="11" font-weight="400">Added allwinner/gc_feature_database.h exposing 8 NN</text>
+  <text x="756" y="408" fill="#c9d1d9" font-size="11" font-weight="400">cores, 512 KB SRAM, TP_ENGINE=0, HW_V83=1, SLICE=1.</text>
+  <rect x="25" y="422" width="1070" height="67" rx="9" fill="#1c2128"/>
+  <rect x="25" y="422" width="1070" height="10" fill="#1c2128"/>
+  <line x1="24" y1="422" x2="1096" y2="422" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="444" fill="#f0f6fc" font-size="11" font-weight="600">6. Mesa HW_V83 + TP=0</text>
+  <line x1="214" y1="422" x2="214" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="226" y="444" fill="#79c0ff" font-size="11" font-weight="400">0002-etnaviv-teflon-add-hw-v83-and-no-tp-support.patch</text>
+  <line x1="434" y1="422" x2="434" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="446" y="444" fill="#ffa657" font-size="11" font-weight="400">First Mesa NPU with TP_ENGINE=0,</text>
+  <text x="446" y="460" fill="#ffa657" font-size="11" font-weight="400">NN_CMD_SUPPORT_SLICE=1,</text>
+  <text x="446" y="476" fill="#ffa657" font-size="11" font-weight="400">FP_INIMAGE_POST_SCALE=1, EXT_CMD=1.</text>
+  <line x1="744" y1="422" x2="744" y2="490" stroke="#30363d" stroke-width="1"/>
+  <text x="756" y="444" fill="#c9d1d9" font-size="11" font-weight="400">Report tp_core_count=0; CPU transpose w/ fence sync;</text>
+  <text x="756" y="460" fill="#c9d1d9" font-size="11" font-weight="400">y_stride=x*y; IEEE-754 exp (&gt;&gt;23); decline ext</text>
+  <text x="756" y="476" fill="#c9d1d9" font-size="11" font-weight="400">ADD/SUB.</text>
+</svg>

@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 688" width="1120" height="688" overflow="hidden" style="background:#0d1117; max-width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <rect width="1120" height="688" fill="#0d1117"/>
+  <text x="560" y="34" fill="#f0f6fc" font-size="19" font-weight="700" text-anchor="middle">Allwinner A733 (0x9202) vs. T527 / A527 (0x9003) NPU Silicon Comparison</text>
+  <text x="560" y="55" fill="#8b949e" font-size="12" text-anchor="middle">Verified from live Radxa Cubie A7A silicon (/sys/kernel/debug/dri/0/gpu) &amp; allwinner/gc_feature_database.h</text>
+  <rect x="24" y="76" width="1072" height="590" rx="10" fill="#161b22" stroke="#1f6feb" stroke-width="1.5"/>
+  <rect x="24" y="76" width="1072" height="38" rx="10" fill="#162c4e"/>
+  <rect x="24" y="104" width="1072" height="10" fill="#162c4e"/>
+  <text x="36" y="100" fill="#58a6ff" font-size="12" font-weight="700">Hardware Parameter</text>
+  <line x1="244" y1="76" x2="244" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="100" fill="#58a6ff" font-size="12" font-weight="700">Allwinner A733 (Cubie A7A)</text>
+  <line x1="494" y1="76" x2="494" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="100" fill="#58a6ff" font-size="12" font-weight="700">Allwinner T527 / A527 (A5E)</text>
+  <line x1="724" y1="76" x2="724" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="100" fill="#58a6ff" font-size="12" font-weight="700">What It Means in Practice</text>
+  <rect x="25" y="114" width="1070" height="36" fill="#161b22"/>
+  <line x1="24" y1="114" x2="1096" y2="114" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="136" fill="#f0f6fc" font-size="11" font-weight="600">Silicon IP Name</text>
+  <line x1="244" y1="114" x2="244" y2="150" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="136" fill="#79c0ff" font-size="11" font-weight="400">VeriSilicon VIP9000Nano-DI (HW_V83)</text>
+  <line x1="494" y1="114" x2="494" y2="150" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="136" fill="#ffa657" font-size="11" font-weight="400">VeriSilicon VIP9000Nano-SI+</text>
+  <line x1="724" y1="114" x2="724" y2="150" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="136" fill="#c9d1d9" font-size="11" font-weight="400">Newer HW_V83 (VIP_VERSION 0x398) IP on A733</text>
+  <rect x="25" y="150" width="1070" height="36" fill="#1c2128"/>
+  <line x1="24" y1="150" x2="1096" y2="150" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="172" fill="#f0f6fc" font-size="11" font-weight="600">Marketed Peak Throughput</text>
+  <line x1="244" y1="150" x2="244" y2="186" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="172" fill="#79c0ff" font-size="11" font-weight="400">3.0 TOPS (INT8, 492-1120 MHz OPP)</text>
+  <line x1="494" y1="150" x2="494" y2="186" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="172" fill="#ffa657" font-size="11" font-weight="400">2.0 TOPS (INT8)</text>
+  <line x1="724" y1="150" x2="724" y2="186" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="172" fill="#c9d1d9" font-size="11" font-weight="400">Higher NN core count &amp; clock scaling on A733</text>
+  <rect x="25" y="186" width="1070" height="36" fill="#161b22"/>
+  <line x1="24" y1="186" x2="1096" y2="186" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="208" fill="#f0f6fc" font-size="11" font-weight="600">MMIO Base Address</text>
+  <line x1="244" y1="186" x2="244" y2="222" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="208" fill="#79c0ff" font-size="11" font-weight="400">0x03600000 (4 KB / 0x1000)</text>
+  <line x1="494" y1="186" x2="494" y2="222" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="208" fill="#ffa657" font-size="11" font-weight="400">0x07120000 (128 KB)</text>
+  <line x1="724" y1="186" x2="724" y2="222" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="208" fill="#c9d1d9" font-size="11" font-weight="400">Mapped on NPU system bus vs. MCU domain</text>
+  <rect x="25" y="222" width="1070" height="36" fill="#1c2128"/>
+  <line x1="24" y1="222" x2="1096" y2="222" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="244" fill="#f0f6fc" font-size="11" font-weight="600">GICv3 Interrupt</text>
+  <line x1="244" y1="222" x2="244" y2="258" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="244" fill="#79c0ff" font-size="11" font-weight="400">GIC_SPI 65 (hwirq 97)</text>
+  <line x1="494" y1="222" x2="494" y2="258" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="244" fill="#ffa657" font-size="11" font-weight="400">GIC_SPI 157</text>
+  <line x1="724" y1="222" x2="724" y2="258" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="244" fill="#c9d1d9" font-size="11" font-weight="400">Signals Front-End (FE) command completion</text>
+  <rect x="25" y="258" width="1070" height="36" fill="#161b22"/>
+  <line x1="24" y1="258" x2="1096" y2="258" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="280" fill="#f0f6fc" font-size="11" font-weight="600">Vivante Chip Model</text>
+  <line x1="244" y1="258" x2="244" y2="294" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="280" fill="#79c0ff" font-size="11" font-weight="400">0x9000</text>
+  <line x1="494" y1="258" x2="494" y2="294" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="280" fill="#ffa657" font-size="11" font-weight="400">0x9000</text>
+  <line x1="724" y1="258" x2="724" y2="294" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="280" fill="#c9d1d9" font-size="11" font-weight="400">Shared VIP9000 family ID</text>
+  <rect x="25" y="294" width="1070" height="36" fill="#1c2128"/>
+  <line x1="24" y1="294" x2="1096" y2="294" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="316" fill="#f0f6fc" font-size="11" font-weight="600">Chip Revision (0x00024)</text>
+  <line x1="244" y1="294" x2="244" y2="330" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="316" fill="#79c0ff" font-size="11" font-weight="400">0x9202 (date 2023-05-18)</text>
+  <line x1="494" y1="294" x2="494" y2="330" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="316" fill="#ffa657" font-size="11" font-weight="400">0x9003</text>
+  <line x1="724" y1="294" x2="724" y2="330" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="316" fill="#c9d1d9" font-size="11" font-weight="400">Verified directly from A7A debugfs gpu</text>
+  <rect x="25" y="330" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="330" x2="1096" y2="330" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="352" fill="#f0f6fc" font-size="11" font-weight="600">Product / Customer / ECO</text>
+  <line x1="244" y1="330" x2="244" y2="382" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="352" fill="#79c0ff" font-size="11" font-weight="400">0x05090009 / 0x1000003b / 0x08000000</text>
+  <line x1="494" y1="330" x2="494" y2="382" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="352" fill="#ffa657" font-size="11" font-weight="400">0x05090009 / 0x10000016 /</text>
+  <text x="506" y="368" fill="#ffa657" font-size="11" font-weight="400">0x06000000</text>
+  <line x1="724" y1="330" x2="724" y2="382" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="352" fill="#c9d1d9" font-size="11" font-weight="400">Exact lookup key in allwinner/gc_feature_database.h</text>
+  <rect x="25" y="382" width="1070" height="36" fill="#1c2128"/>
+  <line x1="24" y1="382" x2="1096" y2="382" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="404" fill="#f0f6fc" font-size="11" font-weight="600">NN Core Count</text>
+  <line x1="244" y1="382" x2="244" y2="418" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="404" fill="#79c0ff" font-size="11" font-weight="400">8 NN Cores (INT8 &amp; INT16)</text>
+  <line x1="494" y1="382" x2="494" y2="418" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="404" fill="#ffa657" font-size="11" font-weight="400">6 NN Cores</text>
+  <line x1="724" y1="382" x2="724" y2="418" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="404" fill="#c9d1d9" font-size="11" font-weight="400">33% more NN cores on A733</text>
+  <rect x="25" y="418" width="1070" height="36" fill="#161b22"/>
+  <line x1="24" y1="418" x2="1096" y2="418" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="440" fill="#f0f6fc" font-size="11" font-weight="600">INT8 MADs per NN Core</text>
+  <line x1="244" y1="418" x2="244" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="440" fill="#79c0ff" font-size="11" font-weight="400">64 MADs/core (32 lanes/out-cycle)</text>
+  <line x1="494" y1="418" x2="494" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="440" fill="#ffa657" font-size="11" font-weight="400">64 MADs/core</text>
+  <line x1="724" y1="418" x2="724" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="440" fill="#c9d1d9" font-size="11" font-weight="400">Paired with NN_ZDP3 = 1 &amp; up to 1.12 GHz OPP</text>
+  <rect x="25" y="454" width="1070" height="52" fill="#1c2128"/>
+  <line x1="24" y1="454" x2="1096" y2="454" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="476" fill="#f0f6fc" font-size="11" font-weight="600">NN Architecture Gen</text>
+  <line x1="244" y1="454" x2="244" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="476" fill="#79c0ff" font-size="11" font-weight="400">HW_V83 = 1, NN_ZDP3 = 1, ZRL_8BIT =</text>
+  <text x="256" y="492" fill="#79c0ff" font-size="11" font-weight="400">0</text>
+  <line x1="494" y1="454" x2="494" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="476" fill="#ffa657" font-size="11" font-weight="400">V8.0/8.1, NN_ZDP6 = 1</text>
+  <line x1="724" y1="454" x2="724" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="476" fill="#c9d1d9" font-size="11" font-weight="400">Adds NN_TENSOR_ADD_FIELD_MOVE_TO_EXT_CMD &amp;</text>
+  <text x="736" y="492" fill="#c9d1d9" font-size="11" font-weight="400">SMALL_BATCH_PHASE2</text>
+  <rect x="25" y="506" width="1070" height="36" fill="#161b22"/>
+  <line x1="24" y1="506" x2="1096" y2="506" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="528" fill="#f0f6fc" font-size="11" font-weight="600">VIP SRAM Size &amp; Width</text>
+  <line x1="244" y1="506" x2="244" y2="542" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="528" fill="#79c0ff" font-size="11" font-weight="400">512 KB @ 128-Byte Width (1024-bit)</text>
+  <line x1="494" y1="506" x2="494" y2="542" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="528" fill="#ffa657" font-size="11" font-weight="400">512 KB @ 64-Byte Width (512-bit)</text>
+  <line x1="724" y1="506" x2="724" y2="542" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="528" fill="#c9d1d9" font-size="11" font-weight="400">A733 has 2x wider internal VIP SRAM bandwidth</text>
+  <rect x="25" y="542" width="1070" height="36" fill="#1c2128"/>
+  <line x1="24" y1="542" x2="1096" y2="542" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="564" fill="#f0f6fc" font-size="11" font-weight="600">TP / PPU Shader Cores</text>
+  <line x1="244" y1="542" x2="244" y2="578" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="564" fill="#79c0ff" font-size="11" font-weight="400">TP_ENGINE = 0, 1 Shader Core</text>
+  <line x1="494" y1="542" x2="494" y2="578" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="564" fill="#ffa657" font-size="11" font-weight="400">2 TP Cores, 1 Shader Core</text>
+  <line x1="724" y1="542" x2="724" y2="578" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="564" fill="#c9d1d9" font-size="11" font-weight="400">No dedicated TP block on 0x9202; transposes use PPU/CPU</text>
+  <rect x="25" y="578" width="1070" height="52" fill="#161b22"/>
+  <line x1="24" y1="578" x2="1096" y2="578" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="600" fill="#f0f6fc" font-size="11" font-weight="600">MMUv2 PDMODE (0x003B4)</text>
+  <line x1="244" y1="578" x2="244" y2="630" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="600" fill="#79c0ff" font-size="11" font-weight="400">MMU_PAGE_DESCRIPTOR = 1 (PDMODE)</text>
+  <line x1="494" y1="578" x2="494" y2="630" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="600" fill="#ffa657" font-size="11" font-weight="400">MMU_PAGE_DESCRIPTOR = 0</text>
+  <line x1="724" y1="578" x2="724" y2="630" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="600" fill="#c9d1d9" font-size="11" font-weight="400">Direct PDMODE (0x003B4 MODE4_K, 0x00388=0x21) +</text>
+  <text x="736" y="616" fill="#c9d1d9" font-size="11" font-weight="400">0xffffff7f flush</text>
+  <rect x="25" y="630" width="1070" height="35" rx="9" fill="#1c2128"/>
+  <rect x="25" y="630" width="1070" height="10" fill="#1c2128"/>
+  <line x1="24" y1="630" x2="1096" y2="630" stroke="#30363d" stroke-width="1"/>
+  <text x="36" y="652" fill="#f0f6fc" font-size="11" font-weight="600">Reset Lines</text>
+  <line x1="244" y1="630" x2="244" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="256" y="652" fill="#79c0ff" font-size="11" font-weight="400">3 resets (CORE, AXI, AHB in 0x0b04)</text>
+  <line x1="494" y1="630" x2="494" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="506" y="652" fill="#ffa657" font-size="11" font-weight="400">1 reset (RST_BUS_NPU)</text>
+  <line x1="724" y1="630" x2="724" y2="666" stroke="#30363d" stroke-width="1"/>
+  <text x="736" y="652" fill="#c9d1d9" font-size="11" font-weight="400">A733 requires multi-reset array control in etnaviv</text>
+</svg>
